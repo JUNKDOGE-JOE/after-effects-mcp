@@ -47,7 +47,7 @@
     "src/cep-runtime-inject.js"() {
       if (typeof Object.hasOwn !== "function") {
         Object.defineProperty(Object, "hasOwn", {
-          value: function hasOwn2(target, key) {
+          value: function hasOwn(target, key) {
             return Object.prototype.hasOwnProperty.call(Object(target), key);
           },
           writable: true,
@@ -125,10 +125,10 @@
       var I = Array.isArray;
       var J = Object.prototype.hasOwnProperty;
       var K = { current: null };
-      var L6 = { key: true, ref: true, __self: true, __source: true };
+      var L5 = { key: true, ref: true, __self: true, __source: true };
       function M(a, b, e) {
         var d, c = {}, k = null, h = null;
-        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L6.hasOwnProperty(d) && (c[d] = b[d]);
+        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L5.hasOwnProperty(d) && (c[d] = b[d]);
         var g = arguments.length - 2;
         if (1 === g) c.children = e;
         else if (1 < g) {
@@ -246,7 +246,7 @@
           void 0 !== b.ref && (k = b.ref, h = K.current);
           void 0 !== b.key && (c = "" + b.key);
           if (a.type && a.type.defaultProps) var g = a.type.defaultProps;
-          for (f in b) J.call(b, f) && !L6.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
+          for (f in b) J.call(b, f) && !L5.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
         }
         var f = arguments.length - 2;
         if (1 === f) d.children = e;
@@ -432,7 +432,7 @@
       }
       function J(a, b) {
         A2 = false;
-        B && (B = false, E(L6), L6 = -1);
+        B && (B = false, E(L5), L5 = -1);
         z = true;
         var c = y;
         try {
@@ -462,7 +462,7 @@
       }
       var N = false;
       var O = null;
-      var L6 = -1;
+      var L5 = -1;
       var P = 5;
       var Q = -1;
       function M() {
@@ -500,7 +500,7 @@
         N || (N = true, S2());
       }
       function K(a, b) {
-        L6 = D2(function() {
+        L5 = D2(function() {
           a(exports.unstable_now());
         }, b);
       }
@@ -587,7 +587,7 @@
         }
         e = c + e;
         a = { id: u++, callback: b, priorityLevel: a, startTime: c, expirationTime: e, sortIndex: -1 };
-        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L6), L6 = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
+        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L5), L5 = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
         return a;
       };
       exports.unstable_shouldYield = M;
@@ -3540,7 +3540,7 @@
       function Bh(a) {
         vh.current === a && (E(uh), E(vh));
       }
-      var L6 = Uf(0);
+      var L5 = Uf(0);
       function Ch(a) {
         for (var b = a; null !== b; ) {
           if (13 === b.tag) {
@@ -4330,11 +4330,11 @@
         return { baseLanes: a, cachePool: null, transitions: null };
       }
       function oj(a, b, c) {
-        var d = b.pendingProps, e = L6.current, f = false, g = 0 !== (b.flags & 128), h;
+        var d = b.pendingProps, e = L5.current, f = false, g = 0 !== (b.flags & 128), h;
         (h = g) || (h = null !== a && null === a.memoizedState ? false : 0 !== (e & 2));
         if (h) f = true, b.flags &= -129;
         else if (null === a || null !== a.memoizedState) e |= 1;
-        G(L6, e & 1);
+        G(L5, e & 1);
         if (null === a) {
           Eg(b);
           a = b.memoizedState;
@@ -4488,7 +4488,7 @@
       function xj(a, b, c) {
         var d = b.pendingProps, e = d.revealOrder, f = d.tail;
         Xi(a, b, d.children, c);
-        d = L6.current;
+        d = L5.current;
         if (0 !== (d & 2)) d = d & 1 | 2, b.flags |= 128;
         else {
           if (null !== a && 0 !== (a.flags & 128)) a: for (a = b.child; null !== a; ) {
@@ -4509,7 +4509,7 @@
           }
           d &= 1;
         }
-        G(L6, d);
+        G(L5, d);
         if (0 === (b.mode & 1)) b.memoizedState = null;
         else switch (e) {
           case "forwards":
@@ -4583,13 +4583,13 @@
           case 13:
             d = b.memoizedState;
             if (null !== d) {
-              if (null !== d.dehydrated) return G(L6, L6.current & 1), b.flags |= 128, null;
+              if (null !== d.dehydrated) return G(L5, L5.current & 1), b.flags |= 128, null;
               if (0 !== (c & b.child.childLanes)) return oj(a, b, c);
-              G(L6, L6.current & 1);
+              G(L5, L5.current & 1);
               a = Zi(a, b, c);
               return null !== a ? a.sibling : null;
             }
-            G(L6, L6.current & 1);
+            G(L5, L5.current & 1);
             break;
           case 19:
             d = 0 !== (c & b.childLanes);
@@ -4599,7 +4599,7 @@
             }
             e = b.memoizedState;
             null !== e && (e.rendering = null, e.tail = null, e.lastEffect = null);
-            G(L6, L6.current);
+            G(L5, L5.current);
             if (d) break;
             else return null;
           case 22:
@@ -4961,7 +4961,7 @@
             S2(b);
             return null;
           case 13:
-            E(L6);
+            E(L5);
             d = b.memoizedState;
             if (null === a || null !== a.memoizedState && null !== a.memoizedState.dehydrated) {
               if (I && null !== yg && 0 !== (b.mode & 1) && 0 === (b.flags & 128)) Hg(), Ig(), b.flags |= 98560, f = false;
@@ -4980,7 +4980,7 @@
             }
             if (0 !== (b.flags & 128)) return b.lanes = c, b;
             d = null !== d;
-            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L6.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
+            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L5.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
             null !== b.updateQueue && (b.flags |= 4);
             S2(b);
             return null;
@@ -4991,7 +4991,7 @@
           case 17:
             return Zf(b.type) && $f(), S2(b), null;
           case 19:
-            E(L6);
+            E(L5);
             f = b.memoizedState;
             if (null === f) return S2(b), null;
             d = 0 !== (b.flags & 128);
@@ -5008,7 +5008,7 @@
                   b.subtreeFlags = 0;
                   d = c;
                   for (c = b.child; null !== c; ) f = c, a = d, f.flags &= 14680066, g = f.alternate, null === g ? (f.childLanes = 0, f.lanes = a, f.child = null, f.subtreeFlags = 0, f.memoizedProps = null, f.memoizedState = null, f.updateQueue = null, f.dependencies = null, f.stateNode = null) : (f.childLanes = g.childLanes, f.lanes = g.lanes, f.child = g.child, f.subtreeFlags = 0, f.deletions = null, f.memoizedProps = g.memoizedProps, f.memoizedState = g.memoizedState, f.updateQueue = g.updateQueue, f.type = g.type, a = g.dependencies, f.dependencies = null === a ? null : { lanes: a.lanes, firstContext: a.firstContext }), c = c.sibling;
-                  G(L6, L6.current & 1 | 2);
+                  G(L5, L5.current & 1 | 2);
                   return b.child;
                 }
                 a = a.sibling;
@@ -5021,7 +5021,7 @@
               } else 2 * B() - f.renderingStartTime > Gj && 1073741824 !== c && (b.flags |= 128, d = true, Dj(f, false), b.lanes = 4194304);
               f.isBackwards ? (g.sibling = b.child, b.child = g) : (c = f.last, null !== c ? c.sibling = g : b.child = g, f.last = g);
             }
-            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L6.current, G(L6, d ? c & 1 | 2 : c & 1), b;
+            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L5.current, G(L5, d ? c & 1 | 2 : c & 1), b;
             S2(b);
             return null;
           case 22:
@@ -5044,7 +5044,7 @@
           case 5:
             return Bh(b), null;
           case 13:
-            E(L6);
+            E(L5);
             a = b.memoizedState;
             if (null !== a && null !== a.dehydrated) {
               if (null === b.alternate) throw Error(p(340));
@@ -5053,7 +5053,7 @@
             a = b.flags;
             return a & 65536 ? (b.flags = a & -65537 | 128, b) : null;
           case 19:
-            return E(L6), null;
+            return E(L5), null;
           case 4:
             return zh(), null;
           case 10:
@@ -6094,10 +6094,10 @@
               zh();
               break;
             case 13:
-              E(L6);
+              E(L5);
               break;
             case 19:
-              E(L6);
+              E(L5);
               break;
             case 10:
               ah(d.type._context);
@@ -8271,7 +8271,7 @@
         };
         var createRoute = function createRoute2(routes, fn2) {
           return function(_ref) {
-            var root2 = _ref.root, props = _ref.props, _ref$actions = _ref.actions, actions2 = _ref$actions === void 0 ? [] : _ref$actions, timestamp2 = _ref.timestamp, shouldOptimize = _ref.shouldOptimize;
+            var root2 = _ref.root, props = _ref.props, _ref$actions = _ref.actions, actions2 = _ref$actions === void 0 ? [] : _ref$actions, timestamp = _ref.timestamp, shouldOptimize = _ref.shouldOptimize;
             actions2.filter(function(action) {
               return routes[action.type];
             }).forEach(function(action) {
@@ -8279,7 +8279,7 @@
                 root: root2,
                 props,
                 action: action.data,
-                timestamp: timestamp2,
+                timestamp,
                 shouldOptimize
               });
             });
@@ -8288,7 +8288,7 @@
                 root: root2,
                 props,
                 actions: actions2,
-                timestamp: timestamp2,
+                timestamp,
                 shouldOptimize
               });
             }
@@ -11807,8 +11807,8 @@
             return item2.id === query;
           });
         };
-        var getItemById = function getItemById2(items, itemId) {
-          var index = getItemIndexByQuery(items, itemId);
+        var getItemById = function getItemById2(items, itemId2) {
+          var index = getItemIndexByQuery(items, itemId2);
           if (index < 0) {
             return;
           }
@@ -11889,17 +11889,17 @@
           return function() {
             var _ref = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
             var query = _ref.query, _ref$success = _ref.success, success = _ref$success === void 0 ? function() {
-            } : _ref$success, _ref$failure = _ref.failure, failure2 = _ref$failure === void 0 ? function() {
+            } : _ref$success, _ref$failure = _ref.failure, failure = _ref$failure === void 0 ? function() {
             } : _ref$failure, options = _objectWithoutProperties(_ref, ["query", "success", "failure"]);
             var item2 = getItemByQuery(state2.items, query);
             if (!item2) {
-              failure2({
+              failure({
                 error: createResponse("error", 0, "Item not found"),
                 file: null
               });
               return;
             }
-            itemHandler(item2, success, failure2, options || {});
+            itemHandler(item2, success, failure, options || {});
           };
         };
         var actions = function actions2(dispatch2, query, state2) {
@@ -12035,7 +12035,7 @@
             },
             ADD_ITEMS: function ADD_ITEMS(_ref6) {
               var items = _ref6.items, index = _ref6.index, interactionMethod = _ref6.interactionMethod, _ref6$success = _ref6.success, success = _ref6$success === void 0 ? function() {
-              } : _ref6$success, _ref6$failure = _ref6.failure, failure2 = _ref6$failure === void 0 ? function() {
+              } : _ref6$success, _ref6$failure = _ref6.failure, failure = _ref6$failure === void 0 ? function() {
               } : _ref6$failure;
               var currentIndex = index;
               if (index === -1 || typeof index === "undefined") {
@@ -12060,7 +12060,7 @@
                   });
                 });
               });
-              Promise.all(promises).then(success).catch(failure2);
+              Promise.all(promises).then(success).catch(failure);
             },
             /**
              * @param source
@@ -12069,10 +12069,10 @@
              */
             ADD_ITEM: function ADD_ITEM(_ref7) {
               var source = _ref7.source, _ref7$index = _ref7.index, index = _ref7$index === void 0 ? -1 : _ref7$index, interactionMethod = _ref7.interactionMethod, _ref7$success = _ref7.success, success = _ref7$success === void 0 ? function() {
-              } : _ref7$success, _ref7$failure = _ref7.failure, failure2 = _ref7$failure === void 0 ? function() {
+              } : _ref7$success, _ref7$failure = _ref7.failure, failure = _ref7$failure === void 0 ? function() {
               } : _ref7$failure, _ref7$options = _ref7.options, options = _ref7$options === void 0 ? {} : _ref7$options;
               if (isEmpty(source)) {
-                failure2({
+                failure({
                   error: createResponse("error", 0, "No source"),
                   file: null
                 });
@@ -12088,7 +12088,7 @@
                     source,
                     error: error2
                   });
-                  failure2({ error: error2, file: null });
+                  failure({ error: error2, file: null });
                   return;
                 }
                 var _item = getActiveItems(state2.items)[0];
@@ -12107,7 +12107,7 @@
                       index,
                       interactionMethod,
                       success,
-                      failure: failure2,
+                      failure,
                       options
                     });
                   }).catch(function() {
@@ -12161,7 +12161,7 @@
                       sub: error3.code + " (" + error3.body + ")"
                     }
                   });
-                  failure2({ error: error3, file: createItemAPI(item2) });
+                  failure({ error: error3, file: createItemAPI(item2) });
                   return;
                 }
                 dispatch2("DID_THROW_ITEM_LOAD_ERROR", {
@@ -12179,7 +12179,7 @@
                   error: error3.status,
                   status: error3.status
                 });
-                failure2({ error: error3.status, file: createItemAPI(item2) });
+                failure({ error: error3.status, file: createItemAPI(item2) });
               });
               item2.on("load-abort", function() {
                 dispatch2("REMOVE_ITEM", { query: id2 });
@@ -12326,20 +12326,20 @@
               );
             },
             REQUEST_PREPARE_OUTPUT: function REQUEST_PREPARE_OUTPUT(_ref9) {
-              var item2 = _ref9.item, success = _ref9.success, _ref9$failure = _ref9.failure, failure2 = _ref9$failure === void 0 ? function() {
+              var item2 = _ref9.item, success = _ref9.success, _ref9$failure = _ref9.failure, failure = _ref9$failure === void 0 ? function() {
               } : _ref9$failure;
               var err = {
                 error: createResponse("error", 0, "Item not found"),
                 file: null
               };
-              if (item2.archived) return failure2(err);
+              if (item2.archived) return failure(err);
               applyFilterChain("PREPARE_OUTPUT", item2.file, { query, item: item2 }).then(
                 function(result) {
                   applyFilterChain("COMPLETE_PREPARE_OUTPUT", result, {
                     query,
                     item: item2
                   }).then(function(result2) {
-                    if (item2.archived) return failure2(err);
+                    if (item2.archived) return failure(err);
                     success(result2);
                   });
                 }
@@ -12381,7 +12381,7 @@
             RETRY_ITEM_LOAD: getItemByQueryFromState(state2, function(item2) {
               item2.retryLoad();
             }),
-            REQUEST_ITEM_PREPARE: getItemByQueryFromState(state2, function(item2, _success, failure2) {
+            REQUEST_ITEM_PREPARE: getItemByQueryFromState(state2, function(item2, _success, failure) {
               dispatch2(
                 "REQUEST_PREPARE_OUTPUT",
                 {
@@ -12394,12 +12394,12 @@
                       output: file2
                     });
                   },
-                  failure: failure2
+                  failure
                 },
                 true
               );
             }),
-            REQUEST_ITEM_PROCESSING: getItemByQueryFromState(state2, function(item2, success, failure2) {
+            REQUEST_ITEM_PROCESSING: getItemByQueryFromState(state2, function(item2, success, failure) {
               var itemCanBeQueuedForProcessing = (
                 // waiting for something
                 item2.status === ItemStatus.IDLE || // processing went wrong earlier
@@ -12410,7 +12410,7 @@
                   return dispatch2("REQUEST_ITEM_PROCESSING", {
                     query: item2,
                     success,
-                    failure: failure2
+                    failure
                   });
                 };
                 var process2 = function process3() {
@@ -12433,16 +12433,16 @@
               if (item2.status === ItemStatus.PROCESSING_QUEUED) return;
               item2.requestProcessing();
               dispatch2("DID_REQUEST_ITEM_PROCESSING", { id: item2.id });
-              dispatch2("PROCESS_ITEM", { query: item2, success, failure: failure2 }, true);
+              dispatch2("PROCESS_ITEM", { query: item2, success, failure }, true);
             }),
-            PROCESS_ITEM: getItemByQueryFromState(state2, function(item2, success, failure2) {
+            PROCESS_ITEM: getItemByQueryFromState(state2, function(item2, success, failure) {
               var maxParallelUploads = query("GET_MAX_PARALLEL_UPLOADS");
               var totalCurrentUploads = query("GET_ITEMS_BY_STATUS", ItemStatus.PROCESSING).length;
               if (totalCurrentUploads === maxParallelUploads) {
                 state2.processingQueue.push({
                   id: item2.id,
                   success,
-                  failure: failure2
+                  failure
                 });
                 return;
               }
@@ -12450,7 +12450,7 @@
               var processNext = function processNext2() {
                 var queueEntry = state2.processingQueue.shift();
                 if (!queueEntry) return;
-                var id2 = queueEntry.id, success2 = queueEntry.success, failure3 = queueEntry.failure;
+                var id2 = queueEntry.id, success2 = queueEntry.success, failure2 = queueEntry.failure;
                 var itemReference = getItemByQuery(state2.items, id2);
                 if (!itemReference || itemReference.archived) {
                   processNext2();
@@ -12458,7 +12458,7 @@
                 }
                 dispatch2(
                   "PROCESS_ITEM",
-                  { query: id2, success: success2, failure: failure3 },
+                  { query: id2, success: success2, failure: failure2 },
                   true
                 );
               };
@@ -12479,7 +12479,7 @@
                 }
               });
               item2.onOnce("process-error", function(error2) {
-                failure2({ error: error2, file: createItemAPI(item2) });
+                failure({ error: error2, file: createItemAPI(item2) });
                 processNext();
               });
               item2.onOnce("process-abort", function() {
@@ -12528,7 +12528,7 @@
             RELEASE_ITEM: getItemByQueryFromState(state2, function(item2) {
               item2.release();
             }),
-            REMOVE_ITEM: getItemByQueryFromState(state2, function(item2, success, failure2, options) {
+            REMOVE_ITEM: getItemByQueryFromState(state2, function(item2, success, failure, options) {
               var removeFromView = function removeFromView2() {
                 var id2 = item2.id;
                 getItemById(state2.items, id2).archive();
@@ -15719,7 +15719,7 @@
                 success: function success(item2) {
                   resolve(item2);
                 },
-                failure: function failure2(error2) {
+                failure: function failure(error2) {
                   reject(error2);
                 }
               });
@@ -15780,7 +15780,7 @@
                 success: function success(item2) {
                   resolve(item2);
                 },
-                failure: function failure2(error2) {
+                failure: function failure(error2) {
                   reject(error2);
                 }
               });
@@ -19317,12 +19317,12 @@
 
   // src/main.jsx
   init_cep_runtime_inject();
-  var import_react49 = __toESM(require_react(), 1);
+  var import_react47 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
   init_cep_runtime_inject();
-  var import_react48 = __toESM(require_react(), 1);
+  var import_react46 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   init_cep_runtime_inject();
@@ -20785,130 +20785,58 @@
     {
       id: "claude-desktop",
       name: "Claude Desktop",
-      kind: "mcp-stdio",
-      installHint: "Install Claude Desktop and open its MCP server settings.",
-      loginHint: "Sign in to Claude Desktop before starting the handshake.",
+      kind: "mcp-shim",
+      installHint: "Claude Desktop uses the bundled stdio-to-HTTP shim and requires system Node.",
+      loginHint: "Sign in to Claude Desktop before using the connection.",
       docsUrl: "https://support.anthropic.com/en/articles/10949351-getting-started-with-model-context-protocol-mcp-on-claude-for-desktop"
     },
     {
       id: "claude-code",
       name: "Claude Code",
-      kind: "mcp-stdio",
-      installHint: "Install Claude Code and add ae-mcp as a local MCP server.",
+      kind: "mcp-http",
+      installHint: "Add the panel host as a Streamable HTTP MCP server.",
       loginHint: "Run claude /login if Claude Code is not signed in.",
       docsUrl: "https://docs.anthropic.com/en/docs/claude-code/mcp"
     },
     {
       id: "cursor",
       name: "Cursor",
-      kind: "mcp-stdio",
-      installHint: "Open Cursor MCP settings and add this server config.",
+      kind: "mcp-http",
+      installHint: "Open Cursor MCP settings and add the local panel URL.",
       loginHint: "Restart Cursor after saving MCP settings.",
       docsUrl: "https://docs.cursor.com/context/model-context-protocol"
-    },
-    {
-      id: "openclaw",
-      name: "OpenClaw",
-      kind: "mcp-doc",
-      installHint: "Follow the OpenClaw integration docs for adding external tools.",
-      loginHint: "Use the account and runtime required by your OpenClaw deployment.",
-      docsUrl: "https://github.com/bestK/OpenClaw",
-      networkNote: "OpenClaw is often long-running or Dockerized. Keep it on the same machine / \u540C\u673A as After Effects, or make sure it can reach 127.0.0.1:11488. MCP-client support is unverified; ae may need to be wrapped as an OpenClaw skill."
-    },
-    {
-      id: "astrbot",
-      name: "AstrBot",
-      kind: "mcp-doc",
-      installHint: "AstrBot v3.5.0+ can add multiple MCP servers from the panel.",
-      loginHint: "Use the account and platform adapter required by your AstrBot deployment.",
-      docsUrl: "https://docs.astrbot.app/",
-      networkNote: "AstrBot is often long-running or Dockerized. Keep it on the same machine / \u540C\u673A as After Effects, or make sure it can reach 127.0.0.1:11488 before adding the MCP server in AstrBot v3.5.0+."
-    },
-    {
-      id: "gemini-antigravity",
-      name: "Gemini Antigravity",
-      kind: "mcp-stdio",
-      installHint: "Add ae-mcp as a local stdio MCP server in Gemini Antigravity.",
-      loginHint: "Sign in to Gemini Antigravity before starting the handshake.",
-      docsUrl: "https://ai.google.dev/gemini-api/docs"
-    },
-    {
-      id: "opencode-external",
-      name: "opencode",
-      kind: "mcp-stdio",
-      installHint: "Use this external opencode config when the embedded panel flow is blocked.",
-      loginHint: "Sign in to opencode before starting the handshake.",
-      docsUrl: "https://opencode.ai/docs"
-    },
-    {
-      id: "zcode",
-      name: "ZCode",
-      kind: "mcp-stdio",
-      installHint: "Add ae-mcp as a local MCP server in ~/.zcode/cli/config.json (mcp.servers).",
-      loginHint: "Open ZCode and make sure its selected provider has an API key before starting.",
-      docsUrl: "https://zcode.z.ai"
     }
   ];
   function expertGuidanceEnv(on) {
     return on ? {} : { AE_MCP_EXPERT_GUIDANCE: "0" };
-  }
-  function zcodeMcpConfig(port = 11488, expertGuidance = true, command = "ae-mcp") {
-    return {
-      mcp: {
-        servers: {
-          ae: {
-            name: "ae",
-            command,
-            args: [],
-            env: Object.assign(
-              { AE_MCP_BACKEND: "ae-mcp" },
-              expertGuidanceEnv(expertGuidance !== false),
-              { AE_MCP_PLUGIN_URL: `http://127.0.0.1:${port}` }
-            )
-          }
-        }
-      }
-    };
-  }
-  function mcpConfigFor(client, port = 11488, expertGuidance = true, command = "ae-mcp") {
-    if (client && client.id === "zcode") return zcodeMcpConfig(port, expertGuidance, command);
-    return {
-      mcpServers: {
-        ae: {
-          command,
-          env: {
-            AE_MCP_BACKEND: "ae-mcp",
-            ...expertGuidanceEnv(expertGuidance !== false),
-            AE_MCP_PLUGIN_URL: `http://127.0.0.1:${port}`
-          }
-        }
-      }
-    };
   }
   function httpConfigFor(client, port = 11488, extensionRoot = "<extension root>") {
     const id = typeof client === "string" ? client : client && client.id;
     const url = `http://127.0.0.1:${port}/mcp`;
     const shimPath = String(extensionRoot).replace(/[\\/]+$/, "") + "/host/stdio-shim.js";
     if (id === "claude-desktop") {
-      return { mcpServers: { ae: { command: "node", args: [shimPath] } } };
+      return {
+        mcpServers: {
+          ae: {
+            command: "node",
+            args: [shimPath],
+            env: { AE_MCP_HTTP_URL: url }
+          }
+        }
+      };
     }
     if (id === "claude-code") {
       return `claude mcp add --transport http ae ${url}`;
     }
-    if (id === "cursor") {
-      return { mcpServers: { ae: { url } } };
-    }
+    if (id === "cursor") return { mcpServers: { ae: { url } } };
     return { mcpServers: { ae: { type: "http", url } } };
   }
   function externalClientConfigText({
     client,
-    engine = "python",
     port = 11488,
-    expertGuidance = true,
-    command = "ae-mcp",
     extensionRoot = "<extension root>"
   } = {}) {
-    const config = engine === "cep-host" ? httpConfigFor(client, port, extensionRoot) : mcpConfigFor(client, port, expertGuidance, command);
+    const config = httpConfigFor(client, port, extensionRoot);
     return typeof config === "string" ? config : JSON.stringify(config, null, 2);
   }
 
@@ -21881,382 +21809,6 @@
     throw new PlatformCapabilityError("UNSUPPORTED_PLATFORM", deps.platform + "-" + deps.arch + " is not supported");
   }
 
-  // src/app/providerInitState.js
-  init_cep_runtime_inject();
-
-  // src/lib/exactSecretRedaction.js
-  init_cep_runtime_inject();
-  function sensitiveValues(profile) {
-    var _a;
-    const values = [];
-    if (typeof ((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.value) === "string" && profile.auth.value) {
-      values.push(profile.auth.value);
-      const scheme = profile.auth.value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
-      if (scheme == null ? void 0 : scheme[1]) values.push(scheme[1]);
-    }
-    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
-      if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
-    }
-    return Array.from(new Set(values)).sort((a, b) => b.length - a.length);
-  }
-  function normalizedSecrets(values) {
-    const variants = [];
-    for (const value of values || []) {
-      if (typeof value !== "string" || !value) continue;
-      variants.push(value);
-      try {
-        const encoded = JSON.stringify(value);
-        if ((encoded == null ? void 0 : encoded.startsWith('"')) && encoded.endsWith('"')) variants.push(encoded.slice(1, -1));
-      } catch {
-      }
-    }
-    return Array.from(new Set(variants.filter(Boolean))).sort((a, b) => b.length - a.length);
-  }
-  var MAX_DECODE_CHARS = 1024 * 1024;
-  var MAX_DECODE_LAYERS = 3;
-  var MAX_STRUCTURE_CHARS = 16 * 1024 * 1024;
-  function decodePercentRuns(value) {
-    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
-      try {
-        return decodeURIComponent(run);
-      } catch {
-        return run;
-      }
-    });
-  }
-  function decodeUnicodeEscapes(value) {
-    return String(value).replace(/\\u([0-9a-f]{4})/gi, (_match, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
-  }
-  function decodedTextLayers(value) {
-    let current = String(value);
-    const layers = [current];
-    for (let layer = 0; layer < MAX_DECODE_LAYERS; layer += 1) {
-      if (!current.includes("%") && !/\\u[0-9a-f]{4}/i.test(current)) break;
-      if (current.length > MAX_DECODE_CHARS) return null;
-      const decoded = decodeUnicodeEscapes(decodePercentRuns(current));
-      if (decoded === current) break;
-      layers.push(decoded);
-      current = decoded;
-    }
-    return layers;
-  }
-  function textContainsSecret(value, secrets) {
-    const layers = decodedTextLayers(value);
-    if (layers === null) return true;
-    return layers.some((layer) => secrets.some((secret) => layer.includes(secret)));
-  }
-  function containsExactSecret(value, values = []) {
-    const secrets = normalizedSecrets(values);
-    if (!secrets.length) return false;
-    const visiting = /* @__PURE__ */ new WeakSet();
-    const valueParts = [];
-    const keyParts = [];
-    const keyValueParts = [];
-    const leafKeyValueParts = [];
-    let structureChars = 0;
-    const containsText = (candidate) => textContainsSecret(candidate, secrets);
-    const appendPart = (parts, candidate) => {
-      const text = String(candidate);
-      structureChars += text.length;
-      if (structureChars > MAX_STRUCTURE_CHARS) return true;
-      parts.push(text);
-      return false;
-    };
-    const visit = (candidate) => {
-      if (typeof candidate === "function") return true;
-      if (typeof candidate !== "object" || candidate === null) {
-        try {
-          if (appendPart(valueParts, candidate)) return true;
-          if (appendPart(keyValueParts, candidate)) return true;
-          return containsText(candidate);
-        } catch {
-          return true;
-        }
-      }
-      if (visiting.has(candidate)) return true;
-      let keys;
-      try {
-        keys = Reflect.ownKeys(candidate);
-      } catch {
-        return true;
-      }
-      visiting.add(candidate);
-      try {
-        for (const key of keys) {
-          try {
-            const item = Reflect.get(candidate, key);
-            if (appendPart(keyParts, key)) return true;
-            if (appendPart(keyValueParts, key)) return true;
-            if (containsText(key)) return true;
-            if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
-              if (appendPart(leafKeyValueParts, key)) return true;
-              if (appendPart(leafKeyValueParts, item)) return true;
-            }
-            if (visit(item)) return true;
-          } catch {
-            return true;
-          }
-        }
-        return false;
-      } finally {
-        visiting.delete(candidate);
-      }
-    };
-    if (visit(value)) return true;
-    return [valueParts, keyParts, keyValueParts, leafKeyValueParts].some((parts) => containsText(parts.join("")));
-  }
-  function containsExactSecretAcrossBoundary(seedValues, payload, values = []) {
-    const secrets = normalizedSecrets(values);
-    if (!secrets.length) return false;
-    const valueParts = [];
-    const keyParts = [];
-    const keyValueParts = [];
-    const leafKeyValueParts = [];
-    const visiting = /* @__PURE__ */ new WeakSet();
-    let chars = 0;
-    const append = (parts, value) => {
-      const text = String(value);
-      chars += text.length;
-      if (chars > MAX_STRUCTURE_CHARS) return false;
-      parts.push(text);
-      return true;
-    };
-    const visit = (value) => {
-      if (typeof value === "function") return false;
-      if (typeof value !== "object" || value === null) {
-        return append(valueParts, value) && append(keyValueParts, value);
-      }
-      if (visiting.has(value)) return false;
-      let keys;
-      try {
-        keys = Reflect.ownKeys(value);
-      } catch {
-        return false;
-      }
-      visiting.add(value);
-      try {
-        for (const key of keys) {
-          let item;
-          try {
-            item = Reflect.get(value, key);
-          } catch {
-            return false;
-          }
-          if (!append(keyParts, key) || !append(keyValueParts, key)) return false;
-          if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
-            if (!append(valueParts, item) || !append(keyValueParts, item) || !append(leafKeyValueParts, key) || !append(leafKeyValueParts, item)) return false;
-          } else if (!visit(item)) {
-            return false;
-          }
-        }
-        return true;
-      } finally {
-        visiting.delete(value);
-      }
-    };
-    if (!visit(payload)) return true;
-    const candidates = [
-      ...leafKeyValueParts,
-      valueParts.join(""),
-      keyParts.join(""),
-      keyValueParts.join(""),
-      leafKeyValueParts.join("")
-    ];
-    let seeds;
-    try {
-      seeds = Array.from(seedValues || [], (value) => String(value));
-    } catch {
-      return true;
-    }
-    for (const seed of seeds) {
-      for (const candidate of candidates) {
-        if (textContainsSecret(seed + candidate, secrets) || textContainsSecret(candidate + seed, secrets)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-  function redactText(value, values = []) {
-    let text = String(value == null ? "" : value);
-    const secrets = normalizedSecrets(values);
-    if (!secrets.length) return text;
-    const marker = secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
-    const decodedLayers = decodedTextLayers(text);
-    if (decodedLayers === null) return marker;
-    if (decodedLayers.slice(1).some((layer) => secrets.some((secret) => layer.includes(secret)))) {
-      return marker;
-    }
-    const maximumPasses = Math.max(1, secrets.length * 4 + 8);
-    for (let pass = 0; pass < maximumPasses; pass += 1) {
-      let changed = false;
-      for (const secret of secrets) {
-        if (!text.includes(secret)) continue;
-        text = text.split(secret).join(marker);
-        changed = true;
-      }
-      if (!changed) return text;
-    }
-    return secrets.some((secret) => text.includes(secret)) ? "" : text;
-  }
-  function redactValueParts(value, values) {
-    if (typeof value === "string") return redactText(value, values);
-    if (value === null || ["number", "boolean", "bigint"].includes(typeof value)) {
-      const text = String(value);
-      const redacted = redactText(text, values);
-      return redacted === text ? value : redacted;
-    }
-    if (Array.isArray(value)) return value.map((item) => redactValueParts(item, values));
-    if (!value || typeof value !== "object") return value;
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
-      redactText(key, values),
-      redactValueParts(item, values)
-    ]));
-  }
-  function redactValue(value, values = []) {
-    const redacted = redactValueParts(value, values);
-    if (!containsExactSecret(redacted, values)) return redacted;
-    const secrets = normalizedSecrets(values);
-    return secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
-  }
-  function createDeltaRedactor(values, emitText) {
-    const secrets = normalizedSecrets(values);
-    let buffer = "";
-    const keep = secrets.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
-    return {
-      feed(delta) {
-        if (!secrets.length) {
-          emitText(String(delta || ""));
-          return;
-        }
-        buffer = redactText(buffer + String(delta || ""), secrets);
-        if (buffer.length > keep) {
-          emitText(buffer.slice(0, buffer.length - keep));
-          buffer = buffer.slice(buffer.length - keep);
-        }
-      },
-      flush() {
-        if (buffer) emitText(redactText(buffer, secrets));
-        buffer = "";
-      },
-      discard() {
-        buffer = "";
-      }
-    };
-  }
-  function createByteRedactor(values, emitBytes) {
-    const secrets = normalizedSecrets(values).map((value) => Buffer.from(value, "utf8")).filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
-    const displayMarker = Buffer.from("[redacted]", "utf8");
-    const marker = secrets.some((secret) => displayMarker.includes(secret)) ? Buffer.alloc(0) : displayMarker;
-    const maximum = secrets.reduce((length, secret) => Math.max(length, secret.length), 0);
-    let pending = Buffer.alloc(0);
-    function emit(value) {
-      if (value.length > 0) emitBytes(value);
-    }
-    function drain(flush) {
-      if (!secrets.length) {
-        emit(pending);
-        pending = Buffer.alloc(0);
-        return;
-      }
-      while (pending.length > 0) {
-        const boundary = flush ? pending.length : Math.max(0, pending.length - maximum + 1);
-        if (!flush && boundary === 0) return;
-        let matchIndex = -1;
-        let matchSecret = null;
-        for (const secret of secrets) {
-          const index = pending.indexOf(secret);
-          if (index < 0 || !flush && index >= boundary) continue;
-          if (matchIndex < 0 || index < matchIndex || index === matchIndex && secret.length > matchSecret.length) {
-            matchIndex = index;
-            matchSecret = secret;
-          }
-        }
-        if (matchIndex < 0) {
-          emit(pending.subarray(0, boundary));
-          pending = pending.subarray(boundary);
-          if (!flush) return;
-          continue;
-        }
-        emit(pending.subarray(0, matchIndex));
-        emit(marker);
-        pending = pending.subarray(matchIndex + matchSecret.length);
-      }
-    }
-    return {
-      feed(chunk) {
-        const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk || "");
-        if (!value.length) return;
-        pending = pending.length ? Buffer.concat([pending, value]) : Buffer.from(value);
-        drain(false);
-      },
-      flush() {
-        drain(true);
-      },
-      discard() {
-        pending = Buffer.alloc(0);
-      }
-    };
-  }
-  function safeErrorMessage(error, values = []) {
-    return redactText(error && error.message ? error.message : "Agent loop failed.", values);
-  }
-
-  // src/app/providerInitState.js
-  var HELPER_FAILURE_CODES = /* @__PURE__ */ new Set([
-    "HELPER_UNAUTHORIZED",
-    "PROTOCOL_VERSION_UNSUPPORTED",
-    "SECRET_STORE_UNAVAILABLE",
-    "PLATFORM_HELPER_REPAIR_REQUIRED",
-    "INVALID_REQUEST",
-    "MESSAGE_TOO_LARGE"
-  ]);
-  var MIGRATION_FAILURE_CODES = /* @__PURE__ */ new Set([
-    "PROVIDER_STORE_CONFLICT",
-    "INVALID_PROVIDER_MIGRATION",
-    "INVALID_MIGRATION_JOURNAL"
-  ]);
-  var SECRET_MISMATCH_CODES = /* @__PURE__ */ new Set([
-    "SECRET_CONFLICT",
-    "SECRET_NOT_FOUND",
-    "INVALID_REFERENCE"
-  ]);
-  function providerInitFailure(error) {
-    const code = typeof (error == null ? void 0 : error.code) === "string" ? error.code : "";
-    let failure2 = "PROVIDER_INITIALIZATION_FAILED";
-    if (code === "HELPER_UNAVAILABLE" || code === "HELPER_START_FAILED") {
-      failure2 = "PLATFORM_HELPER_START_FAILED";
-    } else if (HELPER_FAILURE_CODES.has(code)) failure2 = "PLATFORM_HELPER_REPAIR_REQUIRED";
-    else if (code === "PROVIDER_STORE_INVALID" || code === "PROVIDER_STORE_CREDENTIAL_CONTAMINATION") failure2 = "PROVIDER_STORE_CORRUPT";
-    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure2 = "PROVIDER_STORE_UNAVAILABLE";
-    else if (MIGRATION_FAILURE_CODES.has(code)) failure2 = "PROVIDER_MIGRATION_CONFLICT";
-    else if (SECRET_MISMATCH_CODES.has(code)) failure2 = "PROVIDER_SECRET_MISMATCH";
-    return { state: "unavailable", error: failure2 };
-  }
-  function platformHelperRepairView(providerInit, repairing, hasAction) {
-    if (!hasAction || (providerInit == null ? void 0 : providerInit.state) !== "unavailable" || (providerInit == null ? void 0 : providerInit.error) !== "PLATFORM_HELPER_REPAIR_REQUIRED") {
-      return null;
-    }
-    return {
-      disabled: repairing === true,
-      label: repairing === true ? "repairing" : "repair"
-    };
-  }
-  function providerRepairFailure(error) {
-    const classified = providerInitFailure(error);
-    return {
-      state: "unavailable",
-      error: "PLATFORM_HELPER_REPAIR_REQUIRED",
-      detail: classified.error
-    };
-  }
-  function assertProviderStateCredentialFree(providerState, exactSecrets = []) {
-    if (!containsExactSecret(providerState == null ? void 0 : providerState.providers, exactSecrets)) return providerState;
-    const error = new Error("Stored Provider data contains protected credential material.");
-    error.code = "PROVIDER_STORE_CREDENTIAL_CONTAMINATION";
-    throw error;
-  }
-
   // src/screens/SettingsScreen.jsx
   var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
   var REPO_URL = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
@@ -22279,10 +21831,9 @@
       ai: "AI \u670D\u52A1",
       conn: "\u8FDE\u63A5",
       externalClients: "\u5916\u63A5\u5BA2\u6237\u7AEF",
-      externalClientsCap: "\u7ED9\u5E38\u89C1 MCP \u5BA2\u6237\u7AEF\u590D\u5236\u914D\u7F6E\uFF1B\u6587\u6863\u578B\u6846\u67B6\u6309\u5176\u63A5\u5165\u65B9\u5F0F\u914D\u7F6E\u3002",
-      mcpStdio: "MCP stdio",
+      externalClientsCap: "\u590D\u5236\u5BBF\u4E3B URL\uFF0C\u6216\u4E3A Claude Desktop \u4F7F\u7528 Node shim\u3002",
+      mcpShim: "Node shim\uFF08\u53EF\u9009\uFF09",
       mcpHttp: "MCP HTTP",
-      mcpDoc: "\u6587\u6863\u63A5\u5165",
       panelOpenNote: "\u9762\u677F\u5F00\u7740\u624D\u80FD\u8FDE\u63A5\uFF1B\u5173\u95ED\u6216\u91CD\u8F7D\u9762\u677F\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002",
       openDocs: "\u6253\u5F00\u6587\u6863",
       sec: "\u5B89\u5168",
@@ -22291,23 +21842,10 @@
       backend: "\u540E\u7AEF",
       backendSub: "Claude",
       backendCodex: "Codex",
+      backendOpenCode: "OpenCode",
       backendZcode: "ZCode",
       recheck: "\u91CD\u65B0\u68C0\u6D4B",
-      providerNone: "\uFF08\u672A\u9009\u62E9 provider\uFF09",
-      importClaudeSettings: "\u4ECE ~/.claude/settings.json \u5BFC\u5165",
-      claude3pNote: "\u540C\u4E00\u4E2A Provider \u53EF\u540C\u65F6\u7528\u4E8E Claude \u548C Codex\uFF1B\u534F\u8BAE\u4E0E\u517C\u5BB9\u8F6C\u6362\u6309\u5F53\u524D\u6A21\u578B\u81EA\u52A8\u9009\u62E9\u3002",
-      providerHelperStartFailed: "Provider \u51ED\u636E\u529F\u80FD\u5DF2\u5B89\u5168\u505C\u7528\u3002\u5E73\u53F0 Helper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u4F46\u672C\u6B21\u672A\u80FD\u542F\u52A8\u6216\u8FDE\u63A5\uFF1B\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\uFF0C\u4ECD\u5931\u8D25\u65F6\u91CD\u542F AE\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587\u51ED\u636E\u3002",
-      providerHelperRepair: "Provider \u51ED\u636E\u529F\u80FD\u5DF2\u5B89\u5168\u505C\u7528\u3002\u5E73\u53F0 Helper \u5DF2\u542F\u52A8\u4F46\u672A\u901A\u8FC7\u63E1\u624B\u3001\u7248\u672C\u6216\u6388\u6743\u68C0\u67E5\uFF1B\u8BF7\u91CD\u542F AE\uFF0C\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587\u51ED\u636E\u3002",
-      repairHelper: "\u4FEE\u590D Helper",
-      repairingHelper: "\u6B63\u5728\u4FEE\u590D Helper\u2026",
-      providerStoreCorrupt: "Provider \u914D\u7F6E\u6587\u4EF6\u635F\u574F\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5148\u4ECE\u5907\u4EFD\u6062\u590D providers.json\uFF0C\u518D\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\u3002",
-      providerStoreUnavailable: "Provider \u914D\u7F6E\u6587\u4EF6\u4E0D\u53EF\u7528\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u68C0\u67E5 ~/.ae-mcp \u7684\u78C1\u76D8\u7A7A\u95F4\u4E0E\u8BFB\u5199\u6743\u9650\u3002",
-      providerMigrationConflict: "Provider \u8FC1\u79FB\u671F\u95F4\u914D\u7F6E\u53D1\u751F\u51B2\u7A81\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5173\u95ED\u5176\u4ED6\u9762\u677F\u5B9E\u4F8B\u540E\u91CD\u65B0\u542F\u52A8 AE \u518D\u68C0\u6D4B\u3002",
-      providerSecretMismatch: "Provider \u5F15\u7528\u4E0E\u7CFB\u7EDF\u51ED\u636E\u4E0D\u4E00\u81F4\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5728 Provider \u7BA1\u7406\u4E2D\u91CD\u65B0\u4FDD\u5B58\u5BF9\u5E94\u51ED\u636E\u3002",
-      providerInitializationFailed: "Provider \u521D\u59CB\u5316\u5931\u8D25\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5BFC\u51FA\u65E5\u5FD7\u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
-      zcodeKeyPlaceholder: "\u7C98\u8D34 provider API Key\uFF08\u5B58\u672C\u673A\uFF09",
-      zcodeKeyStored: "\u5DF2\u4FDD\u5B58\u5230\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF0C\u53EF\u7C98\u8D34\u65B0\u503C\u8986\u76D6",
-      zcodeKeySaveFailed: "\u5B89\u5168\u51ED\u636E\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u4FEE\u590D Helper \u540E\u91CD\u8BD5\u3002",
+      providerInitializationFailed: "Provider \u521D\u59CB\u5316\u5931\u8D25\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u68C0\u67E5 OpenCode provider \u914D\u7F6E\u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
       save: "\u4FDD\u5B58",
       modelDefault: "\u9ED8\u8BA4\u6A21\u578B\uFF08\u6253\u5F00\u9762\u677F\u65F6\u4F7F\u7528\uFF09",
       customModel: "\u81EA\u5B9A\u4E49\u6A21\u578B ID",
@@ -22315,10 +21853,6 @@
       zcodeModelManaged: "\u7531 ZCode \u5F53\u524D\u4F1A\u8BDD\u7BA1\u7406",
       port: "\u7AEF\u53E3",
       portHint: "\u9ED8\u8BA4 11488",
-      mcpEngine: "MCP server engine",
-      mcpEnginePython: "Python\uFF08\u9ED8\u8BA4\uFF09",
-      mcpEngineCepHost: "CEP host\uFF08\u5B9E\u9A8C\u6027\uFF09",
-      mcpEngineCap: "\u5BF9\u65B0\u4F1A\u8BDD\u751F\u6548\uFF1B\u5916\u90E8\u5BA2\u6237\u7AEF\u914D\u7F6E\u89C1\u4E0B\u65B9\u3002",
       apply: "\u5E94\u7528",
       token: "\u8BBF\u95EE Token",
       regen: "\u91CD\u65B0\u751F\u6210",
@@ -22344,7 +21878,6 @@
       copied: "\u5DF2\u590D\u5236",
       verPanel: "\u9762\u677F",
       verHost: "Host \u811A\u672C",
-      verPy: "Python \u670D\u52A1",
       pending: "P3 \u63A5\u901A",
       docs: "\u6587\u6863",
       github: "GitHub",
@@ -22354,10 +21887,9 @@
       ai: "AI service",
       conn: "Connection",
       externalClients: "External clients",
-      externalClientsCap: "Copy config for common MCP clients; configure documentation-driven frameworks with their own flow.",
-      mcpStdio: "MCP stdio",
+      externalClientsCap: "Copy the host URL, or use the Node shim for Claude Desktop.",
+      mcpShim: "Node shim (optional)",
       mcpHttp: "MCP HTTP",
-      mcpDoc: "Docs",
       panelOpenNote: "The panel must stay open. Clients reconnect after the panel closes or reloads.",
       openDocs: "Open docs",
       sec: "Security",
@@ -22366,23 +21898,10 @@
       backend: "Backend",
       backendSub: "Claude",
       backendCodex: "Codex",
+      backendOpenCode: "OpenCode",
       backendZcode: "ZCode",
       recheck: "Re-check",
-      providerNone: "(no provider selected)",
-      importClaudeSettings: "Import from ~/.claude/settings.json",
-      claude3pNote: "The same Provider can serve Claude and Codex; protocol routing and compatibility conversion are selected per model.",
-      providerHelperStartFailed: "Provider credentials are safely disabled. Platform Helper starts with AE but could not start or connect in this session. Reopen the panel, then restart AE if it still fails. Plaintext fallback is disabled.",
-      providerHelperRepair: "Provider credentials are safely disabled. Platform Helper started but failed its handshake, version, or authorization check. Restart AE, then repair the current install if it still fails. Plaintext fallback is disabled.",
-      repairHelper: "Repair Helper",
-      repairingHelper: "Repairing Helper\u2026",
-      providerStoreCorrupt: "The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.",
-      providerStoreUnavailable: "The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.",
-      providerMigrationConflict: "The provider configuration changed during migration; the current list was retained. Close other panel instances, restart AE, then re-check.",
-      providerSecretMismatch: "A provider reference no longer matches its system credential; the current list was retained. Save that credential again in Provider Manager.",
-      providerInitializationFailed: "Provider initialization failed; the current list was retained. Export logs, then re-check.",
-      zcodeKeyPlaceholder: "Paste the provider API key (stored locally)",
-      zcodeKeyStored: "Saved in the protected system credential store; paste a new value to overwrite",
-      zcodeKeySaveFailed: "Protected credential save failed. Repair the Helper and retry.",
+      providerInitializationFailed: "Provider initialization failed; the current list was retained. Check the OpenCode provider configuration, then re-check.",
       save: "Save",
       modelDefault: "Default model (used when the panel opens)",
       customModel: "Custom model ID",
@@ -22390,10 +21909,6 @@
       zcodeModelManaged: "Managed by the current ZCode session",
       port: "Port",
       portHint: "Default 11488",
-      mcpEngine: "MCP server engine",
-      mcpEnginePython: "Python (default)",
-      mcpEngineCepHost: "CEP host (experimental)",
-      mcpEngineCap: "Applies to new sessions; external client config is shown below.",
       apply: "Apply",
       token: "Access token",
       regen: "Regenerate",
@@ -22419,7 +21934,6 @@
       copied: "Copied",
       verPanel: "Panel",
       verHost: "Host script",
-      verPy: "Python service",
       pending: "P3",
       docs: "Docs",
       github: "GitHub",
@@ -22444,32 +21958,6 @@
       ),
       expanded && caption ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
       expanded ? children : null
-    ] });
-  }
-  function ZcodeKeyFallback({ t, stored, onSave }) {
-    const [draft, setDraft] = import_react19.default.useState("");
-    const [saving, setSaving] = import_react19.default.useState(false);
-    const [error, setError] = import_react19.default.useState("");
-    const save = async () => {
-      if (!onSave || saving || !draft.trim()) return;
-      setSaving(true);
-      setError("");
-      try {
-        const saved = await onSave(draft.trim());
-        if (saved === false) setError(t.zcodeKeySaveFailed);
-        else setDraft("");
-      } catch {
-        setError(t.zcodeKeySaveFailed);
-      } finally {
-        setSaving(false);
-      }
-    };
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { secret: true, value: draft, onChange: setDraft, placeholder: stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder, style: { flex: 1 } }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "primary", size: "sm", disabled: saving || !draft.trim(), onClick: save, children: t.save })
-      ] }),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null
     ] });
   }
   function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
@@ -22503,25 +21991,70 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: !!session.blocked, onChange: (value) => onBlock && onBlock(info.name, value) })
     ] });
   }
-  function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false, http = false }) {
-    const isStdio = client.kind === "mcp-stdio";
-    const hasConfig = http || isStdio;
+  function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false }) {
+    const isShim = client.kind === "mcp-shim";
     return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: http ? t.mcpHttp : isStdio ? t.mcpStdio : t.mcpDoc })
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+            "span",
+            {
+              style: {
+                display: "block",
+                font: "400 10px/1.35 var(--font-ui)",
+                color: "var(--text-tertiary)"
+              },
+              children: isShim ? t.mcpShim : t.mcpHttp
+            }
+          )
         ] }),
-        hasConfig ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: copyDisabled, onClick: (e) => {
-          e.preventDefault();
-          if (!copyDisabled) onCopy();
-        }, children: copied && !copyDisabled ? t.copied : t.copy }) : null
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          Button,
+          {
+            variant: "secondary",
+            size: "sm",
+            icon: "copy",
+            disabled: copyDisabled,
+            onClick: (e) => {
+              e.preventDefault();
+              if (!copyDisabled) onCopy();
+            },
+            children: copied && !copyDisabled ? t.copied : t.copy
+          }
+        )
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
         client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
         client.loginHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.loginHint }) : null,
-        hasConfig ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--gray-0)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)", whiteSpace: "pre" }, children: configText }) : null,
-        http ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.panelOpenNote }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          "pre",
+          {
+            style: {
+              margin: 0,
+              maxHeight: 128,
+              overflow: "auto",
+              padding: 8,
+              border: "1px solid var(--border-default)",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--gray-0)",
+              color: "var(--text-secondary)",
+              font: "400 10px/1.4 var(--font-mono)",
+              whiteSpace: "pre"
+            },
+            children: configText
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          "div",
+          {
+            style: {
+              font: "400 10px/1.45 var(--font-ui)",
+              color: "var(--text-tertiary)"
+            },
+            children: t.panelOpenNote
+          }
+        ),
         client.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.networkNote }) : null,
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("a", { href: client.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.openDocs })
       ] })
@@ -22561,11 +22094,8 @@
     port = 11488,
     onApplyPort,
     mcpConfig,
-    mcpCommand = "ae-mcp",
     extensionRoot = "<extension root>",
     mcpReady = true,
-    mcpEngine = "python",
-    onMcpEngineChange,
     logs = [],
     clients = [],
     mcpSessions = [],
@@ -22573,7 +22103,6 @@
     onBlockMcpClient,
     onRegenToken,
     hostVersion = "-",
-    pythonVersion = "-",
     model = "claude-sonnet-4-6",
     modelOptions,
     modelSwitchable = true,
@@ -22584,48 +22113,22 @@
     onBackendChange,
     expertGuidance = true,
     onExpertGuidance,
-    channels = { claude: [], codex: [], zcode: [] },
+    channels = { claude: [], codex: [], opencode: [], zcode: [] },
     activeChannel = "",
     selectedChannel = "",
     onSelectChannel,
     onRecheckBackend,
     recheckDisabled = false,
-    providers = [],
-    claudeProviderId = "",
-    onClaudeProviderChange,
-    codexProviderId = "",
-    onCodexProviderChange,
-    onImportClaudeSettings,
-    claudeSettingsImportAvailable = false,
-    onSaveZcodeKey,
-    zcodeKeyStored = false,
-    onSaveCodexKey,
-    codexKeyStored = false,
     codexCliConfig = null,
     providerManager = null,
     providerInit = { state: "checking", error: "" },
-    onRepairPlatformHelper,
-    providerRepairing = false,
     logLevel = "info",
     onLogLevel,
     onExportLogs,
     onRerunWizard
   }) {
     const t = S[lang] || S.zh;
-    const providerInitMessage = {
-      PLATFORM_HELPER_START_FAILED: t.providerHelperStartFailed,
-      PLATFORM_HELPER_REPAIR_REQUIRED: t.providerHelperRepair,
-      PROVIDER_STORE_CORRUPT: t.providerStoreCorrupt,
-      PROVIDER_STORE_UNAVAILABLE: t.providerStoreUnavailable,
-      PROVIDER_MIGRATION_CONFLICT: t.providerMigrationConflict,
-      PROVIDER_SECRET_MISMATCH: t.providerSecretMismatch,
-      PROVIDER_INITIALIZATION_FAILED: t.providerInitializationFailed
-    }[providerInit.error] || t.providerInitializationFailed;
-    const helperRepair = platformHelperRepairView(
-      providerInit,
-      providerRepairing,
-      typeof onRepairPlatformHelper === "function"
-    );
+    const providerInitMessage = t.providerInitializationFailed;
     const zcodeModelLocked = zcodeDefaultModelLocked({ backend, models: modelOptions });
     const [customModelDraft, setCustomModelDraft] = import_react19.default.useState(customModel);
     const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
@@ -22662,13 +22165,14 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "ai", title: t.ai, expanded: sections.ai, onToggle: onToggleSection, children: [
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
           { value: "subscription", label: t.backendSub },
-          { value: "codex", label: t.backendCodex }
+          { value: "codex", label: t.backendCodex },
+          { value: "opencode", label: t.backendOpenCode }
         ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ChannelCard,
           {
             lang,
-            channels: backend === "codex" ? channels.codex : backend === "zcode" ? channels.zcode : channels.claude,
+            channels: backend === "codex" ? channels.codex : backend === "opencode" ? channels.opencode : backend === "zcode" ? channels.zcode : channels.claude,
             activeChannel,
             selectedChannel,
             onSelectChannel,
@@ -22676,30 +22180,8 @@
             recheckLabel: t.recheck,
             recheckDisabled,
             renderChannelBody: (channel) => {
-              if (backend !== "codex" && backend !== "zcode" && channel === "api") {
-                return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: claudeProviderId, onChange: onClaudeProviderChange, options: [
-                    { value: "", label: t.providerNone },
-                    ...providers.map((p) => ({ value: p.id, label: p.name }))
-                  ] }),
-                  claudeSettingsImportAvailable ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", onClick: onImportClaudeSettings, children: t.importClaudeSettings }) : null,
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.claude3pNote })
-                ] });
-              }
-              if (backend === "codex" && channel === "custom") {
-                return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: codexProviderId, onChange: onCodexProviderChange, options: [
-                  { value: "", label: t.providerNone },
-                  ...providers.map((p) => ({ value: p.id, label: p.name }))
-                ] });
-              }
-              if (backend === "zcode" && channel === "cli-config") {
-                return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ZcodeKeyFallback, { t, stored: zcodeKeyStored, onSave: onSaveZcodeKey });
-              }
               if (backend === "codex" && channel === "cli-config") {
-                return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-                  codexCliConfig && codexCliConfig.provider ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)" }, children: [codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") }) : null,
-                  onSaveCodexKey ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ZcodeKeyFallback, { t, stored: codexKeyStored, onSave: onSaveCodexKey }) : null
-                ] });
+                return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: codexCliConfig && codexCliConfig.provider ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)" }, children: [codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") }) : null });
               }
               return null;
             }
@@ -22707,17 +22189,7 @@
         ),
         providerInit.state === "unavailable" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { role: "alert", style: { padding: "7px 8px", border: "1px solid var(--error-border)", borderRadius: "var(--radius-md)", background: "var(--error-bg)", color: "var(--error)", font: "400 10px/1.5 var(--font-ui)" }, children: [
           providerInitMessage,
-          providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : "",
-          helperRepair ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { marginTop: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-            Button,
-            {
-              variant: "secondary",
-              size: "sm",
-              disabled: helperRepair.disabled,
-              onClick: onRepairPlatformHelper,
-              children: helperRepair.label === "repairing" ? t.repairingHelper : t.repairHelper
-            }
-          ) }) : null
+          providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : ""
         ] }) : null,
         providerManager,
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: zcodeManagedModelLabel(lang, backend === "zcode" ? model : "") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
@@ -22731,10 +22203,6 @@
         }, placeholder: backend === "codex" ? "provider/model" : "claude-custom" }) }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "conn", title: t.conn, expanded: sections.conn, onToggle: onToggleSection, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.mcpEngine, caption: t.mcpEngineCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: mcpEngine, onChange: onMcpEngineChange, options: [
-          { value: "python", label: t.mcpEnginePython },
-          { value: "cep-host", label: t.mcpEngineCepHost }
-        ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
@@ -22751,10 +22219,7 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Section, { id: "externalClients", title: t.externalClients, caption: t.externalClientsCap, expanded: sections.externalClients, onToggle: onToggleSection, children: EXTERNAL_CLIENTS.map((externalClient) => {
         const configText = mcpReady ? externalClientConfigText({
           client: externalClient,
-          engine: mcpEngine,
           port: Number(draftPort) || port || 11488,
-          expertGuidance,
-          command: mcpCommand,
           extensionRoot
         }) : "";
         return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
@@ -22765,7 +22230,6 @@
             configText,
             copied: copied === externalClient.id,
             copyDisabled: !mcpReady,
-            http: mcpEngine === "cep-host",
             onCopy: () => copy(externalClient.id, configText)
           },
           externalClient.id
@@ -22814,7 +22278,6 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "about", title: t.about, expanded: sections.about, onToggle: onToggleSection, children: [
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verPy, value: pythonVersion, badge: pythonVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", onClick: () => openExternal(DOCS_URL), children: t.docs }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", onClick: () => openExternal(REPO_URL), children: t.github }),
@@ -23129,7 +22592,7 @@
 
   // src/screens/WizardScreen.jsx
   init_cep_runtime_inject();
-  var import_react25 = __toESM(require_react(), 1);
+  var import_react24 = __toESM(require_react(), 1);
 
   // src/components/core/Spinner.jsx
   init_cep_runtime_inject();
@@ -23156,38 +22619,13 @@
     );
   }
 
-  // src/components/chat/AIAvatar.jsx
-  init_cep_runtime_inject();
-  var import_react24 = __toESM(require_react(), 1);
-  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
-  function AIAvatar({ size = 20, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
-      "span",
-      {
-        "aria-label": "AI",
-        style: {
-          width: size,
-          height: size,
-          flex: "none",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "var(--accent-bg)",
-          border: "1px solid var(--accent-border)",
-          borderRadius: "var(--radius-md)",
-          ...style
-        },
-        children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
-      }
-    );
-  }
-
   // src/lib/wizardSteps.js
   init_cep_runtime_inject();
-  var LOCAL_STEPS = ["uv", "aeMcp"];
-  var SUBSCRIPTION_STEPS = ["node", "claude", "login"];
+  var HOST_STEPS = ["host"];
+  var CLI_STEPS = ["claude", "codex", "opencode"];
+  var OPTIONAL_CLIENT_STEPS = ["node"];
   var LOG_TAIL = 4096;
-  var ALL_STEPS = [...LOCAL_STEPS, ...SUBSCRIPTION_STEPS];
+  var ALL_STEPS = [...HOST_STEPS, ...CLI_STEPS, ...OPTIONAL_CLIENT_STEPS];
   function emptyState() {
     return { status: "idle", version: "", logTail: "" };
   }
@@ -23218,12 +22656,15 @@
       case "detect-result":
         return patchStep(state, action.id, {
           status: action.ok ? "ok" : "missing",
-          version: action.ok ? action.version || "" : ""
+          version: action.ok ? action.version || "" : "",
+          logTail: action.detail || current.logTail
         });
       case "run-start":
         return patchStep(state, action.id, { status: "running", logTail: "" });
       case "run-chunk":
-        return patchStep(state, action.id, { logTail: appendTail(current.logTail, action.text) });
+        return patchStep(state, action.id, {
+          logTail: appendTail(current.logTail, action.text)
+        });
       case "run-done":
         return patchStep(state, action.id, {
           status: action.ok ? "checking" : "fail",
@@ -23235,7 +22676,7 @@
   }
 
   // src/screens/WizardScreen.jsx
-  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
   var W = {
     zh: {
       stepOf: (n) => `\u7B2C ${n} \u6B65 / \u5171 3 \u6B65`,
@@ -23243,27 +22684,22 @@
       next: "\u4E0B\u4E00\u6B65",
       start: "\u5F00\u59CB\u4F7F\u7528",
       skip: "\u8DF3\u8FC7\u5411\u5BFC",
-      t1: "\u6B22\u8FCE\u4F7F\u7528 ae-mcp",
-      b1: "\u8BA9 AI \u52A9\u624B\u5B89\u5168\u5730\u64CD\u4F5C\u4F60\u7684 After Effects \u5DE5\u7A0B \u2014 \u6BCF\u4E00\u6B65\u53EF\u89C1\u3001\u53EF\u6279\u51C6\u3001\u53EF\u64A4\u9500\u3002",
+      t1: "\u68C0\u67E5\u9762\u677F\u5BBF\u4E3B",
+      b1: "\u9762\u677F\u5185\u7684 CEP \u5BBF\u4E3B\u76F4\u63A5\u63D0\u4F9B MCP \u4E0E After Effects \u6267\u884C\u80FD\u529B\uFF0C\u4E0D\u518D\u9700\u8981 Python \u670D\u52A1\u3002",
       langLabel: "\u754C\u9762\u8BED\u8A00 \xB7 Language",
-      t2: "\u5B89\u88C5\u672C\u5730\u670D\u52A1",
-      b2: "\u9762\u677F\u53EF\u4EE5\u66FF\u4F60\u5B8C\u6210\u5B89\u88C5\u2014\u2014\u9010\u9879\u68C0\u6D4B\uFF0C\u7F3A\u4EC0\u4E48\u88C5\u4EC0\u4E48\uFF1A",
+      t2: "\u68C0\u67E5 AI CLI",
+      b2: "\u5185\u7F6E\u5BF9\u8BDD\u53EF\u4F7F\u7528 Claude\u3001Codex \u6216 opencode\uFF1B\u6309\u9700\u5B89\u88C5\u5176\u4E2D\u4EFB\u610F\u4E00\u4E2A\u3002",
+      t3: "\u8FDE\u63A5\u5916\u90E8\u5BA2\u6237\u7AEF",
+      b3: "Claude Code \u4E0E Cursor \u76F4\u63A5\u4F7F\u7528\u5BBF\u4E3B URL\uFF1BClaude Desktop \u4F7F\u7528\u968F\u63D2\u4EF6\u63D0\u4F9B\u7684 shim\u3002",
       copy: "\u590D\u5236",
-      copied: "\u5DF2\u590D\u5236",
-      install: "\u4E00\u952E\u5B89\u88C5",
       recheck: "\u590D\u68C0",
-      openLogin: "\u6253\u5F00\u767B\u5F55\u7A97\u53E3",
-      loginHint: "\u767B\u5F55\u5B8C\u6210\u540E\u56DE\u6765\u70B9\u590D\u68C0",
+      install: "\u5B89\u88C5",
       copyLog: "\u590D\u5236\u65E5\u5FD7",
-      uacNote: "Node \u5B89\u88C5\u4F1A\u5F39\u4E00\u6B21\u7CFB\u7EDF\u6388\u6743\uFF08UAC\uFF09",
-      t3: "\u8FDE\u63A5 AI \u5BA2\u6237\u7AEF",
-      b3: "\u9009\u62E9\u4F60\u7684\u5BA2\u6237\u7AEF\uFF0C\u628A\u914D\u7F6E\u7C98\u8D34\u8FDB\u5B83\u7684 MCP \u8BBE\u7F6E\uFF1A",
-      builtin: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD",
-      builtinNote: "\u65E0\u9700\u914D\u7F6E\uFF0C\u5F00\u7BB1\u5373\u7528",
-      docClient: "\u67E5\u770B\u63A5\u5165\u6587\u6863",
-      docOnly: "\u6309\u6587\u6863\u63A5\u5165",
-      mcpHttp: "MCP HTTP",
-      panelOpenNote: "\u9762\u677F\u5F00\u7740\u624D\u80FD\u8FDE\u63A5\uFF1B\u5173\u95ED\u6216\u91CD\u8F7D\u9762\u677F\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002"
+      optionalNode: "\u7CFB\u7EDF Node\uFF08\u4EC5 Claude Desktop shim\uFF0C\u53EF\u9009\uFF09",
+      optionalNodeHint: "Claude Code\u3001Cursor \u548C\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD\u4E0D\u9700\u8981\u6B64 Node \u6B65\u9AA4\u3002",
+      panelOpenNote: "\u9762\u677F\u5F00\u7740\u624D\u80FD\u8FDE\u63A5\uFF1B\u5173\u95ED\u6216\u91CD\u8F7D\u9762\u677F\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002",
+      http: "MCP HTTP",
+      shim: "Node shim"
     },
     en: {
       stepOf: (n) => `Step ${n} of 3`,
@@ -23271,110 +22707,197 @@
       next: "Next",
       start: "Start using",
       skip: "Skip setup",
-      t1: "Welcome to ae-mcp",
-      b1: "Let AI assistants operate your After Effects project safely \u2014 every step visible, approvable, undoable.",
+      t1: "Check the panel host",
+      b1: "The CEP host now serves MCP and After Effects execution directly, with no Python service.",
       langLabel: "\u754C\u9762\u8BED\u8A00 \xB7 Language",
-      t2: "Install the local service",
-      b2: "The panel installs these for you \u2014 detect each item, install what's missing:",
+      t2: "Check AI CLIs",
+      b2: "Built-in chat can use Claude, Codex, or opencode. Install any CLI you need.",
+      t3: "Connect an external client",
+      b3: "Claude Code and Cursor use the host URL; Claude Desktop uses the bundled shim.",
       copy: "Copy",
-      copied: "Copied",
-      install: "Install",
       recheck: "Re-check",
-      openLogin: "Open login window",
-      loginHint: "After login, return here and re-check",
+      install: "Install",
       copyLog: "Copy log",
-      uacNote: "Node install triggers one UAC prompt",
-      t3: "Connect an AI client",
-      b3: "Pick your client and paste the config into its MCP settings:",
-      builtin: "Built-in chat",
-      builtinNote: "No config needed \u2014 works out of the box",
-      docClient: "Open integration docs",
-      docOnly: "Use docs",
-      mcpHttp: "MCP HTTP",
-      panelOpenNote: "The panel must stay open. Clients reconnect after the panel closes or reloads."
+      optionalNode: "System Node (optional, Claude Desktop shim only)",
+      optionalNodeHint: "Claude Code, Cursor, and built-in chat do not need this Node step.",
+      panelOpenNote: "The panel must stay open. Clients reconnect after it closes or reloads.",
+      http: "MCP HTTP",
+      shim: "Node shim"
     }
   };
   var EMPTY_STEPS = initialStepStates();
   var STEP_LABELS = {
-    uv: "uv",
-    aeMcp: "ae-mcp",
-    node: "Node.js LTS",
+    host: "CEP host /health",
+    node: "Node.js 18+",
     claude: "Claude Code CLI 2.x+",
-    login: "Claude login"
+    codex: "Codex CLI",
+    opencode: "opencode CLI"
   };
   function copyText2(text) {
-    if (globalThis.navigator && globalThis.navigator.clipboard && globalThis.navigator.clipboard.writeText) {
-      globalThis.navigator.clipboard.writeText(text || "").catch(() => {
-      });
-    }
+    const clipboard = globalThis.navigator && globalThis.navigator.clipboard;
+    if (clipboard && clipboard.writeText) clipboard.writeText(text || "").catch(() => {
+    });
   }
-  function CodeBlock({ code, copyLabel, onCopy, maxHeight }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { position: "relative", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("pre", { style: { margin: 0, padding: "10px 36px 10px 12px", font: "400 11px/1.7 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", maxHeight: maxHeight || 180, whiteSpace: "pre" }, children: code }),
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(IconButton, { icon: "copy", title: copyLabel, variant: "secondary", onClick: onCopy, style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" } })
-    ] });
+  function CodeBlock({ code, copyLabel, onCopy }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+      "div",
+      {
+        style: {
+          position: "relative",
+          background: "var(--gray-0)",
+          border: "1px solid var(--border-subtle)",
+          borderRadius: "var(--radius-md)"
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+            "pre",
+            {
+              style: {
+                margin: 0,
+                padding: "10px 36px 10px 12px",
+                font: "400 11px/1.7 var(--font-mono)",
+                color: "var(--text-primary)",
+                overflow: "auto",
+                maxHeight: 150,
+                whiteSpace: "pre"
+              },
+              children: code
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+            IconButton,
+            {
+              icon: "copy",
+              title: copyLabel,
+              variant: "secondary",
+              onClick: onCopy,
+              style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" }
+            }
+          )
+        ]
+      }
+    );
   }
-  function ClientRow2({ name, note, selected, onSelect }) {
-    const [hover, setHover] = import_react25.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
+  function ClientRow2({ client, selected, label, onSelect }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
       "button",
       {
         type: "button",
         className: "ds-focusable",
         onClick: onSelect,
-        onMouseEnter: () => setHover(true),
-        onMouseLeave: () => setHover(false),
         style: {
           display: "flex",
           alignItems: "center",
           gap: 8,
           width: "100%",
-          minHeight: 32,
-          padding: "0 10px",
+          minHeight: 40,
+          padding: "5px 10px",
           textAlign: "left",
-          background: selected ? "var(--bg-selected)" : hover ? "var(--bg-hover)" : "transparent",
-          border: `1px solid ${selected ? "var(--border-strong)" : "var(--border-default)"}`,
+          background: selected ? "var(--bg-selected)" : "transparent",
+          border: "1px solid var(--border-default)",
           borderRadius: "var(--radius-md)",
-          cursor: "pointer",
-          transition: "background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)"
+          cursor: "pointer"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: name }),
-            note ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: note }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+              "span",
+              {
+                style: {
+                  display: "block",
+                  font: "500 12px/1.35 var(--font-ui)",
+                  color: "var(--text-primary)"
+                },
+                children: client.name
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+              "span",
+              {
+                style: {
+                  display: "block",
+                  font: "400 10px/1.35 var(--font-ui)",
+                  color: "var(--text-tertiary)"
+                },
+                children: label
+              }
+            )
           ] }),
-          selected ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5, color: "var(--text-primary)" }) : null
+          selected ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5 }) : null
         ]
       }
     );
   }
-  function InstallStepRow({ label, state, commandPreview: commandPreview2, t, onDetect, onInstall, login = false, hint }) {
+  function CheckRow({ label, state, t, onDetect, onInstall, commandPreview: commandPreview2, hint }) {
     const status = state && state.status ? state.status : "idle";
-    const isBusy = status === "checking" || status === "running";
-    const isProblem = status === "missing" || status === "fail";
-    const icon = status === "ok" ? "check" : isProblem ? "triangle-alert" : status === "idle" ? "circle" : null;
-    const tail = String(state && state.logTail || "").split(/\r?\n/).slice(-6).join("\n");
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: 8, padding: "9px 10px", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none", color: status === "ok" ? "var(--ok)" : isProblem ? "var(--warn)" : "var(--text-tertiary)" }, children: isBusy ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 14 }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: icon, size: 15, strokeWidth: 2 }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6, minHeight: 18 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
-          status === "ok" && state.version ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: state.version }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(IconButton, { icon: "rotate-cw", title: t.recheck, variant: "secondary", size: "sm", disabled: isBusy, onClick: onDetect })
-        ] }),
-        hint ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: hint }) : null,
-        isProblem ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("code", { style: { display: "block", padding: "6px 8px", background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.55 var(--font-mono)", color: "var(--text-primary)", overflow: "auto", whiteSpace: "pre" }, children: commandPreview2 }),
-          login ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.loginHint }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: login ? t.openLogin : t.install }),
-            status === "fail" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => copyText2(state.logTail), children: t.copyLog }) : null
+    const busy = status === "checking" || status === "running";
+    const problem = status === "missing" || status === "fail";
+    const icon = status === "ok" ? "check" : problem ? "triangle-alert" : "circle";
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+      "div",
+      {
+        style: {
+          display: "flex",
+          gap: 8,
+          padding: "9px 10px",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-md)",
+          background: "var(--bg-panel)"
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+            "span",
+            {
+              style: {
+                width: 18,
+                height: 18,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: status === "ok" ? "var(--ok)" : problem ? "var(--warn)" : "var(--text-tertiary)"
+              },
+              children: busy ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Spinner, { size: 14 }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: icon, size: 15, strokeWidth: 2 })
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+              status === "ok" && state.version ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)" }, children: state.version }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
+              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                IconButton,
+                {
+                  icon: "rotate-cw",
+                  title: t.recheck,
+                  variant: "secondary",
+                  size: "sm",
+                  disabled: busy,
+                  onClick: onDetect
+                }
+              )
+            ] }),
+            hint ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: hint }) : null,
+            problem && state.logTail ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 10px/1.45 var(--font-mono)", color: "var(--text-tertiary)" }, children: state.logTail }) : null,
+            problem && onInstall && commandPreview2 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                "code",
+                {
+                  style: {
+                    padding: "6px 8px",
+                    background: "var(--gray-0)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--radius-sm)",
+                    font: "400 10px/1.55 var(--font-mono)"
+                  },
+                  children: commandPreview2
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: t.install })
+            ] }) : null
           ] })
-        ] }) : null,
-        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("pre", { style: { margin: 0, maxHeight: 96, overflow: "auto", padding: 8, background: "var(--gray-0)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", font: "400 10px/1.45 var(--font-mono)", color: "var(--text-secondary)", whiteSpace: "pre-wrap" }, children: tail }) : null
-      ] })
-    ] });
+        ]
+      }
+    );
   }
   function WizardScreen({
     step = 1,
@@ -23382,13 +22905,9 @@
     onLangChange,
     client = "claude-desktop",
     onClient,
-    clientName = "Claude Desktop",
-    mcpConfig = "",
-    mcpCommand = "ae-mcp",
+    extensionRoot = "<extension root>",
     mcpReady = true,
-    mcpEngine = "python",
     port = 11488,
-    expertGuidance = true,
     onNext,
     onBack,
     onCopy,
@@ -23397,111 +22916,166 @@
     stepStates = EMPTY_STEPS,
     onDetect,
     onInstall,
-    onOpenLogin,
-    commandPreviews = {},
-    localSteps = LOCAL_STEPS,
-    channels = { claude: [], codex: [], zcode: [] },
-    activeChannel = ""
+    commandPreviews = {}
   }) {
     const t = W[lang] || W.zh;
-    const clientOptions = [{ id: "builtin", name: "builtin" }, ...EXTERNAL_CLIENTS];
-    const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
-    const selectedMcpConfig = mcpReady && selectedExternalClient && (mcpEngine === "cep-host" || selectedExternalClient.kind === "mcp-stdio") ? externalClientConfigText({
-      client: selectedExternalClient,
-      engine: mcpEngine,
+    const selectedClient = EXTERNAL_CLIENTS.find((item) => item.id === client) || EXTERNAL_CLIENTS[0];
+    const config = mcpReady ? externalClientConfigText({
+      client: selectedClient,
       port,
-      expertGuidance,
-      command: mcpCommand
+      extensionRoot
     }) : "";
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
-        onSkip && step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, style: { color: "var(--text-tertiary)" }, children: t.skip }) : null
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: "var(--space-3)", paddingTop: "var(--space-6)" }, children: [
-        step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(AIAvatar, { size: 44 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { marginTop: "var(--space-2)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginBottom: 6 }, children: t.langLabel }),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] })
-          ] })
-        ] }) : null,
-        step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: localSteps.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
-            InstallStepRow,
-            {
-              label: STEP_LABELS[id],
-              state: stepStates[id] || EMPTY_STEPS[id],
-              commandPreview: commandPreviews[id] || "",
-              t,
-              onDetect: () => onDetect && onDetect(id),
-              onInstall: () => onInstall && onInstall(id)
-            },
-            id
-          )) })
-        ] }) : null,
-        step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.t3 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
-          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: clientOptions.map((c) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
-            ClientRow2,
-            {
-              name: c.id === "builtin" ? t.builtin : c.name,
-              note: c.id === "builtin" ? t.builtinNote : mcpEngine === "cep-host" ? t.mcpHttp : c.kind === "mcp-doc" ? t.docOnly : null,
-              selected: client === c.id,
-              onSelect: () => onClient && onClient(c.id)
-            },
-            c.id
-          )) }),
-          selectedExternalClient && selectedMcpConfig ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }),
-            mcpEngine === "cep-host" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.panelOpenNote }) : null
-          ] }) : null,
-          selectedExternalClient && selectedExternalClient.kind === "mcp-doc" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, padding: 10, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("a", { href: selectedExternalClient.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.docClient }),
-            selectedExternalClient.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: selectedExternalClient.networkNote }) : null
-          ] }) : null,
-          client === "builtin" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
-            SUBSCRIPTION_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
-              InstallStepRow,
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+      "div",
+      {
+        style: {
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          padding: "var(--space-6) var(--space-5) var(--space-5)"
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((number) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+              "span",
               {
-                label: STEP_LABELS[id],
-                state: stepStates[id] || EMPTY_STEPS[id],
-                commandPreview: commandPreviews[id] || (id === "login" ? "claude" : ""),
-                t,
-                login: id === "login",
-                hint: id === "node" ? t.uacNote : null,
-                onDetect: () => onDetect && onDetect(id),
-                onInstall: () => id === "login" ? onOpenLogin && onOpenLogin() : onInstall && onInstall(id)
+                style: {
+                  width: number === step ? 14 : 5,
+                  height: 5,
+                  borderRadius: 3,
+                  background: number === step ? "var(--gray-11)" : number < step ? "var(--gray-9)" : "var(--gray-6)"
+                }
               },
-              id
-            )),
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(ChannelCard, { lang, channels: channels.claude, activeChannel, readOnly: true })
-          ] }) : null
-        ] }) : null
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
-        step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
-        step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start })
-      ] })
-    ] });
+              number
+            )) }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
+            onSkip && step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, children: t.skip }) : null
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+            "div",
+            {
+              style: {
+                flex: 1,
+                minHeight: 0,
+                overflow: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: "var(--space-3)",
+                paddingTop: "var(--space-6)"
+              },
+              children: [
+                step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t1 }),
+                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
+                  HOST_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                    CheckRow,
+                    {
+                      label: STEP_LABELS[id],
+                      state: stepStates[id] || EMPTY_STEPS[id],
+                      t,
+                      onDetect: () => onDetect && onDetect(id)
+                    },
+                    id
+                  )),
+                  /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                      "div",
+                      {
+                        style: {
+                          font: "500 11px/1.35 var(--font-ui)",
+                          color: "var(--text-secondary)",
+                          marginBottom: 6
+                        },
+                        children: t.langLabel
+                      }
+                    ),
+                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                      Segmented,
+                      {
+                        full: true,
+                        value: lang,
+                        onChange: onLangChange,
+                        options: [
+                          { value: "zh", label: "\u4E2D\u6587" },
+                          { value: "en", label: "English" }
+                        ]
+                      }
+                    )
+                  ] })
+                ] }) : null,
+                step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t2 }),
+                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
+                  CLI_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                    CheckRow,
+                    {
+                      label: STEP_LABELS[id],
+                      state: stepStates[id] || EMPTY_STEPS[id],
+                      t,
+                      onDetect: () => onDetect && onDetect(id)
+                    },
+                    id
+                  ))
+                ] }) : null,
+                step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t3 }),
+                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
+                  EXTERNAL_CLIENTS.map((item) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                    ClientRow2,
+                    {
+                      client: item,
+                      selected: selectedClient.id === item.id,
+                      label: item.kind === "mcp-shim" ? t.shim : t.http,
+                      onSelect: () => onClient && onClient(item.id)
+                    },
+                    item.id
+                  )),
+                  config ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                    CodeBlock,
+                    {
+                      code: config,
+                      copyLabel: t.copy,
+                      onCopy: () => onCopy ? onCopy(config) : copyText2(config)
+                    }
+                  ) : null,
+                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.panelOpenNote }),
+                  selectedClient.id === "claude-desktop" ? OPTIONAL_CLIENT_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                    CheckRow,
+                    {
+                      label: t.optionalNode,
+                      state: stepStates[id] || EMPTY_STEPS[id],
+                      t,
+                      hint: t.optionalNodeHint,
+                      commandPreview: commandPreviews[id] || "",
+                      onDetect: () => onDetect && onDetect(id),
+                      onInstall: () => onInstall && onInstall(id)
+                    },
+                    id
+                  )) : null
+                ] }) : null
+              ]
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
+            step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
+            step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start })
+          ] })
+        ]
+      }
+    );
   }
 
   // src/screens/ConnectionDrawer.jsx
   init_cep_runtime_inject();
-  var import_react28 = __toESM(require_react(), 1);
+  var import_react27 = __toESM(require_react(), 1);
 
   // src/components/shell/DiagnosticItem.jsx
   init_cep_runtime_inject();
-  var import_react26 = __toESM(require_react(), 1);
-  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
+  var import_react25 = __toESM(require_react(), 1);
+  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
   var GLYPHS = {
     pass: { icon: "check", color: "var(--ok)" },
     fail: { icon: "x", color: "var(--error)" },
@@ -23509,10 +23083,10 @@
   };
   function DiagnosticItem({ label, status = "pending", detail, actionLabel, onAction, style }) {
     const g = GLYPHS[status];
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
-        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
-        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
+        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
+        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
           "span",
           {
             style: {
@@ -23525,7 +23099,7 @@
           }
         )
       ] }),
-      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
         "div",
         {
           style: {
@@ -23539,8 +23113,8 @@
             borderRadius: "var(--radius-sm)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
-            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
+            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
           ]
         }
       ) : null
@@ -23549,19 +23123,19 @@
 
   // src/components/shell/Drawer.jsx
   init_cep_runtime_inject();
-  var import_react27 = __toESM(require_react(), 1);
-  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
+  var import_react26 = __toESM(require_react(), 1);
+  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
   function Drawer({ open = false, title, onClose, children, closeTitle = "\u5173\u95ED Close", style }) {
     if (!open) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
         "div",
         {
           onClick: onClose,
           style: { position: "absolute", inset: 0, background: "var(--scrim)", animation: "ds-fade var(--dur-slow) var(--ease-out)" }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
         "div",
         {
           role: "dialog",
@@ -23582,7 +23156,7 @@
             ...style
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
               "div",
               {
                 style: {
@@ -23593,12 +23167,12 @@
                   borderBottom: "1px solid var(--border-subtle)"
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
+                  /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+                  /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
                 ]
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
           ]
         }
       )
@@ -23606,7 +23180,7 @@
   }
 
   // src/screens/ConnectionDrawer.jsx
-  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
   var D = {
     zh: {
       title: "\u8FDE\u63A5",
@@ -23630,7 +23204,7 @@
       checks: {
         "host-listening": "Host \u76D1\u542C",
         "token-file": "Token \u6587\u4EF6",
-        "python-seen": "Python \u63E1\u624B",
+        "mcp-session": "MCP \u4F1A\u8BDD",
         "ae-project": "AE \u5DE5\u7A0B",
         "extendscript-ping": "ExtendScript Ping"
       }
@@ -23657,16 +23231,16 @@
       checks: {
         "host-listening": "Host listening",
         "token-file": "Token file",
-        "python-seen": "Python handshake",
+        "mcp-session": "MCP session",
         "ae-project": "AE project",
         "extendscript-ping": "ExtendScript ping"
       }
     }
   };
   function KV({ k, children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
     ] });
   }
   function formatTime(ts) {
@@ -23688,46 +23262,43 @@
   function ConnectionDrawerBody({ lang = "zh", info = {}, panelVersion = package_default.version, statusLabel, copyReady = true, onCopyConfig, onRestart, onDiagnose }) {
     const t = D[lang] || D.zh;
     const connected = !!info.lastClientSeenAt || !!info.lastHealthAt;
-    const pythonVersion = info.pythonVersion || "-";
     const hostVersion = info.hostVersion || "-";
-    const mismatch = info.pythonVersion && info.pythonVersion !== panelVersion;
+    const mismatch = info.hostVersion && info.hostVersion !== panelVersion;
     const recent = info.lastClientSeenAt ? [{ time: formatTime(info.lastClientSeenAt), text: lang === "zh" ? "\u5916\u90E8 MCP \u5BA2\u6237\u7AEF" : "External MCP client" }] : [];
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.status, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.status, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.port, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.port, children: [
         info.port || "-",
         " ",
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "copy", title: t.copyConfig, disabled: !copyReady, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(IconButton, { icon: "copy", title: t.copyConfig, disabled: !copyReady, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.ver, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.ver, children: [
         "v",
         panelVersion,
         " \xB7 host ",
         hostVersion,
-        " \xB7 py ",
-        pythonVersion,
-        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
+        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
       ] }, i)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: !copyReady, onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: !copyReady, onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
       ] })
     ] });
   }
   function DiagnosticsBody({ lang = "zh", diagnostics = [], onRerun }) {
     const t = D[lang] || D.zh;
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
-      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
+      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
         DiagnosticItem,
         {
           label: t.checks[c.id] || c.id,
@@ -23736,10 +23307,10 @@
         },
         c.id
       )),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
         }), children: t.copyReport }),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
+        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
       ] })
     ] });
   }
@@ -23747,8 +23318,8 @@
     const diagList = Array.isArray(diagnostics) ? diagnostics : [];
     const t = D[lang] || D.zh;
     const panelVersion = info.panelVersion || package_default.version;
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
         ConnectionDrawerBody,
         {
           lang,
@@ -23760,7 +23331,7 @@
           onDiagnose
         }
       ),
-      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
+      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
     ] });
   }
 
@@ -23771,6 +23342,34 @@
   // src/components/chat/ChatBubble.jsx
   init_cep_runtime_inject();
   var import_react29 = __toESM(require_react(), 1);
+
+  // src/components/chat/AIAvatar.jsx
+  init_cep_runtime_inject();
+  var import_react28 = __toESM(require_react(), 1);
+  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
+  function AIAvatar({ size = 20, style }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+      "span",
+      {
+        "aria-label": "AI",
+        style: {
+          width: size,
+          height: size,
+          flex: "none",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "var(--accent-bg)",
+          border: "1px solid var(--accent-border)",
+          borderRadius: "var(--radius-md)",
+          ...style
+        },
+        children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
+      }
+    );
+  }
+
+  // src/components/chat/ChatBubble.jsx
   var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
   function formatAttachmentBytes(value) {
     const bytes = Number(value) || 0;
@@ -26092,7 +25691,7 @@
 
   // src/screens/ToolsScreen.jsx
   init_cep_runtime_inject();
-  var import_react42 = __toESM(require_react(), 1);
+  var import_react40 = __toESM(require_react(), 1);
 
   // src/components/forms/Textarea.jsx
   init_cep_runtime_inject();
@@ -26142,1568 +25741,289 @@
     );
   }
 
-  // src/components/tools/ToolArtifactEditor.jsx
-  init_cep_runtime_inject();
-  var import_react40 = __toESM(require_react(), 1);
-
-  // src/lib/toolsState.js
-  init_cep_runtime_inject();
-  var EMPTY_SUMMARIES = Object.freeze([]);
-  var INITIAL_STATUSES = Object.freeze(["saved", "pinned"]);
-  var INITIAL_TOOLS_STATE = Object.freeze({
-    phase: "idle",
-    summaries: EMPTY_SUMMARIES,
-    total: 0,
-    selectedId: null,
-    inspected: null,
-    query: "",
-    kinds: [],
-    category: "",
-    risk: "",
-    statuses: INITIAL_STATUSES,
-    sourceType: "",
-    editor: null,
-    importPreview: null,
-    conflictResolutions: {},
-    error: ""
-  });
-  var STATUS_ORDER = { pinned: 0, saved: 1, candidate: 2, archived: 3, deprecated: 4 };
-  var SOURCE_ORDER = { bundled: 0, user: 1, legacy: 2, imported: 3, "chat-tool-call": 4 };
-  var RISK_ORDER = { read: 0, write: 1, destructive: 2, external: 3 };
-  function sourceType(artifact) {
-    return artifact && (artifact.sourceType || artifact.source && artifact.source.type) || "";
-  }
-  function sortSummaries(values) {
-    return [...values].sort((left, right) => {
-      var _a, _b, _c, _d, _e, _f;
-      const pinned = Number(right.status === "pinned") - Number(left.status === "pinned");
-      if (pinned) return pinned;
-      const verified = Number(Boolean(right.verified)) - Number(Boolean(left.verified));
-      if (verified) return verified;
-      const status = ((_a = STATUS_ORDER[left.status]) != null ? _a : 99) - ((_b = STATUS_ORDER[right.status]) != null ? _b : 99);
-      if (status) return status;
-      const risk = ((_c = RISK_ORDER[left.declaredRisk]) != null ? _c : 99) - ((_d = RISK_ORDER[right.declaredRisk]) != null ? _d : 99);
-      if (risk) return risk;
-      const source = ((_e = SOURCE_ORDER[sourceType(left)]) != null ? _e : 99) - ((_f = SOURCE_ORDER[sourceType(right)]) != null ? _f : 99);
-      if (source) return source;
-      const updated = Number(right.updatedAt || 0) - Number(left.updatedAt || 0);
-      if (updated) return updated;
-      return String(left.id || "").localeCompare(String(right.id || ""));
-    });
-  }
-  function toSummary(value) {
-    var _a;
-    if (!value || typeof value !== "object") return value;
-    return {
-      id: value.id,
-      name: value.name,
-      description: value.description,
-      kind: value.kind,
-      category: value.category,
-      tags: Array.isArray(value.tags) ? [...value.tags] : [],
-      status: value.status,
-      verified: Boolean(value.verified),
-      declaredRisk: value.declaredRisk,
-      contentHash: value.contentHash,
-      revision: value.revision,
-      updatedAt: value.updatedAt,
-      lastUsedAt: (_a = value.lastUsedAt) != null ? _a : null,
-      sourceType: value.sourceType || value.source && value.source.type || "",
-      executionCapabilities: value.executionCapabilities || null
-    };
-  }
-  function messageOf(error) {
-    return String(error && error.message || error || "Tool Library request failed");
-  }
-  function isRevisionConflict(error) {
-    const code = String(error && (error.code || error.payload && error.payload.code) || "");
-    return code === "tool_revision_conflict" || code === "tool_store_revision_conflict";
-  }
-  function reduceToolsState(state = INITIAL_TOOLS_STATE, event = {}) {
-    switch (event.type) {
-      case "load-start":
-        return { ...state, phase: "loading", error: "", refreshRequired: false };
-      case "load-success": {
-        const payload = event.payload || event;
-        const summaries = (payload.artifacts || payload.summaries || []).map(toSummary);
-        const selectedVisible = summaries.some((row) => row.id === state.selectedId);
-        return {
-          ...state,
-          phase: "ready",
-          summaries: sortSummaries(summaries),
-          total: Number.isFinite(payload.total) ? payload.total : summaries.length,
-          selectedId: selectedVisible ? state.selectedId : null,
-          inspected: selectedVisible ? state.inspected : null,
-          error: "",
-          refreshRequired: false
-        };
-      }
-      case "load-error":
-        return {
-          ...state,
-          phase: "error",
-          error: messageOf(event.error),
-          refreshRequired: isRevisionConflict(event.error)
-        };
-      case "select":
-        return {
-          ...state,
-          selectedId: event.id || null,
-          inspected: null,
-          editor: null,
-          error: ""
-        };
-      case "inspect-success":
-        return {
-          ...state,
-          phase: "ready",
-          inspected: {
-            artifact: event.payload && event.payload.artifact,
-            trust: event.payload && event.payload.trust || "user-untrusted"
-          },
-          error: ""
-        };
-      case "set-query":
-        return { ...state, query: String(event.value || ""), error: "" };
-      case "set-filter":
-        return { ...state, [event.key]: event.value, error: "" };
-      case "edit-start":
-        return { ...state, editor: event.editor || event.artifact || null, error: "" };
-      case "edit-change":
-        return {
-          ...state,
-          editor: state.editor ? { ...state.editor, ...event.changes || { [event.key]: event.value } } : state.editor,
-          error: ""
-        };
-      case "edit-cancel":
-        return { ...state, editor: null, error: "" };
-      case "save-success": {
-        const artifact = event.artifact || event.payload && event.payload.artifact;
-        const summaries = artifact ? state.summaries.map((row) => row.id === artifact.id ? toSummary({ ...row, ...artifact }) : row) : state.summaries;
-        return {
-          ...state,
-          phase: "ready",
-          summaries: sortSummaries(summaries),
-          inspected: artifact ? { artifact, trust: event.trust || "user-untrusted" } : state.inspected,
-          editor: null,
-          error: "",
-          refreshRequired: false
-        };
-      }
-      case "delete-success": {
-        const id = event.id || event.artifactId;
-        return {
-          ...state,
-          summaries: state.summaries.filter((row) => row.id !== id),
-          total: Math.max(0, state.total - 1),
-          selectedId: state.selectedId === id ? null : state.selectedId,
-          inspected: state.selectedId === id ? null : state.inspected,
-          editor: null,
-          error: ""
-        };
-      }
-      case "import-preview":
-        return {
-          ...state,
-          importPreview: event.preview || event.payload || null,
-          conflictResolutions: {},
-          error: ""
-        };
-      case "import-resolution":
-        return {
-          ...state,
-          conflictResolutions: {
-            ...state.conflictResolutions,
-            [event.conflictId]: event.resolution
-          }
-        };
-      case "import-finished":
-        return {
-          ...state,
-          importPreview: null,
-          conflictResolutions: {},
-          error: ""
-        };
-      case "clear-error":
-        return { ...state, error: "", refreshRequired: false };
-      default:
-        return state;
-    }
-  }
-  function searchArgsFromState(state, { offset = 0, limit = 100 } = {}) {
-    const args = {
-      query: String(state.query || ""),
-      statuses: [...state.statuses || []],
-      offset,
-      limit
-    };
-    if (state.kinds && state.kinds.length) args.kinds = [...state.kinds];
-    if (state.category) args.categories = [state.category];
-    if (state.risk) args.risks = [state.risk];
-    if (state.sourceType) args.source_types = [state.sourceType];
-    return args;
-  }
-  function canEditArtifact(artifact) {
-    return Boolean(
-      artifact && artifact.kind !== "system-command" && sourceType(artifact) !== "bundled" && !["archived", "deprecated"].includes(artifact.status)
-    );
-  }
-  function toolExecutionCapabilities(artifact) {
-    const contract = artifact && artifact.executionCapabilities;
-    const operations = Array.isArray(contract && contract.operations) ? contract.operations : [];
-    const direct = contract && contract.directRun && typeof contract.directRun === "object" ? contract.directRun : {};
-    return {
-      render: operations.includes("render"),
-      execute: operations.includes("execute"),
-      apply: operations.includes("apply"),
-      directRun: Boolean(direct.available),
-      operation: direct.operation || null,
-      requiresTarget: Boolean(direct.requiresTarget),
-      disabledReason: direct.disabledReason || null,
-      runtime: contract && contract.runtime || null
-    };
-  }
-  function canPromoteArtifact(artifact) {
-    return Boolean(artifact && artifact.status === "candidate");
-  }
-  function displayArtifactContent(artifact) {
-    if (!artifact || artifact.content === void 0 || artifact.content === null) return "";
-    if (typeof artifact.content === "string") return artifact.content;
-    return JSON.stringify(artifact.content, null, 2);
-  }
-  function emptyToolRunInputs() {
-    return {
-      args: "{}",
-      target: { compId: "", layerId: "", path: "" }
-    };
-  }
-  function normalizeExpressionTarget(target) {
-    const compId = String(target && target.compId || "").trim();
-    const path = String(target && target.path || "").trim();
-    const layerId = Number(target && target.layerId);
-    if (!compId || !path || !Number.isInteger(layerId) || layerId < 1) {
-      throw new TypeError("expression target is invalid");
-    }
-    return { compId, layerId, path };
-  }
-  function canonicalizeJson(value) {
-    if (Array.isArray(value)) return value.map(canonicalizeJson);
-    if (!value || typeof value !== "object") return value;
-    return Object.keys(value).sort().reduce((result, key) => {
-      result[key] = canonicalizeJson(value[key]);
-      return result;
-    }, /* @__PURE__ */ Object.create(null));
-  }
-  function sameJsonValue(left, right) {
-    if (Object.is(left, right)) return true;
-    return JSON.stringify(canonicalizeJson(left)) === JSON.stringify(canonicalizeJson(right));
-  }
-  function buildArtifactEditChanges(artifact, editable) {
-    const legacy = sourceType(artifact) === "legacy";
-    const fields = [
-      ["name", "name"],
-      ["description", "description"],
-      ["kind", "kind"],
-      ["category", "category"],
-      ["tags", "tags"],
-      ["declared_risk", "declaredRisk"],
-      ["content", "content"],
-      ["args_schema", "argsSchema"]
-    ];
-    const changes = {};
-    for (const [requestKey, artifactKey] of fields) {
-      if (legacy && requestKey === "name") continue;
-      if (!sameJsonValue(editable[requestKey], artifact[artifactKey])) {
-        changes[requestKey] = editable[requestKey];
-      }
-    }
-    if (legacy) {
-      const skillFields = ["description", "content", "args_schema", "kind"];
-      const metadataFields = ["category", "tags", "declared_risk"];
-      const changesSkill = skillFields.some((key) => Object.prototype.hasOwnProperty.call(changes, key));
-      const changesMetadata = metadataFields.some((key) => Object.prototype.hasOwnProperty.call(changes, key));
-      if (changesSkill && changesMetadata) {
-        const error = new Error("Legacy skill fields and metadata must be saved separately");
-        error.code = "tool_legacy_transaction_required";
-        throw error;
-      }
-    }
-    return changes;
-  }
-  function confirmToolAction(confirmImpl, message) {
-    if (typeof confirmImpl !== "function") return false;
-    try {
-      return confirmImpl(message) === true;
-    } catch {
-      return false;
-    }
-  }
-
-  // src/components/tools/ToolArtifactEditor.jsx
+  // src/screens/ToolsScreen.jsx
   var import_jsx_runtime38 = __toESM(require_jsx_runtime(), 1);
-  var COPY = {
+  var TEXT = {
     zh: {
-      titleNew: "\u65B0\u5EFA\u5DE5\u5177",
-      titleEdit: "\u7F16\u8F91\u5DE5\u5177",
-      name: "\u540D\u79F0",
-      description: "\u8BF4\u660E",
-      kind: "\u7C7B\u578B",
-      category: "\u5206\u7C7B",
-      tags: "\u6807\u7B7E",
-      risk: "\u58F0\u660E\u98CE\u9669",
+      title: "\u5DE5\u5177\u5E93",
+      tools: "\u5DE5\u5177",
+      skills: "\u6280\u80FD",
+      searchTools: "\u641C\u7D22\u5DE5\u5177\u2026",
+      searchSkills: "\u7B5B\u9009\u6280\u80FD\u2026",
+      empty: "\u6CA1\u6709\u5339\u914D\u9879",
+      select: "\u9009\u62E9\u4E00\u4E2A\u6761\u76EE",
+      selectCap: "\u5148\u4ECE\u5DE6\u4FA7\u9009\u62E9\uFF0C\u518D\u67E5\u770B\u8BE6\u60C5\u6216\u8FD0\u884C\u3002",
+      args: "\u53C2\u6570\uFF08JSON\uFF09",
+      run: "\u8FD0\u884C",
+      render: "\u6E32\u67D3\u5E76\u590D\u5236",
+      result: "\u7ED3\u679C",
+      refresh: "\u5237\u65B0",
       content: "\u5185\u5BB9",
-      args: "\u53C2\u6570 Schema\uFF08JSON\uFF09",
-      save: "\u4FDD\u5B58",
-      cancel: "\u53D6\u6D88",
-      invalidJson: "JSON \u683C\u5F0F\u65E0\u6548",
-      legacyName: "Legacy \u5DE5\u5177\u540D\u79F0\u4E3A\u53EA\u8BFB",
-      legacySplit: "Legacy \u5DE5\u5177\u7684\u6280\u80FD\u5185\u5BB9\u5B57\u6BB5\u4E0E\u5143\u6570\u636E\u5B57\u6BB5\u9700\u8981\u5206\u4E24\u6B21\u4FDD\u5B58\u3002",
-      noChanges: "\u6CA1\u6709\u9700\u8981\u4FDD\u5B58\u7684\u66F4\u6539\u3002"
+      invalidArgs: "\u53C2\u6570\u5FC5\u987B\u662F JSON \u5BF9\u8C61\u3002",
+      signed: "\u5DF2\u9A8C\u8BC1",
+      user: "\u7528\u6237\u5DE5\u5177",
+      prompt: "\u63D0\u793A\u6280\u80FD"
     },
     en: {
-      titleNew: "New tool",
-      titleEdit: "Edit tool",
-      name: "Name",
-      description: "Description",
-      kind: "Kind",
-      category: "Category",
-      tags: "Tags",
-      risk: "Declared risk",
+      title: "Tool Library",
+      tools: "Tools",
+      skills: "Skills",
+      searchTools: "Search tools\u2026",
+      searchSkills: "Filter skills\u2026",
+      empty: "No matching items",
+      select: "Select an item",
+      selectCap: "Choose an item on the left to inspect or run it.",
+      args: "Arguments (JSON)",
+      run: "Run",
+      render: "Render & copy",
+      result: "Result",
+      refresh: "Refresh",
       content: "Content",
-      args: "Argument schema (JSON)",
-      save: "Save",
-      cancel: "Cancel",
-      invalidJson: "Invalid JSON",
-      legacyName: "Legacy tool names are read-only",
-      legacySplit: "Save legacy skill fields and metadata fields in two separate operations.",
-      noChanges: "There are no changes to save."
+      invalidArgs: "Arguments must be a JSON object.",
+      signed: "Verified",
+      user: "User tool",
+      prompt: "Prompt skill"
     }
   };
-  var KIND_OPTIONS = ["jsx", "expression", "prompt-skill", "recipe", "diagnostic"].map((value) => ({ value, label: value }));
-  var RISK_OPTIONS = ["read", "write", "destructive", "external"].map((value) => ({ value, label: value }));
-  function initialDraft(artifact) {
-    return {
-      name: artifact && artifact.name || "",
-      description: artifact && artifact.description || "",
-      kind: artifact && artifact.kind || "jsx",
-      category: artifact && artifact.category || "workflow",
-      tags: artifact && Array.isArray(artifact.tags) ? artifact.tags.join(", ") : "",
-      declaredRisk: artifact && artifact.declaredRisk || "write",
-      content: artifact ? displayArtifactContent(artifact) : "",
-      argsSchema: JSON.stringify(artifact && artifact.argsSchema || {}, null, 2)
-    };
-  }
-  function parseObject(text) {
-    const parsed = JSON.parse(text || "{}");
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new TypeError("object required");
-    return parsed;
-  }
-  function ToolArtifactEditor({
-    artifact = null,
-    lang = "zh",
-    busy = false,
-    onSave,
-    onCancel
-  }) {
-    const t = COPY[lang] || COPY.zh;
-    const isLegacy = Boolean(
-      artifact && (artifact.sourceType || artifact.source && artifact.source.type) === "legacy"
-    );
-    const [draft, setDraft] = import_react40.default.useState(() => initialDraft(artifact));
-    const [error, setError] = import_react40.default.useState("");
-    import_react40.default.useEffect(() => {
-      setDraft(initialDraft(artifact));
-      setError("");
-    }, [artifact]);
-    const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
-    const save = async () => {
-      let argsSchema;
-      let content = draft.content;
-      try {
-        argsSchema = parseObject(draft.argsSchema);
-        if (draft.kind === "recipe" || draft.kind === "diagnostic") content = parseObject(draft.content);
-      } catch {
-        setError(t.invalidJson);
-        return;
-      }
-      const editable = {
-        name: draft.name.trim(),
-        description: draft.description,
-        kind: draft.kind,
-        category: draft.category.trim() || "workflow",
-        tags: draft.tags.split(",").map((value) => value.trim()).filter(Boolean),
-        declared_risk: draft.declaredRisk,
-        content,
-        args_schema: argsSchema
-      };
-      if (!editable.name) {
-        setError(t.name);
-        return;
-      }
-      setError("");
-      if (artifact) {
-        let changes;
-        try {
-          changes = buildArtifactEditChanges(artifact, editable);
-        } catch (editError) {
-          if (editError && editError.code === "tool_legacy_transaction_required") {
-            setError(t.legacySplit);
-            return;
-          }
-          throw editError;
-        }
-        if (!Object.keys(changes).length) {
-          setError(t.noChanges);
-          return;
-        }
-        await onSave({
-          artifact_id: artifact.id,
-          changes,
-          expected_revision: artifact.revision,
-          expected_content_hash: artifact.contentHash
-        });
-      } else {
-        await onSave({ ...editable, status: "saved" });
-      }
-    };
-    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-editor", role: "dialog", "aria-label": artifact ? t.titleEdit : t.titleNew, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-editor__title", children: artifact ? t.titleEdit : t.titleNew }),
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-editor__grid", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.name, caption: isLegacy ? t.legacyName : "", children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
-          Input,
-          {
-            value: draft.name,
-            onChange: (value) => update("name", value),
-            disabled: isLegacy
-          }
-        ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.category, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: draft.category, onChange: (value) => update("category", value) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.kind, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: draft.kind, onChange: (value) => update("kind", value), options: KIND_OPTIONS }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.risk, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: draft.declaredRisk, onChange: (value) => update("declaredRisk", value), options: RISK_OPTIONS }) })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.description, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { value: draft.description, onChange: (value) => update("description", value), rows: 2 }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.tags, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: draft.tags, onChange: (value) => update("tags", value), placeholder: "animation, utility" }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.content, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { mono: true, value: draft.content, onChange: (value) => update("content", value), rows: 9 }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.args, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { mono: true, value: draft.argsSchema, onChange: (value) => update("argsSchema", value), rows: 6, error: Boolean(error) }) }),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-inline-error", role: "alert", children: error }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-editor__actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "ghost", onClick: onCancel, disabled: busy, children: t.cancel }),
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: save, disabled: busy || !draft.name.trim(), children: t.save })
-      ] })
-    ] });
-  }
-
-  // src/components/tools/ToolArtifactRow.jsx
-  init_cep_runtime_inject();
-  var import_react41 = __toESM(require_react(), 1);
-  var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
-  var L3 = {
-    zh: { never: "\u672A\u4F7F\u7528", verified: "\u5DF2\u9A8C\u8BC1", run: "\u8FD0\u884C" },
-    en: { never: "Never used", verified: "Verified", run: "Run" }
-  };
-  function riskStatus(risk) {
-    if (risk === "external" || risk === "destructive") return "error";
-    if (risk === "write") return "warn";
-    return "neutral";
-  }
-  function lastUsed(value, t) {
-    if (!value) return t.never;
-    try {
-      return new Date(value).toLocaleString();
-    } catch {
-      return t.never;
+  function objectArgs(text) {
+    const value = JSON.parse(text || "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new TypeError("object required");
     }
+    return value;
   }
-  function ToolArtifactRow({
-    artifact,
-    selected = false,
-    onSelect,
-    onRun,
-    runDisabled = false,
-    lang = "zh"
-  }) {
-    const t = L3[lang] || L3.zh;
-    const directRun = Boolean(
-      artifact && artifact.executionCapabilities && artifact.executionCapabilities.directRun && artifact.executionCapabilities.directRun.available
-    );
-    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(
-      "div",
+  function defaultArgs(schema) {
+    const result = {};
+    const properties = schema && schema.properties && typeof schema.properties === "object" ? schema.properties : {};
+    for (const [name, definition] of Object.entries(properties)) {
+      if (definition && definition.default !== void 0) result[name] = definition.default;
+    }
+    return result;
+  }
+  function itemId(mode, item) {
+    return mode === "skills" ? "skill:" + item.name : item.id;
+  }
+  function ItemRow({ mode, item, selected, onSelect }) {
+    const id = itemId(mode, item);
+    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(
+      "button",
       {
-        className: `tools-artifact-row ds-focusable${selected ? " is-selected" : ""}`,
+        type: "button",
+        className: "ds-focusable",
+        onClick: () => onSelect(item),
+        style: {
+          width: "100%",
+          minHeight: 48,
+          padding: "7px 9px",
+          textAlign: "left",
+          background: selected ? "var(--bg-selected)" : "transparent",
+          border: "1px solid var(--border-subtle)",
+          borderRadius: "var(--radius-md)",
+          color: "var(--text-primary)",
+          cursor: "pointer"
+        },
+        "data-item-id": id,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(
-            "button",
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+            "span",
             {
-              type: "button",
-              className: "tools-artifact-row__select",
-              "aria-current": selected || void 0,
-              onClick: () => onSelect && onSelect(artifact.id),
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("span", { className: "tools-artifact-row__top", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "tools-artifact-row__name", children: artifact.name }),
-                  artifact.verified ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: "ok", icon: "check", children: t.verified }) : null
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("span", { className: "tools-artifact-row__badges", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { children: artifact.kind }),
-                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { children: artifact.category }),
-                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: riskStatus(artifact.declaredRisk), children: artifact.declaredRisk }),
-                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: artifact.status === "candidate" ? "warn" : artifact.status === "pinned" ? "accent" : "neutral", children: artifact.status })
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("span", { className: "tools-artifact-row__meta", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: artifact.sourceType }),
-                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: lastUsed(artifact.lastUsedAt, t) })
-                ] })
-              ]
+              style: {
+                display: "block",
+                font: "500 12px/1.35 var(--font-ui)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              },
+              children: item.name || item.id
             }
           ),
-          directRun ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
-            "button",
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+            "span",
             {
-              type: "button",
-              className: "tools-artifact-row__run",
-              onClick: () => onRun && onRun(artifact),
-              disabled: runDisabled,
-              children: t.run
+              style: {
+                display: "block",
+                marginTop: 2,
+                font: "400 10px/1.35 var(--font-ui)",
+                color: "var(--text-tertiary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              },
+              children: item.description || item.kind || ""
             }
-          ) : null
+          )
         ]
       }
     );
   }
-
-  // src/cep/toolFileDialogs.js
-  init_cep_runtime_inject();
-  var TOOL_PACKAGE_SUFFIX = ".aemcptools";
-  var SYSTEM_COMMAND_SUFFIXES = [".ps1", ".psm1", ".bat", ".cmd", ".sh", ".command"];
-  function selectedValue(result) {
-    if (!result || Number(result.err || 0) !== 0) return null;
-    const data2 = result.data;
-    if (Array.isArray(data2)) return data2.length === 1 ? data2[0] : null;
-    return data2 || null;
-  }
-  function normalizeFileUrl(value) {
-    let path = String(value || "").trim();
-    if (/^file:\/\//i.test(path)) {
-      path = decodeURIComponent(path.replace(/^file:\/\//i, ""));
-      if (/^\/[A-Za-z]:[\\/]/.test(path)) path = path.slice(1);
-    }
-    return path;
-  }
-  function chooseToolPackage(cepFs, {
-    title = "Import Tool Library package",
-    initialPath = "",
-    normalizePath: normalizePath2 = normalizeFileUrl
-  } = {}) {
-    if (!cepFs || typeof cepFs.showOpenDialog !== "function") {
-      throw new TypeError("CEP file dialog is unavailable");
-    }
-    const result = cepFs.showOpenDialog(
-      false,
-      false,
-      title,
-      initialPath,
-      ["aemcptools", "ps1", "psm1", "bat", "cmd", "sh", "command"]
-    );
-    const selected = selectedValue(result);
-    if (!selected) return null;
-    const path = normalizePath2(normalizeFileUrl(selected));
-    const lower = path.toLowerCase();
-    if (!lower.endsWith(TOOL_PACKAGE_SUFFIX) && !SYSTEM_COMMAND_SUFFIXES.some((suffix) => lower.endsWith(suffix))) {
-      throw new Error("Select a .aemcptools package or a quarantined system-command file");
-    }
-    return path;
-  }
-  function chooseToolExportPath(cepFs, {
-    title = "Export Tool Library package",
-    initialPath = "",
-    normalizePath: normalizePath2 = normalizeFileUrl
-  } = {}) {
-    if (!cepFs || typeof cepFs.showSaveDialog !== "function") {
-      throw new TypeError("CEP file dialog is unavailable");
-    }
-    const result = cepFs.showSaveDialog(
-      title,
-      initialPath,
-      ["aemcptools"],
-      "tools.aemcptools"
-    );
-    const selected = selectedValue(result);
-    if (!selected) return null;
-    const path = normalizePath2(normalizeFileUrl(selected));
-    return path.toLowerCase().endsWith(TOOL_PACKAGE_SUFFIX) ? path : `${path}${TOOL_PACKAGE_SUFFIX}`;
-  }
-
-  // src/cep/toolsApi.js
-  init_cep_runtime_inject();
-  function parseMcpPayload(result) {
-    const text = Array.isArray(result && result.content) ? result.content.filter((entry) => entry && entry.type === "text").map((entry) => String(entry.text || "")).join("") : "";
-    let payload;
-    try {
-      payload = JSON.parse(text);
-    } catch (cause) {
-      const error = new Error("Invalid Tool Library response");
-      error.code = "tool_invalid_response";
-      error.cause = cause;
-      throw error;
-    }
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      const error = new Error("Invalid Tool Library response");
-      error.code = "tool_invalid_response";
-      throw error;
-    }
-    if (result && result.isError || payload.ok === false) {
-      const message = String(payload.error || "Tool Library request failed");
-      const error = new Error(message);
-      error.code = String(payload.code || payload.error || "tool_request_failed");
-      error.payload = payload;
-      throw error;
-    }
-    return payload;
-  }
-  function createToolsApi(mcp) {
-    if (!mcp || typeof mcp.callTool !== "function") {
-      throw new TypeError("An MCP client is required");
-    }
-    const call = async (name, args) => parseMcpPayload(
-      await mcp.callTool(name, args)
-    );
-    const panelCall = async (name, args) => {
-      if (typeof mcp.callPanelTool !== "function") {
-        throw new Error("Trusted panel Tool Library channel is unavailable");
-      }
-      return parseMcpPayload(await mcp.callPanelTool(name, args));
-    };
-    return {
-      index: (args = {}) => call("ae_toolIndex", args),
-      search: (args = {}) => call("ae_toolSearch", args),
-      inspect: (artifactId, options = {}) => call("ae_toolInspect", {
-        artifact_id: artifactId,
-        ...options
-      }),
-      developerIndex: (args = {}) => panelCall("ae_toolIndex", args),
-      developerSearch: (args = {}) => panelCall("ae_toolSearch", args),
-      developerInspect: (artifactId) => panelCall("ae_toolInspect", {
-        artifact_id: artifactId
-      }),
-      create: (input) => panelCall("ae_toolCreate", input),
-      edit: (input) => panelCall("ae_toolEdit", input),
-      delete: (input) => panelCall("ae_toolDelete", input),
-      archive: (input) => panelCall("ae_toolArchive", input),
-      duplicate: (input) => panelCall("ae_toolDuplicate", input),
-      promoteFromHistory: (input) => panelCall("ae_toolPromoteFromHistory", input),
-      use: (input) => call("ae_toolUse", input),
-      previewImport: (path) => panelCall("ae_toolImport", { action: "preview", path }),
-      commitImport: (importId, resolutions) => panelCall("ae_toolImport", {
-        action: "commit",
-        import_id: importId,
-        resolutions
-      }),
-      discardImport: (importId) => panelCall("ae_toolImport", {
-        action: "discard",
-        import_id: importId
-      }),
-      exportPackage: (artifactIds, outPath) => panelCall("ae_toolExport", {
-        artifact_ids: artifactIds,
-        out_path: outPath
-      }),
-      newOperationId: () => {
-        if (typeof mcp.newOperationId !== "function") {
-          throw new Error("Secure operation id generation is unavailable");
-        }
-        return mcp.newOperationId();
-      }
-    };
-  }
-  async function startToolPlan(api, {
-    artifactId,
-    operation,
-    args = {},
-    target = {},
-    operationId = api.newOperationId()
-  }) {
-    const plan = await api.use({
-      artifact_id: artifactId,
-      action: "prepare",
-      operation,
-      args,
-      target
-    });
-    const grant = await api.use({
-      action: "grant",
-      plan_hash: plan.planHash,
-      grant_scope: "once"
-    });
-    const startRequest = {
-      action: "start",
-      plan_hash: plan.planHash,
-      grant_id: grant.grantId,
-      operation_id: operationId
-    };
-    try {
-      return await api.use(startRequest);
-    } catch (firstError) {
-      try {
-        return await api.use(startRequest);
-      } catch (secondError) {
-        secondError.startRetryCause = firstError;
-        throw secondError;
-      }
-    }
-  }
-  async function waitForToolExecution(api, execution, {
-    pollIntervalMs = 250,
-    statusRetryLimit = 2,
-    onProgress = () => {
-    },
-    wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
-  } = {}) {
-    let current = execution;
-    onProgress(current);
-    while (!current.terminal) {
-      await wait(pollIntervalMs);
-      let lastError;
-      for (let attempt = 0; attempt <= statusRetryLimit; attempt += 1) {
-        try {
-          current = await api.use({ action: "status", execution_id: current.executionId });
-          lastError = null;
-          break;
-        } catch (error) {
-          lastError = error;
-          if (attempt < statusRetryLimit) await wait(pollIntervalMs);
-        }
-      }
-      if (lastError) {
-        lastError.execution = current;
-        lastError.recoveryAction = "resume-status";
-        throw lastError;
-      }
-      onProgress(current);
-    }
-    return current;
-  }
-
-  // src/lib/toolRunForm.js
-  init_cep_runtime_inject();
-  function schemaParts(schema) {
-    const value = schema && typeof schema === "object" && !Array.isArray(schema) ? schema : {};
-    const canonical = value.type === "object" || value.properties || value.required;
-    return {
-      properties: canonical ? value.properties || {} : value,
-      required: new Set(canonical && Array.isArray(value.required) ? value.required : [])
-    };
-  }
-  function initialToolArgs(schema) {
-    const { properties } = schemaParts(schema);
-    return Object.entries(properties).reduce((result, [name, rule]) => {
-      if (rule && Object.hasOwn(rule, "default")) result[name] = rule.default;
-      else if (rule && rule.type === "boolean") result[name] = false;
-      else result[name] = "";
-      return result;
-    }, {});
-  }
-  function toolArgFields(schema) {
-    const { properties, required } = schemaParts(schema);
-    return Object.entries(properties).map(([name, rawRule]) => {
-      const rule = rawRule && typeof rawRule === "object" ? rawRule : {};
-      return {
-        name,
-        type: rule.type || "string",
-        required: required.has(name),
-        enum: Array.isArray(rule.enum) ? rule.enum : null,
-        minimum: rule.minimum,
-        maximum: rule.maximum,
-        supported: ["string", "number", "integer", "boolean"].includes(rule.type || "string") || Array.isArray(rule.enum)
-      };
-    });
-  }
-  function buildToolArgs(schema, values) {
-    const fields = toolArgFields(schema);
-    const result = {};
-    for (const field of fields) {
-      const value = values && values[field.name];
-      if ((value === "" || value === void 0) && !field.required) continue;
-      if ((value === "" || value === void 0) && field.required) {
-        throw new TypeError(`Missing required argument: ${field.name}`);
-      }
-      if (field.type === "integer") {
-        const parsed = Number(value);
-        if (!Number.isInteger(parsed)) throw new TypeError(`Invalid integer: ${field.name}`);
-        result[field.name] = parsed;
-      } else if (field.type === "number") {
-        const parsed = Number(value);
-        if (!Number.isFinite(parsed)) throw new TypeError(`Invalid number: ${field.name}`);
-        result[field.name] = parsed;
-      } else if (field.type === "boolean") {
-        result[field.name] = Boolean(value);
-      } else if (field.supported) {
-        result[field.name] = value;
-      } else {
-        throw new TypeError(`Use Advanced JSON for argument: ${field.name}`);
-      }
-      if (field.enum && !field.enum.some((item) => Object.is(item, result[field.name]))) {
-        throw new TypeError(`Invalid enum value: ${field.name}`);
-      }
-      if (typeof result[field.name] === "number") {
-        if (field.minimum !== void 0 && result[field.name] < field.minimum) {
-          throw new TypeError(`Value below minimum: ${field.name}`);
-        }
-        if (field.maximum !== void 0 && result[field.name] > field.maximum) {
-          throw new TypeError(`Value above maximum: ${field.name}`);
-        }
-      }
-    }
-    return result;
-  }
-
-  // src/screens/ToolsScreen.jsx
-  var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
-  var TEXT = {
-    zh: {
-      library: "\u5DE5\u5177\u5E93",
-      new: "\u65B0\u5EFA",
-      import: "\u5BFC\u5165",
-      export: "\u5BFC\u51FA",
-      search: "\u641C\u7D22\u5DE5\u5177\u2026",
-      allKinds: "\u5168\u90E8\u7C7B\u578B",
-      allRisk: "\u5168\u90E8\u98CE\u9669",
-      allSource: "\u5168\u90E8\u6765\u6E90",
-      active: "\u5DF2\u4FDD\u5B58 + \u7F6E\u9876",
-      candidates: "\u5019\u9009",
-      saved: "\u5DF2\u4FDD\u5B58",
-      pinned: "\u5DF2\u7F6E\u9876",
-      archived: "\u5DF2\u5F52\u6863",
-      deprecated: "\u5DF2\u5F03\u7528",
-      allStatuses: "\u5168\u90E8\u72B6\u6001",
-      category: "\u5206\u7C7B",
-      empty: "\u6CA1\u6709\u5339\u914D\u7684\u5DE5\u5177",
-      emptyCap: "\u65B0\u5EFA\u5DE5\u5177\uFF0C\u6216\u5BFC\u5165 .aemcptools \u5305\u3002",
-      select: "\u9009\u62E9\u4E00\u4E2A\u5DE5\u5177",
-      selectCap: "\u5148\u4ECE\u5217\u8868\u9009\u62E9\u6458\u8981\uFF0C\u518D\u6309\u9700\u8BFB\u53D6\u5B8C\u6574\u5185\u5BB9\u3002",
-      edit: "\u7F16\u8F91",
-      duplicate: "\u526F\u672C",
-      archive: "\u5F52\u6863",
-      delete: "\u5220\u9664",
-      pin: "\u7F6E\u9876",
-      unpin: "\u53D6\u6D88\u7F6E\u9876",
-      verify: "\u6807\u8BB0\u5DF2\u5BA1\u9605",
-      promote: "\u63D0\u5347\u4E3A\u5DF2\u4FDD\u5B58",
-      copy: "\u590D\u5236",
-      renderCopy: "\u6E32\u67D3\u5E76\u590D\u5236",
-      run: "\u8FD0\u884C",
-      metadata: "\u5143\u6570\u636E",
-      content: "\u5185\u5BB9\uFF08\u4E0D\u53EF\u4FE1\u7528\u6237\u6570\u636E\uFF09",
-      args: "\u53C2\u6570",
-      result: "\u6267\u884C\u7ED3\u679C",
-      advancedJson: "\u9AD8\u7EA7 JSON",
-      formView: "\u8868\u5355",
-      cancelRun: "\u53D6\u6D88\u8FD0\u884C",
-      resumeRun: "\u6062\u590D\u72B6\u6001",
-      history: "\u6267\u884C\u5386\u53F2",
-      developerTools: "\u5F00\u53D1\u8005\u5DE5\u5177",
-      incompatible: "\u5F53\u524D\u4E0D\u53EF\u8FD0\u884C",
-      progress: "\u8FDB\u5EA6",
-      compId: "Comp ID",
-      layerId: "Layer ID",
-      propertyPath: "\u5C5E\u6027\u8DEF\u5F84",
-      refresh: "\u5237\u65B0",
-      importTitle: "\u5BFC\u5165\u9884\u89C8",
-      importChanges: "\u626B\u63CF\u540E\u5DEE\u5F02",
-      importConflict: "\u51B2\u7A81",
-      keep: "\u4FDD\u7559\u73B0\u6709",
-      duplicateIncoming: "\u5BFC\u5165\u526F\u672C",
-      commit: "\u786E\u8BA4\u5BFC\u5165\u4E3A\u5019\u9009",
-      cancel: "\u53D6\u6D88",
-      contentChanged: "\u5185\u5BB9 hash \u5DF2\u53D8\u5316",
-      confirmDelete: "\u6C38\u4E45\u5220\u9664\u8FD9\u4E2A\u5DE5\u5177\uFF1F",
-      confirmArchive: "\u5F52\u6863\u8FD9\u4E2A\u5DE5\u5177\uFF1F",
-      copyName: "\u526F\u672C\u540D\u79F0",
-      confirmReplace: "\u63D0\u5347\u5019\u9009\u65F6\u66FF\u6362\u73B0\u6709\u51B2\u7A81\u5DE5\u5177\uFF1F\u53D6\u6D88\u5C06\u4FDD\u7559\u4E24\u4EFD\u3002",
-      invalidArgs: "\u53C2\u6570\u5FC5\u987B\u662F JSON \u5BF9\u8C61\u3002",
-      targetRequired: "\u5E94\u7528\u8868\u8FBE\u5F0F\u9700\u8981 compId\u3001layerId \u548C\u5C5E\u6027\u8DEF\u5F84\u3002",
-      noCep: "CEP \u6587\u4EF6\u5BF9\u8BDD\u6846\u4E0D\u53EF\u7528\u3002",
-      trust: "\u4FE1\u4EFB",
-      signed: "\u7B7E\u540D\u5185\u7F6E",
-      untrusted: "\u7528\u6237\u4E0D\u53EF\u4FE1"
-    },
-    en: {
-      library: "Tool Library",
-      new: "New",
-      import: "Import",
-      export: "Export",
-      search: "Search tools\u2026",
-      allKinds: "All kinds",
-      allRisk: "All risks",
-      allSource: "All sources",
-      active: "Saved + pinned",
-      candidates: "Candidates",
-      saved: "Saved",
-      pinned: "Pinned",
-      archived: "Archived",
-      deprecated: "Deprecated",
-      allStatuses: "All statuses",
-      category: "Category",
-      empty: "No matching tools",
-      emptyCap: "Create a tool or import an .aemcptools package.",
-      select: "Select a tool",
-      selectCap: "Choose a summary first, then inspect full content on demand.",
-      edit: "Edit",
-      duplicate: "Duplicate",
-      archive: "Archive",
-      delete: "Delete",
-      pin: "Pin",
-      unpin: "Unpin",
-      verify: "Mark reviewed",
-      promote: "Promote to saved",
-      copy: "Copy",
-      renderCopy: "Render & copy",
-      run: "Run",
-      metadata: "Metadata",
-      content: "Content (untrusted user data)",
-      args: "Arguments",
-      result: "Execution result",
-      advancedJson: "Advanced JSON",
-      formView: "Form",
-      cancelRun: "Cancel run",
-      resumeRun: "Resume status",
-      history: "Execution history",
-      developerTools: "Developer Tools",
-      incompatible: "Unavailable",
-      progress: "Progress",
-      compId: "Comp ID",
-      layerId: "Layer ID",
-      propertyPath: "Property path",
-      refresh: "Refresh",
-      importTitle: "Import preview",
-      importChanges: "Post-scan changes",
-      importConflict: "Conflict",
-      keep: "Keep existing",
-      duplicateIncoming: "Import duplicate",
-      commit: "Import as candidates",
-      cancel: "Cancel",
-      contentChanged: "Content hash changed",
-      confirmDelete: "Permanently delete this tool?",
-      confirmArchive: "Archive this tool?",
-      copyName: "Duplicate name",
-      confirmReplace: "Replace the existing conflicting tool while promoting? Cancel keeps both copies.",
-      invalidArgs: "Arguments must be a JSON object.",
-      targetRequired: "Expression apply requires compId, layerId, and property path.",
-      noCep: "CEP file dialogs are unavailable.",
-      trust: "Trust",
-      signed: "Signed bundled",
-      untrusted: "User untrusted"
-    }
-  };
-  var KIND_OPTIONS2 = ["", "jsx", "expression", "prompt-skill", "recipe", "diagnostic", "system-command"];
-  var RISK_OPTIONS2 = ["", "read", "write", "destructive", "external"];
-  var SOURCE_OPTIONS = ["", "user", "legacy", "bundled", "imported", "chat-tool-call"];
-  function artifactSource(artifact) {
-    return artifact && (artifact.sourceType || artifact.source && artifact.source.type) || "";
-  }
-  function asObject(text) {
-    const value = JSON.parse(text || "{}");
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("object required");
-    return value;
-  }
-  function confirmPanel(message) {
-    const confirmImpl = typeof globalThis.confirm === "function" ? (value) => globalThis.confirm(value) : null;
-    return confirmToolAction(confirmImpl, message);
-  }
-  function promptPanel(message, fallback) {
-    return typeof globalThis.prompt === "function" ? globalThis.prompt(message, fallback) : fallback;
-  }
-  function ImportPreview({ preview, resolutions, lang, busy, onResolve, onCommit, onCancel }) {
+  function ToolsScreen({ api, lang = "zh" }) {
     const t = TEXT[lang] || TEXT.zh;
-    const conflicts = preview.conflicts || [];
-    const complete = conflicts.every((conflict) => ["keep", "duplicate"].includes(resolutions[conflict.conflictId]));
-    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-modal__scrim" }),
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import", role: "dialog", "aria-label": t.importTitle, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__heading", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: t.importTitle }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: preview.highestRisk === "external" || preview.highestRisk === "destructive" ? "error" : "warn", children: preview.highestRisk })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__body", children: [
-          (preview.artifacts || []).map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__item", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("strong", { children: item.summary && item.summary.name }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("span", { children: [
-              item.summary && item.summary.kind,
-              " \xB7 ",
-              item.calculatedRisk
-            ] }),
-            item.contentChanged ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "warn", children: t.contentChanged }) : null,
-            item.metadataChanges && Object.keys(item.metadataChanges).length ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("details", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("summary", { children: t.importChanges }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { children: JSON.stringify(item.metadataChanges, null, 2) })
-            ] }) : null
-          ] }, `${item.summary && item.summary.id || "artifact"}:${index}`)),
-          conflicts.map((conflict) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__conflict", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("strong", { children: t.importConflict }),
-              " \xB7 ",
-              conflict.incomingName
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__hashes", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: conflict.existingContentHash }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: conflict.incomingContentHash })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
-              Select,
-              {
-                value: resolutions[conflict.conflictId] || "",
-                onChange: (value) => onResolve(conflict.conflictId, value),
-                options: [
-                  { value: "", label: "\u2014" },
-                  { value: "keep", label: t.keep },
-                  { value: "duplicate", label: t.duplicateIncoming }
-                ]
-              }
-            )
-          ] }, conflict.conflictId))
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", onClick: onCancel, disabled: busy, children: t.cancel }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", onClick: onCommit, disabled: busy || !complete, children: t.commit })
-        ] })
-      ] })
-    ] });
-  }
-  function ToolsScreen({
-    api,
-    lang = "zh",
-    cepFs = globalThis.window && globalThis.window.cep && globalThis.window.cep.fs,
-    initialPath = ""
-  }) {
-    const t = TEXT[lang] || TEXT.zh;
-    const [state, dispatch] = import_react42.default.useReducer(reduceToolsState, INITIAL_TOOLS_STATE);
-    const [busy, setBusy] = import_react42.default.useState(false);
-    const initialRunInputs = import_react42.default.useMemo(() => emptyToolRunInputs(), []);
-    const [runArgs, setRunArgs] = import_react42.default.useState(initialRunInputs.args);
-    const [runForm, setRunForm] = import_react42.default.useState({});
-    const [advancedJson, setAdvancedJson] = import_react42.default.useState(false);
-    const [target, setTarget] = import_react42.default.useState(initialRunInputs.target);
-    const [runResult, setRunResult] = import_react42.default.useState(null);
-    const [runJob, setRunJob] = import_react42.default.useState(null);
-    const [runHistory, setRunHistory] = import_react42.default.useState([]);
-    const [developerMode, setDeveloperMode] = import_react42.default.useState(false);
-    const loadSequence = import_react42.default.useRef(0);
-    const inspectSequence = import_react42.default.useRef(0);
-    const rowRunLock = import_react42.default.useRef(false);
-    const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
-    const artifact = state.inspected && state.inspected.artifact || null;
-    const runPending = Boolean(runJob && !runJob.terminal);
-    const load = import_react42.default.useCallback(async () => {
+    const [mode, setMode] = import_react40.default.useState("tools");
+    const [query, setQuery] = import_react40.default.useState("");
+    const [items, setItems] = import_react40.default.useState([]);
+    const [selectedId, setSelectedId] = import_react40.default.useState("");
+    const [detail, setDetail] = import_react40.default.useState(null);
+    const [argsText, setArgsText] = import_react40.default.useState("{}");
+    const [result, setResult] = import_react40.default.useState(null);
+    const [busy, setBusy] = import_react40.default.useState(false);
+    const [error, setError] = import_react40.default.useState("");
+    const loadSequence = import_react40.default.useRef(0);
+    const selectSequence = import_react40.default.useRef(0);
+    const load = import_react40.default.useCallback(async () => {
       if (!api) return;
       const sequence = loadSequence.current + 1;
       loadSequence.current = sequence;
-      dispatch({ type: "load-start" });
+      setError("");
       try {
-        const needsSearch = Boolean(
-          state.query || state.category || state.risk || state.kinds && state.kinds.length
-        );
-        const payload = needsSearch ? await (developerMode ? api.developerSearch : api.search)(searchArgsFromState(state)) : await (developerMode ? api.developerIndex : api.index)({
-          statuses: state.statuses,
-          source_types: state.sourceType ? [state.sourceType] : void 0,
-          include_candidates: state.statuses.includes("candidate"),
-          limit: 100
-        });
-        if (sequence === loadSequence.current) dispatch({ type: "load-success", payload });
-      } catch (error) {
-        if (sequence === loadSequence.current) dispatch({ type: "load-error", error });
+        if (mode === "skills") {
+          const payload = await api.listSkills({ includeTemplates: true });
+          const needle = query.trim().toLowerCase();
+          const skills = (payload.skills || []).filter((skill) => {
+            const text = [skill.name, skill.description].join(" ").toLowerCase();
+            return !needle || text.includes(needle);
+          });
+          if (sequence === loadSequence.current) setItems(skills);
+        } else {
+          const payload = query.trim() ? await api.search({ query, limit: 100 }) : await api.index({ limit: 100 });
+          if (sequence === loadSequence.current) setItems(payload.artifacts || []);
+        }
+      } catch (cause) {
+        if (sequence === loadSequence.current) setError(cause.message || String(cause));
       }
-    }, [api, state.query, state.kinds, state.category, state.risk, state.statuses, state.sourceType, developerMode]);
-    import_react42.default.useEffect(() => {
+    }, [api, mode, query]);
+    import_react40.default.useEffect(() => {
       const timer = setTimeout(load, 120);
       return () => clearTimeout(timer);
     }, [load]);
-    const inspect = async (id) => {
-      const sequence = inspectSequence.current + 1;
-      inspectSequence.current = sequence;
-      const freshInputs = emptyToolRunInputs();
-      setRunArgs(freshInputs.args);
-      setRunForm({});
-      setAdvancedJson(false);
-      setTarget(freshInputs.target);
-      dispatch({ type: "select", id });
-      setRunResult(null);
+    const changeMode = (next) => {
+      setMode(next);
+      setSelectedId("");
+      setDetail(null);
+      setResult(null);
+      setArgsText("{}");
+    };
+    const select = async (item) => {
+      const id = itemId(mode, item);
+      const sequence = selectSequence.current + 1;
+      selectSequence.current = sequence;
+      setSelectedId(id);
+      setResult(null);
+      setError("");
       try {
-        const payload = await (developerMode ? api.developerInspect(id) : api.inspect(id));
-        if (sequence === inspectSequence.current) {
-          dispatch({ type: "inspect-success", payload });
-          const defaults = initialToolArgs(payload.artifact && payload.artifact.argsSchema);
-          setRunForm(defaults);
-          let initialJson = {};
-          try {
-            initialJson = buildToolArgs(payload.artifact && payload.artifact.argsSchema, defaults);
-          } catch {
-            initialJson = Object.fromEntries(
-              Object.entries(defaults).filter(([, value]) => value !== "")
-            );
+        const value = mode === "skills" ? item : (await api.inspect(item.id)).artifact;
+        if (sequence !== selectSequence.current) return;
+        setDetail({ mode, value });
+        const schema = mode === "skills" ? value.args_schema : value.argsSchema;
+        setArgsText(JSON.stringify(defaultArgs(schema), null, 2));
+      } catch (cause) {
+        if (sequence === selectSequence.current) setError(cause.message || String(cause));
+      }
+    };
+    const invoke = async (action) => {
+      if (!detail || busy) return;
+      setBusy(true);
+      setError("");
+      try {
+        const args = objectArgs(argsText);
+        const value = detail.value;
+        let output;
+        if (detail.mode === "skills") {
+          output = action === "render" ? await api.renderSkill(value.name, args) : await api.executeSkill(value.name, args);
+        } else {
+          output = await api.executeTool(value.id, args);
+        }
+        if (action === "render") await copyText(output.rendered || "");
+        setResult(output);
+      } catch (cause) {
+        setError(cause instanceof SyntaxError ? t.invalidArgs : cause.message || String(cause));
+      } finally {
+        setBusy(false);
+      }
+    };
+    const selected = detail && detail.value;
+    const selectedSchema = selected && (detail.mode === "skills" ? selected.args_schema : selected.argsSchema);
+    const selectedContent = selected && (detail.mode === "skills" ? selected.template : selected.content);
+    const canExecuteSkill = detail && detail.mode === "skills" && selected.template_type === "jsx";
+    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-screen", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("header", { className: "tools-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-header__title", children: t.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-header__actions", children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "ghost", icon: "rotate-cw", onClick: load, disabled: busy, children: t.refresh }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-filters", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+          Segmented,
+          {
+            value: mode,
+            onChange: changeMode,
+            options: [
+              { value: "tools", label: t.tools },
+              { value: "skills", label: t.skills }
+            ]
           }
-          setRunArgs(JSON.stringify(initialJson, null, 2));
-          const history = await api.use({ action: "history", artifact_id: id, limit: 20 });
-          setRunHistory(history.executions || []);
-        }
-        return payload;
-      } catch (error) {
-        if (sequence === inspectSequence.current) dispatch({ type: "load-error", error });
-      }
-    };
-    const refreshAndInspect = async (id) => {
-      await load();
-      if (id) await inspect(id);
-    };
-    const saveEditor = async (input) => {
-      setBusy(true);
-      try {
-        const result = state.editor && state.editor.mode === "create" ? await api.create(input) : await api.edit(input);
-        dispatch({ type: "save-success", payload: result, artifact: result.artifact });
-        await refreshAndInspect(result.artifact && result.artifact.id);
-      } catch (error) {
-        dispatch({ type: "load-error", error });
-      } finally {
-        setBusy(false);
-      }
-    };
-    const mutate = async (request, id = artifact && artifact.id) => {
-      setBusy(true);
-      try {
-        const result = await request();
-        if (result && result.artifact) dispatch({ type: "save-success", artifact: result.artifact });
-        await refreshAndInspect(result && result.artifact ? result.artifact.id : id);
-        return result;
-      } catch (error) {
-        dispatch({ type: "load-error", error });
-        return null;
-      } finally {
-        setBusy(false);
-      }
-    };
-    const duplicate = () => {
-      if (!artifact) return;
-      const name = promptPanel(t.copyName, `${artifact.name} Copy`);
-      if (!name || !name.trim()) return;
-      mutate(() => api.duplicate({
-        artifact_id: artifact.id,
-        name: name.trim(),
-        expected_revision: artifact.revision,
-        expected_content_hash: artifact.contentHash
-      }));
-    };
-    const archive = () => {
-      if (!artifact || !confirmPanel(t.confirmArchive)) return;
-      mutate(() => api.archive({
-        artifact_id: artifact.id,
-        expected_revision: artifact.revision,
-        expected_content_hash: artifact.contentHash
-      }));
-    };
-    const remove = async () => {
-      if (!artifact || !confirmPanel(t.confirmDelete)) return;
-      setBusy(true);
-      try {
-        await api.delete({
-          artifact_id: artifact.id,
-          expected_revision: artifact.revision,
-          expected_content_hash: artifact.contentHash
-        });
-        dispatch({ type: "delete-success", id: artifact.id });
-        await load();
-      } catch (error) {
-        dispatch({ type: "load-error", error });
-      } finally {
-        setBusy(false);
-      }
-    };
-    const editStatus = (status) => mutate(() => api.edit({
-      artifact_id: artifact.id,
-      changes: { status },
-      expected_revision: artifact.revision,
-      expected_content_hash: artifact.contentHash
-    }));
-    const verify = () => mutate(() => api.edit({
-      artifact_id: artifact.id,
-      changes: { verification_action: "mark-reviewed" },
-      expected_revision: artifact.revision,
-      expected_content_hash: artifact.contentHash
-    }));
-    const promote = () => {
-      const input = {
-        artifact_id: artifact.id,
-        expected_revision: artifact.revision,
-        expected_content_hash: artifact.contentHash
-      };
-      if (artifactSource(artifact) === "chat-tool-call") {
-        return mutate(() => api.promoteFromHistory(input));
-      }
-      const originalId = artifact.source && artifact.source.provenance && artifact.source.provenance.originalArtifactId;
-      const replacement = typeof originalId === "string" && originalId.startsWith("user:") && originalId !== artifact.id && state.summaries.some((row) => row.id === originalId && row.sourceType !== "bundled") && confirmPanel(t.confirmReplace) ? originalId : null;
-      return mutate(() => api.edit({
-        ...input,
-        changes: { status: "saved" },
-        ...replacement ? { replace_artifact_id: replacement } : {}
-      }));
-    };
-    const renderAndCopy = async () => {
-      if (!artifact) return;
-      setBusy(true);
-      try {
-        const args = asObject(runArgs);
-        const result = await api.use({ artifact_id: artifact.id, action: "render", args });
-        const content = result.rendered || result.untrustedContext && result.untrustedContext.content || "";
-        await copyText(typeof content === "string" ? content : JSON.stringify(content, null, 2));
-        setRunResult(result);
-      } catch (error) {
-        dispatch({ type: "load-error", error: error instanceof SyntaxError ? new Error(t.invalidArgs) : error });
-      } finally {
-        setBusy(false);
-      }
-    };
-    const executeArtifact = async (artifactToRun, args, normalizedTarget = {}) => {
-      if (runPending) return;
-      const capability = toolExecutionCapabilities(artifactToRun);
-      const operation = capability.operation;
-      if (!capability.directRun || !operation) return;
-      setBusy(true);
-      setRunResult(null);
-      setRunJob(null);
-      try {
-        const started = await startToolPlan(api, {
-          artifactId: artifactToRun.id,
-          operation,
-          args,
-          target: normalizedTarget
-        });
-        const completed = await waitForToolExecution(api, started, {
-          onProgress: setRunJob
-        });
-        await refreshAndInspect(artifactToRun.id);
-        setRunJob(completed);
-        setRunResult(completed);
-      } catch (error) {
-        if (error && error.execution) setRunJob(error.execution);
-        dispatch({ type: "load-error", error });
-      } finally {
-        setBusy(false);
-      }
-    };
-    const execute = async () => {
-      if (!artifact || runPending) return;
-      let args;
-      try {
-        args = advancedJson ? asObject(runArgs) : buildToolArgs(artifact.argsSchema, runForm);
-      } catch (error) {
-        dispatch({ type: "load-error", error: new Error(t.invalidArgs) });
-        return;
-      }
-      const capability = toolExecutionCapabilities(artifact);
-      let normalizedTarget = {};
-      if (capability.operation === "apply") {
-        try {
-          normalizedTarget = normalizeExpressionTarget(target);
-        } catch {
-          dispatch({ type: "load-error", error: new Error(t.targetRequired) });
-          return;
-        }
-      }
-      await executeArtifact(artifact, args, normalizedTarget);
-    };
-    const inspectForRun = async (row) => {
-      if (busy || runPending || rowRunLock.current || !row) return;
-      rowRunLock.current = true;
-      try {
-        const payload = await inspect(row.id);
-        const inspectedArtifact = payload && payload.artifact;
-        const capability = toolExecutionCapabilities(inspectedArtifact);
-        if (!capability.directRun || capability.requiresTarget) return;
-        const defaults = initialToolArgs(inspectedArtifact.argsSchema);
-        try {
-          const args = buildToolArgs(inspectedArtifact.argsSchema, defaults);
-          await executeArtifact(inspectedArtifact, args);
-        } catch {
-        }
-      } finally {
-        rowRunLock.current = false;
-      }
-    };
-    const cancelExecution = async () => {
-      if (!runJob || runJob.terminal) return;
-      try {
-        const next = await api.use({ action: "cancel", execution_id: runJob.executionId });
-        setRunJob(next);
-      } catch (error) {
-        dispatch({ type: "load-error", error });
-      }
-    };
-    const resumeExecution = async () => {
-      if (!runJob || runJob.terminal) return;
-      setBusy(true);
-      try {
-        const completed = await waitForToolExecution(api, runJob, {
-          onProgress: setRunJob
-        });
-        await refreshAndInspect(completed.artifactId);
-        setRunJob(completed);
-        setRunResult(completed);
-      } catch (error) {
-        if (error && error.execution) setRunJob(error.execution);
-        dispatch({ type: "load-error", error });
-      } finally {
-        setBusy(false);
-      }
-    };
-    const previewImport = async () => {
-      if (!cepFs) {
-        dispatch({ type: "load-error", error: new Error(t.noCep) });
-        return;
-      }
-      try {
-        const path = chooseToolPackage(cepFs, { title: t.importTitle, initialPath });
-        if (!path) return;
-        setBusy(true);
-        const preview = await api.previewImport(path);
-        dispatch({ type: "import-preview", preview });
-      } catch (error) {
-        dispatch({ type: "load-error", error });
-      } finally {
-        setBusy(false);
-      }
-    };
-    const cancelImport = async () => {
-      try {
-        if (state.importPreview) await api.discardImport(state.importPreview.importId);
-      } catch (error) {
-        dispatch({ type: "load-error", error });
-      } finally {
-        dispatch({ type: "import-finished" });
-      }
-    };
-    const commitImport = async () => {
-      if (!state.importPreview) return;
-      setBusy(true);
-      try {
-        await api.commitImport(state.importPreview.importId, state.conflictResolutions);
-        dispatch({ type: "import-finished" });
-        dispatch({ type: "set-filter", key: "statuses", value: ["candidate", "saved", "pinned"] });
-        const payload = await (developerMode ? api.developerIndex : api.index)({
-          statuses: ["candidate", "saved", "pinned"],
-          include_candidates: true,
-          limit: 100
-        });
-        dispatch({ type: "load-success", payload });
-      } catch (error) {
-        dispatch({ type: "load-error", error });
-      } finally {
-        setBusy(false);
-      }
-    };
-    const exportPackage = async () => {
-      if (!cepFs) {
-        dispatch({ type: "load-error", error: new Error(t.noCep) });
-        return;
-      }
-      try {
-        const path = chooseToolExportPath(cepFs, { title: t.export, initialPath });
-        if (!path) return;
-        const ids = state.selectedId ? [state.selectedId] : state.summaries.map((row) => row.id);
-        if (!ids.length) return;
-        setBusy(true);
-        await api.exportPackage(ids, path);
-      } catch (error) {
-        dispatch({ type: "load-error", error });
-      } finally {
-        setBusy(false);
-      }
-    };
-    const statusValue = state.statuses.join(",");
-    const source = artifactSource(artifact);
-    const editable = canEditArtifact(artifact);
-    const execution = toolExecutionCapabilities(artifact);
-    const executable = execution.render || execution.directRun;
-    const argFields = toolArgFields(artifact && artifact.argsSchema);
-    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-screen", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("header", { className: "tools-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-header__title", children: t.library }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-header__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "primary", icon: "plus", onClick: () => dispatch({ type: "edit-start", editor: { mode: "create", artifact: null } }), children: t.new }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", icon: "download", onClick: previewImport, disabled: busy, children: t.import }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", icon: "external-link", onClick: exportPackage, disabled: busy || !state.summaries.length, children: t.export }),
-          runPending ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: resumeExecution, disabled: busy, children: t.resumeRun }) : null,
-          runPending ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "danger", onClick: cancelExecution, disabled: busy, children: t.cancelRun }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: developerMode ? "danger" : "ghost", onClick: () => setDeveloperMode((value) => !value), disabled: busy, children: t.developerTools })
-        ] })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-filters", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: state.query, onChange: (value) => dispatch({ type: "set-query", value }), placeholder: t.search }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: state.kinds[0] || "", onChange: (value) => dispatch({ type: "set-filter", key: "kinds", value: value ? [value] : [] }), options: KIND_OPTIONS2.filter((value) => developerMode || value !== "system-command").map((value) => ({ value, label: value || t.allKinds })) }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: state.category, onChange: (value) => dispatch({ type: "set-filter", key: "category", value }), placeholder: t.category }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: state.risk, onChange: (value) => dispatch({ type: "set-filter", key: "risk", value }), options: RISK_OPTIONS2.map((value) => ({ value, label: value || t.allRisk })) }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: statusValue, onChange: (value) => dispatch({ type: "set-filter", key: "statuses", value: value.split(",").filter(Boolean) }), options: [
-          { value: "saved,pinned", label: t.active },
-          { value: "candidate", label: t.candidates },
-          { value: "saved", label: t.saved },
-          { value: "pinned", label: t.pinned },
-          { value: "archived", label: t.archived },
-          { value: "deprecated", label: t.deprecated },
-          { value: "candidate,saved,pinned,archived,deprecated", label: t.allStatuses }
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: state.sourceType, onChange: (value) => dispatch({ type: "set-filter", key: "sourceType", value }), options: SOURCE_OPTIONS.map((value) => ({ value, label: value || t.allSource })) })
-      ] }),
-      state.error ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-error", role: "alert", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: state.error }),
-        state.refreshRequired ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", onClick: load, children: t.refresh }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("button", { type: "button", "aria-label": "Dismiss", onClick: () => dispatch({ type: "clear-error" }), children: "\xD7" })
-      ] }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-split", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-list", "aria-label": "Tool summaries", children: state.summaries.length ? state.summaries.map((row) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
-          ToolArtifactRow,
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+          Input,
           {
-            artifact: row,
-            selected: row.id === state.selectedId,
-            onSelect: inspect,
-            onRun: inspectForRun,
-            runDisabled: busy || runPending,
-            lang
-          },
-          row.id
-        )) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.empty, caption: t.emptyCap, compact: true }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-detail", children: !selectedSummary ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : !artifact ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "rotate-cw", title: state.phase === "error" ? state.error : t.select, compact: true }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-detail__heading", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h2", { children: artifact.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("p", { children: artifact.description })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: state.inspected.trust === "signed-bundled" ? "ok" : "warn", children: state.inspected.trust === "signed-bundled" ? t.signed : t.untrusted })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-detail__actions", children: [
-            editable ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: () => dispatch({ type: "edit-start", editor: { mode: "edit", artifact } }), children: t.edit }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: duplicate, disabled: busy, children: t.duplicate }),
-            editable && ["saved", "pinned"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: () => editStatus(artifact.status === "pinned" ? "saved" : "pinned"), disabled: busy, children: artifact.status === "pinned" ? t.unpin : t.pin }) : null,
-            editable && !artifact.verified && ["saved", "pinned"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: verify, disabled: busy, children: t.verify }) : null,
-            canPromoteArtifact(artifact) ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "accent", onClick: promote, disabled: busy, children: t.promote }) : null,
-            editable && !["archived", "deprecated"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", onClick: archive, disabled: busy, children: t.archive }) : null,
-            source !== "bundled" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "danger", onClick: remove, disabled: busy, children: t.delete }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", icon: "copy", onClick: () => copyText(displayArtifactContent(artifact)), children: t.copy })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.metadata }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("dl", { className: "tools-kv", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "ID" }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.id }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Kind" }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.kind }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Category" }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.category }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Risk" }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.declaredRisk }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Status" }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.status }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Source" }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: source }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Runtime" }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: execution.runtime || "\u2014" }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Hash" }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.contentHash })
-            ] })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.content }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: displayArtifactContent(artifact) })
-          ] }),
-          executable ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.args }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-runner__actions", children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", onClick: () => setAdvancedJson((value) => !value), disabled: busy, children: advancedJson ? t.formView : t.advancedJson }) }),
-            advancedJson ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Textarea, { mono: true, value: runArgs, onChange: setRunArgs, rows: 4 }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-runner__form", children: argFields.length ? argFields.map((field) => {
-              var _a;
-              return /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: `${field.name}${field.required ? " *" : ""}`, children: field.type === "boolean" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
-                Select,
-                {
-                  value: String(Boolean(runForm[field.name])),
-                  onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: value === "true" })),
-                  options: [{ value: "false", label: "false" }, { value: "true", label: "true" }]
-                }
-              ) : field.enum ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
-                Select,
-                {
-                  value: runForm[field.name] === "" ? "" : JSON.stringify(runForm[field.name]),
-                  onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: JSON.parse(value) })),
-                  options: [
-                    ...!field.required ? [{ value: "", label: "\u2014" }] : [],
-                    ...field.enum.map((value) => ({ value: JSON.stringify(value), label: String(value) }))
-                  ]
-                }
-              ) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
-                Input,
-                {
-                  value: (_a = runForm[field.name]) != null ? _a : "",
-                  type: ["number", "integer"].includes(field.type) ? "number" : "text",
-                  disabled: !field.supported,
-                  onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: value }))
-                }
-              ) }, field.name);
-            }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: "{}" }) }),
-            artifact.kind === "expression" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-runner__target", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.compId, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: target.compId, onChange: (value) => setTarget((current) => ({ ...current, compId: value })) }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.layerId, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: target.layerId, onChange: (value) => setTarget((current) => ({ ...current, layerId: value })) }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.propertyPath, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: target.path, onChange: (value) => setTarget((current) => ({ ...current, path: value })) }) })
-            ] }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-runner__actions", children: [
-              execution.render ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", onClick: renderAndCopy, disabled: busy, children: t.renderCopy }) : null,
-              execution.directRun ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy || runPending, children: t.run }) : null
-            ] }),
-            runJob ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { children: [
-              t.progress,
-              ": ",
-              runJob.progress,
-              "% \xB7 ",
-              runJob.status
-            ] }) : null,
-            runResult ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.result }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: JSON.stringify(runResult, null, 2) })
-            ] }) : null,
-            runHistory.length ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.history }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: JSON.stringify(runHistory, null, 2) })
-            ] }) : null
-          ] }) : execution.disabledReason ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.incompatible }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("p", { children: execution.disabledReason.message })
-          ] }) : null
-        ] }) })
-      ] }),
-      state.editor ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-modal__scrim", onClick: () => !busy && dispatch({ type: "edit-cancel" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
-          ToolArtifactEditor,
-          {
-            artifact: state.editor.artifact,
-            lang,
-            busy,
-            onSave: saveEditor,
-            onCancel: () => dispatch({ type: "edit-cancel" })
+            value: query,
+            onChange: setQuery,
+            placeholder: mode === "skills" ? t.searchSkills : t.searchTools
           }
         )
-      ] }) : null,
-      state.importPreview ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
-        ImportPreview,
-        {
-          preview: state.importPreview,
-          resolutions: state.conflictResolutions,
-          lang,
-          busy,
-          onResolve: (conflictId, resolution) => dispatch({ type: "import-resolution", conflictId, resolution }),
-          onCommit: commitImport,
-          onCancel: cancelImport
-        }
-      ) : null
+      ] }),
+      error ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-error", role: "alert", children: error }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-split", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("section", { className: "tools-list", "aria-label": mode === "skills" ? t.skills : t.tools, children: items.length ? items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+          ItemRow,
+          {
+            mode,
+            item,
+            selected: itemId(mode, item) === selectedId,
+            onSelect: select
+          },
+          itemId(mode, item)
+        )) : /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(EmptyState, { icon: "box", title: t.empty, compact: true }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("section", { className: "tools-detail", children: !selected ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-detail__heading", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h2", { children: selected.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("p", { children: selected.description })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { status: selected.verified ? "ok" : "neutral", children: selected.verified ? t.signed : detail.mode === "skills" ? t.prompt : t.user })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.content }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: selectedContent || "\u2014" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.args }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+              Textarea,
+              {
+                mono: true,
+                value: argsText,
+                onChange: setArgsText,
+                rows: Math.max(4, Object.keys((selectedSchema == null ? void 0 : selectedSchema.properties) || {}).length + 2)
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-runner__actions", children: [
+              detail.mode === "skills" ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "secondary", onClick: () => invoke("render"), disabled: busy, children: t.render }) : null,
+              detail.mode === "tools" || canExecuteSkill ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: () => invoke("execute"), disabled: busy, children: t.run }) : null
+            ] }),
+            result ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.result }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: JSON.stringify(result, null, 2) })
+            ] }) : null
+          ] })
+        ] }) })
+      ] })
     ] });
   }
 
   // src/components/tools/ToolApprovalDialog.jsx
   init_cep_runtime_inject();
-  var import_react43 = __toESM(require_react(), 1);
-  var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
-  var L4 = {
+  var import_react41 = __toESM(require_react(), 1);
+  var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
+  var L3 = {
     zh: {
       title: "\u6279\u51C6\u5DE5\u5177\u6267\u884C\uFF1F",
       once: "\u4EC5\u672C\u6B21\u5141\u8BB8",
@@ -27729,32 +26049,32 @@
   };
   function ToolApprovalDialog({ record, lang = "zh", onResolve }) {
     if (!record) return null;
-    const t = L4[lang] || L4.zh;
+    const t = L3[lang] || L3.zh;
     const plan = record.plan || {};
     const resolve = (decision) => onResolve && onResolve({ id: record.id, decision });
-    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve("deny") }),
-      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-approval", role: "alertdialog", "aria-label": t.title, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-approval__heading", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { children: t.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: plan.risk === "destructive" || plan.risk === "external" ? "error" : "warn", children: plan.risk })
+    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve("deny") }),
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-approval", role: "alertdialog", "aria-label": t.title, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-approval__heading", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: t.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: plan.risk === "destructive" || plan.risk === "external" ? "error" : "warn", children: plan.risk })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("dl", { className: "tools-kv", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.artifact }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: plan.artifactId || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.operation }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: plan.operation || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.risk }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: plan.risk || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.args }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("pre", { children: JSON.stringify(plan.normalizedArgs || {}, null, 2) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.target }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("pre", { children: JSON.stringify(plan.target || {}, null, 2) }) })
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("dl", { className: "tools-kv", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.artifact }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: plan.artifactId || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.operation }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: plan.operation || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.risk }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: plan.risk || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.args }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { children: JSON.stringify(plan.normalizedArgs || {}, null, 2) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.target }),
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { children: JSON.stringify(plan.target || {}, null, 2) }) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-approval__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", onClick: () => resolve("deny"), children: t.deny }),
-          record.policy && record.policy.allowSession ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", onClick: () => resolve("session"), children: t.session }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "primary", onClick: () => resolve("once"), children: t.once })
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-approval__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "ghost", onClick: () => resolve("deny"), children: t.deny }),
+          record.policy && record.policy.allowSession ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "secondary", onClick: () => resolve("session"), children: t.session }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "primary", onClick: () => resolve("once"), children: t.once })
         ] })
       ] })
     ] });
@@ -27762,17 +26082,17 @@
 
   // src/components/tools/QuestionFormDialog.jsx
   init_cep_runtime_inject();
-  var import_react44 = __toESM(require_react(), 1);
-  var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
+  var import_react42 = __toESM(require_react(), 1);
+  var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
   function QuestionFormDialog({ record, lang = "zh", onResolve }) {
     if (!record) return null;
     const presentation = record.presentation;
     if (!presentation || presentation.kind !== "question-form") return null;
     const questions = Array.isArray(presentation.questions) ? presentation.questions : [];
     const resolve = (result) => onResolve && onResolve({ id: record.id, ...result });
-    return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve({ action: "cancel", content: {} }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { className: "tools-approval", role: "dialog", "aria-label": presentation.title || "", children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve({ action: "cancel", content: {} }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-approval", role: "dialog", "aria-label": presentation.title || "", children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
         QuestionCard,
         {
           lang,
@@ -27788,82 +26108,376 @@
     ] });
   }
 
-  // src/lib/agentLoop.js
+  // src/lib/backendSelect.js
   init_cep_runtime_inject();
 
-  // src/lib/anthropic.js
+  // src/cep/backends/index.js
   init_cep_runtime_inject();
 
-  // src/lib/sse.js
+  // src/lib/backendCapabilities.js
   init_cep_runtime_inject();
-  function createSseParser(onEvent) {
+
+  // src/cep/zcodeBackend.js
+  init_cep_runtime_inject();
+
+  // src/lib/ndjson.js
+  init_cep_runtime_inject();
+  function createLineSplitter(onLine) {
     let buffer = "";
-    function parseFrame(frame) {
-      let event = "";
-      let data2 = "";
-      const lines = frame.replace(/\r\n/g, "\n").split("\n");
-      for (const line of lines) {
-        if (line.startsWith("event:")) {
-          event = line.slice(6).trim();
-        } else if (line.startsWith("data:")) {
-          data2 += line.slice(5).trimStart();
+    return function push(chunk) {
+      buffer += String(chunk || "");
+      let index = buffer.indexOf("\n");
+      while (index !== -1) {
+        const line = buffer.slice(0, index).trim();
+        buffer = buffer.slice(index + 1);
+        if (line) onLine(line);
+        index = buffer.indexOf("\n");
+      }
+    };
+  }
+  function createNdjsonReader(onMessage) {
+    return createLineSplitter((line) => {
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch (e) {
+        return;
+      }
+      onMessage(message);
+    });
+  }
+
+  // src/lib/zcodeErrors.js
+  init_cep_runtime_inject();
+  var ZH_RULES = [
+    {
+      // Provider ids may contain dots (e.g. "mediastorm_glm/glm-5.2"): capture the
+      // whole non-space run, then drop one trailing sentence terminator if present.
+      re: /Model provider is missing an API key:\s*([^\s]+?)[.。]?(?=\s|$)/i,
+      hint: (m) => "ZCode provider\u300C" + m[1] + "\u300D\u7F3A\u5C11 API Key \u2014\u2014 \u5230 \u8BBE\u7F6E \u2192 AI \u670D\u52A1 \u2192 ZCode \u901A\u9053 \u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5728\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF09\uFF0C\u6216\u5728 ~/.zcode/cli/config.json \u91CC\u914D\u7F6E\u3002"
+    },
+    {
+      re: /Model config is missing/i,
+      hint: () => "\u672A\u627E\u5230 ZCode \u6A21\u578B\u914D\u7F6E \u2014\u2014 \u6253\u5F00 ZCode \u9009\u62E9 provider/model\uFF0C\u6216\u521B\u5EFA ~/.zcode/cli/config.json \u6307\u5B9A provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002"
+    },
+    {
+      re: /Provider authentication failed/i,
+      hint: () => "ZCode provider \u9274\u6743\u5931\u8D25 \u2014\u2014 \u68C0\u67E5 API Key \u662F\u5426\u6709\u6548\uFF1B\u82E5\u662F\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212\uFF08start-plan\uFF09\uFF0C\u9762\u677F\u5C1A\u4E0D\u652F\u6301\u5176\u684C\u9762\u9A8C\u8BC1\u7801\u6865\u63A5\uFF0C\u8BF7\u6539\u7528 CLI \u914D\u7F6E\u901A\u9053\u3002"
+    }
+  ];
+  function localizeZcodeError(message, lang = "en") {
+    const text = String(message || "");
+    if (lang !== "zh" || !text) return text;
+    for (const rule of ZH_RULES) {
+      const m = rule.re.exec(text);
+      if (m) {
+        const hint = rule.hint(m);
+        if (text.startsWith(hint)) return text;
+        return hint + "\n" + text;
+      }
+    }
+    return text;
+  }
+
+  // src/lib/exactSecretRedaction.js
+  init_cep_runtime_inject();
+  function normalizedSecrets(values) {
+    const variants = [];
+    for (const value of values || []) {
+      if (typeof value !== "string" || !value) continue;
+      variants.push(value);
+      try {
+        const encoded = JSON.stringify(value);
+        if ((encoded == null ? void 0 : encoded.startsWith('"')) && encoded.endsWith('"')) variants.push(encoded.slice(1, -1));
+      } catch {
+      }
+    }
+    return Array.from(new Set(variants.filter(Boolean))).sort((a, b) => b.length - a.length);
+  }
+  var MAX_DECODE_CHARS = 1024 * 1024;
+  var MAX_DECODE_LAYERS = 3;
+  var MAX_STRUCTURE_CHARS = 16 * 1024 * 1024;
+  function decodePercentRuns(value) {
+    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+  }
+  function decodeUnicodeEscapes(value) {
+    return String(value).replace(/\\u([0-9a-f]{4})/gi, (_match, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+  }
+  function decodedTextLayers(value) {
+    let current = String(value);
+    const layers = [current];
+    for (let layer = 0; layer < MAX_DECODE_LAYERS; layer += 1) {
+      if (!current.includes("%") && !/\\u[0-9a-f]{4}/i.test(current)) break;
+      if (current.length > MAX_DECODE_CHARS) return null;
+      const decoded = decodeUnicodeEscapes(decodePercentRuns(current));
+      if (decoded === current) break;
+      layers.push(decoded);
+      current = decoded;
+    }
+    return layers;
+  }
+  function textContainsSecret(value, secrets) {
+    const layers = decodedTextLayers(value);
+    if (layers === null) return true;
+    return layers.some((layer) => secrets.some((secret) => layer.includes(secret)));
+  }
+  function containsExactSecret(value, values = []) {
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return false;
+    const visiting = /* @__PURE__ */ new WeakSet();
+    const valueParts = [];
+    const keyParts = [];
+    const keyValueParts = [];
+    const leafKeyValueParts = [];
+    let structureChars = 0;
+    const containsText = (candidate) => textContainsSecret(candidate, secrets);
+    const appendPart = (parts, candidate) => {
+      const text = String(candidate);
+      structureChars += text.length;
+      if (structureChars > MAX_STRUCTURE_CHARS) return true;
+      parts.push(text);
+      return false;
+    };
+    const visit = (candidate) => {
+      if (typeof candidate === "function") return true;
+      if (typeof candidate !== "object" || candidate === null) {
+        try {
+          if (appendPart(valueParts, candidate)) return true;
+          if (appendPart(keyValueParts, candidate)) return true;
+          return containsText(candidate);
+        } catch {
+          return true;
         }
       }
-      const trimmed = data2.trim();
-      if (!trimmed || trimmed === "[DONE]") return;
+      if (visiting.has(candidate)) return true;
+      let keys;
       try {
-        onEvent({ event, data: JSON.parse(trimmed) });
-      } catch (e) {
+        keys = Reflect.ownKeys(candidate);
+      } catch {
+        return true;
+      }
+      visiting.add(candidate);
+      try {
+        for (const key of keys) {
+          try {
+            const item = Reflect.get(candidate, key);
+            if (appendPart(keyParts, key)) return true;
+            if (appendPart(keyValueParts, key)) return true;
+            if (containsText(key)) return true;
+            if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
+              if (appendPart(leafKeyValueParts, key)) return true;
+              if (appendPart(leafKeyValueParts, item)) return true;
+            }
+            if (visit(item)) return true;
+          } catch {
+            return true;
+          }
+        }
+        return false;
+      } finally {
+        visiting.delete(candidate);
+      }
+    };
+    if (visit(value)) return true;
+    return [valueParts, keyParts, keyValueParts, leafKeyValueParts].some((parts) => containsText(parts.join("")));
+  }
+  function containsExactSecretAcrossBoundary(seedValues, payload, values = []) {
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return false;
+    const valueParts = [];
+    const keyParts = [];
+    const keyValueParts = [];
+    const leafKeyValueParts = [];
+    const visiting = /* @__PURE__ */ new WeakSet();
+    let chars = 0;
+    const append = (parts, value) => {
+      const text = String(value);
+      chars += text.length;
+      if (chars > MAX_STRUCTURE_CHARS) return false;
+      parts.push(text);
+      return true;
+    };
+    const visit = (value) => {
+      if (typeof value === "function") return false;
+      if (typeof value !== "object" || value === null) {
+        return append(valueParts, value) && append(keyValueParts, value);
+      }
+      if (visiting.has(value)) return false;
+      let keys;
+      try {
+        keys = Reflect.ownKeys(value);
+      } catch {
+        return false;
+      }
+      visiting.add(value);
+      try {
+        for (const key of keys) {
+          let item;
+          try {
+            item = Reflect.get(value, key);
+          } catch {
+            return false;
+          }
+          if (!append(keyParts, key) || !append(keyValueParts, key)) return false;
+          if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
+            if (!append(valueParts, item) || !append(keyValueParts, item) || !append(leafKeyValueParts, key) || !append(leafKeyValueParts, item)) return false;
+          } else if (!visit(item)) {
+            return false;
+          }
+        }
+        return true;
+      } finally {
+        visiting.delete(value);
+      }
+    };
+    if (!visit(payload)) return true;
+    const candidates = [
+      ...leafKeyValueParts,
+      valueParts.join(""),
+      keyParts.join(""),
+      keyValueParts.join(""),
+      leafKeyValueParts.join("")
+    ];
+    let seeds;
+    try {
+      seeds = Array.from(seedValues || [], (value) => String(value));
+    } catch {
+      return true;
+    }
+    for (const seed of seeds) {
+      for (const candidate of candidates) {
+        if (textContainsSecret(seed + candidate, secrets) || textContainsSecret(candidate + seed, secrets)) {
+          return true;
+        }
       }
     }
-    function feed(chunkText) {
-      buffer += String(chunkText || "");
-      buffer = buffer.replace(/\r\n/g, "\n");
-      let splitAt = buffer.indexOf("\n\n");
-      while (splitAt !== -1) {
-        const frame = buffer.slice(0, splitAt);
-        buffer = buffer.slice(splitAt + 2);
-        parseFrame(frame);
-        splitAt = buffer.indexOf("\n\n");
+    return false;
+  }
+  function redactText(value, values = []) {
+    let text = String(value == null ? "" : value);
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return text;
+    const marker = secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
+    const decodedLayers = decodedTextLayers(text);
+    if (decodedLayers === null) return marker;
+    if (decodedLayers.slice(1).some((layer) => secrets.some((secret) => layer.includes(secret)))) {
+      return marker;
+    }
+    const maximumPasses = Math.max(1, secrets.length * 4 + 8);
+    for (let pass = 0; pass < maximumPasses; pass += 1) {
+      let changed = false;
+      for (const secret of secrets) {
+        if (!text.includes(secret)) continue;
+        text = text.split(secret).join(marker);
+        changed = true;
       }
+      if (!changed) return text;
     }
-    return { feed };
+    return secrets.some((secret) => text.includes(secret)) ? "" : text;
   }
-
-  // src/lib/providerProfile.js
-  init_cep_runtime_inject();
-
-  // src/cep/platform/secret-reference.js
-  init_cep_runtime_inject();
-  var PROVIDER_UUID_SOURCE = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-  var PROVIDER_UUID = new RegExp(`^${PROVIDER_UUID_SOURCE}$`);
-  var SLOT = /^[a-z][a-z0-9_-]{0,31}$/;
-  var PROVIDER_REFERENCE = new RegExp(
-    `^aemcp-secret://provider/(${PROVIDER_UUID_SOURCE})/([a-z][a-z0-9_-]{0,31})/v1$`
-  );
-  function invalidReference() {
-    const error = new Error("Secret reference is invalid");
-    error.code = "INVALID_REFERENCE";
-    return error;
-  }
-  function createProviderSecretReference(input) {
-    const providerId = input == null ? void 0 : input.providerId;
-    const slot = input == null ? void 0 : input.slot;
-    if (typeof providerId !== "string" || !PROVIDER_UUID.test(providerId)) {
-      throw invalidReference();
+  function redactValueParts(value, values) {
+    if (typeof value === "string") return redactText(value, values);
+    if (value === null || ["number", "boolean", "bigint"].includes(typeof value)) {
+      const text = String(value);
+      const redacted = redactText(text, values);
+      return redacted === text ? value : redacted;
     }
-    if (typeof slot !== "string" || !SLOT.test(slot)) throw invalidReference();
-    return `aemcp-secret://provider/${providerId}/${slot}/v1`;
+    if (Array.isArray(value)) return value.map((item) => redactValueParts(item, values));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      redactText(key, values),
+      redactValueParts(item, values)
+    ]));
   }
-  function parseProviderSecretReference(reference) {
-    if (typeof reference !== "string") throw invalidReference();
-    const match = PROVIDER_REFERENCE.exec(reference);
-    if (!match) throw invalidReference();
+  function redactValue(value, values = []) {
+    const redacted = redactValueParts(value, values);
+    if (!containsExactSecret(redacted, values)) return redacted;
+    const secrets = normalizedSecrets(values);
+    return secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
+  }
+  function createDeltaRedactor(values, emitText) {
+    const secrets = normalizedSecrets(values);
+    let buffer = "";
+    const keep = secrets.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
     return {
-      namespace: "provider",
-      providerId: match[1],
-      slot: match[2],
-      version: 1
+      feed(delta) {
+        if (!secrets.length) {
+          emitText(String(delta || ""));
+          return;
+        }
+        buffer = redactText(buffer + String(delta || ""), secrets);
+        if (buffer.length > keep) {
+          emitText(buffer.slice(0, buffer.length - keep));
+          buffer = buffer.slice(buffer.length - keep);
+        }
+      },
+      flush() {
+        if (buffer) emitText(redactText(buffer, secrets));
+        buffer = "";
+      },
+      discard() {
+        buffer = "";
+      }
+    };
+  }
+  function createByteRedactor(values, emitBytes) {
+    const secrets = normalizedSecrets(values).map((value) => Buffer.from(value, "utf8")).filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
+    const displayMarker = Buffer.from("[redacted]", "utf8");
+    const marker = secrets.some((secret) => displayMarker.includes(secret)) ? Buffer.alloc(0) : displayMarker;
+    const maximum = secrets.reduce((length, secret) => Math.max(length, secret.length), 0);
+    let pending = Buffer.alloc(0);
+    function emit(value) {
+      if (value.length > 0) emitBytes(value);
+    }
+    function drain(flush) {
+      if (!secrets.length) {
+        emit(pending);
+        pending = Buffer.alloc(0);
+        return;
+      }
+      while (pending.length > 0) {
+        const boundary = flush ? pending.length : Math.max(0, pending.length - maximum + 1);
+        if (!flush && boundary === 0) return;
+        let matchIndex = -1;
+        let matchSecret = null;
+        for (const secret of secrets) {
+          const index = pending.indexOf(secret);
+          if (index < 0 || !flush && index >= boundary) continue;
+          if (matchIndex < 0 || index < matchIndex || index === matchIndex && secret.length > matchSecret.length) {
+            matchIndex = index;
+            matchSecret = secret;
+          }
+        }
+        if (matchIndex < 0) {
+          emit(pending.subarray(0, boundary));
+          pending = pending.subarray(boundary);
+          if (!flush) return;
+          continue;
+        }
+        emit(pending.subarray(0, matchIndex));
+        emit(marker);
+        pending = pending.subarray(matchIndex + matchSecret.length);
+      }
+    }
+    return {
+      feed(chunk) {
+        const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk || "");
+        if (!value.length) return;
+        pending = pending.length ? Buffer.concat([pending, value]) : Buffer.from(value);
+        drain(false);
+      },
+      flush() {
+        drain(true);
+      },
+      discard() {
+        pending = Buffer.alloc(0);
+      }
     };
   }
 
@@ -28005,1024 +26619,6 @@
   function isReservedProviderExtraHeaderName(value) {
     const name = normalizedName(value);
     return name === "authorization" || name === "x-api-key" || isForbiddenProviderHeaderName(name);
-  }
-
-  // src/lib/providerProfile.js
-  var DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com";
-  var DEFAULT_CODEX_PROVIDER_ID = "ae_mcp_custom";
-  var CODEX_PROVIDER_API_KEY_ENV = "AE_MCP_CODEX_API_KEY";
-  var RESERVED_CODEX_PROVIDER_IDS = /* @__PURE__ */ new Set(["openai", "amazon-bedrock", "ollama", "lmstudio"]);
-  var PROVIDER_ENTRY_KEYS = [
-    "allowInsecureHttp",
-    "auth",
-    "authProfileRevision",
-    "baseUrl",
-    "credentialId",
-    "dialect",
-    "headers",
-    "id",
-    "name",
-    "probedAt",
-    "probedModels",
-    "protocol"
-  ];
-  var AUTH_KEYS = ["model", "probe"];
-  var HEADER_KEYS = ["id", "name", "scopes", "valueRef"];
-  var SECRET_VALUE_REF_KEYS = ["kind", "reference", "revision"];
-  var LITERAL_VALUE_REF_KEYS = ["kind", "value"];
-  var DIALECT_KEYS = ["detected", "override"];
-  var DIALECT_OVERRIDE_KEYS = ["source", "updatedAt", "wireApi"];
-  var LEGACY_DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "wireApi"];
-  var DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "modelId", "wireApi"];
-  var PROBED_MODEL_KEYS = ["id", "label"];
-  var PROVIDER_SCOPES = /* @__PURE__ */ new Set(["probe", "model"]);
-  var PROVIDER_PROTOCOLS = /* @__PURE__ */ new Set(["openai-compatible", "anthropic"]);
-  var WIRE_APIS = /* @__PURE__ */ new Set(["responses", "chat"]);
-  var PROVIDER_WIRE_PROTOCOLS_V3 = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
-  var PROVIDER_CLIENTS_V3 = /* @__PURE__ */ new Set(["codex", "claude-code"]);
-  var PROVIDER_AUTH_SCHEMES_V3 = /* @__PURE__ */ new Set(["none", "bearer", "x-api-key", "custom"]);
-  var PROVIDER_PREFERRED_AUTH_SCHEMES_V3 = /* @__PURE__ */ new Set(["auto", ...PROVIDER_AUTH_SCHEMES_V3]);
-  var PROVIDER_CAPABILITY_STATUSES_V3 = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
-  var PROVIDER_CAPABILITY_UNSUPPORTED_EVIDENCE_V3 = /* @__PURE__ */ new Set([
-    "endpoint-unsupported",
-    "model-protocol-unsupported",
-    "conversion-unsupported"
-  ]);
-  var PROVIDER_CAPABILITY_SUPPORTED_EVIDENCE_V3 = Object.freeze({
-    responses: /* @__PURE__ */ new Set(["responses-success-schema", "responses-incomplete-schema"]),
-    chat: /* @__PURE__ */ new Set(["chat-success-schema", "chat-length-schema"]),
-    messages: /* @__PURE__ */ new Set(["messages-success-schema", "messages-max-tokens-schema"])
-  });
-  var PROVIDER_ENTRY_KEYS_V3 = [
-    "allowInsecureHttp",
-    "baseUrl",
-    "credential",
-    "credentialId",
-    "headers",
-    "id",
-    "modelCapabilities",
-    "modelList",
-    "name",
-    "probeAuthOverride",
-    "probePreference",
-    "requestProfileRevision",
-    "routeOverrides"
-  ];
-  var PROVIDER_CREDENTIAL_KEYS_V3 = ["preferredAuth", "valueRef"];
-  var PROVIDER_AUTH_CHOICE_KEYS_V3 = ["headerName", "scheme"];
-  var PROVIDER_MODEL_LIST_KEYS_V3 = [
-    "apiRoot",
-    "auth",
-    "checkedAt",
-    "models",
-    "requestProfileRevision",
-    "revision",
-    "status",
-    "validUntil"
-  ];
-  var PROVIDER_MODEL_CAPABILITY_KEYS_V3 = ["chat", "messages", "modelId", "responses"];
-  var PROVIDER_PROTOCOL_CAPABILITY_KEYS_V3 = [
-    "agentFeatures",
-    "apiRoot",
-    "auth",
-    "checkedAt",
-    "compatibility",
-    "evidence",
-    "modelListRevision",
-    "requestProfileRevision",
-    "status",
-    "validUntil"
-  ];
-  var PROVIDER_AGENT_FEATURE_KEYS_V3 = [
-    "compact",
-    "continuation",
-    "countTokens",
-    "namespaceTools",
-    "reasoningReplay",
-    "stream",
-    "terminal",
-    "tools"
-  ];
-  var PROVIDER_AGENT_FEATURE_STATUSES_V3 = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
-  var PROVIDER_COMPATIBILITY_KEYS_V3 = ["instructionMode", "tokenField"];
-  var PROVIDER_ROUTE_OVERRIDE_KEYS_V3 = ["client", "modelId", "protocol", "updatedAt"];
-  var PROVIDER_MODEL_LIST_MODEL_KEYS_V3 = ["id", "label", "metadata"];
-  var PROVIDER_MODEL_METADATA_KEYS_V3 = [
-    "capabilities",
-    "inputModalities",
-    "outputModalities",
-    "task"
-  ];
-  var DIALECT_SOURCES = /* @__PURE__ */ new Set(["manual", "legacy-v0.9", "ccswitch-import"]);
-  var VERIFIED_DIALECT_EVIDENCE = Object.freeze({
-    responses: "responses-success-schema",
-    chat: "chat-success-schema"
-  });
-  var LEGACY_DIALECT_EVIDENCE = /* @__PURE__ */ new Set([
-    "models-capability",
-    "responses-success-schema",
-    "responses-missing-input",
-    "chat-success-schema",
-    "chat-missing-messages",
-    "chat-missing-messages-500-compat"
-  ]);
-  var SECRET_LIKE_PATH_LITERAL = /(?:Bearer\s+\S{8,}|Basic\s+\S{8,}|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})/i;
-  var HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-  var MAX_PERCENT_DECODE_LAYERS = 3;
-  var CREDENTIAL_PATH_LABELS = /* @__PURE__ */ new Set([
-    "accesstoken",
-    "apikey",
-    "authtoken",
-    "clientsecret",
-    "credential",
-    "credentials",
-    "passwd",
-    "password",
-    "xapikey"
-  ]);
-  function normalizeBaseUrl(value) {
-    return String(value || "").trim().replace(/\/+$/, "");
-  }
-  function isLoopbackProviderHostname(hostname) {
-    const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
-    if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
-    const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    const ipv4 = mapped ? mapped[1] : host;
-    return /^127(?:\.\d{1,3}){3}$/.test(ipv4);
-  }
-  function decodePercentRuns2(value) {
-    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
-      try {
-        return decodeURIComponent(run);
-      } catch {
-        return run;
-      }
-    });
-  }
-  function pathContainsCredential(value) {
-    let current = String(value || "");
-    for (let layer = 0; layer <= MAX_PERCENT_DECODE_LAYERS; layer += 1) {
-      if (SECRET_LIKE_PATH_LITERAL.test(current) || isCredentialShapedProviderLiteral(current)) return true;
-      const segments = current.split("/").filter(Boolean);
-      for (let index = 0; index + 1 < segments.length; index += 1) {
-        const label = segments[index].toLowerCase().replace(/[^a-z0-9]/g, "");
-        const candidate = segments[index + 1];
-        if (CREDENTIAL_PATH_LABELS.has(label) && !/^v\d+(?:\.\d+)*$/i.test(candidate)) return true;
-      }
-      const decoded = decodePercentRuns2(current);
-      if (decoded === current) break;
-      current = decoded;
-    }
-    return false;
-  }
-  function validateProviderBaseUrl(value, {
-    allowInsecureHttp = false,
-    requireTransportApproval = false
-  } = {}) {
-    const raw = String(value || "").trim();
-    let url;
-    try {
-      url = new URL(raw);
-    } catch {
-      throw providerProfileError();
-    }
-    const schemeMarker = raw.indexOf("://");
-    let hasRawUserInfo = true;
-    if (schemeMarker >= 0) {
-      const authorityStart = schemeMarker + 3;
-      const delimiters = ["/", "?", "#"].map((delimiter) => raw.indexOf(delimiter, authorityStart)).filter((index) => index >= 0);
-      const authorityEnd = delimiters.length ? Math.min(...delimiters) : raw.length;
-      hasRawUserInfo = raw.slice(authorityStart, authorityEnd).includes("@");
-    }
-    if (!["http:", "https:"].includes(url.protocol) || schemeMarker < 0 || raw.includes("?") || raw.includes("#") || hasRawUserInfo || url.username || url.password || url.hash || url.search || pathContainsCredential(url.pathname)) {
-      throw providerProfileError();
-    }
-    if (requireTransportApproval && url.protocol === "http:" && !isLoopbackProviderHostname(url.hostname) && allowInsecureHttp !== true) {
-      throw providerProfileError("provider_insecure_http_forbidden");
-    }
-    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
-    return url.toString().replace(/\/$/, "");
-  }
-  function providerProfileError(code = "provider_profile_invalid") {
-    const error = new Error(
-      code === "provider_header_secret_reference_required" ? "Provider header requires a secret reference" : "Provider profile is invalid"
-    );
-    error.code = code;
-    return error;
-  }
-  function hasExactKeys(value, expected) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const keys = Object.keys(value).sort();
-    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
-  }
-  function requireExactObject(value, expected) {
-    if (!hasExactKeys(value, expected)) throw providerProfileError();
-    return value;
-  }
-  function requireText(value) {
-    if (typeof value !== "string") throw providerProfileError();
-    const text = value.trim();
-    if (!text) throw providerProfileError();
-    return text;
-  }
-  function requireTimestamp(value) {
-    if (!Number.isFinite(value) || value < 0) throw providerProfileError();
-    return value;
-  }
-  function requireRevision(value) {
-    if (!Number.isSafeInteger(value) || value <= 0) throw providerProfileError();
-    return value;
-  }
-  function hasVerifiedDialectEvidence(entry) {
-    return VERIFIED_DIALECT_EVIDENCE[entry == null ? void 0 : entry.wireApi] === (entry == null ? void 0 : entry.evidence);
-  }
-  function normalizeCredentialId(value) {
-    if (typeof value !== "string") throw providerProfileError();
-    try {
-      return parseProviderSecretReference(`aemcp-secret://provider/${value}/a/v1`).providerId;
-    } catch {
-      throw providerProfileError();
-    }
-  }
-  function normalizeSecretValueRef(value, credentialId) {
-    requireExactObject(value, SECRET_VALUE_REF_KEYS);
-    if (value.kind !== "secret") throw providerProfileError();
-    let parsed;
-    try {
-      parsed = parseProviderSecretReference(value.reference);
-    } catch {
-      throw providerProfileError();
-    }
-    if (parsed.providerId !== credentialId) throw providerProfileError();
-    return {
-      kind: "secret",
-      reference: value.reference,
-      revision: requireRevision(value.revision)
-    };
-  }
-  function normalizeHeaderName(value) {
-    const name = requireText(value);
-    if (!HEADER_NAME.test(name)) throw providerProfileError();
-    return name;
-  }
-  function normalizeAuthPolicy(value, credentialId, allowInherit = false) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerProfileError();
-    if (allowInherit && value.kind === "inherit-model") {
-      requireExactObject(value, ["kind"]);
-      return { kind: "inherit-model" };
-    }
-    if (value.kind === "none") {
-      requireExactObject(value, ["kind"]);
-      return { kind: "none" };
-    }
-    if (value.kind === "bearer" || value.kind === "x-api-key") {
-      requireExactObject(value, ["kind", "valueRef"]);
-      return {
-        kind: value.kind,
-        valueRef: normalizeSecretValueRef(value.valueRef, credentialId)
-      };
-    }
-    if (value.kind === "custom") {
-      requireExactObject(value, ["headerName", "kind", "valueRef"]);
-      return {
-        kind: "custom",
-        headerName: normalizeHeaderName(value.headerName),
-        valueRef: normalizeSecretValueRef(value.valueRef, credentialId)
-      };
-    }
-    throw providerProfileError();
-  }
-  function normalizeHeaderValueRef(value, credentialId) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerProfileError();
-    if (value.kind === "literal") {
-      requireExactObject(value, LITERAL_VALUE_REF_KEYS);
-      if (typeof value.value !== "string") throw providerProfileError();
-      return { kind: "literal", value: value.value };
-    }
-    return normalizeSecretValueRef(value, credentialId);
-  }
-  function normalizeExtraHeader(value, credentialId) {
-    requireExactObject(value, HEADER_KEYS);
-    const id = requireText(value.id);
-    const name = normalizeHeaderName(value.name);
-    if (!Array.isArray(value.scopes) || value.scopes.length === 0) throw providerProfileError();
-    const scopes = value.scopes.map((scope) => {
-      if (typeof scope !== "string" || !PROVIDER_SCOPES.has(scope)) throw providerProfileError();
-      return scope;
-    });
-    if (new Set(scopes).size !== scopes.length) throw providerProfileError();
-    const valueRef = normalizeHeaderValueRef(value.valueRef, credentialId);
-    if (isReservedProviderExtraHeaderName(name)) {
-      throw providerProfileError("provider_header_forbidden");
-    }
-    if (valueRef.kind === "literal" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(valueRef.value))) {
-      throw providerProfileError("provider_header_secret_reference_required");
-    }
-    return { id, name, scopes, valueRef };
-  }
-  function normalizeDialect(value) {
-    requireExactObject(value, DIALECT_KEYS);
-    let override = null;
-    if (value.override !== null) {
-      requireExactObject(value.override, DIALECT_OVERRIDE_KEYS);
-      if (!WIRE_APIS.has(value.override.wireApi) || !DIALECT_SOURCES.has(value.override.source)) {
-        throw providerProfileError();
-      }
-      override = {
-        wireApi: value.override.wireApi,
-        source: value.override.source,
-        updatedAt: requireTimestamp(value.override.updatedAt)
-      };
-    }
-    const normalizeDetected = (entry, { includeModelId = true } = {}) => {
-      const keys = includeModelId ? DIALECT_DETECTED_KEYS : LEGACY_DIALECT_DETECTED_KEYS;
-      requireExactObject(entry, keys);
-      if (!WIRE_APIS.has(entry.wireApi) || (includeModelId ? !hasVerifiedDialectEvidence(entry) : !LEGACY_DIALECT_EVIDENCE.has(entry.evidence))) {
-        throw providerProfileError();
-      }
-      return {
-        ...includeModelId ? { modelId: requireText(entry.modelId) } : {},
-        wireApi: entry.wireApi,
-        baseUrl: validateProviderBaseUrl(requireText(entry.baseUrl)),
-        authProfileRevision: requireRevision(entry.authProfileRevision),
-        detectedAt: requireTimestamp(entry.detectedAt),
-        evidence: entry.evidence
-      };
-    };
-    let detected = [];
-    if (Array.isArray(value.detected)) {
-      detected = value.detected.map((entry) => normalizeDetected(entry));
-      const modelIds = /* @__PURE__ */ new Set();
-      for (const entry of detected) {
-        if (modelIds.has(entry.modelId)) throw providerProfileError();
-        modelIds.add(entry.modelId);
-      }
-      detected.sort((left, right) => left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
-    } else if (value.detected !== null) {
-      normalizeDetected(value.detected, { includeModelId: false });
-    }
-    return { override, detected };
-  }
-  function normalizeProbedModel(value) {
-    requireExactObject(value, PROBED_MODEL_KEYS);
-    return { id: requireText(value.id), label: requireText(value.label) };
-  }
-  function normalizeProviderEntryV2(input) {
-    requireExactObject(input, PROVIDER_ENTRY_KEYS);
-    const id = requireText(input.id);
-    const credentialId = normalizeCredentialId(input.credentialId);
-    if (!PROVIDER_PROTOCOLS.has(input.protocol)) throw providerProfileError();
-    if (typeof input.allowInsecureHttp !== "boolean") throw providerProfileError();
-    requireExactObject(input.auth, AUTH_KEYS);
-    if (!Array.isArray(input.headers) || !Array.isArray(input.probedModels)) throw providerProfileError();
-    return {
-      id,
-      credentialId,
-      name: requireText(input.name),
-      protocol: input.protocol,
-      baseUrl: validateProviderBaseUrl(requireText(input.baseUrl), {
-        allowInsecureHttp: input.allowInsecureHttp,
-        requireTransportApproval: true
-      }),
-      allowInsecureHttp: input.allowInsecureHttp,
-      authProfileRevision: requireRevision(input.authProfileRevision),
-      auth: {
-        model: normalizeAuthPolicy(input.auth.model, credentialId),
-        probe: normalizeAuthPolicy(input.auth.probe, credentialId, true)
-      },
-      headers: input.headers.map((header) => normalizeExtraHeader(header, credentialId)),
-      dialect: normalizeDialect(input.dialect),
-      probedModels: input.probedModels.map(normalizeProbedModel),
-      probedAt: requireTimestamp(input.probedAt)
-    };
-  }
-  function requireNonnegativeRevision(value) {
-    if (!Number.isSafeInteger(value) || value < 0) throw providerProfileError();
-    return value;
-  }
-  function normalizeAuthChoiceV3(value, { allowAuto = false } = {}) {
-    requireExactObject(value, PROVIDER_AUTH_CHOICE_KEYS_V3);
-    const allowed = allowAuto ? PROVIDER_PREFERRED_AUTH_SCHEMES_V3 : PROVIDER_AUTH_SCHEMES_V3;
-    if (!allowed.has(value.scheme)) throw providerProfileError();
-    const headerName = value.headerName === null ? null : normalizeHeaderName(value.headerName);
-    if (value.scheme === "custom" !== (headerName !== null)) throw providerProfileError();
-    return { scheme: value.scheme, headerName };
-  }
-  function authChoiceMatchesPreference(choice, preferred) {
-    if (preferred.scheme === "auto") return true;
-    if (preferred.scheme === "none") return choice.scheme === "none";
-    if (preferred.scheme === "custom") {
-      return choice.scheme === "custom" && String(choice.headerName || "").toLowerCase() === String(preferred.headerName || "").toLowerCase();
-    }
-    return choice.scheme === "bearer" || choice.scheme === "x-api-key";
-  }
-  function normalizeCredentialV3(value, credentialId) {
-    requireExactObject(value, PROVIDER_CREDENTIAL_KEYS_V3);
-    const valueRef = value.valueRef === null ? null : normalizeSecretValueRef(value.valueRef, credentialId);
-    const preferredAuth2 = normalizeAuthChoiceV3(value.preferredAuth, { allowAuto: true });
-    if (preferredAuth2.scheme === "none" && valueRef !== null) throw providerProfileError();
-    if (!["auto", "none"].includes(preferredAuth2.scheme) && valueRef === null) throw providerProfileError();
-    return { valueRef, preferredAuth: preferredAuth2 };
-  }
-  function normalizeProbeAuthOverrideV3(value, credentialId) {
-    if (value === null) return null;
-    const normalized = normalizeAuthPolicy(value, credentialId);
-    if (normalized.kind === "inherit-model") throw providerProfileError();
-    return normalized;
-  }
-  function authChoiceFromPolicyV3(policy) {
-    if (!policy || policy.kind === "none") return { scheme: "none", headerName: null };
-    return {
-      scheme: policy.kind,
-      headerName: policy.kind === "custom" ? policy.headerName : null
-    };
-  }
-  function normalizeApiRootV3(value, { baseUrl, allowInsecureHttp }) {
-    if (value === null) return null;
-    const apiRoot = validateProviderBaseUrl(requireText(value), {
-      allowInsecureHttp,
-      requireTransportApproval: true
-    });
-    if (new URL(apiRoot).origin !== new URL(baseUrl).origin) throw providerProfileError();
-    return apiRoot;
-  }
-  function normalizeMetadataStringListV3(value) {
-    if (!Array.isArray(value)) throw providerProfileError();
-    const output = value.map((entry) => requireText(entry));
-    if (new Set(output).size !== output.length) throw providerProfileError();
-    output.sort();
-    return output;
-  }
-  function normalizeModelMetadataV3(value) {
-    requireExactObject(value, PROVIDER_MODEL_METADATA_KEYS_V3);
-    return {
-      task: value.task === null ? null : requireText(value.task),
-      inputModalities: normalizeMetadataStringListV3(value.inputModalities),
-      outputModalities: normalizeMetadataStringListV3(value.outputModalities),
-      capabilities: normalizeMetadataStringListV3(value.capabilities)
-    };
-  }
-  function normalizeModelListEntryV3(value) {
-    requireExactObject(value, PROVIDER_MODEL_LIST_MODEL_KEYS_V3);
-    return {
-      id: requireText(value.id),
-      label: requireText(value.label),
-      metadata: normalizeModelMetadataV3(value.metadata)
-    };
-  }
-  function normalizeModelsV3(value) {
-    if (!Array.isArray(value)) throw providerProfileError();
-    const models = value.map(normalizeModelListEntryV3);
-    const ids = /* @__PURE__ */ new Set();
-    for (const model of models) {
-      if (ids.has(model.id)) throw providerProfileError();
-      ids.add(model.id);
-    }
-    models.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-    return models;
-  }
-  function unknownProviderAgentFeatures() {
-    return {
-      compact: "unknown",
-      continuation: "unknown",
-      countTokens: "unknown",
-      namespaceTools: "unknown",
-      reasoningReplay: "unknown",
-      stream: "unknown",
-      terminal: "unknown",
-      tools: "unknown"
-    };
-  }
-  function normalizeAgentFeaturesV3(value, protocolStatus) {
-    requireExactObject(value, PROVIDER_AGENT_FEATURE_KEYS_V3);
-    const output = {};
-    for (const key of PROVIDER_AGENT_FEATURE_KEYS_V3) {
-      if (!PROVIDER_AGENT_FEATURE_STATUSES_V3.has(value[key])) throw providerProfileError();
-      output[key] = value[key];
-    }
-    if (protocolStatus === "unknown" && Object.values(output).some((status) => status !== "unknown")) {
-      throw providerProfileError();
-    }
-    if (protocolStatus === "unsupported" && Object.values(output).some((status) => status === "supported")) {
-      throw providerProfileError();
-    }
-    return output;
-  }
-  function unknownProviderProtocolCapability({
-    requestProfileRevision,
-    modelListRevision
-  } = {}) {
-    return {
-      status: "unknown",
-      apiRoot: null,
-      auth: null,
-      compatibility: null,
-      agentFeatures: unknownProviderAgentFeatures(),
-      checkedAt: 0,
-      validUntil: 0,
-      requestProfileRevision: requireRevision(requestProfileRevision),
-      modelListRevision: requireNonnegativeRevision(modelListRevision),
-      evidence: null
-    };
-  }
-  function normalizeModelListV3(value, provider) {
-    requireExactObject(value, PROVIDER_MODEL_LIST_KEYS_V3);
-    if (value.status !== "unknown" && value.status !== "supported") throw providerProfileError();
-    const revision = requireNonnegativeRevision(value.revision);
-    const requestProfileRevision = requireRevision(value.requestProfileRevision);
-    const checkedAt = requireTimestamp(value.checkedAt);
-    const validUntil = requireTimestamp(value.validUntil);
-    const models = normalizeModelsV3(value.models);
-    const apiRoot = normalizeApiRootV3(value.apiRoot, provider);
-    const auth = value.auth === null ? null : normalizeAuthChoiceV3(value.auth);
-    if (value.status === "unknown") {
-      if (apiRoot !== null || auth !== null || checkedAt !== 0 || validUntil !== 0 || models.length !== 0) {
-        throw providerProfileError();
-      }
-    } else {
-      if (revision <= 0 || apiRoot === null || auth === null || checkedAt <= 0 || validUntil < checkedAt || models.length === 0) {
-        throw providerProfileError();
-      }
-      const configuredProbeAuth = provider.probeAuthOverride ? authChoiceFromPolicyV3(provider.probeAuthOverride) : provider.credential.preferredAuth;
-      if (!authChoiceMatchesPreference(auth, configuredProbeAuth)) throw providerProfileError();
-      if (auth.scheme !== "none" && provider.probeAuthOverride === null && provider.credential.valueRef === null) {
-        throw providerProfileError();
-      }
-    }
-    return {
-      revision,
-      status: value.status,
-      apiRoot,
-      auth,
-      models,
-      checkedAt,
-      validUntil,
-      requestProfileRevision
-    };
-  }
-  function normalizeCompatibilityV3(value, protocol) {
-    requireExactObject(value, PROVIDER_COMPATIBILITY_KEYS_V3);
-    const instructionMode = value.instructionMode;
-    const tokenField = value.tokenField;
-    const valid = protocol === "responses" ? instructionMode === "responses-instructions" && tokenField === "max_output_tokens" : protocol === "chat" ? ["chat-developer", "chat-system"].includes(instructionMode) && ["max_tokens", "max_completion_tokens"].includes(tokenField) : instructionMode === "messages-system" && tokenField === "max_tokens";
-    if (!valid) throw providerProfileError();
-    return { instructionMode, tokenField };
-  }
-  function normalizeProtocolCapabilityV3(value, protocol, provider) {
-    requireExactObject(value, PROVIDER_PROTOCOL_CAPABILITY_KEYS_V3);
-    if (!PROVIDER_CAPABILITY_STATUSES_V3.has(value.status)) throw providerProfileError();
-    const agentFeatures = normalizeAgentFeaturesV3(value.agentFeatures, value.status);
-    const apiRoot = normalizeApiRootV3(value.apiRoot, provider);
-    const auth = value.auth === null ? null : normalizeAuthChoiceV3(value.auth);
-    const compatibility2 = value.compatibility === null ? null : normalizeCompatibilityV3(value.compatibility, protocol);
-    const checkedAt = requireTimestamp(value.checkedAt);
-    const validUntil = value.validUntil === null ? null : requireTimestamp(value.validUntil);
-    const requestProfileRevision = requireRevision(value.requestProfileRevision);
-    const modelListRevision = requireNonnegativeRevision(value.modelListRevision);
-    const evidence = value.evidence === null ? null : requireText(value.evidence);
-    if (value.status === "unknown") {
-      if (apiRoot !== null || auth !== null || compatibility2 !== null || evidence !== null || checkedAt !== 0 || validUntil !== 0) {
-        throw providerProfileError();
-      }
-    } else {
-      if (apiRoot === null || auth === null || checkedAt <= 0 || value.status === "supported" && (validUntil === null || validUntil < checkedAt) || value.status === "unsupported" && validUntil !== null || provider.credential.valueRef === null && auth.scheme !== "none") {
-        throw providerProfileError();
-      }
-      if (!authChoiceMatchesPreference(auth, provider.credential.preferredAuth)) {
-        throw providerProfileError();
-      }
-      if (value.status === "supported") {
-        if (compatibility2 === null || !PROVIDER_CAPABILITY_SUPPORTED_EVIDENCE_V3[protocol].has(evidence)) {
-          throw providerProfileError();
-        }
-      } else if (compatibility2 !== null || !PROVIDER_CAPABILITY_UNSUPPORTED_EVIDENCE_V3.has(evidence)) {
-        throw providerProfileError();
-      }
-    }
-    return {
-      status: value.status,
-      apiRoot,
-      auth,
-      compatibility: compatibility2,
-      agentFeatures,
-      checkedAt,
-      validUntil,
-      requestProfileRevision,
-      modelListRevision,
-      evidence
-    };
-  }
-  function normalizeModelCapabilityV3(value, provider) {
-    requireExactObject(value, PROVIDER_MODEL_CAPABILITY_KEYS_V3);
-    return {
-      modelId: requireText(value.modelId),
-      responses: normalizeProtocolCapabilityV3(value.responses, "responses", provider),
-      chat: normalizeProtocolCapabilityV3(value.chat, "chat", provider),
-      messages: normalizeProtocolCapabilityV3(value.messages, "messages", provider)
-    };
-  }
-  function normalizeRouteOverrideV3(value) {
-    requireExactObject(value, PROVIDER_ROUTE_OVERRIDE_KEYS_V3);
-    if (!PROVIDER_CLIENTS_V3.has(value.client) || !PROVIDER_WIRE_PROTOCOLS_V3.has(value.protocol)) {
-      throw providerProfileError();
-    }
-    const updatedAt = requireTimestamp(value.updatedAt);
-    if (updatedAt <= 0) throw providerProfileError();
-    return {
-      client: value.client,
-      modelId: requireText(value.modelId),
-      protocol: value.protocol,
-      updatedAt
-    };
-  }
-  function normalizeProviderEntryV3(input) {
-    requireExactObject(input, PROVIDER_ENTRY_KEYS_V3);
-    const id = requireText(input.id);
-    const credentialId = normalizeCredentialId(input.credentialId);
-    const baseUrl = validateProviderBaseUrl(requireText(input.baseUrl), {
-      allowInsecureHttp: input.allowInsecureHttp,
-      requireTransportApproval: true
-    });
-    if (typeof input.allowInsecureHttp !== "boolean") throw providerProfileError();
-    if (!Array.isArray(input.headers) || !Array.isArray(input.modelCapabilities) || !Array.isArray(input.routeOverrides)) {
-      throw providerProfileError();
-    }
-    if (input.probePreference !== null && !PROVIDER_WIRE_PROTOCOLS_V3.has(input.probePreference)) {
-      throw providerProfileError();
-    }
-    const credential = normalizeCredentialV3(input.credential, credentialId);
-    const probeAuthOverride = normalizeProbeAuthOverrideV3(input.probeAuthOverride, credentialId);
-    const provider = {
-      id,
-      credentialId,
-      name: requireText(input.name),
-      baseUrl,
-      allowInsecureHttp: input.allowInsecureHttp,
-      requestProfileRevision: requireRevision(input.requestProfileRevision),
-      credential,
-      probeAuthOverride,
-      headers: input.headers.map((header) => normalizeExtraHeader(header, credentialId)),
-      probePreference: input.probePreference
-    };
-    const modelList = normalizeModelListV3(input.modelList, provider);
-    const modelCapabilities = input.modelCapabilities.map((entry) => normalizeModelCapabilityV3(entry, provider));
-    const modelIds = /* @__PURE__ */ new Set();
-    for (const entry of modelCapabilities) {
-      if (modelIds.has(entry.modelId)) throw providerProfileError();
-      modelIds.add(entry.modelId);
-    }
-    modelCapabilities.sort((left, right) => left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
-    const routeOverrides = input.routeOverrides.map(normalizeRouteOverrideV3);
-    const overrideKeys = /* @__PURE__ */ new Set();
-    for (const entry of routeOverrides) {
-      const key = `${entry.client}\0${entry.modelId}`;
-      if (overrideKeys.has(key)) throw providerProfileError();
-      overrideKeys.add(key);
-    }
-    routeOverrides.sort((left, right) => left.client < right.client ? -1 : left.client > right.client ? 1 : left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
-    return {
-      ...provider,
-      modelList,
-      modelCapabilities,
-      routeOverrides
-    };
-  }
-  function normalizeProviderId(value) {
-    const raw = String(value || "").trim() || DEFAULT_CODEX_PROVIDER_ID;
-    const safe = raw.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || DEFAULT_CODEX_PROVIDER_ID;
-    return RESERVED_CODEX_PROVIDER_IDS.has(safe) ? safe + "-custom" : safe;
-  }
-  function tomlString(value) {
-    return JSON.stringify(String(value || ""));
-  }
-  function codexRuntimeProviderProfile({
-    effectiveChannel,
-    customProvider,
-    customProviderCredentialResolverReady = false,
-    modelId
-  } = {}) {
-    if (effectiveChannel !== "custom" || customProviderCredentialResolverReady !== true || !customProvider) {
-      return null;
-    }
-    const selectedModelId = String(modelId || "").trim();
-    if (!selectedModelId) return null;
-    let normalized;
-    try {
-      normalized = normalizeProviderEntryV3(customProvider);
-    } catch {
-      return null;
-    }
-    return { provider: normalized, modelId: selectedModelId };
-  }
-  function normalizeCodexRuntimeConfig(runtimeConfig) {
-    if (!runtimeConfig || !runtimeConfig.baseUrl) return null;
-    if (runtimeConfig.chatCompatibility !== void 0 && typeof runtimeConfig.chatCompatibility !== "boolean") {
-      throw providerProfileError();
-    }
-    if (!Array.isArray(runtimeConfig.envHeaders) || runtimeConfig.envHeaders.length > 64) {
-      throw providerProfileError();
-    }
-    const names = /* @__PURE__ */ new Set();
-    const envNames = /* @__PURE__ */ new Set();
-    const apiKey = runtimeConfig.apiKey === void 0 ? void 0 : requireText(runtimeConfig.apiKey);
-    const envHeaders = runtimeConfig.envHeaders.map((entry) => {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw providerProfileError();
-      const name = normalizeHeaderName(entry.name);
-      const envName = requireText(entry.envName);
-      if (!/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(envName)) throw providerProfileError();
-      const lower = name.toLowerCase();
-      if (names.has(lower) || envNames.has(envName)) throw providerProfileError();
-      names.add(lower);
-      envNames.add(envName);
-      return {
-        name,
-        envName,
-        value: entry.value === void 0 ? void 0 : String(entry.value)
-      };
-    });
-    return {
-      providerId: normalizeProviderId(runtimeConfig.providerId),
-      baseUrl: normalizeBaseUrl(requireText(runtimeConfig.baseUrl)),
-      apiKey,
-      envHeaders,
-      chatCompatibility: runtimeConfig.chatCompatibility === true
-    };
-  }
-  function codexAppServerArgs(runtimeConfig = null) {
-    const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
-    if (!runtime) return ["app-server"];
-    const provider = runtime.providerId;
-    const args = [
-      "app-server",
-      "-c",
-      `model_provider=${tomlString(provider)}`,
-      "-c",
-      `model_providers.${provider}.name="AE MCP Custom"`,
-      "-c",
-      `model_providers.${provider}.base_url=${tomlString(runtime.baseUrl)}`
-    ];
-    if (runtime.apiKey !== void 0) {
-      args.push("-c", `model_providers.${provider}.env_key=${tomlString(CODEX_PROVIDER_API_KEY_ENV)}`);
-    }
-    if (runtime.envHeaders.length > 0) {
-      const table = runtime.envHeaders.map((header) => `${tomlString(header.name)} = ${tomlString(header.envName)}`).join(", ");
-      args.push("-c", `model_providers.${provider}.env_http_headers={ ${table} }`);
-    }
-    args.push(
-      "-c",
-      `model_providers.${provider}.wire_api="responses"`,
-      "-c",
-      `model_providers.${provider}.requires_openai_auth=false`,
-      "-c",
-      "features.multi_agent=false",
-      "-c",
-      "features.multi_agent_v2=false",
-      "-c",
-      "features.multi_agent_v2.non_code_mode_only=false"
-    );
-    if (runtime.chatCompatibility) {
-      args.push(
-        "-c",
-        'web_search="disabled"',
-        "-c",
-        "features.apps=false",
-        "-c",
-        "features.plugins=false",
-        "-c",
-        "features.remote_plugin=false"
-      );
-    }
-    return args;
-  }
-  function codexSpawnEnv(runtimeConfig = null, baseEnv = {}) {
-    const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
-    const env = { ...baseEnv || {} };
-    if (!runtime) return env;
-    delete env[CODEX_PROVIDER_API_KEY_ENV];
-    for (const key of Object.keys(env)) {
-      if (/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(key)) delete env[key];
-    }
-    for (const header of runtime.envHeaders) {
-      if (header.value === void 0) throw providerProfileError();
-      env[header.envName] = header.value;
-    }
-    if (runtime.apiKey !== void 0) env[CODEX_PROVIDER_API_KEY_ENV] = runtime.apiKey;
-    return env;
-  }
-  function anthropicEndpoint(baseUrl, apiPath) {
-    const base = normalizeBaseUrl(baseUrl) || DEFAULT_ANTHROPIC_BASE_URL;
-    const url = new URL(base);
-    const prefix = url.pathname.replace(/\/+$/, "");
-    const rawPath = String(apiPath || "");
-    const queryIndex = rawPath.indexOf("?");
-    const pathPart = queryIndex === -1 ? rawPath : rawPath.slice(0, queryIndex);
-    const searchPart = queryIndex === -1 ? "" : rawPath.slice(queryIndex);
-    const suffix = pathPart.startsWith("/") ? pathPart : "/" + pathPart;
-    url.pathname = (prefix === "/" ? "" : prefix) + suffix;
-    url.search = searchPart;
-    url.hash = "";
-    return url.toString();
-  }
-
-  // src/lib/anthropic.js
-  var DEFAULT_MODEL = "claude-sonnet-4-6";
-  function buildSystemPrompt(lang = "zh") {
-    if (lang === "en") {
-      return [
-        "You are a concise After Effects assistant inside the AE MCP panel.",
-        "Understand the user goal, then choose appropriate MCP tools before operating.",
-        "Name target comps, layers, properties, or files in quotes before changing them.",
-        "Prefer read-only inspection before edits when context is missing.",
-        "Summarize tool results plainly and ask only when a required detail is missing.",
-        "",
-        "Working mode:",
-        "- Prefer typed tools (ae_createLayer / ae_setProperty / ae_readProps, etc.); use ae_exec scripts only when no typed tool fits.",
-        "- Before scripting, inspect with read tools (ae_overview / ae_layers / ae_readProps) to confirm structure instead of guessing project contents.",
-        "- ae_exec accepts only code and undoGroup; it has no comp_id or other targeting parameters. Put target lookup inside the script.",
-        "- If the MCP/panel path is unavailable, Do not switch to OS screenshots, desktop automation, or ad-hoc external scripts; report the MCP failure to the user.",
-        "- Keep generated files and temporary files in the project workspace or a user-approved output directory; do not scatter files outside it.",
-        "",
-        "ExtendScript scripting pitfalls (must follow):",
-        "- setTemporalEaseAtKey ease arrays must match the property dimension (1D like Opacity=1; Scale 3D=3; spatial properties like Position=1). Use AEMCP.easeKeys(prop) to size them automatically.",
-        '- Any byName / index lookup may return null; check before use, or call AEMCP.mustFind(value, "name") so the error names the missing target.',
-        "- Do not invent APIs that do not exist (for example items.byName); if unsure, use read tools or iterate.",
-        "- AE may be localized (Chinese): display names are translated, so prefer matchName for property matching.",
-        "- AEMCP helpers (safeValue / easeKeys / mustFind / compById / layerById) are injected and available; layerById and similar helpers expect numeric ids."
-      ].join(" ");
-    }
-    return [
-      "\u4F60\u662F AE MCP \u9762\u677F\u5185\u7684\u7B80\u6D01 After Effects \u52A9\u624B\u3002",
-      "\u5148\u7406\u89E3\u7528\u6237\u76EE\u6807\uFF0C\u518D\u9009\u62E9\u5408\u9002\u7684 MCP \u5DE5\u5177\u64CD\u4F5C AE\u3002",
-      "\u4FEE\u6539\u524D\u7528\u5F15\u53F7\u660E\u793A\u76EE\u6807\u5408\u6210\u3001\u56FE\u5C42\u3001\u5C5E\u6027\u6216\u6587\u4EF6\u3002",
-      "\u7F3A\u5C11\u4E0A\u4E0B\u6587\u65F6\u4F18\u5148\u7528\u53EA\u8BFB\u5DE5\u5177\u68C0\u67E5\u3002",
-      "\u7528\u7B80\u660E\u8BED\u8A00\u603B\u7ED3\u5DE5\u5177\u7ED3\u679C\uFF0C\u53EA\u5728\u7F3A\u5C11\u5FC5\u8981\u4FE1\u606F\u65F6\u8FFD\u95EE\u3002",
-      "",
-      "\u5DE5\u4F5C\u65B9\u5F0F\uFF1A",
-      "- \u4F18\u5148\u4F7F\u7528 typed \u5DE5\u5177\uFF08ae_createLayer / ae_setProperty / ae_readProps \u7B49\uFF09\uFF1B\u53EA\u6709\u6CA1\u6709\u5BF9\u5E94\u5DE5\u5177\u65F6\u624D\u7528 ae_exec \u5199\u811A\u672C\u3002",
-      "- \u5199\u811A\u672C\u524D\u5148\u7528\u8BFB\u5DE5\u5177\uFF08ae_overview / ae_layers / ae_readProps\uFF09\u786E\u8BA4\u7ED3\u6784\uFF0C\u4E0D\u8981\u51ED\u8BB0\u5FC6\u731C\u6D4B\u5DE5\u7A0B\u5185\u5BB9\u3002",
-      "- ae_exec \u53EA\u63A5\u53D7 code \u4E0E undoGroup \u4E24\u4E2A\u53C2\u6570\uFF0C\u6CA1\u6709 comp_id \u7B49\u5B9A\u4F4D\u53C2\u6570\u2014\u2014\u76EE\u6807\u5B9A\u4F4D\u5199\u5728\u811A\u672C\u91CC\u3002",
-      "- MCP/\u9762\u677F\u901A\u9053\u4E0D\u53EF\u7528\u65F6\uFF0CDo not switch to OS screenshots\u3001\u684C\u9762\u81EA\u52A8\u5316\u6216\u5916\u90E8\u4E34\u65F6\u811A\u672C\uFF1Breport the MCP failure \u7ED9\u7528\u6237\u3002",
-      "- \u751F\u6210\u6587\u4EF6\u548C temporary files \u653E\u5728 project workspace \u6216\u7528\u6237\u660E\u786E\u540C\u610F\u7684\u8F93\u51FA\u76EE\u5F55\uFF0C\u4E0D\u8981\u6563\u843D\u5230\u5DE5\u4F5C\u533A\u5916\u3002",
-      "",
-      "ExtendScript \u9AD8\u9891\u9677\u9631\uFF08\u52A1\u5FC5\u9075\u5B88\uFF09\uFF1A",
-      "- setTemporalEaseAtKey \u7684\u7F13\u52A8\u6570\u7EC4\u957F\u5EA6\u5FC5\u987B\u7B49\u4E8E\u5C5E\u6027\u7EF4\u5EA6\uFF08\u4E00\u7EF4\u5982 Opacity=1\uFF1BScale \u4E09\u7EF4=3\uFF1B\u7A7A\u95F4\u5C5E\u6027\u5982 Position=1\uFF09\u3002\u76F4\u63A5\u7528 AEMCP.easeKeys(prop) \u81EA\u52A8\u5904\u7406\u3002",
-      '- \u4EFB\u4F55 byName / \u7D22\u5F15\u67E5\u627E\u90FD\u53EF\u80FD\u8FD4\u56DE null\uFF0C\u4F7F\u7528\u524D\u5FC5\u987B\u5224\u7A7A\uFF1B\u6216\u7528 AEMCP.mustFind(value, "\u540D\u5B57") \u8BA9\u9519\u8BEF\u81EA\u5E26\u540D\u5B57\u3002',
-      "- \u4E0D\u5B58\u5728\u7684 API \u4E0D\u8981\u81C6\u9020\uFF08\u5982 items.byName \u4E0D\u5B58\u5728\uFF09\uFF1B\u4E0D\u786E\u5B9A\u5C31\u5148\u7528\u8BFB\u5DE5\u5177\u6216\u904D\u5386\u3002",
-      "- \u672C\u673A\u53EF\u80FD\u662F\u672C\u5730\u5316\uFF08\u4E2D\u6587\uFF09AE\uFF1A\u663E\u793A\u540D\u662F\u7FFB\u8BD1\u8FC7\u7684\uFF0C\u5339\u914D\u5C5E\u6027\u4F18\u5148\u7528 matchName\u3002",
-      "- AEMCP \u52A9\u624B\uFF08safeValue / easeKeys / mustFind / compById / layerById\uFF09\u5DF2\u6CE8\u5165\uFF0C\u53EF\u76F4\u63A5\u8C03\u7528\uFF1BlayerById \u7B49\u7528\u6570\u5B57 id\u3002"
-    ].join(" ");
-  }
-  function mapMcpToolsToAnthropic(tools = []) {
-    return tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description || "",
-      input_schema: tool.inputSchema || tool.input_schema || {}
-    }));
-  }
-  function classifyHttpError(status, fallbackMessage) {
-    if (status === 401 || status === 403) return { kind: "auth", message: "Anthropic authentication failed." };
-    if (status === 404) return { kind: "model", message: "Model unavailable for this API key." };
-    if (status === 429) return { kind: "rate_limit", message: "Anthropic rate limit reached." };
-    if (status === 529 || status >= 500) return { kind: "overloaded", message: "Anthropic service is overloaded." };
-    return { kind: "network", message: fallbackMessage || "Anthropic request failed." };
-  }
-  function toError(kind, message) {
-    const error = new Error(message);
-    error.kind = kind;
-    return error;
-  }
-  function parseAnthropicEvent(data2, state, onTextDelta) {
-    if (data2.type === "content_block_start") {
-      const block = data2.content_block || {};
-      if (block.type === "text") {
-        state.blocks.set(data2.index, { type: "text", text: block.text || "" });
-      } else if (block.type === "tool_use") {
-        state.blocks.set(data2.index, {
-          type: "tool_use",
-          id: block.id,
-          name: block.name,
-          inputJson: "",
-          startInput: block.input || {}
-        });
-      }
-    } else if (data2.type === "content_block_delta") {
-      const block = state.blocks.get(data2.index);
-      if (!block || !data2.delta) return;
-      if (data2.delta.type === "text_delta") {
-        const text = data2.delta.text || "";
-        block.text += text;
-        if (text) onTextDelta(text);
-      } else if (data2.delta.type === "input_json_delta") {
-        block.inputJson += data2.delta.partial_json || "";
-      }
-    } else if (data2.type === "message_delta" && data2.delta) {
-      state.stopReason = data2.delta.stop_reason || state.stopReason;
-    }
-  }
-  function finishBlocks(blocks) {
-    return Array.from(blocks.values()).map((block) => {
-      if (block.type === "tool_use") {
-        let input = block.startInput || {};
-        if (block.inputJson) input = JSON.parse(block.inputJson);
-        return { type: "tool_use", id: block.id, name: block.name, input };
-      }
-      return block;
-    });
-  }
-  async function sendAnthropicMessage({
-    requestProfile,
-    model = DEFAULT_MODEL,
-    system = buildSystemPrompt("zh"),
-    messages,
-    tools,
-    signal,
-    effort = null,
-    fast = false,
-    fetchImpl = globalThis.fetch,
-    onTextDelta = () => {
-    }
-  } = {}) {
-    var _a, _b;
-    if (!requestProfile || typeof requestProfile !== "object" || typeof requestProfile.baseUrl !== "string") {
-      throw toError("auth", "Provider request profile is missing.");
-    }
-    if (!fetchImpl) throw toError("network", "fetch is unavailable in this runtime.");
-    let validatedBaseUrl;
-    try {
-      validatedBaseUrl = validateProviderBaseUrl(requestProfile.baseUrl, {
-        allowInsecureHttp: requestProfile.allowInsecureHttp === true,
-        requireTransportApproval: true
-      });
-    } catch {
-      throw toError("configuration", "Provider request URL is not allowed. Reconfirm the provider transport settings.");
-    }
-    let response;
-    try {
-      const url = anthropicEndpoint(validatedBaseUrl, "/v1/messages");
-      const headers = {
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-        "content-type": "application/json"
-      };
-      for (const header of requestProfile.extraHeaders || []) {
-        if (header && typeof header.name === "string" && typeof header.value === "string") {
-          headers[header.name] = header.value;
-        }
-      }
-      if (((_a = requestProfile.auth) == null ? void 0 : _a.kind) === "header") {
-        if (typeof requestProfile.auth.name !== "string" || typeof requestProfile.auth.value !== "string") {
-          throw toError("auth", "Provider request authentication is invalid.");
-        }
-        headers[requestProfile.auth.name] = requestProfile.auth.value;
-      } else if (((_b = requestProfile.auth) == null ? void 0 : _b.kind) !== "none") {
-        throw toError("auth", "Provider request authentication is invalid.");
-      }
-      if (fast) headers["anthropic-beta"] = "fast-mode-2026-02-01";
-      const body = {
-        model,
-        max_tokens: 8192,
-        system,
-        messages,
-        tools: mapMcpToolsToAnthropic(tools),
-        stream: true
-      };
-      if (effort) body.output_config = { effort };
-      if (fast) body.speed = "fast";
-      response = await fetchImpl(url, {
-        method: "POST",
-        redirect: "manual",
-        signal,
-        headers,
-        body: JSON.stringify(body)
-      });
-    } catch (e) {
-      if (e && e.name === "AbortError") throw e;
-      throw toError("network", "Anthropic network request failed.");
-    }
-    if (!response.ok) {
-      let detail = "";
-      try {
-        detail = await response.text();
-      } catch (e) {
-      }
-      const classified = classifyHttpError(response.status, detail ? "Anthropic request failed." : "Anthropic request failed.");
-      throw toError(classified.kind, classified.message);
-    }
-    const reader = response.body && response.body.getReader ? response.body.getReader() : null;
-    if (!reader) throw toError("network", "Anthropic response body is not streamable.");
-    const decoder = new TextDecoder();
-    const state = { blocks: /* @__PURE__ */ new Map(), stopReason: "end_turn" };
-    const parser = createSseParser(({ data: data2 }) => parseAnthropicEvent(data2, state, onTextDelta));
-    while (true) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      parser.feed(decoder.decode(chunk.value, { stream: true }));
-    }
-    parser.feed(decoder.decode());
-    return {
-      assistantMessage: { role: "assistant", content: finishBlocks(state.blocks) },
-      stopReason: state.stopReason
-    };
   }
 
   // ../shared/tool-approval.mjs
@@ -29296,341 +26892,6 @@
     return { action: "decline", content: {} };
   }
 
-  // src/lib/agentLoop.js
-  var MAX_TOOL_ROUNDS = 25;
-  function clone(value) {
-    return value == null ? value : JSON.parse(JSON.stringify(value));
-  }
-  function toolText(result) {
-    const content = result && Array.isArray(result.content) ? result.content : [];
-    const text = content.filter((item) => item && item.type === "text").map((item) => item.text || "").join("\n");
-    if (text) return text;
-    if (result === void 0) return "";
-    try {
-      return JSON.stringify(result);
-    } catch (e) {
-      return String(result);
-    }
-  }
-  function normalizeErrorKind(error) {
-    if (error && error.name === "AbortError") return "aborted";
-    return error && error.kind || "network";
-  }
-  function shouldBypassApproval({ mode, tool, sessionAllowed }) {
-    if (sessionAllowed) return true;
-    if (mode === "none") return true;
-    const annotations = tool && tool.annotations || {};
-    if (mode === "readonly") return annotations.readOnlyHint === true;
-    if (mode === "manual") return annotations.readOnlyHint === true;
-    if (mode === "auto") return annotations.destructiveHint !== true;
-    return false;
-  }
-  function approvalRisk(tool) {
-    const annotations = tool && tool.annotations || {};
-    return annotations.destructiveHint === true ? "destructive" : "write";
-  }
-  function getToolUses(message) {
-    return (message && message.content || []).filter((block) => block && block.type === "tool_use");
-  }
-  function makeToolResult(toolUseId, text, isError) {
-    return { type: "tool_result", tool_use_id: toolUseId, content: text, is_error: Boolean(isError) };
-  }
-  function createAgentLoop({
-    resolveRequestProfile,
-    getModel,
-    mcp,
-    getPermissionMode,
-    getEffort,
-    getFast,
-    onEvent,
-    anthropic = sendAnthropicMessage,
-    maxToolRounds = MAX_TOOL_ROUNDS,
-    lang = "zh"
-  }) {
-    let messages = [];
-    let activeController = null;
-    let activeRun = null;
-    const pendingApprovals = /* @__PURE__ */ new Map();
-    const sessionAllowedTools = /* @__PURE__ */ new Set();
-    function emit(evt) {
-      if (onEvent) onEvent(evt);
-    }
-    function resetPendingApprovals() {
-      for (const [id, pending] of pendingApprovals) {
-        pendingApprovals.delete(id);
-        emit({ type: "tool-denied", toolUseId: id });
-        pending.resolve({ decision: "abort" });
-      }
-    }
-    async function waitForApproval(toolUse) {
-      return await new Promise((resolve) => {
-        pendingApprovals.set(toolUse.id, { name: toolUse.name, resolve });
-      });
-    }
-    async function executeTool(toolUse) {
-      const start = Date.now();
-      try {
-        const result = await mcp.callTool(toolUse.name, toolUse.input || {});
-        const text = toolText(result);
-        const isError = Boolean(result && result.isError);
-        emit({ type: "tool-result", toolUseId: toolUse.id, ok: !isError, text, durationMs: Date.now() - start });
-        return makeToolResult(toolUse.id, text, isError);
-      } catch (e) {
-        const text = e && e.message ? e.message : "MCP tool call failed.";
-        emit({ type: "tool-result", toolUseId: toolUse.id, ok: false, text, durationMs: Date.now() - start });
-        return makeToolResult(toolUse.id, text, true);
-      }
-    }
-    async function handleToolUse(toolUse, toolByName) {
-      emit({ type: "tool-start", toolUseId: toolUse.id, name: toolUse.name, input: clone(toolUse.input || {}) });
-      if (isCoreAuthorizedDynamicCall(toolUse.name, toolUse.input || {})) {
-        return await executeTool(toolUse);
-      }
-      const tool = toolByName.get(toolUse.name) || {};
-      const mode = getPermissionMode && getPermissionMode() || "manual";
-      if (mode === "readonly" && !(tool.annotations && tool.annotations.readOnlyHint === true)) {
-        emit({ type: "tool-denied", toolUseId: toolUse.id });
-        return makeToolResult(toolUse.id, "Blocked: read-only mode allows only read tools.", true);
-      }
-      const sessionAllowed = sessionAllowedTools.has(toolUse.name);
-      if (!shouldBypassApproval({ mode, tool, sessionAllowed })) {
-        emit({
-          type: "approval-required",
-          toolUseId: toolUse.id,
-          name: toolUse.name,
-          input: clone(toolUse.input || {}),
-          risk: approvalRisk(tool)
-        });
-        const approved = await waitForApproval(toolUse);
-        pendingApprovals.delete(toolUse.id);
-        if (approved.decision === "abort") throw Object.assign(new Error("aborted"), { name: "AbortError" });
-        if (approved.decision === "deny") {
-          emit({ type: "tool-denied", toolUseId: toolUse.id });
-          return makeToolResult(toolUse.id, "User denied this action.", true);
-        }
-        if (approved.decision === "allow-session") sessionAllowedTools.add(toolUse.name);
-      }
-      return await executeTool(toolUse);
-    }
-    async function sendUser(input) {
-      if (activeRun) return activeRun;
-      let turn;
-      try {
-        turn = normalizeTurnInput(input);
-      } catch (error) {
-        const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
-        emit({
-          type: "error",
-          kind: "attachment",
-          code: "TURN_INPUT_INVALID",
-          message: error.message,
-          ...turnId ? { turnId, dispatchState: "not-started" } : {}
-        });
-        return;
-      }
-      if (turn.attachments.length) {
-        emit({
-          type: "error",
-          kind: "attachment",
-          code: "ATTACHMENT_SIDECAR_REQUIRED",
-          message: "Restore the Claude Agent SDK sidecar to send local files.",
-          turnId: turn.turnId,
-          dispatchState: "not-started"
-        });
-        return;
-      }
-      const userMessage = { role: "user", content: turn.text };
-      messages.push(userMessage);
-      emit({ type: "turn-start" });
-      const controller = new AbortController();
-      activeController = controller;
-      activeRun = (async () => {
-        let activeSensitiveValues = [];
-        let turnAccepted = false;
-        try {
-          const tools = await mcp.listTools();
-          const toolByName = new Map((tools || []).map((tool) => [tool.name, tool]));
-          const serverInstr = mcp.getServerInstructions && mcp.getServerInstructions() || "";
-          const system = serverInstr ? buildSystemPrompt(lang) + "\n\n" + serverInstr : buildSystemPrompt(lang);
-          let toolRounds = 0;
-          while (true) {
-            if (toolRounds >= maxToolRounds) {
-              emit({ type: "error", kind: "mcp", message: "Stopped after 25 consecutive tool rounds." });
-              return;
-            }
-            if (typeof resolveRequestProfile !== "function") {
-              throw Object.assign(new Error("Provider request profile is unavailable."), { kind: "auth" });
-            }
-            let requestProfile = await resolveRequestProfile();
-            activeSensitiveValues = sensitiveValues(requestProfile);
-            const deltaRedactor = createDeltaRedactor(
-              activeSensitiveValues,
-              (text) => {
-                if (text) emit({ type: "text-delta", text });
-              }
-            );
-            let result;
-            try {
-              if (turn.turnId && !turnAccepted) {
-                turnAccepted = true;
-                emit({ type: "turn-accepted", turnId: turn.turnId, transport: "legacy-byok" });
-              }
-              result = await anthropic({
-                requestProfile,
-                model: getModel && getModel() || DEFAULT_MODEL,
-                system,
-                messages: clone(messages),
-                tools,
-                signal: controller.signal,
-                effort: getEffort && getEffort() || null,
-                fast: Boolean(getFast && getFast()),
-                onTextDelta: (delta) => deltaRedactor.feed(delta)
-              });
-              deltaRedactor.flush();
-            } catch (error) {
-              deltaRedactor.discard();
-              throw error;
-            } finally {
-              requestProfile = null;
-            }
-            const assistantMessage = redactValue(result.assistantMessage || { role: "assistant", content: [] }, activeSensitiveValues);
-            messages.push(assistantMessage);
-            const toolUses = getToolUses(assistantMessage);
-            if (result.stopReason !== "tool_use" || toolUses.length === 0) {
-              emit({ type: "turn-end", stopReason: result.stopReason || "end_turn" });
-              return;
-            }
-            toolRounds += 1;
-            const toolResults = [];
-            for (const toolUse of toolUses) {
-              toolResults.push(await handleToolUse(toolUse, toolByName));
-            }
-            messages.push({ role: "user", content: toolResults });
-          }
-        } catch (e) {
-          const kind = normalizeErrorKind(e);
-          repairDanglingToolUses();
-          emit({
-            type: "error",
-            kind,
-            message: safeErrorMessage(e, activeSensitiveValues),
-            ...!turnAccepted && turn.turnId ? {
-              turnId: turn.turnId,
-              dispatchState: "not-started"
-            } : {}
-          });
-        } finally {
-          activeSensitiveValues = [];
-          activeController = null;
-          activeRun = null;
-        }
-      })();
-      return await activeRun;
-    }
-    function repairDanglingToolUses() {
-      const last = messages[messages.length - 1];
-      if (!last || last.role !== "assistant") return;
-      const uses = getToolUses(last);
-      if (!uses.length) return;
-      messages.push({
-        role: "user",
-        content: uses.map((use) => makeToolResult(use.id, "Cancelled by user.", true))
-      });
-    }
-    function approve(toolUseId, decision) {
-      const pending = pendingApprovals.get(toolUseId);
-      if (!pending) return;
-      pending.resolve({ decision });
-    }
-    function stop() {
-      if (activeController) activeController.abort();
-      resetPendingApprovals();
-    }
-    function reset() {
-      stop();
-      messages = [];
-      sessionAllowedTools.clear();
-    }
-    return {
-      sendUser,
-      approve,
-      stop,
-      reset,
-      getMessages: () => clone(messages)
-    };
-  }
-
-  // src/lib/backendSelect.js
-  init_cep_runtime_inject();
-
-  // src/cep/backends/index.js
-  init_cep_runtime_inject();
-
-  // src/lib/backendCapabilities.js
-  init_cep_runtime_inject();
-
-  // src/cep/zcodeBackend.js
-  init_cep_runtime_inject();
-
-  // src/lib/ndjson.js
-  init_cep_runtime_inject();
-  function createLineSplitter(onLine) {
-    let buffer = "";
-    return function push(chunk) {
-      buffer += String(chunk || "");
-      let index = buffer.indexOf("\n");
-      while (index !== -1) {
-        const line = buffer.slice(0, index).trim();
-        buffer = buffer.slice(index + 1);
-        if (line) onLine(line);
-        index = buffer.indexOf("\n");
-      }
-    };
-  }
-  function createNdjsonReader(onMessage) {
-    return createLineSplitter((line) => {
-      let message;
-      try {
-        message = JSON.parse(line);
-      } catch (e) {
-        return;
-      }
-      onMessage(message);
-    });
-  }
-
-  // src/lib/zcodeErrors.js
-  init_cep_runtime_inject();
-  var ZH_RULES = [
-    {
-      // Provider ids may contain dots (e.g. "mediastorm_glm/glm-5.2"): capture the
-      // whole non-space run, then drop one trailing sentence terminator if present.
-      re: /Model provider is missing an API key:\s*([^\s]+?)[.。]?(?=\s|$)/i,
-      hint: (m) => "ZCode provider\u300C" + m[1] + "\u300D\u7F3A\u5C11 API Key \u2014\u2014 \u5230 \u8BBE\u7F6E \u2192 AI \u670D\u52A1 \u2192 ZCode \u901A\u9053 \u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5728\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF09\uFF0C\u6216\u5728 ~/.zcode/cli/config.json \u91CC\u914D\u7F6E\u3002"
-    },
-    {
-      re: /Model config is missing/i,
-      hint: () => "\u672A\u627E\u5230 ZCode \u6A21\u578B\u914D\u7F6E \u2014\u2014 \u6253\u5F00 ZCode \u9009\u62E9 provider/model\uFF0C\u6216\u521B\u5EFA ~/.zcode/cli/config.json \u6307\u5B9A provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002"
-    },
-    {
-      re: /Provider authentication failed/i,
-      hint: () => "ZCode provider \u9274\u6743\u5931\u8D25 \u2014\u2014 \u68C0\u67E5 API Key \u662F\u5426\u6709\u6548\uFF1B\u82E5\u662F\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212\uFF08start-plan\uFF09\uFF0C\u9762\u677F\u5C1A\u4E0D\u652F\u6301\u5176\u684C\u9762\u9A8C\u8BC1\u7801\u6865\u63A5\uFF0C\u8BF7\u6539\u7528 CLI \u914D\u7F6E\u901A\u9053\u3002"
-    }
-  ];
-  function localizeZcodeError(message, lang = "en") {
-    const text = String(message || "");
-    if (lang !== "zh" || !text) return text;
-    for (const rule of ZH_RULES) {
-      const m = rule.re.exec(text);
-      if (m) {
-        const hint = rule.hint(m);
-        if (text.startsWith(hint)) return text;
-        return hint + "\n" + text;
-      }
-    }
-    return text;
-  }
-
   // src/cep/zcodeBackend.js
   var RPC_TIMEOUT_MS = 3e4;
   var STDERR_TAIL_LIMIT = 4096;
@@ -29648,7 +26909,7 @@
     const next = tail + String(chunk || "");
     return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
   }
-  function clone2(value) {
+  function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
   async function resolveZcodeCli({ env, platform }) {
@@ -30810,7 +28071,7 @@
       stop,
       reset,
       setThoughtLevel,
-      getMessages: () => clone2(transcript),
+      getMessages: () => clone(transcript),
       probeAccount
     };
   }
@@ -30970,6 +28231,49 @@
       label: "OpenCode",
       models,
       defaultModelId: "north-mini-code-free",
+      defaultEffort: null,
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function providerEntries(providerResult) {
+    if (Array.isArray(providerResult)) return providerResult.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
+    if (providerResult && Array.isArray(providerResult.providers)) {
+      return providerResult.providers.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
+    }
+    if (providerResult && typeof providerResult === "object") return Object.entries(providerResult);
+    return [];
+  }
+  function modelEntries(provider) {
+    const models = provider && provider.models;
+    if (Array.isArray(models)) return models.map((m) => [m && (m.id || m.modelID || m.modelId || m.name), m]);
+    if (models && typeof models === "object") return Object.entries(models);
+    return [];
+  }
+  function openCodeDescriptorFromModels(providerResult) {
+    const models = [];
+    for (const [providerKey, provider] of providerEntries(providerResult)) {
+      const providerID = String(provider && (provider.id || provider.providerID || provider.providerId) || providerKey || "opencode");
+      for (const [modelKey, raw] of modelEntries(provider)) {
+        const modelId = String(raw && (raw.id || raw.modelID || raw.modelId) || modelKey || "");
+        if (!modelId) continue;
+        models.push({
+          id: providerID === "opencode" ? modelId : providerID + "/" + modelId,
+          label: raw && (raw.name || raw.displayName || raw.display_name) || modelId,
+          effortLevels: [],
+          cost: String(modelId).endsWith("-free") ? 1 : 2,
+          adaptive: false
+        });
+      }
+    }
+    if (!models.length) return openCodeStaticDescriptor();
+    const defaultModel = models.find((m) => m.id === "north-mini-code-free") || models.find((m) => String(m.id).endsWith("/north-mini-code-free")) || models[0];
+    return {
+      id: "opencode",
+      label: "OpenCode",
+      models,
+      defaultModelId: defaultModel.id,
       defaultEffort: null,
       supportsFast: () => false,
       approvalModes: APPROVAL_MODES,
@@ -31161,17 +28465,14 @@
   }
 
   // src/lib/backendSelect.js
-  var DEFAULT_CHANNEL = { claude: "subscription", codex: "cli", zcode: "cli-config" };
+  var DEFAULT_CHANNEL = { claude: "subscription", codex: "cli", opencode: "provider", zcode: "cli-config" };
   function pickBackend({ pref, channels = {}, channelChoices = {} }) {
-    const group = pref === "codex" || pref === "zcode" ? pref : "claude";
+    const group = ["codex", "opencode", "zcode"].includes(pref) ? pref : "claude";
     const list = channels[group] || [];
     const wanted = channelChoices[group] || DEFAULT_CHANNEL[group];
     const chosen = list.find((c) => c && c.channel === wanted) || list[0] || null;
     if (chosen && chosen.checking) {
       return { backend: "none", reason: group + "-probing", channel: null, fixHint: null };
-    }
-    if (group === "codex" && (chosen == null ? void 0 : chosen.channel) === "custom" && chosen.canPreflight === true && !chosen.ok) {
-      return { backend: "codex", reason: "provider-preflight", channel: "custom", fixHint: null };
     }
     if (!chosen || !chosen.ok) {
       return {
@@ -31182,9 +28483,6 @@
       };
     }
     if (group === "claude") {
-      if (chosen.channel === "api") {
-        return { backend: "claude-api", reason: "ok", channel: "api", fixHint: null };
-      }
       return { backend: "subscription", reason: "ok", channel: "subscription", fixHint: null };
     }
     return { backend: group, reason: "ok", channel: chosen.channel, fixHint: null };
@@ -31232,1937 +28530,230 @@
 
   // src/cep/mcpClient.js
   init_cep_runtime_inject();
-
-  // src/cep/runtimeManager.js
-  init_cep_runtime_inject();
-  var RUNTIME_PLATFORM = "macos-arm64";
-  var LOCK_NAME = ".runtime-manager.lock";
-  var INSTALL_RECORD = "install-record.json";
-  var LAYER_RECORD = "layer-record.json";
-  var STABLE_LAUNCHER_RECORD = "stable-launcher-record.json";
-  var GENERATION_LAUNCHER = "ae-mcp-launcher";
-  var GENERATION_OWNER = "ae-mcp-runtime-manager";
-  var GENERATION_ID = /^g-[0-9a-f]{16}$/;
-  var LAYER_INSTANCE_ID = /^i-[0-9a-f]{16}$/;
-  var SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
-  var SOURCE_SHA = /^[0-9a-f]{40}$/;
-  var SHA256 = /^[0-9a-f]{64}$/;
-  var DEVELOPMENT_RUNTIME_ENV = "AE_MCP_DEV_RUNTIME";
-  var DEVELOPMENT_CORE_BOOTSTRAP = [
-    "import runpy,sys",
-    "sys.path.insert(0,sys.argv[1])",
-    "sys.path.insert(0,sys.argv[2])",
-    'runpy.run_module("ae_mcp",run_name="__main__")'
-  ].join(";");
-  var RuntimeManagerError = class extends Error {
-    constructor(code, message, details = {}) {
-      super(message);
-      this.name = "RuntimeManagerError";
-      this.code = code;
-      this.details = details;
-    }
-  };
-  function failure(code, message, details) {
-    throw new RuntimeManagerError(code, message, details);
-  }
-  function exactKeys(value, keys) {
-    return value !== null && typeof value === "object" && !Array.isArray(value) && JSON.stringify(Object.keys(value).sort()) === JSON.stringify(keys.slice().sort());
-  }
-  function portablePath(value) {
-    if (typeof value !== "string" || !value || value.length > 1024 || value.includes("\\") || value.includes("\0") || value.startsWith("/")) return false;
-    return value.split("/").every((part) => part && part !== "." && part !== "..");
-  }
-  function pointerValue(value, platformId = RUNTIME_PLATFORM) {
-    const text = String(value || "").trim();
-    const parts = text.split("/");
-    if (!portablePath(text) || parts.length !== 2) return "";
-    if (parts[0] === "generations" && GENERATION_ID.test(parts[1])) return text;
-    return parts[1] === platformId ? text : "";
-  }
-  function compareSemver(left, right) {
-    const numbers = (value) => String(value).split(/[+-]/, 1)[0].split(".").map(Number);
-    const a = numbers(left);
-    const b = numbers(right);
-    for (let index = 0; index < 3; index += 1) {
-      if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
-    }
-    return 0;
-  }
-  function compareUtf8(left, right) {
-    return Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
-  }
-  function modeOf(stats) {
-    return (stats.mode & 511).toString(8).padStart(4, "0");
-  }
-  function runtimeError(error, fallbackCode = "RUNTIME_MANAGER_FAILED") {
-    if (error instanceof RuntimeManagerError) return error;
-    return new RuntimeManagerError(fallbackCode, String((error == null ? void 0 : error.message) || error), {
-      causeCode: typeof (error == null ? void 0 : error.code) === "string" ? error.code : void 0
-    });
-  }
-  function defaultSleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-  function defaultRandomBytes(size) {
-    var _a, _b, _c;
-    const requireImpl = ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) || ((_c = globalThis.window) == null ? void 0 : _c.require) || globalThis.require;
-    if (typeof requireImpl !== "function") {
-      failure("RUNTIME_CRYPTO_UNAVAILABLE", "CEP Node crypto is unavailable");
-    }
-    return requireImpl("crypto").randomBytes(size);
-  }
-  function randomHex(randomBytes, size = 8) {
-    return Buffer.from(randomBytes(size)).toString("hex");
-  }
-  function hasDevelopmentRuntimeOverride(environment = {}) {
-    return typeof (environment == null ? void 0 : environment[DEVELOPMENT_RUNTIME_ENV]) === "string" && environment[DEVELOPMENT_RUNTIME_ENV].trim().length > 0;
-  }
-  function createRuntimeManager({
-    platform,
-    extensionRoot,
-    fsImpl,
-    cryptoImpl,
-    randomBytes = defaultRandomBytes,
-    now = () => Date.now(),
-    sleep: sleep2 = defaultSleep,
-    pid = Number(((_c) => (_c = ((_b) => (_b = ((_a) => (_a = globalThis.window) == null ? void 0 : _a.cep_node)()) == null ? void 0 : _b.process)()) == null ? void 0 : _c.pid)() || ((_d) => (_d = globalThis.process) == null ? void 0 : _d.pid)() || 0),
-    isProcessAlive = (ownerPid) => {
-      var _a2, _b2;
-      const processApi = ((_b2 = (_a2 = globalThis.window) == null ? void 0 : _a2.cep_node) == null ? void 0 : _b2.process) || globalThis.process;
-      try {
-        processApi.kill(ownerPid, 0);
-        return true;
-      } catch (error) {
-        return (error == null ? void 0 : error.code) !== "ESRCH";
-      }
-    },
-    lockTimeoutMs = 1e4,
-    lockPollMs = 25,
-    environment = (platform == null ? void 0 : platform.env) || ((_g) => (_g = ((_f) => (_f = ((_e) => (_e = globalThis.window) == null ? void 0 : _e.cep_node)()) == null ? void 0 : _f.process)()) == null ? void 0 : _g.env)() || ((_h) => (_h = globalThis.process) == null ? void 0 : _h.env)() || {}
-  } = {}) {
-    if (!platform || platform.id !== RUNTIME_PLATFORM) {
-      failure("RUNTIME_PLATFORM_UNSUPPORTED", "RuntimeManager currently supports Apple Silicon macOS only");
-    }
-    if (!platform.paths || !platform.fs || !extensionRoot) {
-      failure("RUNTIME_MANAGER_INPUT_INVALID", "RuntimeManager requires a platform adapter and extension root");
-    }
-    const fs = fsImpl || platform.fs;
-    const paths = platform.paths;
-    const promises = fs.promises;
-    if (!promises) failure("RUNTIME_FILESYSTEM_UNAVAILABLE", "CEP Node filesystem promises are unavailable");
-    const crypto = cryptoImpl || (() => {
-      var _a2, _b2, _c2;
-      const requireImpl = ((_b2 = (_a2 = globalThis.window) == null ? void 0 : _a2.cep_node) == null ? void 0 : _b2.require) || ((_c2 = globalThis.window) == null ? void 0 : _c2.require) || globalThis.require;
-      return typeof requireImpl === "function" ? requireImpl("crypto") : null;
-    })();
-    if (!crypto || typeof crypto.createHash !== "function") {
-      failure("RUNTIME_CRYPTO_UNAVAILABLE", "CEP Node crypto is unavailable");
-    }
-    const root = paths.runtimeRoot;
-    const lockPath = paths.join([root, LOCK_NAME]);
-    const packageManifestPath = paths.join([extensionRoot, "bundle-manifest.json"]);
-    const packagedRuntimeRoot = paths.join([extensionRoot, "runtime", platform.id]);
-    const packagedRuntimeManifest = paths.join([packagedRuntimeRoot, "runtime-manifest.json"]);
-    const packagedLauncher = paths.join([extensionRoot, "platform", platform.id, "bin", "ae-mcp"]);
-    const stableLauncherRecordPath = paths.join([root, STABLE_LAUNCHER_RECORD]);
-    const developmentMarkerPath = paths.join([extensionRoot, ".debug"]);
-    const developmentRuntimeInput = hasDevelopmentRuntimeOverride(environment) ? environment[DEVELOPMENT_RUNTIME_ENV].trim() : "";
-    function developmentBuild() {
-      return fs.existsSync(developmentMarkerPath) && !fs.existsSync(packageManifestPath);
-    }
-    async function selectDevelopmentRuntime() {
-      var _a2, _b2, _c2, _d2;
-      if (!developmentRuntimeInput) return null;
-      if (!developmentBuild()) {
-        failure(
-          "RUNTIME_DEVELOPMENT_RUNTIME_RELEASE_REFUSED",
-          `${DEVELOPMENT_RUNTIME_ENV} is refused by a packaged release build`
-        );
-      }
-      if (!paths.isAbsolute(developmentRuntimeInput)) {
-        failure(
-          "RUNTIME_DEVELOPMENT_RUNTIME_INVALID",
-          `${DEVELOPMENT_RUNTIME_ENV} must name an absolute source checkout path`
-        );
-      }
-      let checkout;
-      try {
-        checkout = await promises.realpath(developmentRuntimeInput);
-        const info = await promises.stat(checkout);
-        if (!info.isDirectory()) throw new Error("not a directory");
-      } catch {
-        failure(
-          "RUNTIME_DEVELOPMENT_RUNTIME_INVALID",
-          `${DEVELOPMENT_RUNTIME_ENV} does not resolve to a usable source checkout`,
-          { path: developmentRuntimeInput }
-        );
-      }
-      const projectManifest = paths.join([checkout, "pyproject.toml"]);
-      const coreRoot = paths.join([checkout, "packages", "core"]);
-      const coreEntrypoint = paths.join([coreRoot, "ae_mcp", "__main__.py"]);
-      const bridgeRoot = paths.join([checkout, "packages", "bridge"]);
-      const bridgeEntrypoint = paths.join([bridgeRoot, "ae_mcp_bridge", "__init__.py"]);
-      const interpreter = paths.join([checkout, ".venv", "bin", "python3"]);
-      let resolvedInterpreter;
-      try {
-        const [manifestInfo, entrypointInfo, bridgeInfo, interpreterInfo] = await Promise.all([
-          promises.lstat(projectManifest),
-          promises.lstat(coreEntrypoint),
-          promises.lstat(bridgeEntrypoint),
-          promises.lstat(interpreter)
-        ]);
-        if (!manifestInfo.isFile() || ((_a2 = manifestInfo.isSymbolicLink) == null ? void 0 : _a2.call(manifestInfo)) || !entrypointInfo.isFile() || ((_b2 = entrypointInfo.isSymbolicLink) == null ? void 0 : _b2.call(entrypointInfo)) || !bridgeInfo.isFile() || ((_c2 = bridgeInfo.isSymbolicLink) == null ? void 0 : _c2.call(bridgeInfo)) || !interpreterInfo.isFile() && !((_d2 = interpreterInfo.isSymbolicLink) == null ? void 0 : _d2.call(interpreterInfo)) || (interpreterInfo.mode & 73) === 0) {
-          throw new Error("required checkout entrypoint is invalid");
-        }
-        resolvedInterpreter = await promises.realpath(interpreter);
-        const resolvedInfo = await promises.stat(resolvedInterpreter);
-        if (!resolvedInfo.isFile() || (resolvedInfo.mode & 73) === 0) {
-          throw new Error("resolved interpreter is not executable");
-        }
-      } catch {
-        failure(
-          "RUNTIME_DEVELOPMENT_RUNTIME_INVALID",
-          `${DEVELOPMENT_RUNTIME_ENV} does not contain the Core/bridge entrypoints and an executable .venv/bin/python3`,
-          { path: checkout }
-        );
-      }
-      return {
-        ok: true,
-        action: "development-runtime",
-        developmentRuntime: true,
-        checkoutPath: checkout,
-        launcher: interpreter,
-        args: ["-B", "-I", "-c", DEVELOPMENT_CORE_BOOTSTRAP, coreRoot, bridgeRoot],
-        cwd: checkout,
-        interpreter: {
-          path: interpreter,
-          resolvedPath: resolvedInterpreter
-        },
-        diagnostics: [{
-          code: "RUNTIME_DEVELOPMENT_RUNTIME_SELECTED",
-          message: `Development runtime selected from ${checkout}; no packaged runtime was verified or installed.`
-        }]
-      };
-    }
-    async function sha256File(filePath) {
-      var _a2;
-      const info = await promises.lstat(filePath);
-      if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1) {
-        failure("RUNTIME_FILE_INVALID", "Runtime payload requires an ordinary file", { path: filePath });
-      }
-      const bytes = await promises.readFile(filePath);
-      return crypto.createHash("sha256").update(bytes).digest("hex");
-    }
-    async function readJson2(filePath, code) {
-      var _a2;
-      try {
-        const info = await promises.lstat(filePath);
-        if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1) {
-          failure(code, "Runtime metadata is not an ordinary file", { path: filePath });
-        }
-        return JSON.parse(String(await promises.readFile(filePath, "utf8")));
-      } catch (error) {
-        if (error instanceof RuntimeManagerError) throw error;
-        failure(code, "Runtime metadata is missing or invalid", { path: filePath });
-      }
-    }
-    async function ordinaryFileSignal(filePath, code, {
-      executable = false,
-      expectedMode,
-      expectedSize
-    } = {}) {
-      var _a2;
-      let info;
-      try {
-        info = await promises.lstat(filePath);
-      } catch (error) {
-        failure(code, "Trusted local runtime metadata is missing", { path: filePath });
-      }
-      if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1 || executable && (info.mode & 73) === 0 || expectedMode && modeOf(info) !== expectedMode || Number.isSafeInteger(expectedSize) && info.size !== expectedSize) {
-        failure(code, "Trusted local runtime metadata changed", {
-          path: filePath,
-          size: info.size,
-          mtimeMs: Math.trunc(info.mtimeMs)
-        });
-      }
-      return {
-        path: filePath,
-        size: info.size,
-        mtimeMs: Math.trunc(info.mtimeMs),
-        mode: modeOf(info)
-      };
-    }
-    async function executableSignal(filePath, code, {
-      rootDirectory,
-      expectedMode,
-      expectedSize,
-      expectedType
-    } = {}) {
-      var _a2, _b2;
-      let info;
-      try {
-        info = await promises.lstat(filePath);
-      } catch (error) {
-        failure(code, "Trusted local runtime entrypoint is missing", { path: filePath });
-      }
-      const type = ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) ? "symlink" : "file";
-      if (expectedType && type !== expectedType || expectedMode && modeOf(info) !== expectedMode || Number.isSafeInteger(expectedSize) && info.size !== expectedSize) {
-        failure(code, "Trusted local runtime entrypoint metadata changed", {
-          path: filePath,
-          size: info.size,
-          mtimeMs: Math.trunc(info.mtimeMs)
-        });
-      }
-      if (type === "file") {
-        if (!info.isFile() || info.nlink !== 1 || (info.mode & 73) === 0) {
-          failure(code, "Trusted local runtime entrypoint changed", { path: filePath });
-        }
-        return {
-          path: filePath,
-          type,
-          size: info.size,
-          mtimeMs: Math.trunc(info.mtimeMs),
-          mode: modeOf(info)
-        };
-      }
-      let target;
-      let targetInfo;
-      try {
-        target = await promises.readlink(filePath);
-        const resolved = paths.resolve([paths.dirname(filePath), target]);
-        if (!rootDirectory || paths.isAbsolute(target) || !paths.contains(rootDirectory, resolved)) {
-          failure(code, "Trusted local runtime entrypoint symlink is unsafe", { path: filePath });
-        }
-        targetInfo = await promises.lstat(resolved);
-      } catch (error) {
-        if (error instanceof RuntimeManagerError) throw error;
-        failure(code, "Trusted local runtime entrypoint symlink is invalid", { path: filePath });
-      }
-      if (!targetInfo.isFile() || ((_b2 = targetInfo.isSymbolicLink) == null ? void 0 : _b2.call(targetInfo)) || targetInfo.nlink !== 1 || (targetInfo.mode & 73) === 0) {
-        failure(code, "Trusted local runtime entrypoint target changed", { path: filePath });
-      }
-      return {
-        path: filePath,
-        type,
-        size: targetInfo.size,
-        mtimeMs: Math.trunc(targetInfo.mtimeMs),
-        mode: modeOf(targetInfo),
-        linkTarget: target,
-        linkSize: info.size,
-        linkMtimeMs: Math.trunc(info.mtimeMs)
-      };
-    }
-    function sameSignal(actual, expected) {
-      if (!actual || !expected) return false;
-      return actual.size === expected.size && actual.mtimeMs === expected.mtimeMs && actual.mode === expected.mode && actual.type === expected.type && actual.linkTarget === expected.linkTarget && actual.linkSize === expected.linkSize && actual.linkMtimeMs === expected.linkMtimeMs;
-    }
-    function emptyLifecycle() {
-      return {
-        generations: { created: 0, reused: 0, reclaimed: 0 },
-        layers: { created: 0, reused: 0, reclaimed: 0 },
-        logicalBytes: { created: 0, reclaimed: 0 },
-        physicalBytes: { created: 0, reclaimed: 0 }
-      };
-    }
-    function mergeLifecycle(...values) {
-      var _a2, _b2;
-      const result = emptyLifecycle();
-      for (const value of values) {
-        if (!value) continue;
-        for (const kind of ["generations", "layers"]) {
-          for (const counter of ["created", "reused", "reclaimed"]) {
-            result[kind][counter] += Number(((_a2 = value[kind]) == null ? void 0 : _a2[counter]) || 0);
-          }
-        }
-        for (const kind of ["logicalBytes", "physicalBytes"]) {
-          for (const counter of ["created", "reclaimed"]) {
-            result[kind][counter] += Number(((_b2 = value[kind]) == null ? void 0 : _b2[counter]) || 0);
-          }
-        }
-      }
-      return result;
-    }
-    async function treeUsage(directory) {
-      let logicalBytes = 0;
-      let physicalBytes = 0;
-      const visit = async (current) => {
-        var _a2;
-        const entries = await promises.readdir(current, { withFileTypes: true });
-        for (const entry of entries) {
-          const absolute = paths.join([current, entry.name]);
-          const info = await promises.lstat(absolute);
-          if (info.isDirectory() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info))) {
-            await visit(absolute);
-          } else {
-            logicalBytes += info.size;
-            physicalBytes += Number.isSafeInteger(info.blocks) ? info.blocks * 512 : info.size;
-          }
-        }
-      };
-      await visit(directory);
-      return { logicalBytes, physicalBytes };
-    }
-    function validateRuntimeManifest(value) {
-      var _a2, _b2;
-      if (!value || value.schemaVersion !== 1 || value.platform !== platform.id || ((_a2 = value.node) == null ? void 0 : _a2.version) !== "24.17.0" || ((_b2 = value.python) == null ? void 0 : _b2.version) !== "3.13.14" || !Array.isArray(value.files) || value.files.length === 0) {
-        failure("RUNTIME_MANIFEST_INVALID", "Runtime manifest identity is invalid");
-      }
-      const seen = /* @__PURE__ */ new Set();
-      let previous = "";
-      for (const record of value.files) {
-        if (!exactKeys(record, ["mode", "path", "sha256", "size", "type"]) || !portablePath(record.path) || !["file", "symlink"].includes(record.type) || !SHA256.test(record.sha256) || !Number.isSafeInteger(record.size) || record.size < 0 || !/^[0-7]{4}$/.test(record.mode) || seen.has(record.path) || previous && compareUtf8(record.path, previous) <= 0) {
-          failure("RUNTIME_MANIFEST_INVALID", "Runtime manifest file inventory is invalid");
-        }
-        seen.add(record.path);
-        previous = record.path;
-      }
-      return value;
-    }
-    async function actualRuntimePaths(directory, prefix = "", values = []) {
-      var _a2;
-      const entries = await promises.readdir(directory, { withFileTypes: true });
-      for (const entry of entries) {
-        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
-        if (!portablePath(relative)) failure("RUNTIME_FILE_INVALID", "Runtime contains an unsafe path");
-        const absolute = paths.join([directory, entry.name]);
-        const info = await promises.lstat(absolute);
-        if (info.isDirectory() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info))) {
-          await actualRuntimePaths(absolute, relative, values);
-        } else if (relative !== "runtime-manifest.json") {
-          values.push(relative);
-        }
-      }
-      return values;
-    }
-    async function verifyRuntime(directory, expectedManifestSha256) {
-      var _a2, _b2;
-      const manifestPath = paths.join([directory, "runtime-manifest.json"]);
-      if (expectedManifestSha256 && await sha256File(manifestPath) !== expectedManifestSha256) {
-        failure("RUNTIME_HASH_MISMATCH", "Runtime manifest digest does not match its install record");
-      }
-      const manifest = validateRuntimeManifest(await readJson2(manifestPath, "RUNTIME_MANIFEST_INVALID"));
-      const expectedPaths = manifest.files.map((record) => record.path);
-      const actualPaths = (await actualRuntimePaths(directory)).sort(compareUtf8);
-      if (JSON.stringify(actualPaths) !== JSON.stringify(expectedPaths)) {
-        failure("RUNTIME_INCOMPLETE", "Runtime file inventory is incomplete or contains unexpected files");
-      }
-      for (const record of manifest.files) {
-        const absolute = paths.join([directory, ...record.path.split("/")]);
-        const info = await promises.lstat(absolute);
-        if (modeOf(info) !== record.mode) {
-          failure("RUNTIME_METADATA_MISMATCH", "Runtime file mode does not match the manifest", { path: record.path });
-        }
-        let bytes;
-        if (record.type === "symlink") {
-          if (!((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info))) failure("RUNTIME_METADATA_MISMATCH", "Runtime symlink is missing", { path: record.path });
-          const target = await promises.readlink(absolute);
-          const lexical = paths.resolve([paths.dirname(absolute), target]);
-          if (paths.isAbsolute(target) || !paths.contains(directory, lexical)) {
-            failure("RUNTIME_SYMLINK_UNSAFE", "Runtime symlink escapes its version directory", { path: record.path });
-          }
-          bytes = Buffer.from(target, "utf8");
-        } else {
-          if (!info.isFile() || ((_b2 = info.isSymbolicLink) == null ? void 0 : _b2.call(info)) || info.nlink !== 1) {
-            failure("RUNTIME_METADATA_MISMATCH", "Runtime ordinary file is missing", { path: record.path });
-          }
-          bytes = await promises.readFile(absolute);
-        }
-        const digest = crypto.createHash("sha256").update(bytes).digest("hex");
-        if (bytes.length !== record.size || digest !== record.sha256) {
-          failure("RUNTIME_HASH_MISMATCH", "Runtime file digest does not match the manifest", { path: record.path });
-        }
-      }
-      return manifest;
-    }
-    function validateBundleManifest(value) {
-      var _a2;
-      if (!value || value.schemaVersion !== 1 || value.platform !== platform.id || !SEMVER.test(value.version || "") || !SOURCE_SHA.test(value.sourceCommitSha || "") || !SHA256.test(((_a2 = value.runtime) == null ? void 0 : _a2.manifestSha256) || "") || !Array.isArray(value.files) || value.files.length === 0) {
-        failure("RUNTIME_BUNDLE_INVALID", "Packaged runtime bundle manifest is invalid");
-      }
-      const byPath = /* @__PURE__ */ new Map();
-      for (const record of value.files) {
-        if (!portablePath(record == null ? void 0 : record.path) || !SHA256.test((record == null ? void 0 : record.sha256) || "") || !["file", "symlink"].includes(record == null ? void 0 : record.type) || byPath.has(record.path)) {
-          failure("RUNTIME_BUNDLE_INVALID", "Packaged runtime bundle inventory is invalid");
-        }
-        byPath.set(record.path, record);
-      }
-      return { manifest: value, byPath };
-    }
-    async function inspectPackagedPayload() {
-      const { manifest, byPath } = validateBundleManifest(
-        await readJson2(packageManifestPath, "RUNTIME_BUNDLE_INVALID")
-      );
-      const runtimeManifestRelative = `runtime/${platform.id}/runtime-manifest.json`;
-      const launcherRelative = `platform/${platform.id}/bin/ae-mcp`;
-      const nodeRelative = `runtime/${platform.id}/node/bin/node`;
-      const pythonRelative = `runtime/${platform.id}/python/bin/python3`;
-      const runtimeRecord = byPath.get(runtimeManifestRelative);
-      const launcherRecord = byPath.get(launcherRelative);
-      const nodeRecord = byPath.get(nodeRelative);
-      const pythonRecord = byPath.get(pythonRelative);
-      if (!runtimeRecord || runtimeRecord.type !== "file" || runtimeRecord.sha256 !== manifest.runtime.manifestSha256 || !Number.isSafeInteger(runtimeRecord.size) || runtimeRecord.size <= 0 || !launcherRecord || launcherRecord.type !== "file" || !Number.isSafeInteger(launcherRecord.size) || launcherRecord.size <= 0 || !nodeRecord || nodeRecord.type !== "file" || !Number.isSafeInteger(nodeRecord.size) || nodeRecord.size <= 0 || !pythonRecord || !["file", "symlink"].includes(pythonRecord.type) || !Number.isSafeInteger(pythonRecord.size) || pythonRecord.size <= 0) {
-        failure("RUNTIME_BUNDLE_INVALID", "Packaged runtime entrypoints or stable launcher are not declared");
-      }
-      const runtimeManifestSignal = await ordinaryFileSignal(
-        packagedRuntimeManifest,
-        "RUNTIME_BUNDLE_METADATA_CHANGED",
-        { expectedMode: runtimeRecord.mode, expectedSize: runtimeRecord.size }
-      );
-      const launcherSignal = await ordinaryFileSignal(
-        packagedLauncher,
-        "RUNTIME_BUNDLE_METADATA_CHANGED",
-        {
-          executable: true,
-          expectedMode: launcherRecord.mode,
-          expectedSize: launcherRecord.size
-        }
-      );
-      const nodeSignal = await ordinaryFileSignal(
-        paths.join([packagedRuntimeRoot, "node", "bin", "node"]),
-        "RUNTIME_BUNDLE_METADATA_CHANGED",
-        {
-          executable: true,
-          expectedMode: nodeRecord.mode,
-          expectedSize: nodeRecord.size
-        }
-      );
-      const pythonSignal = await executableSignal(
-        paths.join([packagedRuntimeRoot, "python", "bin", "python3"]),
-        "RUNTIME_BUNDLE_METADATA_CHANGED",
-        {
-          rootDirectory: packagedRuntimeRoot,
-          expectedMode: pythonRecord.mode,
-          expectedSize: pythonRecord.size,
-          expectedType: pythonRecord.type
-        }
-      );
-      return {
-        version: manifest.version,
-        sourceCommitSha: manifest.sourceCommitSha,
-        runtimeManifestSha256: manifest.runtime.manifestSha256,
-        launcherSha256: launcherRecord.sha256,
-        signals: {
-          runtimeManifest: runtimeManifestSignal,
-          launcher: launcherSignal,
-          node: nodeSignal,
-          python: pythonSignal
-        }
-      };
-    }
-    async function verifyPackagedPayload() {
-      const { manifest, byPath } = validateBundleManifest(
-        await readJson2(packageManifestPath, "RUNTIME_BUNDLE_INVALID")
-      );
-      const runtimeManifestRelative = `runtime/${platform.id}/runtime-manifest.json`;
-      const launcherRelative = `platform/${platform.id}/bin/ae-mcp`;
-      const runtimeRecord = byPath.get(runtimeManifestRelative);
-      const launcherRecord = byPath.get(launcherRelative);
-      if (!runtimeRecord || runtimeRecord.type !== "file" || runtimeRecord.sha256 !== manifest.runtime.manifestSha256 || !launcherRecord || launcherRecord.type !== "file") {
-        failure("RUNTIME_BUNDLE_INVALID", "Packaged runtime or stable launcher is not declared");
-      }
-      if (await sha256File(packagedRuntimeManifest) !== runtimeRecord.sha256 || await sha256File(packagedLauncher) !== launcherRecord.sha256) {
-        failure("RUNTIME_BUNDLE_CORRUPT", "Packaged runtime or stable launcher failed SHA-256 verification");
-      }
-      await verifyRuntime(packagedRuntimeRoot, manifest.runtime.manifestSha256);
-      return {
-        version: manifest.version,
-        sourceCommitSha: manifest.sourceCommitSha,
-        runtimeManifestSha256: manifest.runtime.manifestSha256,
-        launcherSha256: launcherRecord.sha256
-      };
-    }
-    function installRecordPath(relative) {
-      return relative.startsWith("generations/") ? paths.join([root, ...relative.split("/"), INSTALL_RECORD]) : paths.join([root, relative.split("/")[0], INSTALL_RECORD]);
-    }
-    function generationLauncherPath(relative) {
-      return relative.startsWith("generations/") ? paths.join([root, ...relative.split("/"), GENERATION_LAUNCHER]) : paths.join([root, relative.split("/")[0], GENERATION_LAUNCHER]);
-    }
-    function validateLegacyInstallRecord(record, normalized) {
-      if (!exactKeys(record, [
-        "installedAt",
-        "launcherSha256",
-        "platform",
-        "relative",
-        "runtimeManifestSha256",
-        "schemaVersion",
-        "sourceCommitSha",
-        "version"
-      ]) || record.schemaVersion !== 1 || record.platform !== platform.id || record.relative !== normalized || !SEMVER.test(record.version) || !SOURCE_SHA.test(record.sourceCommitSha) || !SHA256.test(record.runtimeManifestSha256) || !SHA256.test(record.launcherSha256) || !Number.isSafeInteger(record.installedAt) || record.installedAt < 0) {
-        failure("RUNTIME_INSTALL_RECORD_INVALID", "Runtime install record is invalid");
-      }
-      return record;
-    }
-    function validateLayerReference(value) {
-      if (!exactKeys(value, ["id", "instanceId", "manifestSha256", "relative"]) || !SHA256.test(value.id) || value.manifestSha256 !== value.id || !LAYER_INSTANCE_ID.test(value.instanceId) || value.relative !== `layers/${value.id}/${value.instanceId}/${platform.id}`) {
-        failure("RUNTIME_INSTALL_RECORD_INVALID", "Runtime layer reference is invalid");
-      }
-      return value;
-    }
-    function validateGenerationRecord(record, normalized) {
-      if (!exactKeys(record, [
-        "generationId",
-        "installedAt",
-        "launcherSha256",
-        "launcherSignal",
-        "layer",
-        "owner",
-        "platform",
-        "relative",
-        "schemaVersion",
-        "sourceCommitSha",
-        "version"
-      ]) || record.schemaVersion !== 2 || record.owner !== GENERATION_OWNER || record.platform !== platform.id || record.relative !== normalized || normalized !== `generations/${record.generationId}` || !GENERATION_ID.test(record.generationId) || !SEMVER.test(record.version) || !SOURCE_SHA.test(record.sourceCommitSha) || !SHA256.test(record.launcherSha256) || !Number.isSafeInteger(record.installedAt) || record.installedAt < 0) {
-        failure("RUNTIME_INSTALL_RECORD_INVALID", "Runtime generation receipt is invalid");
-      }
-      validateLayerReference(record.layer);
-      return record;
-    }
-    function validateLayerRecord(record, reference) {
-      if (!exactKeys(record, [
-        "id",
-        "installedAt",
-        "instanceId",
-        "logicalBytes",
-        "owner",
-        "physicalBytes",
-        "platform",
-        "relative",
-        "schemaVersion",
-        "signals"
-      ]) || record.schemaVersion !== 1 || record.owner !== GENERATION_OWNER || record.platform !== platform.id || record.id !== reference.id || record.instanceId !== reference.instanceId || record.relative !== reference.relative || !Number.isSafeInteger(record.installedAt) || record.installedAt < 0 || !Number.isSafeInteger(record.logicalBytes) || record.logicalBytes <= 0 || !Number.isSafeInteger(record.physicalBytes) || record.physicalBytes <= 0 || !exactKeys(record.signals, ["node", "python", "runtimeManifest"])) {
-        failure("RUNTIME_LAYER_RECORD_INVALID", "Runtime layer receipt is invalid");
-      }
-      return record;
-    }
-    async function inspectLegacyInstalled(normalized) {
-      const record = validateLegacyInstallRecord(
-        await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID"),
-        normalized
-      );
-      const directory = paths.join([root, ...normalized.split("/")]);
-      const signals = {
-        runtimeManifest: await ordinaryFileSignal(
-          paths.join([directory, "runtime-manifest.json"]),
-          "RUNTIME_TRUST_SIGNAL_CHANGED",
-          {}
-        ),
-        launcher: await ordinaryFileSignal(
-          generationLauncherPath(normalized),
-          "RUNTIME_TRUST_SIGNAL_CHANGED",
-          { executable: true, expectedMode: "0755" }
-        ),
-        node: await ordinaryFileSignal(
-          paths.join([directory, "node", "bin", "node"]),
-          "RUNTIME_TRUST_SIGNAL_CHANGED",
-          { executable: true }
-        ),
-        python: await executableSignal(
-          paths.join([directory, "python", "bin", "python3"]),
-          "RUNTIME_TRUST_SIGNAL_CHANGED",
-          { rootDirectory: directory }
-        )
-      };
-      return {
-        relative: normalized,
-        directory,
-        launcher: generationLauncherPath(normalized),
-        record,
-        signals
-      };
-    }
-    async function layerSignals(directory) {
-      return {
-        runtimeManifest: await ordinaryFileSignal(
-          paths.join([directory, "runtime-manifest.json"]),
-          "RUNTIME_TRUST_SIGNAL_CHANGED"
-        ),
-        node: await ordinaryFileSignal(
-          paths.join([directory, "node", "bin", "node"]),
-          "RUNTIME_TRUST_SIGNAL_CHANGED",
-          { executable: true }
-        ),
-        python: await executableSignal(
-          paths.join([directory, "python", "bin", "python3"]),
-          "RUNTIME_TRUST_SIGNAL_CHANGED",
-          { rootDirectory: directory }
-        )
-      };
-    }
-    async function inspectV2Installed(normalized) {
-      var _a2;
-      const record = validateGenerationRecord(
-        await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID"),
-        normalized
-      );
-      const generationRoot = paths.join([root, ...normalized.split("/")]);
-      const directory = paths.join([root, ...record.layer.relative.split("/")]);
-      const layerRoot = paths.dirname(directory);
-      const layerRecord = validateLayerRecord(
-        await readJson2(paths.join([layerRoot, LAYER_RECORD]), "RUNTIME_LAYER_RECORD_INVALID"),
-        record.layer
-      );
-      const signals = {
-        ...await layerSignals(directory),
-        launcher: await ordinaryFileSignal(
-          generationLauncherPath(normalized),
-          "RUNTIME_TRUST_SIGNAL_CHANGED",
-          { executable: true, expectedMode: "0755" }
-        )
-      };
-      if (!sameSignal(signals.runtimeManifest, layerRecord.signals.runtimeManifest) || !sameSignal(signals.node, layerRecord.signals.node) || !sameSignal(signals.python, layerRecord.signals.python) || !sameSignal(signals.launcher, record.launcherSignal)) {
-        failure("RUNTIME_TRUST_SIGNAL_CHANGED", "A runtime receipt path, size, or modification time changed");
-      }
-      const runtimeAlias = paths.join([generationRoot, "runtime"]);
-      let target;
-      try {
-        const info = await promises.lstat(runtimeAlias);
-        target = await promises.readlink(runtimeAlias);
-        const resolved = paths.resolve([generationRoot, target]);
-        if (!((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || paths.isAbsolute(target) || !paths.contains(root, resolved) || !paths.same(resolved, directory)) {
-          failure("RUNTIME_GENERATION_INVALID", "Runtime generation layer alias is invalid");
-        }
-      } catch (error) {
-        if (error instanceof RuntimeManagerError) throw error;
-        failure("RUNTIME_GENERATION_INVALID", "Runtime generation layer alias is missing");
-      }
-      return {
-        relative: normalized,
-        generationRoot,
-        directory,
-        launcher: generationLauncherPath(normalized),
-        record,
-        layerRecord,
-        signals,
-        schemaVersion: 2
-      };
-    }
-    async function inspectInstalled(relative) {
-      const normalized = pointerValue(relative, platform.id);
-      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Runtime pointer is invalid");
-      return normalized.startsWith("generations/") ? inspectV2Installed(normalized) : inspectLegacyInstalled(normalized);
-    }
-    async function verifyInstalled(relative) {
-      var _a2;
-      const selected = await inspectInstalled(relative);
-      const { record, directory } = selected;
-      await verifyRuntime(
-        directory,
-        record.schemaVersion === 2 ? record.layer.manifestSha256 : record.runtimeManifestSha256
-      );
-      const launcher = selected.launcher;
-      const launcherInfo = await promises.lstat(launcher);
-      if (!launcherInfo.isFile() || ((_a2 = launcherInfo.isSymbolicLink) == null ? void 0 : _a2.call(launcherInfo)) || launcherInfo.nlink !== 1 || modeOf(launcherInfo) !== "0755" || await sha256File(launcher) !== record.launcherSha256) {
-        failure("RUNTIME_LAUNCHER_CORRUPT", "Runtime generation launcher failed verification");
-      }
-      return selected;
-    }
-    function componentReceipt(selected) {
-      const layerId = selected.record.schemaVersion === 2 ? selected.record.layer.id : selected.record.runtimeManifestSha256;
-      return {
-        schemaVersion: 1,
-        component: "core-runtime",
-        platform: platform.id,
-        version: selected.record.version,
-        sourceRevision: selected.record.sourceCommitSha,
-        sourceRevisionRole: "advisory",
-        canonicalPath: selected.directory,
-        installReceiptPath: installRecordPath(selected.relative),
-        generation: selected.relative,
-        layerId,
-        signals: selected.signals,
-        stableLauncher: {
-          canonicalPath: paths.launcher,
-          installReceiptPath: stableLauncherRecordPath,
-          signal: selected.stableLauncherSignal
-        }
-      };
-    }
-    async function pointerState(pointerPath) {
-      var _a2;
-      try {
-        const info = await promises.lstat(pointerPath);
-        if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1) {
-          return { exists: true, ok: false, code: "RUNTIME_POINTER_INVALID" };
-        }
-        const relative = pointerValue(await promises.readFile(pointerPath, "utf8"), platform.id);
-        if (!relative) return { exists: true, ok: false, code: "RUNTIME_POINTER_INVALID" };
-        try {
-          return { exists: true, ok: true, ...await inspectInstalled(relative) };
-        } catch (error) {
-          const normalized = runtimeError(error);
-          return { exists: true, ok: false, relative, code: normalized.code, detail: normalized.message };
-        }
-      } catch (error) {
-        if ((error == null ? void 0 : error.code) === "ENOENT") return { exists: false, ok: false, code: "RUNTIME_POINTER_MISSING" };
-        throw error;
-      }
-    }
-    async function atomicWrite(filePath, value, mode = 384) {
-      await promises.mkdir(paths.dirname(filePath), { recursive: true, mode: 448 });
-      const temporary = paths.join([
-        paths.dirname(filePath),
-        `.${paths.basename(filePath)}.${pid}.${randomHex(randomBytes)}.tmp`
-      ]);
-      try {
-        await promises.writeFile(temporary, value, { flag: "wx", mode });
-        await promises.rename(temporary, filePath);
-      } finally {
-        await promises.rm(temporary, { force: true }).catch(() => {
-        });
-      }
-    }
-    async function writePointer(pointerPath, relative) {
-      const normalized = pointerValue(relative, platform.id);
-      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Refused to write an invalid runtime pointer");
-      await atomicWrite(pointerPath, `${normalized}
-`);
-    }
-    async function removePointer(pointerPath) {
-      await promises.rm(pointerPath, { force: true });
-    }
-    async function copyTree(source, destination) {
-      var _a2, _b2, _c2;
-      await promises.mkdir(destination, { recursive: true, mode: 448 });
-      const entries = await promises.readdir(source, { withFileTypes: true });
-      for (const entry of entries) {
-        const from = paths.join([source, entry.name]);
-        const to = paths.join([destination, entry.name]);
-        const info = await promises.lstat(from);
-        if (info.isDirectory() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info))) {
-          await copyTree(from, to);
-        } else if ((_b2 = info.isSymbolicLink) == null ? void 0 : _b2.call(info)) {
-          await promises.symlink(await promises.readlink(from), to);
-        } else if (info.isFile() && info.nlink === 1) {
-          await promises.copyFile(from, to, (_c2 = fs.constants) == null ? void 0 : _c2.COPYFILE_EXCL);
-          await promises.chmod(to, info.mode & 511);
-        } else {
-          failure("RUNTIME_FILE_INVALID", "Packaged runtime contains an unsupported filesystem entry");
-        }
-      }
-    }
-    async function installLauncher(selected) {
-      let source;
-      try {
-        source = await ordinaryFileSignal(
-          selected.launcher,
-          "RUNTIME_LAUNCHER_CORRUPT",
-          { executable: true, expectedMode: "0755" }
-        );
-        const record = await readJson2(stableLauncherRecordPath, "RUNTIME_LAUNCHER_CORRUPT");
-        if (!exactKeys(record, [
-          "schemaVersion",
-          "owner",
-          "platform",
-          "canonicalPath",
-          "launcherSha256",
-          "signal"
-        ]) || record.schemaVersion !== 1 || record.owner !== GENERATION_OWNER || record.platform !== platform.id || record.canonicalPath !== paths.launcher || record.launcherSha256 !== selected.record.launcherSha256) {
-          failure("RUNTIME_LAUNCHER_CORRUPT", "Stable launcher receipt is invalid");
-        }
-        const installed = await ordinaryFileSignal(
-          paths.launcher,
-          "RUNTIME_LAUNCHER_CORRUPT",
-          { executable: true, expectedMode: "0755", expectedSize: source.size }
-        );
-        if (sameSignal(installed, record.signal)) {
-          selected.stableLauncherSignal = installed;
-          return;
-        }
-      } catch (error) {
-        if (!(error instanceof RuntimeManagerError) && (error == null ? void 0 : error.code) !== "ENOENT") throw error;
-      }
-      await promises.mkdir(paths.binRoot, { recursive: true, mode: 448 });
-      const bytes = await promises.readFile(selected.launcher);
-      if (crypto.createHash("sha256").update(bytes).digest("hex") !== selected.record.launcherSha256) {
-        failure("RUNTIME_LAUNCHER_CORRUPT", "Runtime generation launcher failed verification");
-      }
-      await atomicWrite(paths.launcher, bytes, 493);
-      await promises.chmod(paths.launcher, 493);
-      const signal = await ordinaryFileSignal(
-        paths.launcher,
-        "RUNTIME_LAUNCHER_CORRUPT",
-        { executable: true, expectedMode: "0755", expectedSize: bytes.length }
-      );
-      selected.stableLauncherSignal = signal;
-      await atomicWrite(stableLauncherRecordPath, `${JSON.stringify({
-        schemaVersion: 1,
-        owner: GENERATION_OWNER,
-        platform: platform.id,
-        canonicalPath: paths.launcher,
-        launcherSha256: selected.record.launcherSha256,
-        signal
-      }, null, 2)}
-`);
-    }
-    function reusedLifecycle(selected) {
-      var _a2;
-      return ((_a2 = selected == null ? void 0 : selected.record) == null ? void 0 : _a2.schemaVersion) === 2 ? {
-        ...emptyLifecycle(),
-        generations: { created: 0, reused: 1, reclaimed: 0 },
-        layers: { created: 0, reused: 1, reclaimed: 0 }
-      } : {
-        ...emptyLifecycle(),
-        generations: { created: 0, reused: 1, reclaimed: 0 }
-      };
-    }
-    function assertLauncherTransitionCompatible(selected, current) {
-      if (!(current == null ? void 0 : current.ok) || current.relative === selected.relative) return;
-      if (current.record.schemaVersion === 1 && selected.record.schemaVersion === 2) return;
-      if (current.record.launcherSha256 !== selected.record.launcherSha256) {
-        failure(
-          "RUNTIME_LAUNCHER_MIGRATION_REQUIRED",
-          "The stable launcher contract changed; keep the active runtime until a dedicated launcher migration is available",
-          {
-            currentSourceCommitSha: current.record.sourceCommitSha,
-            selectedSourceCommitSha: selected.record.sourceCommitSha
-          }
-        );
-      }
-    }
-    async function prepareSelectedForActivation(selected, current, previous) {
-      var _a2, _b2, _c2, _d2;
-      try {
-        assertLauncherTransitionCompatible(selected, current);
-        await installLauncher(selected);
-      } catch (error) {
-        await reclaimOwnedState({
-          currentRelative: (current == null ? void 0 : current.relative) || null,
-          previousRelative: (previous == null ? void 0 : previous.relative) || null,
-          inProgressRelative: null
-        });
-        const selectedLayer = selected.record.layer;
-        if (selected.lifecycle.layers.created === 1 && ((_b2 = (_a2 = current == null ? void 0 : current.record) == null ? void 0 : _a2.layer) == null ? void 0 : _b2.relative) !== selectedLayer.relative && ((_d2 = (_c2 = previous == null ? void 0 : previous.record) == null ? void 0 : _c2.layer) == null ? void 0 : _d2.relative) !== selectedLayer.relative) {
-          await promises.rm(
-            paths.join([root, "layers", selectedLayer.id, selectedLayer.instanceId]),
-            { recursive: true, force: true }
-          );
-        }
-        throw error;
-      }
-    }
-    async function refreshLayerReceipt(layerRoot, record, directory) {
-      const refreshed = {
-        ...record,
-        signals: await layerSignals(directory)
-      };
-      await atomicWrite(
-        paths.join([layerRoot, LAYER_RECORD]),
-        `${JSON.stringify(refreshed, null, 2)}
-`
-      );
-      return refreshed;
-    }
-    async function findReusableLayer(layerId) {
-      const contentRoot = paths.join([root, "layers", layerId]);
-      let entries;
-      try {
-        entries = await promises.readdir(contentRoot, { withFileTypes: true });
-      } catch (error) {
-        if ((error == null ? void 0 : error.code) === "ENOENT") return null;
-        throw error;
-      }
-      entries.sort((left, right) => compareUtf8(left.name, right.name));
-      for (const entry of entries) {
-        if (!entry.isDirectory() || !LAYER_INSTANCE_ID.test(entry.name)) continue;
-        const relative = `layers/${layerId}/${entry.name}/${platform.id}`;
-        const reference = {
-          id: layerId,
-          instanceId: entry.name,
-          manifestSha256: layerId,
-          relative
-        };
-        const layerRoot = paths.join([contentRoot, entry.name]);
-        const directory = paths.join([root, ...relative.split("/")]);
-        try {
-          let record = validateLayerRecord(
-            await readJson2(paths.join([layerRoot, LAYER_RECORD]), "RUNTIME_LAYER_RECORD_INVALID"),
-            reference
-          );
-          const signals = await layerSignals(directory);
-          if (!sameSignal(signals.runtimeManifest, record.signals.runtimeManifest) || !sameSignal(signals.node, record.signals.node) || !sameSignal(signals.python, record.signals.python)) {
-            await verifyRuntime(directory, layerId);
-            record = await refreshLayerReceipt(layerRoot, record, directory);
-          }
-          return { reference, record, directory, lifecycle: {
-            ...emptyLifecycle(),
-            layers: { created: 0, reused: 1, reclaimed: 0 }
-          } };
-        } catch (error) {
-          if (!(error instanceof RuntimeManagerError) && (error == null ? void 0 : error.code) !== "ENOENT") throw error;
-        }
-      }
-      return null;
-    }
-    async function installLayer(packaged, { forceNew = false } = {}) {
-      if (!forceNew) {
-        const reusable = await findReusableLayer(packaged.runtimeManifestSha256);
-        if (reusable) return reusable;
-      }
-      const layerId = packaged.runtimeManifestSha256;
-      const instanceId = `i-${randomHex(randomBytes)}`;
-      const relative = `layers/${layerId}/${instanceId}/${platform.id}`;
-      const temporary = paths.join([root, `.stage-layer-${instanceId}-${randomHex(randomBytes, 6)}`]);
-      const finalRoot = paths.join([root, "layers", layerId, instanceId]);
-      try {
-        await promises.mkdir(root, { recursive: true, mode: 448 });
-        await promises.mkdir(temporary, { mode: 448 });
-        await copyTree(packagedRuntimeRoot, paths.join([temporary, platform.id]));
-        const directory = paths.join([temporary, platform.id]);
-        await verifyRuntime(directory, layerId);
-        const usage = await treeUsage(directory);
-        const record = {
-          schemaVersion: 1,
-          owner: GENERATION_OWNER,
-          id: layerId,
-          instanceId,
-          platform: platform.id,
-          relative,
-          installedAt: Math.max(0, Math.floor(now())),
-          logicalBytes: usage.logicalBytes,
-          physicalBytes: usage.physicalBytes,
-          signals: await layerSignals(directory)
-        };
-        await promises.writeFile(
-          paths.join([temporary, LAYER_RECORD]),
-          `${JSON.stringify(record, null, 2)}
-`,
-          { flag: "wx", mode: 384 }
-        );
-        await promises.mkdir(paths.dirname(finalRoot), { recursive: true, mode: 448 });
-        await promises.rename(temporary, finalRoot);
-        const finalDirectory = paths.join([root, ...relative.split("/")]);
-        const finalRecord = {
-          ...record,
-          signals: await layerSignals(finalDirectory)
-        };
-        await atomicWrite(
-          paths.join([finalRoot, LAYER_RECORD]),
-          `${JSON.stringify(finalRecord, null, 2)}
-`
-        );
-        return {
-          reference: { id: layerId, instanceId, manifestSha256: layerId, relative },
-          record: finalRecord,
-          directory: finalDirectory,
-          lifecycle: {
-            ...emptyLifecycle(),
-            layers: { created: 1, reused: 0, reclaimed: 0 },
-            logicalBytes: { created: usage.logicalBytes, reclaimed: 0 },
-            physicalBytes: { created: usage.physicalBytes, reclaimed: 0 }
-          }
-        };
-      } catch (error) {
-        await promises.rm(temporary, { recursive: true, force: true }).catch(() => {
-        });
-        throw runtimeError(error, "RUNTIME_INSTALL_FAILED");
-      }
-    }
-    async function installPackaged(packaged, { repair: repair2 = false } = {}) {
-      var _a2;
-      const layer = await installLayer(packaged, { forceNew: repair2 });
-      const generationId = `g-${randomHex(randomBytes)}`;
-      const relative = `generations/${generationId}`;
-      const temporary = paths.join([root, `.stage-generation-${generationId}-${randomHex(randomBytes, 6)}`]);
-      const finalRoot = paths.join([root, ...relative.split("/")]);
-      try {
-        await promises.mkdir(temporary, { mode: 448 });
-        await promises.copyFile(
-          packagedLauncher,
-          paths.join([temporary, GENERATION_LAUNCHER]),
-          (_a2 = fs.constants) == null ? void 0 : _a2.COPYFILE_EXCL
-        );
-        await promises.chmod(paths.join([temporary, GENERATION_LAUNCHER]), 493);
-        await promises.symlink(`../../${layer.reference.relative}`, paths.join([temporary, "runtime"]));
-        const launcherSignal = await ordinaryFileSignal(
-          paths.join([temporary, GENERATION_LAUNCHER]),
-          "RUNTIME_LAUNCHER_CORRUPT",
-          { executable: true, expectedMode: "0755" }
-        );
-        const record = {
-          schemaVersion: 2,
-          owner: GENERATION_OWNER,
-          generationId,
-          platform: platform.id,
-          version: packaged.version,
-          sourceCommitSha: packaged.sourceCommitSha,
-          layer: layer.reference,
-          launcherSha256: packaged.launcherSha256,
-          launcherSignal,
-          relative,
-          installedAt: Math.max(0, Math.floor(now()))
-        };
-        await promises.writeFile(
-          paths.join([temporary, INSTALL_RECORD]),
-          `${JSON.stringify(record, null, 2)}
-`,
-          { flag: "wx", mode: 384 }
-        );
-        if (await sha256File(paths.join([temporary, GENERATION_LAUNCHER])) !== packaged.launcherSha256) {
-          failure("RUNTIME_LAUNCHER_CORRUPT", "Staged runtime launcher failed verification");
-        }
-        await promises.mkdir(paths.dirname(finalRoot), { recursive: true, mode: 448 });
-        await promises.rename(temporary, finalRoot);
-        const finalRecord = {
-          ...record,
-          launcherSignal: await ordinaryFileSignal(
-            paths.join([finalRoot, GENERATION_LAUNCHER]),
-            "RUNTIME_LAUNCHER_CORRUPT",
-            { executable: true, expectedMode: "0755" }
-          )
-        };
-        await atomicWrite(
-          paths.join([finalRoot, INSTALL_RECORD]),
-          `${JSON.stringify(finalRecord, null, 2)}
-`
-        );
-        const selected = await inspectInstalled(relative);
-        const usage = await treeUsage(finalRoot);
-        return {
-          ...selected,
-          lifecycle: mergeLifecycle(layer.lifecycle, {
-            ...emptyLifecycle(),
-            generations: { created: 1, reused: 0, reclaimed: 0 },
-            logicalBytes: { created: usage.logicalBytes, reclaimed: 0 },
-            physicalBytes: { created: usage.physicalBytes, reclaimed: 0 }
-          })
-        };
-      } catch (error) {
-        await promises.rm(temporary, { recursive: true, force: true }).catch(() => {
-        });
-        throw runtimeError(error, "RUNTIME_INSTALL_FAILED");
-      }
-    }
-    async function activate(selected, previous) {
-      if ((previous == null ? void 0 : previous.ok) && previous.relative !== selected.relative) {
-        await writePointer(paths.previousPointer, previous.relative);
-      } else {
-        await removePointer(paths.previousPointer);
-      }
-      await writePointer(paths.currentPointer, selected.relative);
-    }
-    async function readOwnedGeneration(relative) {
-      if (!(relative == null ? void 0 : relative.startsWith("generations/"))) return null;
-      try {
-        return validateGenerationRecord(
-          await readJson2(installRecordPath(relative), "RUNTIME_INSTALL_RECORD_INVALID"),
-          relative
-        );
-      } catch (error) {
-        if (error instanceof RuntimeManagerError || (error == null ? void 0 : error.code) === "ENOENT") return null;
-        throw error;
-      }
-    }
-    async function reclaimOwnedState({ currentRelative, previousRelative, inProgressRelative }) {
-      const lifecycle = emptyLifecycle();
-      const retained = new Set(
-        [currentRelative, previousRelative, inProgressRelative].filter((value) => typeof value === "string" && value.length > 0)
-      );
-      const referencedLayers = /* @__PURE__ */ new Set();
-      let layerGcSafe = true;
-      const generationsRoot = paths.join([root, "generations"]);
-      let entries = [];
-      try {
-        entries = await promises.readdir(generationsRoot, { withFileTypes: true });
-      } catch (error) {
-        if ((error == null ? void 0 : error.code) !== "ENOENT") throw error;
-      }
-      for (const entry of entries) {
-        if (!entry.isDirectory() || !GENERATION_ID.test(entry.name)) continue;
-        const relative = `generations/${entry.name}`;
-        const record = await readOwnedGeneration(relative);
-        if (!record) {
-          layerGcSafe = false;
-          continue;
-        }
-        if (retained.has(relative)) {
-          referencedLayers.add(record.layer.relative);
-          continue;
-        }
-        const generationRoot = paths.join([generationsRoot, entry.name]);
-        const usage = await treeUsage(generationRoot);
-        await promises.rm(generationRoot, { recursive: true, force: true });
-        lifecycle.generations.reclaimed += 1;
-        lifecycle.logicalBytes.reclaimed += usage.logicalBytes;
-        lifecycle.physicalBytes.reclaimed += usage.physicalBytes;
-      }
-      const legacyEntries = await promises.readdir(root, { withFileTypes: true });
-      for (const entry of legacyEntries) {
-        if (!entry.isDirectory() || entry.name.startsWith(".") || entry.name === "generations" || entry.name === "layers") continue;
-        const relative = `${entry.name}/${platform.id}`;
-        if (retained.has(relative)) continue;
-        try {
-          validateLegacyInstallRecord(
-            await readJson2(
-              paths.join([root, entry.name, INSTALL_RECORD]),
-              "RUNTIME_INSTALL_RECORD_INVALID"
-            ),
-            relative
-          );
-        } catch (error) {
-          if (error instanceof RuntimeManagerError || (error == null ? void 0 : error.code) === "ENOENT") continue;
-          throw error;
-        }
-        const legacyRoot = paths.join([root, entry.name]);
-        const usage = await treeUsage(legacyRoot);
-        await promises.rm(legacyRoot, { recursive: true, force: true });
-        lifecycle.generations.reclaimed += 1;
-        lifecycle.logicalBytes.reclaimed += usage.logicalBytes;
-        lifecycle.physicalBytes.reclaimed += usage.physicalBytes;
-      }
-      if (!layerGcSafe) return lifecycle;
-      const layersRoot = paths.join([root, "layers"]);
-      let digests = [];
-      try {
-        digests = await promises.readdir(layersRoot, { withFileTypes: true });
-      } catch (error) {
-        if ((error == null ? void 0 : error.code) !== "ENOENT") throw error;
-      }
-      for (const digestEntry of digests) {
-        if (!digestEntry.isDirectory() || !SHA256.test(digestEntry.name)) continue;
-        const digestRoot = paths.join([layersRoot, digestEntry.name]);
-        const instances = await promises.readdir(digestRoot, { withFileTypes: true });
-        for (const instanceEntry of instances) {
-          if (!instanceEntry.isDirectory() || !LAYER_INSTANCE_ID.test(instanceEntry.name)) continue;
-          const relative = `layers/${digestEntry.name}/${instanceEntry.name}/${platform.id}`;
-          if (referencedLayers.has(relative)) continue;
-          const reference = {
-            id: digestEntry.name,
-            instanceId: instanceEntry.name,
-            manifestSha256: digestEntry.name,
-            relative
-          };
-          const instanceRoot = paths.join([digestRoot, instanceEntry.name]);
-          let record;
-          try {
-            record = validateLayerRecord(
-              await readJson2(paths.join([instanceRoot, LAYER_RECORD]), "RUNTIME_LAYER_RECORD_INVALID"),
-              reference
-            );
-          } catch (error) {
-            if (error instanceof RuntimeManagerError || (error == null ? void 0 : error.code) === "ENOENT") continue;
-            throw error;
-          }
-          await promises.rm(instanceRoot, { recursive: true, force: true });
-          lifecycle.layers.reclaimed += 1;
-          lifecycle.logicalBytes.reclaimed += record.logicalBytes;
-          lifecycle.physicalBytes.reclaimed += record.physicalBytes;
-        }
-      }
-      return lifecycle;
-    }
-    async function acquireLock() {
-      await promises.mkdir(root, { recursive: true, mode: 448 });
-      const deadline = now() + lockTimeoutMs;
-      while (true) {
-        try {
-          const handle = await promises.open(lockPath, "wx", 384);
-          try {
-            await handle.writeFile(`${JSON.stringify({ pid, acquiredAt: Math.floor(now()) })}
-`);
-          } catch (error) {
-            await handle.close().catch(() => {
-            });
-            await promises.rm(lockPath, { force: true }).catch(() => {
-            });
-            throw error;
-          }
-          await handle.close();
-          return;
-        } catch (error) {
-          if ((error == null ? void 0 : error.code) !== "EEXIST") throw error;
-          let owner;
-          try {
-            owner = JSON.parse(String(await promises.readFile(lockPath, "utf8")));
-          } catch {
-            owner = null;
-          }
-          if (Number.isSafeInteger(owner == null ? void 0 : owner.pid) && owner.pid > 0 && Number.isSafeInteger(owner == null ? void 0 : owner.acquiredAt) && owner.acquiredAt >= 0 && !isProcessAlive(owner.pid)) {
-            const stalePath = paths.join([
-              root,
-              `.runtime-manager.stale-lock.${randomHex(randomBytes)}.json`
-            ]);
-            try {
-              await promises.rename(lockPath, stalePath);
-              continue;
-            } catch (reclaimError) {
-              if ((reclaimError == null ? void 0 : reclaimError.code) !== "ENOENT") throw reclaimError;
-            }
-          }
-          if (now() >= deadline) {
-            failure("RUNTIME_MANAGER_LOCKED", "Another panel is updating the runtime; retry after it finishes");
-          }
-          await sleep2(lockPollMs);
-        }
-      }
-    }
-    async function withLock(callback) {
-      await acquireLock();
-      try {
-        return await callback();
-      } finally {
-        await promises.rm(lockPath, { force: true }).catch(() => {
-        });
-      }
-    }
-    let readinessPromise = null;
-    function ensureReady() {
-      if (readinessPromise) return readinessPromise;
-      const pending = developmentRuntimeInput ? selectDevelopmentRuntime() : withLock(async () => {
-        let current = await pointerState(paths.currentPointer);
-        const previous = await pointerState(paths.previousPointer);
-        if (!current.ok && previous.ok) {
-          await installLauncher(previous);
-          await writePointer(paths.currentPointer, previous.relative);
-          await removePointer(paths.previousPointer);
-          const reclaimed2 = await reclaimOwnedState({
-            currentRelative: previous.relative,
-            previousRelative: null,
-            inProgressRelative: previous.relative
-          });
-          return {
-            ok: true,
-            action: "fallback",
-            launcher: paths.launcher,
-            relative: previous.relative,
-            version: previous.record.version,
-            sourceCommitSha: previous.record.sourceCommitSha,
-            componentReceipt: componentReceipt(previous),
-            lifecycle: mergeLifecycle(reusedLifecycle(previous), reclaimed2),
-            diagnostics: [{
-              code: "RUNTIME_CURRENT_INVALID_FALLBACK",
-              message: "The current runtime was invalid; RuntimeManager activated the previous verified runtime once.",
-              failedCode: current.code
-            }]
-          };
-        }
-        let packaged;
-        try {
-          packaged = await inspectPackagedPayload();
-        } catch (error) {
-          if (!current.ok) throw error;
-          await installLauncher(current);
-          const reclaimed2 = await reclaimOwnedState({
-            currentRelative: current.relative,
-            previousRelative: previous.ok ? previous.relative : null,
-            inProgressRelative: current.relative
-          });
-          return {
-            ok: true,
-            action: "retained",
-            launcher: paths.launcher,
-            relative: current.relative,
-            version: current.record.version,
-            sourceCommitSha: current.record.sourceCommitSha,
-            componentReceipt: componentReceipt(current),
-            lifecycle: mergeLifecycle(reusedLifecycle(current), reclaimed2),
-            diagnostics: [{
-              code: "RUNTIME_PACKAGED_PAYLOAD_INVALID_ACTIVE_RETAINED",
-              message: "The extension runtime payload was invalid; RuntimeManager retained the previously verified active runtime.",
-              failedCode: (error == null ? void 0 : error.code) || "RUNTIME_PACKAGED_PAYLOAD_INVALID"
-            }]
-          };
-        }
-        const declaredRuntimeMatches = current.ok && current.record.version === packaged.version && (current.record.schemaVersion === 2 ? current.record.layer.manifestSha256 : current.record.runtimeManifestSha256) === packaged.runtimeManifestSha256 && current.record.launcherSha256 === packaged.launcherSha256;
-        const trustedSignalsMatch = declaredRuntimeMatches && current.record.schemaVersion === 2 && current.signals.runtimeManifest.size === packaged.signals.runtimeManifest.size && current.signals.launcher.size === packaged.signals.launcher.size && current.signals.node.size === packaged.signals.node.size && current.signals.python.size === packaged.signals.python.size && current.signals.python.type === packaged.signals.python.type && current.signals.python.linkTarget === packaged.signals.python.linkTarget;
-        if (trustedSignalsMatch) {
-          await installLauncher(current);
-          const reclaimed2 = await reclaimOwnedState({
-            currentRelative: current.relative,
-            previousRelative: previous.ok ? previous.relative : null,
-            inProgressRelative: current.relative
-          });
-          return {
-            ok: true,
-            action: "ready",
-            launcher: paths.launcher,
-            relative: current.relative,
-            version: current.record.version,
-            sourceCommitSha: current.record.sourceCommitSha,
-            packagedSourceCommitSha: packaged.sourceCommitSha,
-            componentReceipt: componentReceipt(current),
-            trustSignals: current.signals,
-            lifecycle: mergeLifecycle(reusedLifecycle(current), reclaimed2),
-            diagnostics: current.record.sourceCommitSha === packaged.sourceCommitSha ? [] : [{
-              code: "RUNTIME_SOURCE_REVISION_DIFFERENT_TRUSTED",
-              message: "The unchanged installed runtime was reused across an advisory source revision change."
-            }]
-          };
-        }
-        if (declaredRuntimeMatches && current.record.schemaVersion === 2) {
-          current = {
-            ...current,
-            ok: false,
-            code: "RUNTIME_TRUST_SIGNAL_CHANGED",
-            detail: "A bounded runtime size or metadata signal changed."
-          };
-        }
-        packaged = await verifyPackagedPayload();
-        const selected = await installPackaged(packaged);
-        await prepareSelectedForActivation(selected, current, previous);
-        await activate(selected, current);
-        const reclaimed = await reclaimOwnedState({
-          currentRelative: selected.relative,
-          previousRelative: current.ok ? current.relative : null,
-          inProgressRelative: selected.relative
-        });
-        const action = current.ok ? current.record.schemaVersion === 1 ? "migrate" : compareSemver(packaged.version, current.record.version) < 0 ? "downgrade" : "upgrade" : current.exists ? "repair" : "install";
-        return {
-          ok: true,
-          action,
-          launcher: paths.launcher,
-          relative: selected.relative,
-          version: selected.record.version,
-          sourceCommitSha: selected.record.sourceCommitSha,
-          componentReceipt: componentReceipt(selected),
-          lifecycle: mergeLifecycle(selected.lifecycle, reclaimed),
-          diagnostics: current.exists && !current.ok ? [{
-            code: "RUNTIME_CURRENT_REPAIRED",
-            message: "The active runtime was invalid and no verified previous runtime was available; the packaged runtime was repaired offline.",
-            failedCode: current.code
-          }] : []
-        };
-      });
-      const shared = pending.finally(() => {
-        if (readinessPromise === shared) readinessPromise = null;
-      });
-      readinessPromise = shared;
-      return shared;
-    }
-    async function repair() {
-      if (developmentRuntimeInput) {
-        failure(
-          "RUNTIME_DEVELOPMENT_RUNTIME_OPERATION_UNAVAILABLE",
-          "Repair is unavailable while AE_MCP_DEV_RUNTIME selects a source checkout."
-        );
-      }
-      return withLock(async () => {
-        const packaged = await verifyPackagedPayload();
-        const current = await pointerState(paths.currentPointer);
-        const previous = await pointerState(paths.previousPointer);
-        const selected = await installPackaged(packaged, { repair: true });
-        await prepareSelectedForActivation(selected, current, previous);
-        await activate(selected, current);
-        const reclaimed = await reclaimOwnedState({
-          currentRelative: selected.relative,
-          previousRelative: current.ok ? current.relative : null,
-          inProgressRelative: selected.relative
-        });
-        return {
-          ok: true,
-          action: "repair",
-          launcher: paths.launcher,
-          relative: selected.relative,
-          version: selected.record.version,
-          sourceCommitSha: selected.record.sourceCommitSha,
-          componentReceipt: componentReceipt(selected),
-          lifecycle: mergeLifecycle(selected.lifecycle, reclaimed),
-          diagnostics: []
-        };
-      });
-    }
-    async function rollback() {
-      if (developmentRuntimeInput) {
-        failure(
-          "RUNTIME_DEVELOPMENT_RUNTIME_OPERATION_UNAVAILABLE",
-          "Rollback is unavailable while AE_MCP_DEV_RUNTIME selects a source checkout."
-        );
-      }
-      return withLock(async () => {
-        const current = await pointerState(paths.currentPointer);
-        const previous = await pointerState(paths.previousPointer);
-        if (!previous.ok) failure("RUNTIME_ROLLBACK_UNAVAILABLE", "No verified previous runtime is available");
-        assertLauncherTransitionCompatible(previous, current);
-        await installLauncher(previous);
-        await writePointer(paths.currentPointer, previous.relative);
-        if (current.ok && current.relative !== previous.relative) await writePointer(paths.previousPointer, current.relative);
-        else await removePointer(paths.previousPointer);
-        const reclaimed = await reclaimOwnedState({
-          currentRelative: previous.relative,
-          previousRelative: current.ok && current.relative !== previous.relative ? current.relative : null,
-          inProgressRelative: previous.relative
-        });
-        return {
-          ok: true,
-          action: "rollback",
-          launcher: paths.launcher,
-          relative: previous.relative,
-          version: previous.record.version,
-          sourceCommitSha: previous.record.sourceCommitSha,
-          componentReceipt: componentReceipt(previous),
-          lifecycle: mergeLifecycle(reusedLifecycle(previous), reclaimed),
-          diagnostics: []
-        };
-      });
-    }
-    async function uninstall() {
-      if (developmentRuntimeInput) {
-        failure(
-          "RUNTIME_DEVELOPMENT_RUNTIME_OPERATION_UNAVAILABLE",
-          "Uninstall is unavailable while AE_MCP_DEV_RUNTIME selects a source checkout."
-        );
-      }
-      return withLock(async () => {
-        await removePointer(paths.currentPointer);
-        await removePointer(paths.previousPointer);
-        await promises.rm(paths.launcher, { force: true });
-        await promises.rm(stableLauncherRecordPath, { force: true });
-        const reclaimed = await reclaimOwnedState({
-          currentRelative: null,
-          previousRelative: null,
-          inProgressRelative: null
-        });
-        return {
-          ok: true,
-          action: "uninstall",
-          launcher: paths.launcher,
-          relative: "",
-          lifecycle: reclaimed,
-          diagnostics: []
-        };
-      });
-    }
-    async function inspect() {
-      var _a2;
-      if (developmentRuntimeInput) {
-        try {
-          const selected = await selectDevelopmentRuntime();
-          return {
-            ok: true,
-            developmentRuntime: true,
-            checkoutPath: selected.checkoutPath,
-            interpreter: selected.interpreter,
-            launcher: { ok: true, path: selected.launcher },
-            diagnostics: selected.diagnostics
-          };
-        } catch (error) {
-          const normalized = runtimeError(error);
-          return {
-            ok: false,
-            developmentRuntime: true,
-            code: normalized.code,
-            detail: normalized.message,
-            launcher: { ok: false, code: normalized.code },
-            diagnostics: [{ code: normalized.code, message: normalized.message }]
-          };
-        }
-      }
-      const current = await pointerState(paths.currentPointer);
-      const previous = await pointerState(paths.previousPointer);
-      let launcher = { ok: false, code: "RUNTIME_LAUNCHER_MISSING", path: paths.launcher };
-      try {
-        const info = await promises.lstat(paths.launcher);
-        const sourceSize = current.ok ? current.signals.launcher.size : info.size;
-        launcher = info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && info.nlink === 1 && modeOf(info) === "0755" && info.size === sourceSize ? { ok: true, path: paths.launcher } : { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
-      } catch (error) {
-        if ((error == null ? void 0 : error.code) !== "ENOENT") launcher = { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
-      }
-      return { ok: current.ok && launcher.ok, current, previous, launcher };
-    }
-    async function resolveNode() {
-      var _a2;
-      const selected = await ensureReady();
-      if (selected.developmentRuntime) {
-        const node = await platform.resolveExecutable("node", {
-          minimumVersion: "24.17.0",
-          requiredArch: "arm64"
-        });
-        if (!node.ok) {
-          failure("RUNTIME_NODE_INVALID", "A development runtime requires an available Node 24 arm64 executable");
-        }
-        return {
-          ok: true,
-          nodePath: node.path,
-          version: node.version,
-          runtime: selected,
-          executable: {
-            ...node,
-            source: "development-path"
-          }
-        };
-      }
-      const inspected = await inspectInstalled(selected.relative);
-      const nodePath = paths.join([inspected.directory, "node", "bin", "node"]);
-      const info = await promises.lstat(nodePath);
-      if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1 || (info.mode & 73) === 0) {
-        failure("RUNTIME_NODE_INVALID", "The verified runtime Node entrypoint is unavailable");
-      }
-      return {
-        ok: true,
-        nodePath,
-        version: "24.17.0",
-        runtime: selected,
-        executable: {
-          ok: true,
-          id: "node",
-          path: nodePath,
-          argsPrefix: [],
-          source: "runtime-manager",
-          version: "24.17.0",
-          arch: "arm64"
-        }
-      };
-    }
-    return Object.freeze({ ensureReady, inspect, repair, resolveNode, rollback, uninstall });
-  }
-  var _runtimeManagerInternals = Object.freeze({ pointerValue, compareSemver });
-
-  // src/cep/mcpClient.js
-  var DEFAULT_TIMEOUT_MS2 = 3e4;
-  var INITIALIZE_TIMEOUT_MS = 12e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
   var PANEL_VERSION = "0.9.6";
-  function defaultRandomBytes2(size) {
-    const cryptoImpl = globalThis.crypto;
-    if (!cryptoImpl || typeof cryptoImpl.getRandomValues !== "function") {
-      throw new Error("Secure random generation is unavailable");
+  function defaultFetch() {
+    if (globalThis.window && globalThis.window.fetch) {
+      return globalThis.window.fetch.bind(globalThis.window);
     }
-    const value = new Uint8Array(size);
-    cryptoImpl.getRandomValues(value);
-    return value;
+    if (globalThis.fetch) return globalThis.fetch.bind(globalThis);
+    throw new Error("fetch is unavailable");
   }
-  function secureHex(randomBytes, size) {
-    const value = randomBytes(size);
-    if (!value || value.length !== size) throw new Error("Secure random generation failed");
-    return Array.from(value, (byte) => Number(byte).toString(16).padStart(2, "0")).join("");
+  function loadHostServer(extensionRoot) {
+    const requireImpl = globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require;
+    const root = String(extensionRoot || "").replace(/[\\/]+$/, "");
+    if (typeof requireImpl !== "function" || !root) return null;
+    try {
+      return requireImpl(root + "/host/server.js");
+    } catch (error) {
+      return null;
+    }
   }
-  function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
-    const adapter = platform || createPlatformAdapter();
-    if (repoRoot && fsImpl.existsSync(adapter.paths.join([repoRoot, "pyproject.toml"]))) return adapter.paths.resolve([repoRoot]);
-    let current = adapter.paths.resolve([extRoot]);
-    while (current) {
-      if (fsImpl.existsSync(adapter.paths.join([current, "pyproject.toml"]))) return current;
-      const parent = adapter.paths.dirname(current);
-      if (!parent || parent === current) break;
-      current = parent;
-    }
-    return "";
+  function rpcError(response) {
+    const detail = response && response.error;
+    const error = new Error(detail && detail.message ? detail.message : "MCP request failed");
+    if (detail && detail.code !== void 0) error.code = detail.code;
+    if (detail && detail.data !== void 0) error.data = detail.data;
+    return error;
   }
-  async function resolveMcpCommand({
-    explicitPath,
-    platform,
-    extRoot,
-    runtimeManager
-  } = {}) {
-    const configured = String(explicitPath || "").trim();
-    if (configured) return { command: configured, args: [], source: "explicit" };
-    const adapter = platform || createPlatformAdapter();
-    const debugMarker = extRoot && adapter.paths.join([extRoot, ".debug"]);
-    const bundleManifest = extRoot && adapter.paths.join([extRoot, "bundle-manifest.json"]);
-    const developmentFallback = adapter.id === "macos-arm64" && debugMarker && adapter.fs.existsSync(debugMarker) && !adapter.fs.existsSync(bundleManifest);
-    const developmentRuntimeOverride = hasDevelopmentRuntimeOverride(adapter.env);
-    if (adapter.id === "macos-arm64" && (runtimeManager || extRoot && (!developmentFallback || developmentRuntimeOverride))) {
-      const manager = runtimeManager || createRuntimeManager({ platform: adapter, extensionRoot: extRoot });
-      const selected = await manager.ensureReady();
-      return {
-        command: selected.launcher,
-        args: selected.args || [],
-        cwd: selected.cwd,
-        source: selected.developmentRuntime ? "development-runtime" : selected.action === "fallback" ? "runtime-fallback" : "runtime-manager",
-        runtime: selected
-      };
-    }
-    const resolved = await adapter.resolveExecutable("ae-mcp", developmentFallback ? { allowDevelopmentPath: true } : {});
-    if (resolved.ok) return { command: resolved.path, args: [...resolved.argsPrefix], source: resolved.source };
-    throw new Error("Unable to find ae-mcp. Repair the installed runtime launcher at " + adapter.paths.launcher + ".");
+  function resultFor(response) {
+    if (!response || typeof response !== "object") return null;
+    if (response.error) throw rpcError(response);
+    return response.result === void 0 ? null : response.result;
   }
-  function _createRpc(stdinWrite, onLine, options = {}) {
-    const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS2;
-    const onRequest = options.onRequest;
-    let nextId2 = 1;
-    const pending = /* @__PURE__ */ new Map();
-    const inbound = /* @__PURE__ */ new Map();
-    function rejectPending(id, error) {
-      const entry = pending.get(id);
-      if (!entry) return;
-      pending.delete(id);
-      clearTimeout(entry.timer);
-      entry.reject(error);
+  async function responseBody(response) {
+    if (!response) return null;
+    if (typeof response.text === "function") {
+      const text = await response.text();
+      return text ? JSON.parse(text) : null;
     }
-    function writeMessage(message) {
-      stdinWrite(JSON.stringify(message) + "\n");
-    }
-    function hasId(message) {
-      return message && message.id !== void 0 && message.id !== null;
-    }
-    function hasMethod(message) {
-      return message && typeof message.method === "string" && message.method.length > 0;
-    }
-    function abortInbound(id) {
-      const entry = inbound.get(id);
-      if (entry) entry.controller.abort();
-    }
-    async function dispatchRequest(message) {
-      if (inbound.has(message.id)) {
-        writeMessage({
-          jsonrpc: "2.0",
-          id: message.id,
-          error: { code: -32600, message: "Invalid Request" }
-        });
-        return;
-      }
-      const controller = new AbortController();
-      let settleAbort;
-      const aborted = new Promise((resolve) => {
-        settleAbort = resolve;
-      });
-      const abortHandler = () => settleAbort({ kind: "abort" });
-      controller.signal.addEventListener("abort", abortHandler, { once: true });
-      inbound.set(message.id, { controller });
-      try {
-        const handled = typeof onRequest === "function" ? Promise.resolve().then(() => onRequest(message, { signal: controller.signal })) : Promise.reject(Object.assign(new Error("Method not found"), { code: -32601 }));
-        const outcome = await Promise.race([
-          handled.then(
-            (result) => ({ kind: "result", result }),
-            (error) => ({ kind: "error", error })
-          ),
-          aborted
-        ]);
-        if (outcome.kind === "abort") {
-          writeMessage({
-            jsonrpc: "2.0",
-            id: message.id,
-            result: { action: "cancel", content: {} }
-          });
-        } else if (outcome.kind === "error") {
-          const code = outcome.error && outcome.error.code === -32601 ? -32601 : -32603;
-          const error = {
-            code,
-            message: code === -32601 ? "Method not found" : "Internal error"
-          };
-          if (code === -32601 && outcome.error && outcome.error.data !== void 0) {
-            error.data = outcome.error.data;
-          }
-          writeMessage({ jsonrpc: "2.0", id: message.id, error });
-        } else {
-          writeMessage({
-            jsonrpc: "2.0",
-            id: message.id,
-            result: outcome.result === void 0 ? null : outcome.result
-          });
-        }
-      } finally {
-        controller.signal.removeEventListener("abort", abortHandler);
-        inbound.delete(message.id);
+    if (typeof response.json === "function") return response.json();
+    return null;
+  }
+  function requestHeaders(values) {
+    const normalized = {};
+    for (const [name, value] of Object.entries(values)) {
+      if (value !== void 0 && value !== null && value !== "") {
+        normalized[name.toLowerCase()] = String(value);
       }
     }
-    function handleMessage(message) {
-      if (!message || typeof message !== "object") return;
-      if (hasMethod(message)) {
-        if (!hasId(message)) {
-          if (message.method === "notifications/cancelled") {
-            abortInbound(message.params && message.params.requestId);
-          }
-          return;
-        }
-        dispatchRequest(message).catch(() => {
-        });
-        return;
+    return {
+      values: normalized,
+      get(name) {
+        return normalized[String(name || "").toLowerCase()];
       }
-      if (!hasId(message)) return;
-      const entry = pending.get(message.id);
-      if (!entry) return;
-      pending.delete(message.id);
-      clearTimeout(entry.timer);
-      if (message.error) {
-        const error = new Error(message.error.message || "JSON-RPC request failed");
-        error.code = message.error.code;
-        error.data = message.error.data;
-        entry.reject(error);
-      } else {
-        entry.resolve(message.result);
-      }
-    }
-    const handleChunk = createNdjsonReader(handleMessage);
-    if (onLine) onLine(handleChunk);
-    function request(method, params, timeoutOverrideMs) {
-      const id = nextId2++;
-      const message = { jsonrpc: "2.0", id, method };
-      if (params !== void 0) message.params = params;
-      const limit = Number.isFinite(timeoutOverrideMs) && timeoutOverrideMs > 0 ? timeoutOverrideMs : timeoutMs;
-      const promise = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + limit + "ms")), limit);
-        pending.set(id, { resolve, reject, timer });
-      });
-      writeMessage(message);
-      return promise;
-    }
-    function notify(method, params) {
-      const message = { jsonrpc: "2.0", method };
-      if (params !== void 0) message.params = params;
-      writeMessage(message);
-    }
-    function close(reason = new Error("MCP process closed")) {
-      for (const id of Array.from(pending.keys())) rejectPending(id, reason);
-      for (const entry of inbound.values()) entry.controller.abort();
-    }
-    return { request, notify, handleChunk, close };
+    };
   }
   function createMcpClient({
-    platform,
-    spawnImpl,
-    resolveCommand = resolveMcpCommand,
-    env,
-    onCrash,
-    onElicitation,
+    getHost,
+    getConversation = () => null,
+    getPort,
+    port = 11488,
+    fetchImpl,
     extRoot,
-    repoRoot,
-    getExpertGuidance = () => true,
-    packageVersion = PANEL_VERSION,
-    retryDelays = [1e3, 2e3, 4e3],
-    initializeTimeoutMs = INITIALIZE_TIMEOUT_MS,
-    randomBytes = defaultRandomBytes2
+    packageVersion = PANEL_VERSION
   } = {}) {
-    let proc = null;
-    let rpc = null;
+    let status = "idle";
+    let lastError = null;
     let tools = null;
     let serverInstructions = "";
     let serverInfo = null;
-    let status = "idle";
+    let sessionId = "";
+    let nextId2 = 1;
+    let transport = null;
     let startPromise = null;
-    let retryCount = 0;
-    let lastError = null;
     let stopped = false;
-    let restartTimer = null;
-    const panelCapability = secureHex(randomBytes, 32);
+    function resolveHost() {
+      return typeof getHost === "function" ? getHost() : loadHostServer(extRoot);
+    }
+    function mountedMcp() {
+      const host = resolveHost();
+      const mounted = host && host.mcp;
+      return mounted && typeof mounted.dispatch === "function" ? mounted : null;
+    }
+    function currentConversation() {
+      return typeof getConversation === "function" ? getConversation() : null;
+    }
+    function currentPort() {
+      const value = typeof getPort === "function" ? getPort() : port;
+      return Number(value) || 11488;
+    }
+    function rootUrl() {
+      return `http://127.0.0.1:${currentPort()}/mcp`;
+    }
     function currentState() {
-      return { status, retryCount, error: lastError, tools };
-    }
-    function attachBeforeUnload() {
-      if (globalThis.window && globalThis.window.addEventListener) {
-        globalThis.window.addEventListener("beforeunload", () => stop());
-      }
-    }
-    async function handleServerRequest(message, { signal }) {
-      if (message.method !== "elicitation/create") {
-        throw Object.assign(new Error("Method not found"), {
-          code: -32601,
-          data: { method: message.method }
-        });
-      }
-      if (typeof onElicitation !== "function") return { action: "decline", content: {} };
-      const params = message.params && typeof message.params === "object" ? message.params : {};
-      const request = {
-        serverName: serverInfo && typeof serverInfo.name === "string" ? serverInfo.name : "",
-        message: typeof params.message === "string" ? params.message : "",
-        requestedSchema: params.requestedSchema,
-        mode: params.mode,
-        serverInfo: serverInfo ? { ...serverInfo } : null,
-        serverInstructions,
-        meta: params._meta
-      };
-      if (signal.aborted) return { action: "cancel", content: {} };
-      const result = await onElicitation(request, { signal });
-      if (signal.aborted) return { action: "cancel", content: {} };
-      if (!result || !["accept", "decline", "cancel"].includes(result.action)) {
-        return { action: "decline", content: {} };
-      }
       return {
-        action: result.action,
-        content: result.content && typeof result.content === "object" && !Array.isArray(result.content) ? result.content : {}
+        status,
+        error: lastError,
+        tools,
+        transport: transport ? transport.kind : null
       };
+    }
+    function message(method, params) {
+      const value = { jsonrpc: "2.0", id: nextId2++, method };
+      if (params !== void 0) value.params = params;
+      return value;
+    }
+    function notification(method, params) {
+      const value = { jsonrpc: "2.0", method };
+      if (params !== void 0) value.params = params;
+      return value;
+    }
+    async function dispatchInProcess(payload) {
+      const headers = requestHeaders({
+        "mcp-session-id": sessionId,
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION
+      });
+      const request = {
+        get: headers.get,
+        headers: headers.values,
+        socket: { localPort: currentPort() }
+      };
+      const conversation = currentConversation();
+      const output = await transport.mounted.dispatch(request, payload, conversation);
+      if (output && output.session && output.session.id) sessionId = output.session.id;
+      return output ? output.response : null;
+    }
+    async function dispatchHttp(payload, method = "POST") {
+      const headers = {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION
+      };
+      if (sessionId) headers["mcp-session-id"] = sessionId;
+      const response = await transport.fetcher(transport.url, {
+        method,
+        headers,
+        ...method === "POST" ? { body: JSON.stringify(payload) } : {}
+      });
+      if (response && response.headers && typeof response.headers.get === "function") {
+        sessionId = response.headers.get("mcp-session-id") || sessionId;
+      }
+      if (response && response.ok === false) {
+        const error = new Error("MCP HTTP request failed with status " + response.status);
+        error.status = response.status;
+        throw error;
+      }
+      return responseBody(response);
+    }
+    function dispatch(payload) {
+      return transport.kind === "in-process" ? dispatchInProcess(payload) : dispatchHttp(payload);
+    }
+    function connectionMatches() {
+      if (!transport) return false;
+      if (transport.kind === "in-process") {
+        const conversation = currentConversation();
+        const conversationId = conversation && conversation.id ? conversation.id : null;
+        return mountedMcp() === transport.mounted && conversationId === transport.conversationId;
+      }
+      return rootUrl() === transport.url;
+    }
+    function clearConnection() {
+      var _a, _b;
+      if (transport && sessionId) {
+        if (transport.kind === "in-process") {
+          try {
+            (_b = (_a = transport.mounted.sessions) == null ? void 0 : _a.delete) == null ? void 0 : _b.call(_a, sessionId);
+          } catch (error) {
+          }
+        } else {
+          dispatchHttp(null, "DELETE").catch(() => {
+          });
+        }
+      }
+      transport = null;
+      sessionId = "";
+      tools = null;
+      serverInstructions = "";
+      serverInfo = null;
+      startPromise = null;
     }
     async function start() {
-      if (status === "ready") return currentState();
+      if (status === "ready" && connectionMatches()) return currentState();
+      if (status === "ready") clearConnection();
       if (startPromise) return startPromise;
       stopped = false;
       status = "starting";
+      lastError = null;
       startPromise = (async () => {
-        const adapter = platform || (!spawnImpl ? createPlatformAdapter() : null);
-        const commandSpec = await resolveCommand({ extRoot, repoRoot, platform: adapter || void 0 });
-        const additions = {
-          AE_MCP_BACKEND: "ae-mcp",
-          AE_MCP_PANEL_CAPABILITY: panelCapability,
-          ...expertGuidanceEnv(getExpertGuidance())
-        };
-        const spawnEnv = adapter ? adapter.completeSpawnEnv(env || {}, additions) : Object.assign({}, env || {}, additions);
-        const options = {
-          stdio: "pipe",
-          windowsHide: true,
-          env: spawnEnv,
-          ...commandSpec.cwd ? { cwd: commandSpec.cwd } : {}
-        };
-        if (adapter) {
-          const executable = { ok: true, id: "ae-mcp", path: commandSpec.command, argsPrefix: [], source: commandSpec.source || "runtime", version: null, arch: null };
-          proc = adapter.spawn(executable, commandSpec.args || [], options);
+        const mounted = mountedMcp();
+        if (mounted) {
+          const conversation = currentConversation();
+          transport = {
+            kind: "in-process",
+            mounted,
+            conversationId: conversation && conversation.id ? conversation.id : null
+          };
         } else {
-          proc = spawnImpl(commandSpec.command, commandSpec.args || [], { ...options, shell: false });
+          transport = {
+            kind: "http",
+            url: rootUrl(),
+            fetcher: fetchImpl || defaultFetch()
+          };
         }
-        const spawnedProc = proc;
-        rpc = _createRpc(
-          (line) => spawnedProc.stdin.write(line),
-          (handler) => spawnedProc.stdout.on("data", handler),
-          { onRequest: handleServerRequest }
-        );
-        proc.on("exit", (code, signal) => {
-          if (proc === spawnedProc) handleExit(code, signal);
-        });
-        proc.on("error", (err) => {
-          if (proc === spawnedProc) handleCrash(err);
-        });
-        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", () => {
-        });
-        const initResult = await rpc.request("initialize", {
+        const initialized = resultFor(await dispatch(message("initialize", {
           protocolVersion: MCP_PROTOCOL_VERSION,
-          clientInfo: { name: "panel-chat", version: packageVersion },
-          capabilities: { elicitation: {} }
-        }, initializeTimeoutMs);
-        serverInstructions = initResult && initResult.instructions || "";
-        serverInfo = initResult && initResult.serverInfo && typeof initResult.serverInfo === "object" ? { ...initResult.serverInfo } : null;
-        rpc.notify("notifications/initialized");
-        const listed = await rpc.request("tools/list", {});
+          clientInfo: { name: "ae-mcp-panel", version: packageVersion },
+          capabilities: {}
+        })));
+        serverInstructions = initialized && initialized.instructions || "";
+        serverInfo = initialized && initialized.serverInfo ? { ...initialized.serverInfo } : null;
+        await dispatch(notification("notifications/initialized"));
+        const listed = resultFor(await dispatch(message("tools/list", {})));
         tools = listed && Array.isArray(listed.tools) ? listed.tools : [];
         status = "ready";
-        retryCount = 0;
-        lastError = null;
-        attachBeforeUnload();
         return currentState();
       })();
       try {
         return await startPromise;
-      } catch (e) {
-        const failedRpc = rpc;
-        const failedProc = proc;
-        rpc = null;
-        proc = null;
-        if (failedRpc) failedRpc.close(e instanceof Error ? e : new Error("MCP initialization failed"));
-        if (failedProc && failedProc.kill) {
-          try {
-            failedProc.kill();
-          } catch (killError) {
-          }
-        }
+      } catch (error) {
+        clearConnection();
         status = "error";
-        lastError = e;
-        throw e;
+        lastError = error;
+        throw error;
       } finally {
         startPromise = null;
       }
-    }
-    function handleCrash(error) {
-      if (stopped) return;
-      status = "crashed";
-      lastError = error;
-      if (rpc) rpc.close(error instanceof Error ? error : new Error("MCP process crashed"));
-      if (onCrash) onCrash(error);
-      scheduleRestart();
-    }
-    function handleExit(code, signal) {
-      if (stopped) return;
-      handleCrash(new Error("MCP process exited: " + code + (signal ? " " + signal : "")));
-    }
-    function scheduleRestart() {
-      if (retryCount >= retryDelays.length) {
-        status = "error";
-        return;
-      }
-      const delay = retryDelays[retryCount++];
-      clearTimeout(restartTimer);
-      restartTimer = setTimeout(() => {
-        start().catch((err) => {
-          lastError = err;
-          scheduleRestart();
-        });
-      }, delay);
     }
     async function listTools() {
       await start();
@@ -33170,303 +28761,81 @@
     }
     async function callTool(name, args = {}) {
       await start();
-      return rpc.request("tools/call", { name, arguments: args });
-    }
-    async function callPanelTool(name, args = {}) {
-      return callTool(name, { ...args, _ae_panel_capability: panelCapability });
-    }
-    function newOperationId() {
-      return secureHex(randomBytes, 16);
+      try {
+        return resultFor(await dispatch(message("tools/call", { name, arguments: args })));
+      } catch (error) {
+        clearConnection();
+        status = "error";
+        lastError = error;
+        throw error;
+      }
     }
     function stop() {
       stopped = true;
-      clearTimeout(restartTimer);
-      restartTimer = null;
+      clearConnection();
       status = "stopped";
-      if (rpc) rpc.close(new Error("MCP client stopped"));
-      if (proc) {
-        try {
-          proc.kill();
-        } catch (e) {
-        }
-      }
-      proc = null;
-      rpc = null;
-      serverInfo = null;
-      startPromise = null;
+      lastError = null;
     }
     return {
       start,
       listTools,
       callTool,
-      callPanelTool,
-      newOperationId,
       stop,
       state: currentState,
-      getServerInstructions: () => serverInstructions
+      getServerInstructions: () => serverInstructions,
+      getServerInfo: () => serverInfo,
+      isStopped: () => stopped
     };
   }
 
-  // src/cep/approvalTierFile.js
+  // src/cep/toolsApi.js
   init_cep_runtime_inject();
-  var TOOL_TIER_ENV = "AE_MCP_TOOL_APPROVAL_TIER_FILE";
-  var VALID_TIERS = /* @__PURE__ */ new Set(["readonly", "manual", "auto", "none"]);
-  function protect(fs, path, mode, platformId) {
+  function parseMcpPayload(result) {
+    const text = Array.isArray(result && result.content) ? result.content.filter((entry) => entry && entry.type === "text").map((entry) => String(entry.text || "")).join("") : "";
+    let payload;
     try {
-      fs.chmodSync(path, mode);
-    } catch (error) {
-      if (platformId !== "windows-x64") throw error;
+      payload = JSON.parse(text);
+    } catch (cause) {
+      const error = new Error("Invalid Tool Library response");
+      error.cause = cause;
+      throw error;
     }
+    if (result && result.isError) {
+      const error = new Error(payload && payload.error || "Tool Library request failed");
+      error.code = payload && payload.error;
+      error.payload = payload;
+      throw error;
+    }
+    return payload;
   }
-  function createApprovalTierFile(deps) {
-    if (!(deps == null ? void 0 : deps.fs) || !(deps == null ? void 0 : deps.paths) || typeof deps.paths.join !== "function") {
-      throw new TypeError("platform file dependencies are required");
-    }
-    const { fs, paths } = deps;
-    const pid = Number.isSafeInteger(deps.pid) && deps.pid >= 0 ? deps.pid : 0;
-    const now = typeof deps.now === "function" ? deps.now : () => Date.now();
-    const directory = paths.join([paths.runtimeRoot, "approval"]);
-    const file = paths.join([directory, `panel-${pid}.tier`]);
-    let temporaryCounter = 0;
-    function ensureDirectory() {
-      fs.mkdirSync(directory, { recursive: true, mode: 448 });
-      protect(fs, directory, 448, deps.platformId);
-    }
-    function temporaryPath() {
-      temporaryCounter += 1;
-      const suffix = typeof deps.nonce === "function" ? deps.nonce() : temporaryCounter;
-      return paths.join([directory, `.panel-${pid}.${now()}.${suffix}.tmp`]);
-    }
-    function write(tier) {
-      if (!VALID_TIERS.has(tier)) throw new TypeError("Unsupported tool approval tier");
-      ensureDirectory();
-      const temporary = temporaryPath();
-      let descriptor = null;
-      try {
-        descriptor = fs.openSync(temporary, "wx", 384);
-        fs.writeFileSync(descriptor, tier + "\n", "utf8");
-        if (typeof fs.fsyncSync !== "function") throw new Error("Filesystem fsync is unavailable");
-        fs.fsyncSync(descriptor);
-        fs.closeSync(descriptor);
-        descriptor = null;
-        protect(fs, temporary, 384, deps.platformId);
-        fs.renameSync(temporary, file);
-        return tier;
-      } catch (error) {
-        if (descriptor !== null) {
-          try {
-            fs.closeSync(descriptor);
-          } catch {
-          }
-        }
-        try {
-          fs.unlinkSync(temporary);
-        } catch {
-        }
-        throw error;
-      }
-    }
-    function dispose() {
-      try {
-        fs.unlinkSync(file);
-      } catch (error) {
-        if (!error || error.code !== "ENOENT") throw error;
-      }
-    }
+  function searchArgs(input = {}) {
+    const result = {};
+    if (typeof input.query === "string" && input.query.trim()) result.query = input.query.trim();
+    if (Number.isInteger(input.offset) && input.offset >= 0) result.offset = input.offset;
+    if (Number.isInteger(input.limit) && input.limit > 0) result.limit = input.limit;
+    return result;
+  }
+  function createToolsApi(mcp) {
+    const call = async (name, args = {}) => parseMcpPayload(await mcp.callTool(name, args));
     return {
-      path: () => file,
-      env: () => ({ [TOOL_TIER_ENV]: file }),
-      write,
-      dispose
-    };
-  }
-  function withToolApprovalTier(commandSpec, tierFile) {
-    return Object.assign({}, commandSpec, {
-      env: Object.assign({}, commandSpec.env || {}, {
-        [TOOL_TIER_ENV]: tierFile.path()
+      index: (args = {}) => call("ae_toolSearch", searchArgs(args)),
+      search: (args = {}) => call("ae_toolSearch", searchArgs(args)),
+      inspect: (name) => call("ae_toolSearch", { name }),
+      executeTool: (name, args = {}) => call("ae_toolUse", { name, args }),
+      listSkills: (options = {}) => call("ae_skillUse", {
+        include_templates: options.includeTemplates === true
+      }),
+      renderSkill: (name, args = {}) => call("ae_skillUse", {
+        name,
+        args,
+        execute: false
+      }),
+      executeSkill: (name, args = {}) => call("ae_skillUse", {
+        name,
+        args,
+        execute: true
       })
-    });
-  }
-
-  // src/cep/apiKey.js
-  init_cep_runtime_inject();
-  var KEY_FILES = {
-    anthropic: "anthropic-key",
-    codex: "codex-key",
-    zcode: "zcode-key"
-  };
-  function cepRequire2() {
-    if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) return globalThis.window.cep_node.require;
-    if (globalThis.window && globalThis.window.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    return null;
-  }
-  function defaultDeps() {
-    const req = cepRequire2();
-    if (!req) throw new Error("CEP Node require is unavailable");
-    return {
-      fs: req("fs"),
-      os: req("os"),
-      path: req("path")
     };
-  }
-  function createLegacyApiKeyStore(deps = defaultDeps()) {
-    const fs = deps.fs;
-    const os = deps.os;
-    const path = deps.path;
-    function keyDir() {
-      return path.join(os.homedir(), ".ae-mcp");
-    }
-    function keyFile(name = "anthropic") {
-      const file = KEY_FILES[String(name || "anthropic")];
-      if (!file) throw new Error("Unsupported API key name: " + name);
-      return file;
-    }
-    function keyPath(name = "anthropic") {
-      return path.join(keyDir(), keyFile(name));
-    }
-    function readKey(name = "anthropic") {
-      try {
-        return fs.readFileSync(keyPath(name), "utf8").trim();
-      } catch (e) {
-        if (e && e.code === "ENOENT") return "";
-        throw e;
-      }
-    }
-    function clearKey(name = "anthropic") {
-      try {
-        fs.unlinkSync(keyPath(name));
-      } catch (e) {
-        if (!e || e.code !== "ENOENT") throw e;
-      }
-    }
-    return Object.freeze({ keyDir, keyPath, readKey, clearKey });
-  }
-
-  // src/cep/zcodeCredential.js
-  init_cep_runtime_inject();
-  var STORAGE_KEY = "ae_mcp_zcode_credential_v1";
-  var CREDENTIAL_ID = "6c1d936a-3f93-5b2c-9e15-1a513cdd8a89";
-  var VALUE_REF_KEYS = ["kind", "reference", "revision"];
-  function credentialError() {
-    const error = new Error("ZCode protected credential is unavailable");
-    error.code = "ZCODE_CREDENTIAL_UNAVAILABLE";
-    return error;
-  }
-  function exactKeys2(value, expected) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const keys = Object.keys(value).sort();
-    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
-  }
-  function normalizeValueRef(value) {
-    if (!exactKeys2(value, VALUE_REF_KEYS) || value.kind !== "secret") throw credentialError();
-    let parsed;
-    try {
-      parsed = parseProviderSecretReference(value.reference);
-    } catch {
-      throw credentialError();
-    }
-    if (parsed.providerId !== CREDENTIAL_ID || !parsed.slot.startsWith("auth-model-") || !Number.isSafeInteger(value.revision) || value.revision <= 0) {
-      throw credentialError();
-    }
-    return Object.freeze({ kind: "secret", reference: value.reference, revision: value.revision });
-  }
-  function createZcodeCredentialManager({ storage, secretService, legacyKeyStore } = {}) {
-    if (!storage || typeof storage.getItem !== "function" || typeof storage.setItem !== "function") {
-      throw new TypeError("storage must implement getItem and setItem");
-    }
-    if (!secretService || typeof secretService.create !== "function" || typeof secretService.resolve !== "function" || typeof secretService.delete !== "function") {
-      throw new TypeError("secretService must implement create, resolve, and delete");
-    }
-    function readValueRef() {
-      let raw;
-      try {
-        raw = storage.getItem(STORAGE_KEY);
-      } catch {
-        throw credentialError();
-      }
-      if (!raw) return null;
-      try {
-        return normalizeValueRef(JSON.parse(raw));
-      } catch {
-        throw credentialError();
-      }
-    }
-    function persistValueRef(valueRef) {
-      try {
-        storage.setItem(STORAGE_KEY, JSON.stringify(normalizeValueRef(valueRef)));
-      } catch {
-        throw credentialError();
-      }
-    }
-    function clearLegacy() {
-      if (!legacyKeyStore) return;
-      try {
-        legacyKeyStore.clearKey("zcode");
-        if (legacyKeyStore.readKey("zcode")) throw credentialError();
-      } catch {
-        throw credentialError();
-      }
-    }
-    async function resolve(valueRef = readValueRef()) {
-      if (!valueRef) return "";
-      try {
-        const value = await secretService.resolve(valueRef);
-        if (typeof value !== "string") throw credentialError();
-        return value;
-      } catch {
-        throw credentialError();
-      }
-    }
-    async function save(rawValue) {
-      const value = String(rawValue || "").trim();
-      if (!value) throw credentialError();
-      const previous = readValueRef();
-      let created;
-      try {
-        created = await secretService.create({
-          credentialId: CREDENTIAL_ID,
-          slotPrefix: "auth-model",
-          value
-        });
-        persistValueRef(created);
-      } catch {
-        if (created) {
-          try {
-            await secretService.delete(created);
-          } catch {
-          }
-        }
-        throw credentialError();
-      }
-      if (previous) {
-        try {
-          await secretService.delete(previous);
-        } catch {
-        }
-      }
-      clearLegacy();
-      return value;
-    }
-    async function loadOrMigrate() {
-      const current = readValueRef();
-      if (current) {
-        const value = await resolve(current);
-        clearLegacy();
-        return value;
-      }
-      let legacy = "";
-      if (legacyKeyStore) {
-        try {
-          legacy = String(legacyKeyStore.readKey("zcode") || "").trim();
-        } catch {
-          throw credentialError();
-        }
-      }
-      if (!legacy) return "";
-      return save(legacy);
-    }
-    return Object.freeze({ loadOrMigrate, readValueRef, resolve, save });
   }
 
   // src/cep/claudeAuth.js
@@ -33545,6 +28914,789 @@
 
   // src/lib/providerRouteSelection.js
   init_cep_runtime_inject();
+
+  // src/lib/providerProfile.js
+  init_cep_runtime_inject();
+
+  // src/cep/platform/secret-reference.js
+  init_cep_runtime_inject();
+  var PROVIDER_UUID_SOURCE = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+  var PROVIDER_UUID = new RegExp(`^${PROVIDER_UUID_SOURCE}$`);
+  var PROVIDER_REFERENCE = new RegExp(
+    `^aemcp-secret://provider/(${PROVIDER_UUID_SOURCE})/([a-z][a-z0-9_-]{0,31})/v1$`
+  );
+  function invalidReference() {
+    const error = new Error("Secret reference is invalid");
+    error.code = "INVALID_REFERENCE";
+    return error;
+  }
+  function parseProviderSecretReference(reference) {
+    if (typeof reference !== "string") throw invalidReference();
+    const match = PROVIDER_REFERENCE.exec(reference);
+    if (!match) throw invalidReference();
+    return {
+      namespace: "provider",
+      providerId: match[1],
+      slot: match[2],
+      version: 1
+    };
+  }
+
+  // src/lib/providerProfile.js
+  var DEFAULT_CODEX_PROVIDER_ID = "ae_mcp_custom";
+  var CODEX_PROVIDER_API_KEY_ENV = "AE_MCP_CODEX_API_KEY";
+  var RESERVED_CODEX_PROVIDER_IDS = /* @__PURE__ */ new Set(["openai", "amazon-bedrock", "ollama", "lmstudio"]);
+  var PROVIDER_ENTRY_KEYS = [
+    "allowInsecureHttp",
+    "auth",
+    "authProfileRevision",
+    "baseUrl",
+    "credentialId",
+    "dialect",
+    "headers",
+    "id",
+    "name",
+    "probedAt",
+    "probedModels",
+    "protocol"
+  ];
+  var AUTH_KEYS = ["model", "probe"];
+  var HEADER_KEYS = ["id", "name", "scopes", "valueRef"];
+  var SECRET_VALUE_REF_KEYS = ["kind", "reference", "revision"];
+  var LITERAL_VALUE_REF_KEYS = ["kind", "value"];
+  var DIALECT_KEYS = ["detected", "override"];
+  var DIALECT_OVERRIDE_KEYS = ["source", "updatedAt", "wireApi"];
+  var LEGACY_DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "wireApi"];
+  var DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "modelId", "wireApi"];
+  var PROBED_MODEL_KEYS = ["id", "label"];
+  var PROVIDER_SCOPES = /* @__PURE__ */ new Set(["probe", "model"]);
+  var PROVIDER_PROTOCOLS = /* @__PURE__ */ new Set(["openai-compatible", "anthropic"]);
+  var WIRE_APIS = /* @__PURE__ */ new Set(["responses", "chat"]);
+  var PROVIDER_WIRE_PROTOCOLS_V3 = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
+  var PROVIDER_CLIENTS_V3 = /* @__PURE__ */ new Set(["codex", "claude-code"]);
+  var PROVIDER_AUTH_SCHEMES_V3 = /* @__PURE__ */ new Set(["none", "bearer", "x-api-key", "custom"]);
+  var PROVIDER_PREFERRED_AUTH_SCHEMES_V3 = /* @__PURE__ */ new Set(["auto", ...PROVIDER_AUTH_SCHEMES_V3]);
+  var PROVIDER_CAPABILITY_STATUSES_V3 = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
+  var PROVIDER_CAPABILITY_UNSUPPORTED_EVIDENCE_V3 = /* @__PURE__ */ new Set([
+    "endpoint-unsupported",
+    "model-protocol-unsupported",
+    "conversion-unsupported"
+  ]);
+  var PROVIDER_CAPABILITY_SUPPORTED_EVIDENCE_V3 = Object.freeze({
+    responses: /* @__PURE__ */ new Set(["responses-success-schema", "responses-incomplete-schema"]),
+    chat: /* @__PURE__ */ new Set(["chat-success-schema", "chat-length-schema"]),
+    messages: /* @__PURE__ */ new Set(["messages-success-schema", "messages-max-tokens-schema"])
+  });
+  var PROVIDER_ENTRY_KEYS_V3 = [
+    "allowInsecureHttp",
+    "baseUrl",
+    "credential",
+    "credentialId",
+    "headers",
+    "id",
+    "modelCapabilities",
+    "modelList",
+    "name",
+    "probeAuthOverride",
+    "probePreference",
+    "requestProfileRevision",
+    "routeOverrides"
+  ];
+  var PROVIDER_CREDENTIAL_KEYS_V3 = ["preferredAuth", "valueRef"];
+  var PROVIDER_AUTH_CHOICE_KEYS_V3 = ["headerName", "scheme"];
+  var PROVIDER_MODEL_LIST_KEYS_V3 = [
+    "apiRoot",
+    "auth",
+    "checkedAt",
+    "models",
+    "requestProfileRevision",
+    "revision",
+    "status",
+    "validUntil"
+  ];
+  var PROVIDER_MODEL_CAPABILITY_KEYS_V3 = ["chat", "messages", "modelId", "responses"];
+  var PROVIDER_PROTOCOL_CAPABILITY_KEYS_V3 = [
+    "agentFeatures",
+    "apiRoot",
+    "auth",
+    "checkedAt",
+    "compatibility",
+    "evidence",
+    "modelListRevision",
+    "requestProfileRevision",
+    "status",
+    "validUntil"
+  ];
+  var PROVIDER_AGENT_FEATURE_KEYS_V3 = [
+    "compact",
+    "continuation",
+    "countTokens",
+    "namespaceTools",
+    "reasoningReplay",
+    "stream",
+    "terminal",
+    "tools"
+  ];
+  var PROVIDER_AGENT_FEATURE_STATUSES_V3 = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
+  var PROVIDER_COMPATIBILITY_KEYS_V3 = ["instructionMode", "tokenField"];
+  var PROVIDER_ROUTE_OVERRIDE_KEYS_V3 = ["client", "modelId", "protocol", "updatedAt"];
+  var PROVIDER_MODEL_LIST_MODEL_KEYS_V3 = ["id", "label", "metadata"];
+  var PROVIDER_MODEL_METADATA_KEYS_V3 = [
+    "capabilities",
+    "inputModalities",
+    "outputModalities",
+    "task"
+  ];
+  var DIALECT_SOURCES = /* @__PURE__ */ new Set(["manual", "legacy-v0.9", "ccswitch-import"]);
+  var VERIFIED_DIALECT_EVIDENCE = Object.freeze({
+    responses: "responses-success-schema",
+    chat: "chat-success-schema"
+  });
+  var LEGACY_DIALECT_EVIDENCE = /* @__PURE__ */ new Set([
+    "models-capability",
+    "responses-success-schema",
+    "responses-missing-input",
+    "chat-success-schema",
+    "chat-missing-messages",
+    "chat-missing-messages-500-compat"
+  ]);
+  var SECRET_LIKE_PATH_LITERAL = /(?:Bearer\s+\S{8,}|Basic\s+\S{8,}|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})/i;
+  var HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+  var MAX_PERCENT_DECODE_LAYERS = 3;
+  var CREDENTIAL_PATH_LABELS = /* @__PURE__ */ new Set([
+    "accesstoken",
+    "apikey",
+    "authtoken",
+    "clientsecret",
+    "credential",
+    "credentials",
+    "passwd",
+    "password",
+    "xapikey"
+  ]);
+  function normalizeBaseUrl(value) {
+    return String(value || "").trim().replace(/\/+$/, "");
+  }
+  function isLoopbackProviderHostname(hostname) {
+    const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
+    const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    const ipv4 = mapped ? mapped[1] : host;
+    return /^127(?:\.\d{1,3}){3}$/.test(ipv4);
+  }
+  function decodePercentRuns2(value) {
+    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+  }
+  function pathContainsCredential(value) {
+    let current = String(value || "");
+    for (let layer = 0; layer <= MAX_PERCENT_DECODE_LAYERS; layer += 1) {
+      if (SECRET_LIKE_PATH_LITERAL.test(current) || isCredentialShapedProviderLiteral(current)) return true;
+      const segments = current.split("/").filter(Boolean);
+      for (let index = 0; index + 1 < segments.length; index += 1) {
+        const label = segments[index].toLowerCase().replace(/[^a-z0-9]/g, "");
+        const candidate = segments[index + 1];
+        if (CREDENTIAL_PATH_LABELS.has(label) && !/^v\d+(?:\.\d+)*$/i.test(candidate)) return true;
+      }
+      const decoded = decodePercentRuns2(current);
+      if (decoded === current) break;
+      current = decoded;
+    }
+    return false;
+  }
+  function validateProviderBaseUrl(value, {
+    allowInsecureHttp = false,
+    requireTransportApproval = false
+  } = {}) {
+    const raw = String(value || "").trim();
+    let url;
+    try {
+      url = new URL(raw);
+    } catch {
+      throw providerProfileError();
+    }
+    const schemeMarker = raw.indexOf("://");
+    let hasRawUserInfo = true;
+    if (schemeMarker >= 0) {
+      const authorityStart = schemeMarker + 3;
+      const delimiters = ["/", "?", "#"].map((delimiter) => raw.indexOf(delimiter, authorityStart)).filter((index) => index >= 0);
+      const authorityEnd = delimiters.length ? Math.min(...delimiters) : raw.length;
+      hasRawUserInfo = raw.slice(authorityStart, authorityEnd).includes("@");
+    }
+    if (!["http:", "https:"].includes(url.protocol) || schemeMarker < 0 || raw.includes("?") || raw.includes("#") || hasRawUserInfo || url.username || url.password || url.hash || url.search || pathContainsCredential(url.pathname)) {
+      throw providerProfileError();
+    }
+    if (requireTransportApproval && url.protocol === "http:" && !isLoopbackProviderHostname(url.hostname) && allowInsecureHttp !== true) {
+      throw providerProfileError("provider_insecure_http_forbidden");
+    }
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.toString().replace(/\/$/, "");
+  }
+  function providerProfileError(code = "provider_profile_invalid") {
+    const error = new Error(
+      code === "provider_header_secret_reference_required" ? "Provider header requires a secret reference" : "Provider profile is invalid"
+    );
+    error.code = code;
+    return error;
+  }
+  function hasExactKeys(value, expected) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const keys = Object.keys(value).sort();
+    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+  }
+  function requireExactObject(value, expected) {
+    if (!hasExactKeys(value, expected)) throw providerProfileError();
+    return value;
+  }
+  function requireText(value) {
+    if (typeof value !== "string") throw providerProfileError();
+    const text = value.trim();
+    if (!text) throw providerProfileError();
+    return text;
+  }
+  function requireTimestamp(value) {
+    if (!Number.isFinite(value) || value < 0) throw providerProfileError();
+    return value;
+  }
+  function requireRevision(value) {
+    if (!Number.isSafeInteger(value) || value <= 0) throw providerProfileError();
+    return value;
+  }
+  function hasVerifiedDialectEvidence(entry) {
+    return VERIFIED_DIALECT_EVIDENCE[entry == null ? void 0 : entry.wireApi] === (entry == null ? void 0 : entry.evidence);
+  }
+  function normalizeCredentialId(value) {
+    if (typeof value !== "string") throw providerProfileError();
+    try {
+      return parseProviderSecretReference(`aemcp-secret://provider/${value}/a/v1`).providerId;
+    } catch {
+      throw providerProfileError();
+    }
+  }
+  function normalizeSecretValueRef(value, credentialId) {
+    requireExactObject(value, SECRET_VALUE_REF_KEYS);
+    if (value.kind !== "secret") throw providerProfileError();
+    let parsed;
+    try {
+      parsed = parseProviderSecretReference(value.reference);
+    } catch {
+      throw providerProfileError();
+    }
+    if (parsed.providerId !== credentialId) throw providerProfileError();
+    return {
+      kind: "secret",
+      reference: value.reference,
+      revision: requireRevision(value.revision)
+    };
+  }
+  function normalizeHeaderName(value) {
+    const name = requireText(value);
+    if (!HEADER_NAME.test(name)) throw providerProfileError();
+    return name;
+  }
+  function normalizeAuthPolicy(value, credentialId, allowInherit = false) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerProfileError();
+    if (allowInherit && value.kind === "inherit-model") {
+      requireExactObject(value, ["kind"]);
+      return { kind: "inherit-model" };
+    }
+    if (value.kind === "none") {
+      requireExactObject(value, ["kind"]);
+      return { kind: "none" };
+    }
+    if (value.kind === "bearer" || value.kind === "x-api-key") {
+      requireExactObject(value, ["kind", "valueRef"]);
+      return {
+        kind: value.kind,
+        valueRef: normalizeSecretValueRef(value.valueRef, credentialId)
+      };
+    }
+    if (value.kind === "custom") {
+      requireExactObject(value, ["headerName", "kind", "valueRef"]);
+      return {
+        kind: "custom",
+        headerName: normalizeHeaderName(value.headerName),
+        valueRef: normalizeSecretValueRef(value.valueRef, credentialId)
+      };
+    }
+    throw providerProfileError();
+  }
+  function normalizeHeaderValueRef(value, credentialId) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerProfileError();
+    if (value.kind === "literal") {
+      requireExactObject(value, LITERAL_VALUE_REF_KEYS);
+      if (typeof value.value !== "string") throw providerProfileError();
+      return { kind: "literal", value: value.value };
+    }
+    return normalizeSecretValueRef(value, credentialId);
+  }
+  function normalizeExtraHeader(value, credentialId) {
+    requireExactObject(value, HEADER_KEYS);
+    const id = requireText(value.id);
+    const name = normalizeHeaderName(value.name);
+    if (!Array.isArray(value.scopes) || value.scopes.length === 0) throw providerProfileError();
+    const scopes = value.scopes.map((scope) => {
+      if (typeof scope !== "string" || !PROVIDER_SCOPES.has(scope)) throw providerProfileError();
+      return scope;
+    });
+    if (new Set(scopes).size !== scopes.length) throw providerProfileError();
+    const valueRef = normalizeHeaderValueRef(value.valueRef, credentialId);
+    if (isReservedProviderExtraHeaderName(name)) {
+      throw providerProfileError("provider_header_forbidden");
+    }
+    if (valueRef.kind === "literal" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(valueRef.value))) {
+      throw providerProfileError("provider_header_secret_reference_required");
+    }
+    return { id, name, scopes, valueRef };
+  }
+  function normalizeDialect(value) {
+    requireExactObject(value, DIALECT_KEYS);
+    let override = null;
+    if (value.override !== null) {
+      requireExactObject(value.override, DIALECT_OVERRIDE_KEYS);
+      if (!WIRE_APIS.has(value.override.wireApi) || !DIALECT_SOURCES.has(value.override.source)) {
+        throw providerProfileError();
+      }
+      override = {
+        wireApi: value.override.wireApi,
+        source: value.override.source,
+        updatedAt: requireTimestamp(value.override.updatedAt)
+      };
+    }
+    const normalizeDetected = (entry, { includeModelId = true } = {}) => {
+      const keys = includeModelId ? DIALECT_DETECTED_KEYS : LEGACY_DIALECT_DETECTED_KEYS;
+      requireExactObject(entry, keys);
+      if (!WIRE_APIS.has(entry.wireApi) || (includeModelId ? !hasVerifiedDialectEvidence(entry) : !LEGACY_DIALECT_EVIDENCE.has(entry.evidence))) {
+        throw providerProfileError();
+      }
+      return {
+        ...includeModelId ? { modelId: requireText(entry.modelId) } : {},
+        wireApi: entry.wireApi,
+        baseUrl: validateProviderBaseUrl(requireText(entry.baseUrl)),
+        authProfileRevision: requireRevision(entry.authProfileRevision),
+        detectedAt: requireTimestamp(entry.detectedAt),
+        evidence: entry.evidence
+      };
+    };
+    let detected = [];
+    if (Array.isArray(value.detected)) {
+      detected = value.detected.map((entry) => normalizeDetected(entry));
+      const modelIds = /* @__PURE__ */ new Set();
+      for (const entry of detected) {
+        if (modelIds.has(entry.modelId)) throw providerProfileError();
+        modelIds.add(entry.modelId);
+      }
+      detected.sort((left, right) => left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
+    } else if (value.detected !== null) {
+      normalizeDetected(value.detected, { includeModelId: false });
+    }
+    return { override, detected };
+  }
+  function normalizeProbedModel(value) {
+    requireExactObject(value, PROBED_MODEL_KEYS);
+    return { id: requireText(value.id), label: requireText(value.label) };
+  }
+  function normalizeProviderEntryV2(input) {
+    requireExactObject(input, PROVIDER_ENTRY_KEYS);
+    const id = requireText(input.id);
+    const credentialId = normalizeCredentialId(input.credentialId);
+    if (!PROVIDER_PROTOCOLS.has(input.protocol)) throw providerProfileError();
+    if (typeof input.allowInsecureHttp !== "boolean") throw providerProfileError();
+    requireExactObject(input.auth, AUTH_KEYS);
+    if (!Array.isArray(input.headers) || !Array.isArray(input.probedModels)) throw providerProfileError();
+    return {
+      id,
+      credentialId,
+      name: requireText(input.name),
+      protocol: input.protocol,
+      baseUrl: validateProviderBaseUrl(requireText(input.baseUrl), {
+        allowInsecureHttp: input.allowInsecureHttp,
+        requireTransportApproval: true
+      }),
+      allowInsecureHttp: input.allowInsecureHttp,
+      authProfileRevision: requireRevision(input.authProfileRevision),
+      auth: {
+        model: normalizeAuthPolicy(input.auth.model, credentialId),
+        probe: normalizeAuthPolicy(input.auth.probe, credentialId, true)
+      },
+      headers: input.headers.map((header) => normalizeExtraHeader(header, credentialId)),
+      dialect: normalizeDialect(input.dialect),
+      probedModels: input.probedModels.map(normalizeProbedModel),
+      probedAt: requireTimestamp(input.probedAt)
+    };
+  }
+  function requireNonnegativeRevision(value) {
+    if (!Number.isSafeInteger(value) || value < 0) throw providerProfileError();
+    return value;
+  }
+  function normalizeAuthChoiceV3(value, { allowAuto = false } = {}) {
+    requireExactObject(value, PROVIDER_AUTH_CHOICE_KEYS_V3);
+    const allowed = allowAuto ? PROVIDER_PREFERRED_AUTH_SCHEMES_V3 : PROVIDER_AUTH_SCHEMES_V3;
+    if (!allowed.has(value.scheme)) throw providerProfileError();
+    const headerName = value.headerName === null ? null : normalizeHeaderName(value.headerName);
+    if (value.scheme === "custom" !== (headerName !== null)) throw providerProfileError();
+    return { scheme: value.scheme, headerName };
+  }
+  function authChoiceMatchesPreference(choice, preferred) {
+    if (preferred.scheme === "auto") return true;
+    if (preferred.scheme === "none") return choice.scheme === "none";
+    if (preferred.scheme === "custom") {
+      return choice.scheme === "custom" && String(choice.headerName || "").toLowerCase() === String(preferred.headerName || "").toLowerCase();
+    }
+    return choice.scheme === "bearer" || choice.scheme === "x-api-key";
+  }
+  function normalizeCredentialV3(value, credentialId) {
+    requireExactObject(value, PROVIDER_CREDENTIAL_KEYS_V3);
+    const valueRef = value.valueRef === null ? null : normalizeSecretValueRef(value.valueRef, credentialId);
+    const preferredAuth = normalizeAuthChoiceV3(value.preferredAuth, { allowAuto: true });
+    if (preferredAuth.scheme === "none" && valueRef !== null) throw providerProfileError();
+    if (!["auto", "none"].includes(preferredAuth.scheme) && valueRef === null) throw providerProfileError();
+    return { valueRef, preferredAuth };
+  }
+  function normalizeProbeAuthOverrideV3(value, credentialId) {
+    if (value === null) return null;
+    const normalized = normalizeAuthPolicy(value, credentialId);
+    if (normalized.kind === "inherit-model") throw providerProfileError();
+    return normalized;
+  }
+  function authChoiceFromPolicyV3(policy) {
+    if (!policy || policy.kind === "none") return { scheme: "none", headerName: null };
+    return {
+      scheme: policy.kind,
+      headerName: policy.kind === "custom" ? policy.headerName : null
+    };
+  }
+  function normalizeApiRootV3(value, { baseUrl, allowInsecureHttp }) {
+    if (value === null) return null;
+    const apiRoot = validateProviderBaseUrl(requireText(value), {
+      allowInsecureHttp,
+      requireTransportApproval: true
+    });
+    if (new URL(apiRoot).origin !== new URL(baseUrl).origin) throw providerProfileError();
+    return apiRoot;
+  }
+  function normalizeMetadataStringListV3(value) {
+    if (!Array.isArray(value)) throw providerProfileError();
+    const output = value.map((entry) => requireText(entry));
+    if (new Set(output).size !== output.length) throw providerProfileError();
+    output.sort();
+    return output;
+  }
+  function normalizeModelMetadataV3(value) {
+    requireExactObject(value, PROVIDER_MODEL_METADATA_KEYS_V3);
+    return {
+      task: value.task === null ? null : requireText(value.task),
+      inputModalities: normalizeMetadataStringListV3(value.inputModalities),
+      outputModalities: normalizeMetadataStringListV3(value.outputModalities),
+      capabilities: normalizeMetadataStringListV3(value.capabilities)
+    };
+  }
+  function normalizeModelListEntryV3(value) {
+    requireExactObject(value, PROVIDER_MODEL_LIST_MODEL_KEYS_V3);
+    return {
+      id: requireText(value.id),
+      label: requireText(value.label),
+      metadata: normalizeModelMetadataV3(value.metadata)
+    };
+  }
+  function normalizeModelsV3(value) {
+    if (!Array.isArray(value)) throw providerProfileError();
+    const models = value.map(normalizeModelListEntryV3);
+    const ids = /* @__PURE__ */ new Set();
+    for (const model of models) {
+      if (ids.has(model.id)) throw providerProfileError();
+      ids.add(model.id);
+    }
+    models.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+    return models;
+  }
+  function normalizeAgentFeaturesV3(value, protocolStatus) {
+    requireExactObject(value, PROVIDER_AGENT_FEATURE_KEYS_V3);
+    const output = {};
+    for (const key of PROVIDER_AGENT_FEATURE_KEYS_V3) {
+      if (!PROVIDER_AGENT_FEATURE_STATUSES_V3.has(value[key])) throw providerProfileError();
+      output[key] = value[key];
+    }
+    if (protocolStatus === "unknown" && Object.values(output).some((status) => status !== "unknown")) {
+      throw providerProfileError();
+    }
+    if (protocolStatus === "unsupported" && Object.values(output).some((status) => status === "supported")) {
+      throw providerProfileError();
+    }
+    return output;
+  }
+  function normalizeModelListV3(value, provider) {
+    requireExactObject(value, PROVIDER_MODEL_LIST_KEYS_V3);
+    if (value.status !== "unknown" && value.status !== "supported") throw providerProfileError();
+    const revision = requireNonnegativeRevision(value.revision);
+    const requestProfileRevision = requireRevision(value.requestProfileRevision);
+    const checkedAt = requireTimestamp(value.checkedAt);
+    const validUntil = requireTimestamp(value.validUntil);
+    const models = normalizeModelsV3(value.models);
+    const apiRoot = normalizeApiRootV3(value.apiRoot, provider);
+    const auth = value.auth === null ? null : normalizeAuthChoiceV3(value.auth);
+    if (value.status === "unknown") {
+      if (apiRoot !== null || auth !== null || checkedAt !== 0 || validUntil !== 0 || models.length !== 0) {
+        throw providerProfileError();
+      }
+    } else {
+      if (revision <= 0 || apiRoot === null || auth === null || checkedAt <= 0 || validUntil < checkedAt || models.length === 0) {
+        throw providerProfileError();
+      }
+      const configuredProbeAuth = provider.probeAuthOverride ? authChoiceFromPolicyV3(provider.probeAuthOverride) : provider.credential.preferredAuth;
+      if (!authChoiceMatchesPreference(auth, configuredProbeAuth)) throw providerProfileError();
+      if (auth.scheme !== "none" && provider.probeAuthOverride === null && provider.credential.valueRef === null) {
+        throw providerProfileError();
+      }
+    }
+    return {
+      revision,
+      status: value.status,
+      apiRoot,
+      auth,
+      models,
+      checkedAt,
+      validUntil,
+      requestProfileRevision
+    };
+  }
+  function normalizeCompatibilityV3(value, protocol) {
+    requireExactObject(value, PROVIDER_COMPATIBILITY_KEYS_V3);
+    const instructionMode = value.instructionMode;
+    const tokenField = value.tokenField;
+    const valid = protocol === "responses" ? instructionMode === "responses-instructions" && tokenField === "max_output_tokens" : protocol === "chat" ? ["chat-developer", "chat-system"].includes(instructionMode) && ["max_tokens", "max_completion_tokens"].includes(tokenField) : instructionMode === "messages-system" && tokenField === "max_tokens";
+    if (!valid) throw providerProfileError();
+    return { instructionMode, tokenField };
+  }
+  function normalizeProtocolCapabilityV3(value, protocol, provider) {
+    requireExactObject(value, PROVIDER_PROTOCOL_CAPABILITY_KEYS_V3);
+    if (!PROVIDER_CAPABILITY_STATUSES_V3.has(value.status)) throw providerProfileError();
+    const agentFeatures = normalizeAgentFeaturesV3(value.agentFeatures, value.status);
+    const apiRoot = normalizeApiRootV3(value.apiRoot, provider);
+    const auth = value.auth === null ? null : normalizeAuthChoiceV3(value.auth);
+    const compatibility = value.compatibility === null ? null : normalizeCompatibilityV3(value.compatibility, protocol);
+    const checkedAt = requireTimestamp(value.checkedAt);
+    const validUntil = value.validUntil === null ? null : requireTimestamp(value.validUntil);
+    const requestProfileRevision = requireRevision(value.requestProfileRevision);
+    const modelListRevision = requireNonnegativeRevision(value.modelListRevision);
+    const evidence = value.evidence === null ? null : requireText(value.evidence);
+    if (value.status === "unknown") {
+      if (apiRoot !== null || auth !== null || compatibility !== null || evidence !== null || checkedAt !== 0 || validUntil !== 0) {
+        throw providerProfileError();
+      }
+    } else {
+      if (apiRoot === null || auth === null || checkedAt <= 0 || value.status === "supported" && (validUntil === null || validUntil < checkedAt) || value.status === "unsupported" && validUntil !== null || provider.credential.valueRef === null && auth.scheme !== "none") {
+        throw providerProfileError();
+      }
+      if (!authChoiceMatchesPreference(auth, provider.credential.preferredAuth)) {
+        throw providerProfileError();
+      }
+      if (value.status === "supported") {
+        if (compatibility === null || !PROVIDER_CAPABILITY_SUPPORTED_EVIDENCE_V3[protocol].has(evidence)) {
+          throw providerProfileError();
+        }
+      } else if (compatibility !== null || !PROVIDER_CAPABILITY_UNSUPPORTED_EVIDENCE_V3.has(evidence)) {
+        throw providerProfileError();
+      }
+    }
+    return {
+      status: value.status,
+      apiRoot,
+      auth,
+      compatibility,
+      agentFeatures,
+      checkedAt,
+      validUntil,
+      requestProfileRevision,
+      modelListRevision,
+      evidence
+    };
+  }
+  function normalizeModelCapabilityV3(value, provider) {
+    requireExactObject(value, PROVIDER_MODEL_CAPABILITY_KEYS_V3);
+    return {
+      modelId: requireText(value.modelId),
+      responses: normalizeProtocolCapabilityV3(value.responses, "responses", provider),
+      chat: normalizeProtocolCapabilityV3(value.chat, "chat", provider),
+      messages: normalizeProtocolCapabilityV3(value.messages, "messages", provider)
+    };
+  }
+  function normalizeRouteOverrideV3(value) {
+    requireExactObject(value, PROVIDER_ROUTE_OVERRIDE_KEYS_V3);
+    if (!PROVIDER_CLIENTS_V3.has(value.client) || !PROVIDER_WIRE_PROTOCOLS_V3.has(value.protocol)) {
+      throw providerProfileError();
+    }
+    const updatedAt = requireTimestamp(value.updatedAt);
+    if (updatedAt <= 0) throw providerProfileError();
+    return {
+      client: value.client,
+      modelId: requireText(value.modelId),
+      protocol: value.protocol,
+      updatedAt
+    };
+  }
+  function normalizeProviderEntryV3(input) {
+    requireExactObject(input, PROVIDER_ENTRY_KEYS_V3);
+    const id = requireText(input.id);
+    const credentialId = normalizeCredentialId(input.credentialId);
+    const baseUrl = validateProviderBaseUrl(requireText(input.baseUrl), {
+      allowInsecureHttp: input.allowInsecureHttp,
+      requireTransportApproval: true
+    });
+    if (typeof input.allowInsecureHttp !== "boolean") throw providerProfileError();
+    if (!Array.isArray(input.headers) || !Array.isArray(input.modelCapabilities) || !Array.isArray(input.routeOverrides)) {
+      throw providerProfileError();
+    }
+    if (input.probePreference !== null && !PROVIDER_WIRE_PROTOCOLS_V3.has(input.probePreference)) {
+      throw providerProfileError();
+    }
+    const credential = normalizeCredentialV3(input.credential, credentialId);
+    const probeAuthOverride = normalizeProbeAuthOverrideV3(input.probeAuthOverride, credentialId);
+    const provider = {
+      id,
+      credentialId,
+      name: requireText(input.name),
+      baseUrl,
+      allowInsecureHttp: input.allowInsecureHttp,
+      requestProfileRevision: requireRevision(input.requestProfileRevision),
+      credential,
+      probeAuthOverride,
+      headers: input.headers.map((header) => normalizeExtraHeader(header, credentialId)),
+      probePreference: input.probePreference
+    };
+    const modelList = normalizeModelListV3(input.modelList, provider);
+    const modelCapabilities = input.modelCapabilities.map((entry) => normalizeModelCapabilityV3(entry, provider));
+    const modelIds = /* @__PURE__ */ new Set();
+    for (const entry of modelCapabilities) {
+      if (modelIds.has(entry.modelId)) throw providerProfileError();
+      modelIds.add(entry.modelId);
+    }
+    modelCapabilities.sort((left, right) => left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
+    const routeOverrides = input.routeOverrides.map(normalizeRouteOverrideV3);
+    const overrideKeys = /* @__PURE__ */ new Set();
+    for (const entry of routeOverrides) {
+      const key = `${entry.client}\0${entry.modelId}`;
+      if (overrideKeys.has(key)) throw providerProfileError();
+      overrideKeys.add(key);
+    }
+    routeOverrides.sort((left, right) => left.client < right.client ? -1 : left.client > right.client ? 1 : left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
+    return {
+      ...provider,
+      modelList,
+      modelCapabilities,
+      routeOverrides
+    };
+  }
+  function normalizeProviderId(value) {
+    const raw = String(value || "").trim() || DEFAULT_CODEX_PROVIDER_ID;
+    const safe = raw.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || DEFAULT_CODEX_PROVIDER_ID;
+    return RESERVED_CODEX_PROVIDER_IDS.has(safe) ? safe + "-custom" : safe;
+  }
+  function tomlString(value) {
+    return JSON.stringify(String(value || ""));
+  }
+  function normalizeCodexRuntimeConfig(runtimeConfig) {
+    if (!runtimeConfig || !runtimeConfig.baseUrl) return null;
+    if (runtimeConfig.chatCompatibility !== void 0 && typeof runtimeConfig.chatCompatibility !== "boolean") {
+      throw providerProfileError();
+    }
+    if (!Array.isArray(runtimeConfig.envHeaders) || runtimeConfig.envHeaders.length > 64) {
+      throw providerProfileError();
+    }
+    const names = /* @__PURE__ */ new Set();
+    const envNames = /* @__PURE__ */ new Set();
+    const apiKey = runtimeConfig.apiKey === void 0 ? void 0 : requireText(runtimeConfig.apiKey);
+    const envHeaders = runtimeConfig.envHeaders.map((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw providerProfileError();
+      const name = normalizeHeaderName(entry.name);
+      const envName = requireText(entry.envName);
+      if (!/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(envName)) throw providerProfileError();
+      const lower = name.toLowerCase();
+      if (names.has(lower) || envNames.has(envName)) throw providerProfileError();
+      names.add(lower);
+      envNames.add(envName);
+      return {
+        name,
+        envName,
+        value: entry.value === void 0 ? void 0 : String(entry.value)
+      };
+    });
+    return {
+      providerId: normalizeProviderId(runtimeConfig.providerId),
+      baseUrl: normalizeBaseUrl(requireText(runtimeConfig.baseUrl)),
+      apiKey,
+      envHeaders,
+      chatCompatibility: runtimeConfig.chatCompatibility === true
+    };
+  }
+  function codexAppServerArgs(runtimeConfig = null) {
+    const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
+    if (!runtime) return ["app-server"];
+    const provider = runtime.providerId;
+    const args = [
+      "app-server",
+      "-c",
+      `model_provider=${tomlString(provider)}`,
+      "-c",
+      `model_providers.${provider}.name="AE MCP Custom"`,
+      "-c",
+      `model_providers.${provider}.base_url=${tomlString(runtime.baseUrl)}`
+    ];
+    if (runtime.apiKey !== void 0) {
+      args.push("-c", `model_providers.${provider}.env_key=${tomlString(CODEX_PROVIDER_API_KEY_ENV)}`);
+    }
+    if (runtime.envHeaders.length > 0) {
+      const table = runtime.envHeaders.map((header) => `${tomlString(header.name)} = ${tomlString(header.envName)}`).join(", ");
+      args.push("-c", `model_providers.${provider}.env_http_headers={ ${table} }`);
+    }
+    args.push(
+      "-c",
+      `model_providers.${provider}.wire_api="responses"`,
+      "-c",
+      `model_providers.${provider}.requires_openai_auth=false`,
+      "-c",
+      "features.multi_agent=false",
+      "-c",
+      "features.multi_agent_v2=false",
+      "-c",
+      "features.multi_agent_v2.non_code_mode_only=false"
+    );
+    if (runtime.chatCompatibility) {
+      args.push(
+        "-c",
+        'web_search="disabled"',
+        "-c",
+        "features.apps=false",
+        "-c",
+        "features.plugins=false",
+        "-c",
+        "features.remote_plugin=false"
+      );
+    }
+    return args;
+  }
+  function codexSpawnEnv(runtimeConfig = null, baseEnv = {}) {
+    const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
+    const env = { ...baseEnv || {} };
+    if (!runtime) return env;
+    delete env[CODEX_PROVIDER_API_KEY_ENV];
+    for (const key of Object.keys(env)) {
+      if (/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(key)) delete env[key];
+    }
+    for (const header of runtime.envHeaders) {
+      if (header.value === void 0) throw providerProfileError();
+      env[header.envName] = header.value;
+    }
+    if (runtime.apiKey !== void 0) env[CODEX_PROVIDER_API_KEY_ENV] = runtime.apiKey;
+    return env;
+  }
+
+  // src/lib/providerRouteSelection.js
   var CLIENT_PROTOCOLS = Object.freeze({
     codex: "responses",
     "claude-code": "messages"
@@ -33661,9 +29813,9 @@
     if (!clientProtocol || !selectedModelId || !FEATURES.has(feature) || typeof requireAgentReady !== "boolean") {
       return routeResult({ clientProtocol, reasonCode: "invalid-request" });
     }
-    let timestamp2;
+    let timestamp;
     try {
-      timestamp2 = currentTime(now);
+      timestamp = currentTime(now);
     } catch {
       return routeResult({ clientProtocol, reasonCode: "invalid-request" });
     }
@@ -33692,7 +29844,7 @@
         model,
         override.protocol,
         feature,
-        timestamp2,
+        timestamp,
         requireAgentReady
       );
       if (evaluated.outcome === "selected") {
@@ -33718,7 +29870,7 @@
         model,
         protocol,
         feature,
-        timestamp2,
+        timestamp,
         requireAgentReady
       );
       if (evaluated.outcome === "selected") {
@@ -38852,12 +35004,12 @@ data: ${JSON.stringify(payload)}
       }
       const context = admit(req, res);
       if (!context) return;
-      let requestBody2;
+      let requestBody;
       let chatBody;
       try {
-        requestBody2 = await readRequestBody(req, limits.requestBodyBytes, context);
+        requestBody = await readRequestBody(req, limits.requestBodyBytes, context);
         if (context.finished) return;
-        chatBody = responsesBodyToChatBody(parseJsonBody(requestBody2), {
+        chatBody = responsesBodyToChatBody(parseJsonBody(requestBody), {
           openReasoning: reasoningCapsule == null ? void 0 : reasoningCapsule.open
         });
       } catch (error) {
@@ -39245,21 +35397,21 @@ data: ${JSON.stringify(payload)}
   }
   function payloadWithoutRejectedContextManagement(payload, buffer) {
     let errorBody;
-    let requestBody2;
+    let requestBody;
     try {
       errorBody = JSON.parse(buffer.toString("utf8"));
-      requestBody2 = JSON.parse(payload.toString("utf8"));
+      requestBody = JSON.parse(payload.toString("utf8"));
     } catch {
       return null;
     }
     const source = (errorBody == null ? void 0 : errorBody.error) && typeof errorBody.error === "object" ? errorBody.error : errorBody;
     const message = typeof (source == null ? void 0 : source.message) === "string" ? source.message : "";
-    if (!/\bcontext_management\b/.test(message) || requestBody2 === null || typeof requestBody2 !== "object" || Array.isArray(requestBody2)) return null;
-    const context = requestBody2.context_management;
+    if (!/\bcontext_management\b/.test(message) || requestBody === null || typeof requestBody !== "object" || Array.isArray(requestBody)) return null;
+    const context = requestBody.context_management;
     if (context === null || typeof context !== "object" || Array.isArray(context) || JSON.stringify(Object.keys(context).sort()) !== '["edits"]' || !Array.isArray(context.edits) || context.edits.length !== 1) return null;
     const edit = context.edits[0];
     if (edit === null || typeof edit !== "object" || Array.isArray(edit) || JSON.stringify(Object.keys(edit).sort()) !== '["keep","type"]' || edit.type !== "clear_thinking_20251015" || edit.keep !== "all") return null;
-    const next = { ...requestBody2 };
+    const next = { ...requestBody };
     delete next.context_management;
     return Buffer.from(JSON.stringify(next), "utf8");
   }
@@ -39590,7 +35742,7 @@ data: ${JSON.stringify(payload)}
         method: "POST"
       };
       if (lookupImpl) requestOptions.lookup = lookupImpl;
-      const sendAttempt = (attemptHeaders, attemptPayload, compatibility2) => {
+      const sendAttempt = (attemptHeaders, attemptPayload, compatibility) => {
         let connected = false;
         let requestSettled = false;
         let request = null;
@@ -39639,7 +35791,7 @@ data: ${JSON.stringify(payload)}
                 if (responseSettled || context.finished) return;
                 responseSettled = true;
                 const rawErrorBody = Buffer.concat(chunks2);
-                const retryHeaders = compatibility2.beta && status === 400 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, rawErrorBody) : null;
+                const retryHeaders = compatibility.beta && status === 400 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, rawErrorBody) : null;
                 if (retryHeaders) {
                   retryHeaders["content-length"] = String(attemptPayload.length);
                   onAudit({
@@ -39652,11 +35804,11 @@ data: ${JSON.stringify(payload)}
                   });
                   sendAttempt(retryHeaders, attemptPayload, {
                     beta: false,
-                    contextManagement: compatibility2.contextManagement
+                    contextManagement: compatibility.contextManagement
                   });
                   return;
                 }
-                const retryPayload = compatibility2.contextManagement && status === 400 ? payloadWithoutRejectedContextManagement(attemptPayload, rawErrorBody) : null;
+                const retryPayload = compatibility.contextManagement && status === 400 ? payloadWithoutRejectedContextManagement(attemptPayload, rawErrorBody) : null;
                 if (retryPayload) {
                   onAudit({
                     event: "provider_route_compat_retry",
@@ -39673,7 +35825,7 @@ data: ${JSON.stringify(payload)}
                     },
                     retryPayload,
                     {
-                      beta: compatibility2.beta,
+                      beta: compatibility.beta,
                       contextManagement: false
                     }
                   );
@@ -40215,11 +36367,6 @@ data: ${JSON.stringify(payload)}
   // src/cep/claudeAgentBackend.js
   var CLAUDE_MINIMUM_VERSION = "2.0.0";
   var STDERR_TAIL_LIMIT2 = 4096;
-  var PROVIDER_ENV_KEYS = [
-    "ANTHROPIC_API_KEY",
-    "ANTHROPIC_BASE_URL",
-    "ANTHROPIC_AUTH_TOKEN"
-  ];
   var DISALLOWED_TOOLS = [
     "Bash",
     "Edit",
@@ -40305,7 +36452,7 @@ data: ${JSON.stringify(payload)}
       executable: resolved
     };
   }
-  function clone3(value) {
+  function clone2(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
   function appendTail3(tail, chunk) {
@@ -40460,34 +36607,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
     };
   }
-  function deleteEnvironmentKey2(environment, name) {
-    const normalized = name.toUpperCase();
-    for (const key of Object.keys(environment)) {
-      if (key.toUpperCase() === normalized) delete environment[key];
-    }
-  }
   function mcpConfigForSpec(spec) {
-    if (spec && spec.kind === "http") {
-      return {
-        mcpServers: {
-          ae: { type: "http", url: String(spec.url || "") }
-        }
-      };
-    }
-    const childEnv = isPlainObject2(spec == null ? void 0 : spec.env) ? { ...spec.env } : {};
-    for (const key of PROVIDER_ENV_KEYS) deleteEnvironmentKey2(childEnv, key);
-    for (const key of PROVIDER_ENV_KEYS) childEnv[key] = "";
-    for (const key of ["AE_MCP_APPROVAL_TIER_FILE", "AE_MCP_TOOL_APPROVAL_TIER_FILE"]) {
-      deleteEnvironmentKey2(childEnv, key);
-    }
-    childEnv.AE_MCP_BACKEND = "ae-mcp";
     return {
       mcpServers: {
-        ae: {
-          command: String((spec == null ? void 0 : spec.command) || "ae-mcp"),
-          args: Array.isArray(spec == null ? void 0 : spec.args) ? spec.args.map(String) : [],
-          env: childEnv
-        }
+        ae: { type: "http", url: String((spec == null ? void 0 : spec.url) || "") }
       }
     };
   }
@@ -41433,7 +37556,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       answerQuestion,
       stop,
       reset,
-      getMessages: () => clone3(transcript),
+      getMessages: () => clone2(transcript),
       getStderrTail: () => stderrTail
     };
   }
@@ -41581,7 +37704,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const next = tail + String(chunk || "");
     return next.length > STDERR_TAIL_LIMIT3 ? next.slice(next.length - STDERR_TAIL_LIMIT3) : next;
   }
-  function clone4(value) {
+  function clone3(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
   function defaultCwd(env, platform) {
@@ -41760,7 +37883,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getPermissionMode,
     getMcpSpec: getMcpSpec2,
     getToolMeta,
-    getExpertGuidance = () => true,
     getServerInstructions = () => "",
     getProviderProfile = () => null,
     getProviderCandidate = () => null,
@@ -42516,14 +38638,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         sandboxPolicy: SANDBOX_POLICY,
         config: {
           mcp_servers: {
-            ae: mcpSpec && mcpSpec.kind === "http" ? { url: mcpSpec.url } : {
-              command: mcpSpec.command,
-              args: mcpSpec.args || [],
-              env: Object.assign({}, mcpSpec.env || {}, {
-                AE_MCP_BACKEND: "ae-mcp",
-                ...expertGuidanceEnv(getExpertGuidance())
-              })
-            }
+            ae: { url: mcpSpec.url }
           }
         }
       });
@@ -42618,7 +38733,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (!activeRun || providerRecoveryInFlight || turnFailureInFlight) return;
       turnFailureInFlight = true;
       try {
-        let failure2 = {
+        let failure = {
           kind: error == null ? void 0 : error.kind,
           code: error == null ? void 0 : error.code,
           message: redactValue(
@@ -42629,7 +38744,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         try {
           if (!activeTurnDispatched && await attemptProviderRecovery(error)) return;
         } catch (recoveryError) {
-          failure2 = {
+          failure = {
             kind: recoveryError == null ? void 0 : recoveryError.kind,
             code: recoveryError == null ? void 0 : recoveryError.code,
             message: redactValue(
@@ -42640,12 +38755,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }
         providerDeltaRedactor.discard();
         drainApprovals();
-        const message = (failure2 == null ? void 0 : failure2.message) || "Failed to start Codex turn.";
+        const message = (failure == null ? void 0 : failure.message) || "Failed to start Codex turn.";
         const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
         emit({
           type: "error",
-          kind: (failure2 == null ? void 0 : failure2.kind) || (providerHttpFailure || /model/i.test(message) ? "model" : "mcp"),
-          ...(failure2 == null ? void 0 : failure2.code) ? { code: failure2.code } : {},
+          kind: (failure == null ? void 0 : failure.kind) || (providerHttpFailure || /model/i.test(message) ? "model" : "mcp"),
+          ...(failure == null ? void 0 : failure.code) ? { code: failure.code } : {},
           message,
           ...activeTurnFailureFields()
         });
@@ -42787,9 +38902,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }
         return secrets;
       };
-      const failure2 = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
+      const failure = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
       if (!cliInfo.ok) {
-        return failure2(redactText(cliInfo.detail || "codex CLI is unavailable", probeSecrets()));
+        return failure(redactText(cliInfo.detail || "codex CLI is unavailable", probeSecrets()));
       }
       const executable = cliInfo.executable || {
         ok: true,
@@ -42808,7 +38923,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           env: codexSpawnEnv(null, spawnEnv)
         });
       } catch (error) {
-        return failure2(redactText(error && error.message ? error.message : String(error), probeSecrets()));
+        return failure(redactText(error && error.message ? error.message : String(error), probeSecrets()));
       }
       const probeRpc = createRpc2({ writeLine: (line) => probeProc.stdin.write(line) });
       const reader = createNdjsonReader((message) => probeRpc.handleMessage(message));
@@ -42848,15 +38963,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           ...diag
         };
         if (containsExactSecret(result, probeSecrets())) {
-          return failure2("Provider probe metadata was rejected");
+          return failure("Provider probe metadata was rejected");
         }
         return result;
       } catch (e) {
         const detail = redactText(e && e.message ? e.message : String(e), probeSecrets());
         if (e && e.probeTimeout) {
-          return failure2("probe timeout: " + e.probeTimeout + (detail ? " | " + detail : ""));
+          return failure("probe timeout: " + e.probeTimeout + (detail ? " | " + detail : ""));
         }
-        return failure2(detail);
+        return failure(detail);
       } finally {
         try {
           probeProc.kill();
@@ -42871,7 +38986,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       answerQuestion,
       stop,
       reset,
-      getMessages: () => clone4(transcript),
+      getMessages: () => clone3(transcript),
       getStderrTail: () => stderrTail,
       probeAccount
     };
@@ -42879,7 +38994,273 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/cep/openCodeBackend.js
   init_cep_runtime_inject();
-  var MCP_TIMEOUT_MS = 12e4;
+
+  // src/lib/sse.js
+  init_cep_runtime_inject();
+  function createSseParser(onEvent) {
+    let buffer = "";
+    function parseFrame(frame) {
+      let event = "";
+      let data2 = "";
+      const lines = frame.replace(/\r\n/g, "\n").split("\n");
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          event = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          data2 += line.slice(5).trimStart();
+        }
+      }
+      const trimmed = data2.trim();
+      if (!trimmed || trimmed === "[DONE]") return;
+      try {
+        onEvent({ event, data: JSON.parse(trimmed) });
+      } catch (e) {
+      }
+    }
+    function feed(chunkText) {
+      buffer += String(chunkText || "");
+      buffer = buffer.replace(/\r\n/g, "\n");
+      let splitAt = buffer.indexOf("\n\n");
+      while (splitAt !== -1) {
+        const frame = buffer.slice(0, splitAt);
+        buffer = buffer.slice(splitAt + 2);
+        parseFrame(frame);
+        splitAt = buffer.indexOf("\n\n");
+      }
+    }
+    return { feed };
+  }
+
+  // src/cep/openCodeProviderStore.js
+  init_cep_runtime_inject();
+  var CONFIG_FILE = "opencode-providers.json";
+  var AUTH_FILE = "auth.json";
+  var VERSION = 1;
+  function storeError(code, message) {
+    const error = new Error(message || code);
+    error.code = code;
+    return error;
+  }
+  function clone4(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+  function slug(value) {
+    return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+  function normalizeOpenCodeProviderId(value) {
+    const raw = String(value || "").trim();
+    const normalized = slug(raw.startsWith("aemcp-") ? raw.slice("aemcp-".length) : raw);
+    if (!normalized) throw storeError("OPENCODE_PROVIDER_INVALID", "Provider name is required");
+    return `aemcp-${normalized}`;
+  }
+  function normalizeBaseUrl2(value) {
+    let url;
+    try {
+      url = new URL(String(value || "").trim());
+    } catch {
+      throw storeError("OPENCODE_PROVIDER_INVALID", "Provider base URL is invalid");
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      throw storeError("OPENCODE_PROVIDER_INVALID", "Provider base URL must use HTTP or HTTPS");
+    }
+    return url.toString().replace(/\/$/, "");
+  }
+  function normalizeModelIds(value) {
+    const values = Array.isArray(value) ? value : String(value || "").split(/[\s,]+/);
+    const models = values.map((item) => String(item || "").trim()).filter(Boolean);
+    if (!models.length) throw storeError("OPENCODE_PROVIDER_INVALID", "At least one model is required");
+    return Array.from(new Set(models)).sort();
+  }
+  function normalizeProvider(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw storeError("OPENCODE_PROVIDER_INVALID", "Provider definition is invalid");
+    }
+    const id = normalizeOpenCodeProviderId(value.id || value.name);
+    const name = String(value.name || "").trim();
+    if (!name) throw storeError("OPENCODE_PROVIDER_INVALID", "Provider name is required");
+    if (value.allowInsecureHttp !== true && normalizeBaseUrl2(value.baseUrl).startsWith("http:")) {
+      throw storeError("OPENCODE_PROVIDER_INVALID", "Insecure provider HTTP requires confirmation");
+    }
+    return {
+      id,
+      name,
+      baseUrl: normalizeBaseUrl2(value.baseUrl),
+      allowInsecureHttp: value.allowInsecureHttp === true,
+      modelIds: normalizeModelIds(value.modelIds || value.modelId),
+      needsApiKey: value.needsApiKey === true
+    };
+  }
+  function normalizeState(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value) || value.version !== VERSION || !Array.isArray(value.providers)) {
+      throw storeError("OPENCODE_PROVIDER_STORE_INVALID", "OpenCode provider store is invalid");
+    }
+    const providers = value.providers.map(normalizeProvider);
+    const ids = /* @__PURE__ */ new Set();
+    for (const provider of providers) {
+      if (ids.has(provider.id)) {
+        throw storeError("OPENCODE_PROVIDER_STORE_INVALID", "OpenCode provider IDs must be unique");
+      }
+      ids.add(provider.id);
+    }
+    return { version: VERSION, providers };
+  }
+  function emptyState2() {
+    return { version: VERSION, providers: [] };
+  }
+  function parseJsonFile(fs, file, missingValue, code) {
+    try {
+      return JSON.parse(String(fs.readFileSync(file, "utf8")));
+    } catch (error) {
+      if ((error == null ? void 0 : error.code) === "ENOENT" || !fs.existsSync(file)) return missingValue;
+      throw storeError(code, (error == null ? void 0 : error.message) || code);
+    }
+  }
+  function writeAtomic(fs, file, value, tempSuffix) {
+    const directory = file.slice(0, Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\")));
+    const temp = `${file}.${tempSuffix}.tmp`;
+    try {
+      if (!fs.existsSync(directory)) fs.mkdirSync(directory, { recursive: true });
+      fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}
+`, "utf8");
+      try {
+        fs.chmodSync(temp, 384);
+      } catch {
+      }
+      fs.renameSync(temp, file);
+      try {
+        fs.chmodSync(file, 384);
+      } catch {
+      }
+    } catch (error) {
+      try {
+        fs.unlinkSync(temp);
+      } catch {
+      }
+      throw storeError(
+        "OPENCODE_PROVIDER_STORE_UNAVAILABLE",
+        (error == null ? void 0 : error.message) || "OpenCode provider store is unavailable"
+      );
+    }
+  }
+  function authPath(adapter) {
+    var _a;
+    const dataHome = String(((_a = adapter.env) == null ? void 0 : _a.XDG_DATA_HOME) || "").trim();
+    const root = dataHome ? adapter.paths.resolve([dataHome]) : adapter.paths.join([adapter.paths.home, ".local", "share"]);
+    return adapter.paths.join([root, "opencode", AUTH_FILE]);
+  }
+  function normalizeAuth(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw storeError("OPENCODE_AUTH_INVALID", "OpenCode auth.json is invalid");
+    }
+    return value;
+  }
+  function legacyProviderDraft(provider) {
+    var _a;
+    const name = String((provider == null ? void 0 : provider.name) || (provider == null ? void 0 : provider.id) || "").trim();
+    const baseUrl = String((provider == null ? void 0 : provider.baseUrl) || "").trim();
+    if (!name || !baseUrl) return null;
+    const models = Array.isArray((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models) ? provider.modelList.models.map((model) => model == null ? void 0 : model.id) : Array.isArray(provider == null ? void 0 : provider.probedModels) ? provider.probedModels.map((model) => model == null ? void 0 : model.id) : [];
+    return {
+      id: provider.id || name,
+      name,
+      baseUrl,
+      allowInsecureHttp: provider.allowInsecureHttp === true,
+      modelIds: models.length ? models : ["model-required"],
+      needsApiKey: true
+    };
+  }
+  function openCodeProviderDefinitions(providers) {
+    const definitions = {};
+    for (const raw of providers || []) {
+      const provider = normalizeProvider(raw);
+      if (provider.needsApiKey) continue;
+      definitions[provider.id] = {
+        npm: "@ai-sdk/anthropic",
+        name: provider.name,
+        options: { baseURL: provider.baseUrl },
+        models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }]))
+      };
+    }
+    return definitions;
+  }
+  function createOpenCodeProviderStore({ platform, fsImpl, tempSuffix } = {}) {
+    var _a, _b;
+    const adapter = platform || createPlatformAdapter();
+    const fs = fsImpl || adapter.fs;
+    if (!((_a = adapter == null ? void 0 : adapter.paths) == null ? void 0 : _a.join) || !((_b = adapter == null ? void 0 : adapter.paths) == null ? void 0 : _b.home) || !fs) {
+      throw new TypeError("A platform adapter with file access is required");
+    }
+    let nonce = 0;
+    const nextSuffix = () => tempSuffix || `${Date.now()}-${nonce += 1}`;
+    const file = adapter.paths.join([adapter.paths.configRoot, CONFIG_FILE]);
+    const authFile = authPath(adapter);
+    function readState() {
+      return normalizeState(parseJsonFile(fs, file, emptyState2(), "OPENCODE_PROVIDER_STORE_UNAVAILABLE"));
+    }
+    function list() {
+      return clone4(readState().providers);
+    }
+    function auth() {
+      return normalizeAuth(parseJsonFile(fs, authFile, {}, "OPENCODE_AUTH_UNAVAILABLE"));
+    }
+    function hasApiKey(providerId) {
+      const entry = auth()[normalizeOpenCodeProviderId(providerId)];
+      return (entry == null ? void 0 : entry.type) === "api" && typeof entry.key === "string" && entry.key.length > 0;
+    }
+    function writeAuthKey(providerId, key) {
+      const value = String(key || "");
+      if (!value) throw storeError("OPENCODE_API_KEY_REQUIRED", "An API key is required");
+      const current = auth();
+      current[normalizeOpenCodeProviderId(providerId)] = { type: "api", key: value };
+      writeAtomic(fs, authFile, current, nextSuffix());
+    }
+    function save(draft, { apiKey = "", currentId = "" } = {}) {
+      const current = readState();
+      const wantedId = String(currentId || (draft == null ? void 0 : draft.id) || (draft == null ? void 0 : draft.name) || "").trim();
+      const id = wantedId.startsWith("aemcp-") ? wantedId : normalizeOpenCodeProviderId(wantedId);
+      const provider = normalizeProvider({ ...draft, id, needsApiKey: false });
+      const previous = current.providers.find((entry) => entry.id === id) || null;
+      const key = String(apiKey || "");
+      if (key) writeAuthKey(provider.id, key);
+      else if (((previous == null ? void 0 : previous.needsApiKey) || !previous) && !hasApiKey(provider.id)) {
+        throw storeError("OPENCODE_API_KEY_REQUIRED", "Re-enter this provider API key");
+      }
+      const index = current.providers.findIndex((entry) => entry.id === provider.id);
+      if (index === -1) current.providers.push(provider);
+      else current.providers[index] = provider;
+      writeAtomic(fs, file, current, nextSuffix());
+      return clone4(provider);
+    }
+    function remove(providerId) {
+      const id = normalizeOpenCodeProviderId(providerId);
+      const current = readState();
+      const providers = current.providers.filter((provider) => provider.id !== id);
+      if (providers.length === current.providers.length) return false;
+      current.providers = providers;
+      writeAtomic(fs, file, current, nextSuffix());
+      return true;
+    }
+    function importLegacyProviders(legacyProviders) {
+      const current = readState();
+      if (current.providers.length) return list();
+      const providers = (legacyProviders || []).map(legacyProviderDraft).filter(Boolean).map(normalizeProvider);
+      if (!providers.length) return [];
+      current.providers = providers;
+      writeAtomic(fs, file, current, nextSuffix());
+      return clone4(providers);
+    }
+    return Object.freeze({
+      authFilePath: () => authFile,
+      filePath: () => file,
+      hasApiKey,
+      importLegacyProviders,
+      list,
+      remove,
+      save
+    });
+  }
+
+  // src/cep/openCodeBackend.js
   var READY_TIMEOUT_MS = 3e4;
   var READY_POLL_MS = 250;
   var DEFAULT_PROVIDER_ID = "opencode";
@@ -42892,7 +39273,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function defaultFetch() {
+  function defaultFetch2() {
     if (globalThis.window && globalThis.window.fetch) return globalThis.window.fetch.bind(globalThis.window);
     if (globalThis.fetch) return globalThis.fetch.bind(globalThis);
     throw new Error("fetch is unavailable");
@@ -42922,11 +39303,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         server.close(() => resolve(port));
       });
     });
-  }
-  function asCommandArray(mcpSpec) {
-    const command = mcpSpec && mcpSpec.command ? String(mcpSpec.command) : "ae-mcp";
-    const args = mcpSpec && Array.isArray(mcpSpec.args) ? mcpSpec.args.map(String) : [];
-    return [command].concat(args);
   }
   function prefixedToolName2(raw) {
     const text = String(raw || "");
@@ -42977,9 +39353,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     return { id: raw, providerID: DEFAULT_PROVIDER_ID };
   }
-  function permissionRuleset(mode) {
-    if (mode === "none") return { type: "allow" };
-    return { type: "ask" };
+  function permissionRuleset() {
+    return { type: "allow" };
   }
   function permissionReplyBody(decision) {
     if (decision === "deny") return { action: "deny", remember: false };
@@ -42998,6 +39373,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getPermissionMode,
     getMcpSpec: getMcpSpec2,
     getToolMeta,
+    getProviders = () => [],
     getExpertGuidance = () => true,
     onEvent,
     env
@@ -43066,7 +39442,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       resetStderrRedactor();
     }
     function fetcher() {
-      return fetchImpl || defaultFetch();
+      return fetchImpl || defaultFetch2();
     }
     function currentEnv() {
       return adapter.completeSpawnEnv(env || {});
@@ -43142,18 +39518,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       configHome = adapter.paths.join([adapter.paths.tempRoot, tempDirName()]);
       const configDir = adapter.paths.join([configHome, "opencode"]);
       fs.mkdirSync(configDir, { recursive: true });
-      const mcpEntry = mcpSpec && mcpSpec.kind === "http" ? { type: "remote", url: mcpSpec.url, enabled: true } : {
-        type: "local",
-        command: asCommandArray(mcpSpec),
-        enabled: true,
-        timeout: MCP_TIMEOUT_MS,
-        environment: Object.assign({}, mcpSpec && mcpSpec.env || {}, {
-          AE_MCP_BACKEND: "ae-mcp",
-          ...expertGuidanceEnv(getExpertGuidance())
-        })
-      };
+      const mcpEntry = { type: "remote", url: mcpSpec.url, enabled: true };
       const config = {
         $schema: "https://opencode.ai/config.json",
+        // OpenCode is only the CLI transport here. Host conversation approval
+        // remains authoritative for writes through the tokenized MCP endpoint.
+        permission: { "*": "allow" },
+        provider: openCodeProviderDefinitions(getProviders()),
         mcp: {
           ae: mcpEntry
         }
@@ -43283,7 +39654,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         const result = await postJson("/session", {
           title: "After Effects MCP",
           model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID),
-          permission: permissionRuleset(getPermissionMode ? getPermissionMode() : "manual")
+          permission: permissionRuleset()
         });
         sessionId = String(result && (result.id || result.sessionID || result.sessionId) || "");
         if (!sessionId) throw new Error("OpenCode did not return a session id.");
@@ -43547,24 +39918,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/lib/channels.js
   init_cep_runtime_inject();
-  function providerHasCredentialPolicy(provider) {
-    var _a, _b, _c;
-    const credential = provider == null ? void 0 : provider.credential;
-    if (credential == null ? void 0 : credential.preferredAuth) {
-      const scheme = credential.preferredAuth.scheme;
-      if (scheme === "auto" || scheme === "none") return true;
-      return Boolean(((_a = credential.valueRef) == null ? void 0 : _a.kind) === "secret");
-    }
-    const policy = (_b = provider == null ? void 0 : provider.auth) == null ? void 0 : _b.model;
-    return Boolean(policy && (policy.kind === "none" || ((_c = policy.valueRef) == null ? void 0 : _c.kind) === "secret"));
-  }
   function claudeChannels({
-    probe,
-    apiProvider,
-    apiProviderSelected,
-    providerAvailable,
-    providerCredentialResolverReady,
-    providerChecking = false
+    probe
   } = {}) {
     const sub = {
       channel: "subscription",
@@ -43579,39 +39934,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         zh: "\u672A\u627E\u5230 Claude CLI\uFF1A\u8BF7\u5B89\u88C5 Claude Code 2.x\uFF1B\u82E5\u9762\u677F PATH \u4E0D\u542B claude\uFF0C\u53EF\u8BBE\u7F6E AE_MCP_CLAUDE_CLI \u540E\u91CD\u542F AE\u3002",
         en: "Claude CLI was not found. Install Claude Code 2.x; if claude is not on the panel PATH, set AE_MCP_CLAUDE_CLI and restart AE."
       } : {
-        zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528\u4E0B\u65B9\u300C\u81EA\u5B9A\u4E49 Provider\u300D\u901A\u9053\u3002",
-        en: "Not logged in: run claude /login in a terminal and re-check, or switch to the custom Provider channel below."
+        zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528 OpenCode Provider \u901A\u9053\u3002",
+        en: "Not logged in: run claude /login in a terminal and re-check, or use the OpenCode Provider channel."
       }
     };
-    const selected = apiProviderSelected === void 0 ? Boolean(apiProvider) : Boolean(apiProviderSelected);
-    const resolverReady = providerCredentialResolverReady === void 0 ? providerAvailable === void 0 ? providerHasCredentialPolicy(apiProvider) : providerAvailable : providerCredentialResolverReady;
-    const runtimeReady = !(probe && probe.cliOk === false);
-    const canPreflight = Boolean(
-      !providerChecking && selected && (apiProvider == null ? void 0 : apiProvider.baseUrl) && resolverReady && runtimeReady
-    );
-    const api = {
-      channel: "api",
-      source: { zh: "\u9762\u677F\u914D\u7F6E \xB7 \u901A\u7528 Provider", en: "Panel config \xB7 Universal Provider" },
-      selected,
-      canPreflight,
-      checking: Boolean(providerChecking),
-      ok: canPreflight,
-      detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : "",
-      fixHint: !runtimeReady ? {
-        zh: "Claude \u81EA\u5B9A\u4E49 Provider \u4E5F\u901A\u8FC7 Claude CLI \u8FD0\u884C\uFF1A\u8BF7\u5B89\u88C5\u6216\u5347\u7EA7\u5230 Claude CLI 2.x\u3002",
-        en: "Claude custom Providers also run through Claude CLI. Install or upgrade to Claude CLI 2.x."
-      } : apiProvider && resolverReady !== true && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u7CFB\u7EDF\u4F1A\u6309\u6A21\u578B\u81EA\u52A8\u9009\u62E9 Messages\u3001Responses \u6216 Chat \u8DEF\u7531\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model." }
-    };
-    api.directHttp = false;
-    return [sub, api];
+    return [sub];
   }
   function codexChannels({
     codexProbe,
-    customProvider,
-    customProviderSelected,
-    customProviderAvailable,
-    customProviderCredentialResolverReady = false,
-    providerChecking = false,
     cliConfig,
     cliCredentialAvailable
   } = {}) {
@@ -43632,24 +39962,29 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       checking: false,
       ok: hasProvider && hasKey && runtimeOk,
       detail: hasProvider ? [cliConfig.providerId, cliConfig.model, cliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") : "",
-      fixHint: !hasProvider ? { zh: "\u672A\u627E\u5230 ~/.codex/config.toml \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 Codex CLI \u91CC\u914D\u7F6E model_provider\u3002", en: "No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first." } : !hasKey ? { zh: "\u68C0\u6D4B\u5230 Codex CLI provider\u300C" + cliConfig.providerId + "\u300D\uFF0C\u4F46\u6CA1\u6709\u53EF\u7528\u51ED\u636E\u3002\u8BF7\u8BBE\u7F6E\u5176\u73AF\u5883\u53D8\u91CF\u6216\u5728 Provider \u7BA1\u7406\u4E2D\u914D\u7F6E\u3002", en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable or configure it in Provider Manager.' } : { zh: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u68C0\u67E5 Codex CLI \u5B89\u88C5\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Codex runtime unavailable: check the Codex CLI install and re-check." }
+      fixHint: !hasProvider ? { zh: "\u672A\u627E\u5230 ~/.codex/config.toml \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 Codex CLI \u91CC\u914D\u7F6E model_provider\u3002", en: "No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first." } : !hasKey ? {
+        zh: "\u68C0\u6D4B\u5230 Codex CLI provider\u300C" + cliConfig.providerId + "\u300D\uFF0C\u4F46\u6CA1\u6709\u53EF\u7528\u51ED\u636E\u3002\u8BF7\u5728 Codex CLI \u4E2D\u8BBE\u7F6E\u5176\u73AF\u5883\u53D8\u91CF\u3002",
+        en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable in the Codex CLI environment.'
+      } : { zh: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u68C0\u67E5 Codex CLI \u5B89\u88C5\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Codex runtime unavailable: check the Codex CLI install and re-check." }
     };
-    const customCanPreflight = Boolean(
-      !providerChecking && (customProviderSelected === void 0 ? customProvider : customProviderSelected) && (customProvider == null ? void 0 : customProvider.baseUrl) && (customProviderAvailable === void 0 ? providerHasCredentialPolicy(customProvider) : customProviderAvailable) && customProviderCredentialResolverReady === true && (!codexProbe || codexProbe.runtimeOk !== false)
-    );
-    const custom = {
-      channel: "custom",
-      source: { zh: "\u81EA\u5B9A\u4E49 provider", en: "Custom provider" },
-      selected: customProviderSelected === void 0 ? Boolean(customProvider) : Boolean(customProviderSelected),
-      canPreflight: customCanPreflight,
-      checking: Boolean(providerChecking),
-      ok: Boolean(
-        customCanPreflight
-      ),
-      detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : "",
-      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u5C1A\u672A\u5C31\u7EEA\uFF1BHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE \u540E\u68C0\u6D4B\uFF0C\u6301\u7EED\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5B89\u88C5\u3002", en: "The system credential store is not ready. Helper starts with AE; reopen the panel or restart AE, and repair the install only if the failure persists." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u534F\u8BAE\u8DEF\u7531\u4F1A\u5728\u53D1\u9001\u524D\u6309\u5F53\u524D\u6A21\u578B\u9884\u68C0\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending." }
-    };
-    return [cli, cliConfigChannel, custom];
+    return [cli, cliConfigChannel];
+  }
+  function openCodeChannels({ probe, providers = [] } = {}) {
+    const configured = providers.some((provider) => provider && provider.needsApiKey !== true);
+    return [{
+      channel: "provider",
+      source: { zh: "Provider \u7BA1\u7406 \xB7 OpenCode", en: "Provider Manager \xB7 OpenCode" },
+      checking: probe === null,
+      ok: configured && Boolean(probe == null ? void 0 : probe.loggedIn),
+      detail: (probe == null ? void 0 : probe.detail) || "",
+      fixHint: configured ? {
+        zh: "OpenCode \u672A\u80FD\u542F\u52A8\uFF1A\u5B89\u88C5\u6216\u66F4\u65B0 OpenCode CLI \u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
+        en: "OpenCode could not start. Install or update the OpenCode CLI, then re-check."
+      } : {
+        zh: "\u5728 Provider \u7BA1\u7406\u4E2D\u586B\u5199 Base URL\u3001API Key \u548C\u6A21\u578B\uFF1B\u65E7 Provider \u9700\u8981\u91CD\u65B0\u586B\u5199 key\u3002",
+        en: "Add a Base URL, API key, and model in Provider Manager. Older providers require their key again."
+      }
+    }];
   }
   function zcodeChannels({ zcodeProbe, configSummary } = {}) {
     const summary = configSummary || {};
@@ -43681,34 +40016,31 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     };
     return [cli, desktop, startPlan];
   }
-  var CLAUDE_CHANNEL_IDS = ["subscription", "api"];
-  var CODEX_CHANNEL_IDS = ["cli", "cli-config", "custom"];
+  var CLAUDE_CHANNEL_IDS = ["subscription"];
+  var CODEX_CHANNEL_IDS = ["cli", "cli-config"];
   function migrateBackendPref(storage) {
     let pref = "subscription";
-    const channelChoices = { claude: "subscription", codex: "cli" };
+    const channelChoices = { claude: "subscription", codex: "cli", opencode: "provider" };
     try {
       const raw = storage.getItem("ae_mcp_backend") || "subscription";
       const legacyLock = storage.getItem("ae_mcp_channel_lock") || "";
       const storedClaude = storage.getItem("ae_mcp_channel_claude") || "";
       const storedCodex = storage.getItem("ae_mcp_channel_codex") || "";
-      if (raw === "byok") {
-        pref = "subscription";
-        channelChoices.claude = "api";
-        storage.setItem("ae_mcp_backend", pref);
-      } else if (raw === "opencode" || raw === "zcode") {
+      if (raw === "opencode") {
+        pref = "opencode";
+      } else if (raw === "byok" || raw === "zcode") {
         pref = "subscription";
         storage.setItem("ae_mcp_backend", pref);
       } else if (raw === "codex" || raw === "subscription") {
         pref = raw;
       }
       if (CLAUDE_CHANNEL_IDS.includes(storedClaude)) channelChoices.claude = storedClaude;
-      else if (legacyLock === "api") channelChoices.claude = "api";
+      else if (legacyLock === "api") channelChoices.claude = "subscription";
       if (CODEX_CHANNEL_IDS.includes(storedCodex)) channelChoices.codex = storedCodex;
-      else if (legacyLock === "custom" || String(storage.getItem("ae_mcp_codex_provider") || "").trim()) {
-        channelChoices.codex = "custom";
-      }
+      else if (legacyLock === "custom") channelChoices.codex = "cli";
       storage.setItem("ae_mcp_channel_claude", channelChoices.claude);
       storage.setItem("ae_mcp_channel_codex", channelChoices.codex);
+      storage.setItem("ae_mcp_channel_opencode", channelChoices.opencode);
       storage.removeItem("ae_mcp_channel_lock");
     } catch (e) {
     }
@@ -43719,21 +40051,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   init_cep_runtime_inject();
   var FILE_NAME = "providers.json";
   var STATE_KEYS = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
-  var VALUE_REF_KEYS2 = ["kind", "reference", "revision"];
+  var VALUE_REF_KEYS = ["kind", "reference", "revision"];
   var LOCK_KEYS = ["createdAt", "ownerNonce", "pid", "schemaVersion"];
   var RELEASED_LOCK_NONCES = /* @__PURE__ */ new Set();
   var MAX_RELEASED_LOCK_NONCES = 256;
   var LOCK_STALE_AFTER_MS = 3e4;
-  function cepRequire3() {
+  function cepRequire2() {
     var _a, _b, _c;
     if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
     if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
     if (globalThis.require) return globalThis.require;
     return null;
   }
-  function defaultDeps2() {
-    const req = cepRequire3();
-    if (!req) throw storeError("PROVIDER_STORE_UNAVAILABLE");
+  function defaultDeps() {
+    const req = cepRequire2();
+    if (!req) throw storeError2("PROVIDER_STORE_UNAVAILABLE");
     const processApi = req("process");
     return {
       fs: req("fs"),
@@ -43752,7 +40084,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
     };
   }
-  function storeError(code) {
+  function storeError2(code) {
     const messages = {
       PROVIDER_STORE_CONFLICT: "Provider store revision conflict",
       PROVIDER_STORE_INVALID: "Provider store is invalid",
@@ -43771,17 +40103,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function clone5(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
-  function normalizeValueRef2(value) {
-    if (!hasExactKeys2(value, VALUE_REF_KEYS2) || value.kind !== "secret") {
-      throw storeError("PROVIDER_STORE_INVALID");
+  function normalizeValueRef(value) {
+    if (!hasExactKeys2(value, VALUE_REF_KEYS) || value.kind !== "secret") {
+      throw storeError2("PROVIDER_STORE_INVALID");
     }
     try {
       parseProviderSecretReference(value.reference);
     } catch {
-      throw storeError("PROVIDER_STORE_INVALID");
+      throw storeError2("PROVIDER_STORE_INVALID");
     }
     if (!Number.isSafeInteger(value.revision) || value.revision <= 0) {
-      throw storeError("PROVIDER_STORE_INVALID");
+      throw storeError2("PROVIDER_STORE_INVALID");
     }
     return { kind: "secret", reference: value.reference, revision: value.revision };
   }
@@ -43789,7 +40121,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     try {
       validateProviderBaseUrl(value);
     } catch {
-      throw storeError("PROVIDER_STORE_INVALID");
+      throw storeError2("PROVIDER_STORE_INVALID");
     }
   }
   function providerSecretReferences(provider) {
@@ -43810,23 +40142,23 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
   function exactStatInteger(value) {
     if (typeof value === "bigint") {
-      if (value < BigInt(0)) throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      if (value < BigInt(0)) throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : value.toString(10);
     }
     if (!Number.isSafeInteger(value) || value < 0) {
-      throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      throw storeError2("PROVIDER_STORE_UNAVAILABLE");
     }
     return value;
   }
   function statTimeMilliseconds(value) {
     const number = typeof value === "bigint" ? Number(value) : value;
     if (!Number.isFinite(number) || number < 0 || !Number.isSafeInteger(Math.trunc(number))) {
-      throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      throw storeError2("PROVIDER_STORE_UNAVAILABLE");
     }
     return number;
   }
   function fileIdentity(stat) {
-    if (!stat || typeof stat !== "object") throw storeError("PROVIDER_STORE_UNAVAILABLE");
+    if (!stat || typeof stat !== "object") throw storeError2("PROVIDER_STORE_UNAVAILABLE");
     return {
       kind: "provider-file-identity-v1",
       dev: exactStatInteger(stat.dev),
@@ -43844,36 +40176,36 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     return fileIdentity(fs.statSync(file, { bigint: true }));
   }
-  function normalizeStateForVersion(value, version, normalizeProvider) {
-    if (!hasExactKeys2(value, STATE_KEYS)) throw storeError("PROVIDER_STORE_INVALID");
+  function normalizeStateForVersion(value, version, normalizeProvider2) {
+    if (!hasExactKeys2(value, STATE_KEYS)) throw storeError2("PROVIDER_STORE_INVALID");
     if (value.version !== version || !Number.isSafeInteger(value.revision) || value.revision < 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
-      throw storeError("PROVIDER_STORE_INVALID");
+      throw storeError2("PROVIDER_STORE_INVALID");
     }
-    const pendingSecretDeletes = value.pendingSecretDeletes.map(normalizeValueRef2);
+    const pendingSecretDeletes = value.pendingSecretDeletes.map(normalizeValueRef);
     const pendingKeys = /* @__PURE__ */ new Set();
     for (const ref of pendingSecretDeletes) {
-      if (pendingKeys.has(ref.reference)) throw storeError("PROVIDER_STORE_INVALID");
+      if (pendingKeys.has(ref.reference)) throw storeError2("PROVIDER_STORE_INVALID");
       pendingKeys.add(ref.reference);
     }
     const providers = value.providers.map((provider) => {
       try {
-        const normalized = normalizeProvider(provider);
+        const normalized = normalizeProvider2(provider);
         requireSafeProviderUrl(normalized.baseUrl);
         return normalized;
       } catch {
-        throw storeError("PROVIDER_STORE_INVALID");
+        throw storeError2("PROVIDER_STORE_INVALID");
       }
     });
     const ids = /* @__PURE__ */ new Set();
     const activeReferences = /* @__PURE__ */ new Map();
     for (const provider of providers) {
-      if (ids.has(provider.id)) throw storeError("PROVIDER_STORE_INVALID");
+      if (ids.has(provider.id)) throw storeError2("PROVIDER_STORE_INVALID");
       ids.add(provider.id);
       for (const valueRef of providerSecretReferences(provider)) {
-        if (pendingKeys.has(valueRef.reference)) throw storeError("PROVIDER_STORE_INVALID");
+        if (pendingKeys.has(valueRef.reference)) throw storeError2("PROVIDER_STORE_INVALID");
         const existingRevision = activeReferences.get(valueRef.reference);
         if (existingRevision !== void 0 && existingRevision !== valueRef.revision) {
-          throw storeError("PROVIDER_STORE_INVALID");
+          throw storeError2("PROVIDER_STORE_INVALID");
         }
         activeReferences.set(valueRef.reference, valueRef.revision);
       }
@@ -43895,9 +40227,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function normalizePersistedState(value) {
     if ((value == null ? void 0 : value.version) === 2) return normalizeStateV2(value);
     if ((value == null ? void 0 : value.version) === 3) return normalizeStateV3(value);
-    throw storeError("PROVIDER_STORE_INVALID");
+    throw storeError2("PROVIDER_STORE_INVALID");
   }
-  function emptyState2() {
+  function emptyState3() {
     return {
       version: 3,
       revision: 0,
@@ -43908,13 +40240,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
   function appendPending(existing, additions) {
     if (additions === void 0) return existing.slice();
-    if (!Array.isArray(additions)) throw storeError("PROVIDER_STORE_INVALID");
+    if (!Array.isArray(additions)) throw storeError2("PROVIDER_STORE_INVALID");
     const output = existing.slice();
     const seen = new Map(output.map((ref) => [ref.reference, ref.revision]));
     for (const raw of additions) {
-      const ref = normalizeValueRef2(raw);
+      const ref = normalizeValueRef(raw);
       if (seen.has(ref.reference)) {
-        if (seen.get(ref.reference) !== ref.revision) throw storeError("PROVIDER_STORE_INVALID");
+        if (seen.get(ref.reference) !== ref.revision) throw storeError2("PROVIDER_STORE_INVALID");
       } else {
         seen.set(ref.reference, ref.revision);
         output.push(ref);
@@ -43924,7 +40256,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
   function createProviderStore(inputDeps) {
     var _a;
-    const deps = inputDeps || defaultDeps2();
+    const deps = inputDeps || defaultDeps();
     const { fs, os, path } = deps;
     const now = typeof deps.now === "function" ? deps.now : Date.now;
     const pid = Number.isSafeInteger(deps.pid) && deps.pid > 0 ? deps.pid : 0;
@@ -44007,8 +40339,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
     }
     function lockLeaseExpired(snapshot) {
-      const timestamp2 = snapshot.metadata ? snapshot.metadata.createdAt : Math.max(snapshot.identity.mtimeMs, snapshot.identity.ctimeMs);
-      const age = now() - timestamp2;
+      const timestamp = snapshot.metadata ? snapshot.metadata.createdAt : Math.max(snapshot.identity.mtimeMs, snapshot.identity.ctimeMs);
+      const age = now() - timestamp;
       return Number.isFinite(age) && age >= LOCK_STALE_AFTER_MS;
     }
     function lockSnapshotIsRecoverable(snapshot) {
@@ -44077,13 +40409,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function createLockOwner() {
       if (pid <= 0 || typeof randomBytes !== "function") {
-        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       }
       let ownerNonce;
       try {
         ownerNonce = randomBytes.call(deps.crypto, 24).toString("hex");
       } catch {
-        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       }
       const metadata = normalizeLockMetadata({
         schemaVersion: 1,
@@ -44091,7 +40423,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         pid,
         createdAt: now()
       });
-      if (!metadata) throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      if (!metadata) throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       return metadata;
     }
     function acquireMutationLock(lock) {
@@ -44101,18 +40433,18 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       let fd;
       for (let attempt = 0; attempt < 2; attempt += 1) {
         if (((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, recovery)) && !recoverQuarantinedLock(lock)) {
-          throw storeError("PROVIDER_STORE_CONFLICT");
+          throw storeError2("PROVIDER_STORE_CONFLICT");
         }
         try {
           fd = fs.openSync(lock, "wx");
           break;
         } catch (error) {
-          if ((error == null ? void 0 : error.code) !== "EEXIST") throw storeError("PROVIDER_STORE_UNAVAILABLE");
+          if ((error == null ? void 0 : error.code) !== "EEXIST") throw storeError2("PROVIDER_STORE_UNAVAILABLE");
           if (attempt === 0 && recoverReleasedOrDeadLock(lock)) continue;
-          throw storeError("PROVIDER_STORE_CONFLICT");
+          throw storeError2("PROVIDER_STORE_CONFLICT");
         }
       }
-      if (fd === void 0) throw storeError("PROVIDER_STORE_CONFLICT");
+      if (fd === void 0) throw storeError2("PROVIDER_STORE_CONFLICT");
       try {
         fs.writeFileSync(fd, `${JSON.stringify(owner)}
 `, "utf8");
@@ -44121,7 +40453,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           fs.chmodSync(lock, 384);
         } catch {
         }
-        if ((_b = fs.existsSync) == null ? void 0 : _b.call(fs, recovery)) throw storeError("PROVIDER_STORE_CONFLICT");
+        if ((_b = fs.existsSync) == null ? void 0 : _b.call(fs, recovery)) throw storeError2("PROVIDER_STORE_CONFLICT");
       } catch (error) {
         try {
           fs.closeSync(fd);
@@ -44135,13 +40467,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         } catch {
         }
         if ((error == null ? void 0 : error.code) === "PROVIDER_STORE_CONFLICT") throw error;
-        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       }
       return { fd, owner };
     }
     function withMutationLock(operation) {
       if (typeof fs.openSync !== "function" || typeof fs.closeSync !== "function") {
-        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       }
       ensureDirectory();
       const lock = lockPath();
@@ -44181,26 +40513,26 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         text = fs.readFileSync(filePath(), "utf8");
       } catch (error) {
         if ((error == null ? void 0 : error.code) === "ENOENT" || !((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, filePath()))) return null;
-        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       }
       let parsed;
       try {
         parsed = JSON.parse(String(text));
       } catch {
-        throw storeError("PROVIDER_STORE_INVALID");
+        throw storeError2("PROVIDER_STORE_INVALID");
       }
       return { text: String(text), parsed };
     }
     function readState() {
       var _a2, _b;
       const raw = readRaw();
-      if (raw === null) return emptyState2();
+      if (raw === null) return emptyState3();
       if (((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1) {
-        throw storeError("PROVIDER_STORE_MIGRATION_REQUIRED");
+        throw storeError2("PROVIDER_STORE_MIGRATION_REQUIRED");
       }
       if (((_b = raw.parsed) == null ? void 0 : _b.version) === 2) {
         normalizeStateV2(raw.parsed);
-        throw storeError("PROVIDER_STORE_MIGRATION_REQUIRED");
+        throw storeError2("PROVIDER_STORE_MIGRATION_REQUIRED");
       }
       return normalizeStateV3(raw.parsed);
     }
@@ -44220,7 +40552,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         } catch {
         }
         if (!sameLockOwner(readLockMetadata(lockPath()), activeLockOwner) || ((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, `${lockPath()}.recovering`))) {
-          throw storeError("PROVIDER_STORE_CONFLICT");
+          throw storeError2("PROVIDER_STORE_CONFLICT");
         }
         fs.renameSync(tmp, filePath());
       } catch (error) {
@@ -44229,14 +40561,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         } catch {
         }
         if ((error == null ? void 0 : error.code) === "PROVIDER_STORE_INVALID" || (error == null ? void 0 : error.code) === "PROVIDER_STORE_CONFLICT") throw error;
-        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       }
       return clone5(state);
     }
     function assertExpected(state, expectedRevision) {
       if (expectedRevision === void 0) return;
       if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision !== state.revision) {
-        throw storeError("PROVIDER_STORE_CONFLICT");
+        throw storeError2("PROVIDER_STORE_CONFLICT");
       }
     }
     function list() {
@@ -44259,7 +40591,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       try {
         normalized = normalizeProviderEntryV3(entry);
       } catch {
-        throw storeError("PROVIDER_STORE_INVALID");
+        throw storeError2("PROVIDER_STORE_INVALID");
       }
       return withMutationLock(() => {
         const state = readState();
@@ -44292,11 +40624,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
     }
     function acknowledgeSecretDelete(reference, options = {}) {
-      if (typeof reference !== "string" || !reference) throw storeError("PROVIDER_STORE_INVALID");
+      if (typeof reference !== "string" || !reference) throw storeError2("PROVIDER_STORE_INVALID");
       try {
         parseProviderSecretReference(reference);
       } catch {
-        throw storeError("PROVIDER_STORE_INVALID");
+        throw storeError2("PROVIDER_STORE_INVALID");
       }
       return withMutationLock(() => {
         const state = readState();
@@ -44314,16 +40646,16 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         const raw = readRaw();
         if (options.expectedSourceRevision !== void 0) {
           if (typeof options.expectedSourceRevision !== "string" || !options.expectedSourceRevision) {
-            throw storeError("PROVIDER_STORE_INVALID");
+            throw storeError2("PROVIDER_STORE_INVALID");
           }
           const expectedSourceVersion = options.expectedSourceVersion === void 0 ? next.version - 1 : options.expectedSourceVersion;
           const currentSource = expectedSourceVersion === 1 ? readLegacyMigrationInput() : expectedSourceVersion === 2 ? readSchemaMigrationInput() : null;
           if (!currentSource || currentSource.sourceRevision !== options.expectedSourceRevision) {
-            throw storeError("PROVIDER_STORE_CONFLICT");
+            throw storeError2("PROVIDER_STORE_CONFLICT");
           }
         }
         if (options.expectedRevision !== void 0) {
-          const current = raw === null ? emptyState2() : normalizeStateV3(raw.parsed);
+          const current = raw === null ? emptyState3() : normalizeStateV3(raw.parsed);
           assertExpected(current, options.expectedRevision);
         }
         return { stateRevision: writeState(next).revision };
@@ -44340,7 +40672,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return raw !== null && ((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 2;
     }
     function stableMigrationInput(raw, state) {
-      if (typeof fs.statSync !== "function") throw storeError("PROVIDER_STORE_UNAVAILABLE");
+      if (typeof fs.statSync !== "function") throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       let firstIdentity;
       let secondIdentity;
       let secondRaw;
@@ -44350,10 +40682,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         secondIdentity = readFileIdentity(fs, filePath());
       } catch (error) {
         if ((error == null ? void 0 : error.code) === "PROVIDER_STORE_UNAVAILABLE") throw error;
-        throw storeError("PROVIDER_STORE_UNAVAILABLE");
+        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
       }
       if (secondRaw === null || secondRaw.text !== raw.text || JSON.stringify(firstIdentity) !== JSON.stringify(secondIdentity)) {
-        throw storeError("PROVIDER_STORE_CONFLICT");
+        throw storeError2("PROVIDER_STORE_CONFLICT");
       }
       return { sourceRevision: JSON.stringify(firstIdentity), state: clone5(state) };
     }
@@ -44362,11 +40694,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const raw = readRaw();
       if (raw === null || ((_a2 = raw.parsed) == null ? void 0 : _a2.version) !== 1) return null;
       if (!raw.parsed || typeof raw.parsed !== "object" || !Array.isArray(raw.parsed.providers)) {
-        throw storeError("PROVIDER_STORE_INVALID");
+        throw storeError2("PROVIDER_STORE_INVALID");
       }
       for (const provider of raw.parsed.providers) {
         if (!provider || typeof provider !== "object" || typeof provider.baseUrl !== "string") {
-          throw storeError("PROVIDER_STORE_INVALID");
+          throw storeError2("PROVIDER_STORE_INVALID");
         }
         requireSafeProviderUrl(provider.baseUrl);
       }
@@ -44383,7 +40715,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const keep = policy.keep === void 0 ? 3 : policy.keep;
       const maxAgeDays = policy.maxAgeDays === void 0 ? 30 : policy.maxAgeDays;
       if (!Number.isSafeInteger(keep) || keep < 1 || !Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
-        throw storeError("PROVIDER_STORE_INVALID");
+        throw storeError2("PROVIDER_STORE_INVALID");
       }
       const backupDir = path.join(dir(), "provider-backups");
       if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
@@ -44427,2116 +40759,475 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     });
   }
 
-  // src/cep/providerSecrets.js
+  // src/components/settings/ProviderManagerSection.jsx
   init_cep_runtime_inject();
-  var SLOT_PREFIXES = /* @__PURE__ */ new Set(["auth-model", "auth-probe", "header"]);
-  var PUBLIC_ERROR_CODES = /* @__PURE__ */ new Set([
-    "INVALID_REFERENCE",
-    "SECRET_CONFLICT",
-    "SECRET_NOT_FOUND",
-    "SECRET_STORE_UNAVAILABLE"
-  ]);
-  var HELPER_AVAILABILITY_CODES = /* @__PURE__ */ new Set([
-    "HELPER_UNAVAILABLE",
-    "HELPER_UNAUTHORIZED",
-    "PROTOCOL_VERSION_UNSUPPORTED",
-    "INVALID_REQUEST",
-    "MESSAGE_TOO_LARGE"
-  ]);
-  var PROVIDER_HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-  function providerSecretError(code) {
-    const messages = {
-      INVALID_REFERENCE: "Secret reference is invalid",
-      SECRET_CONFLICT: "Provider secret revision conflict",
-      SECRET_NOT_FOUND: "Provider secret was not found",
-      SECRET_STORE_UNAVAILABLE: "Provider secret store is unavailable",
-      SECRET_OPERATION_FAILED: "Provider secret operation failed"
-    };
-    const error = new Error(messages[code] || messages.SECRET_OPERATION_FAILED);
-    error.code = messages[code] ? code : "SECRET_OPERATION_FAILED";
-    return error;
-  }
-  function sanitizeHostError(error, fallback = "SECRET_OPERATION_FAILED") {
-    const code = HELPER_AVAILABILITY_CODES.has(error == null ? void 0 : error.code) ? "SECRET_STORE_UNAVAILABLE" : PUBLIC_ERROR_CODES.has(error == null ? void 0 : error.code) ? error.code : fallback;
-    return providerSecretError(code);
-  }
-  function hasExactKeys3(value, expected) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const keys = Object.keys(value).sort();
-    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
-  }
-  function normalizeValueRef3(valueRef) {
-    if (!hasExactKeys3(valueRef, ["kind", "reference", "revision"]) || valueRef.kind !== "secret") {
-      throw providerSecretError("INVALID_REFERENCE");
-    }
-    try {
-      parseProviderSecretReference(valueRef.reference);
-    } catch {
-      throw providerSecretError("INVALID_REFERENCE");
-    }
-    if (!Number.isSafeInteger(valueRef.revision) || valueRef.revision <= 0) {
-      throw providerSecretError("INVALID_REFERENCE");
-    }
-    return {
-      kind: "secret",
-      reference: valueRef.reference,
-      revision: valueRef.revision
-    };
-  }
-  function defaultRandomBytes3(size) {
-    if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
-      const bytes = new Uint8Array(size);
-      globalThis.crypto.getRandomValues(bytes);
-      return bytes;
-    }
-    throw providerSecretError("SECRET_STORE_UNAVAILABLE");
-  }
-  function randomSuffix(randomBytes) {
-    let bytes;
-    try {
-      bytes = randomBytes(8);
-    } catch (error) {
-      throw sanitizeHostError(error, "SECRET_STORE_UNAVAILABLE");
-    }
-    if (!bytes || typeof bytes.length !== "number" || bytes.length < 4 || bytes.length > 10) {
-      throw providerSecretError("SECRET_STORE_UNAVAILABLE");
-    }
-    return Array.from(bytes, (byte) => {
-      if (!Number.isInteger(byte) || byte < 0 || byte > 255) {
-        throw providerSecretError("SECRET_STORE_UNAVAILABLE");
-      }
-      return byte.toString(16).padStart(2, "0");
-    }).join("");
-  }
-  function validRevision(value) {
-    return Number.isSafeInteger(value) && value > 0;
-  }
-  function ambiguousCreateFailure(error) {
-    return !(error == null ? void 0 : error.code) || HELPER_AVAILABILITY_CODES.has(error.code) || error.code === "SECRET_STORE_UNAVAILABLE" || error.code === "SECRET_OPERATION_FAILED";
-  }
-  function createProviderSecretService({
-    getHost,
-    createReference = createProviderSecretReference,
-    randomBytes = defaultRandomBytes3
-  } = {}) {
-    if (typeof getHost !== "function") throw new TypeError("getHost must be a function");
-    if (typeof createReference !== "function") throw new TypeError("createReference must be a function");
-    if (typeof randomBytes !== "function") throw new TypeError("randomBytes must be a function");
-    const redactionValues = /* @__PURE__ */ new Set();
-    function rememberForRedaction(value) {
-      if (typeof value === "string" && value) redactionValues.add(value);
-    }
-    function getRedactionValues() {
-      return Array.from(redactionValues).sort((left, right) => right.length - left.length);
-    }
-    function requireHost() {
-      let host;
-      try {
-        host = getHost();
-      } catch (error) {
-        throw sanitizeHostError(error, "SECRET_STORE_UNAVAILABLE");
-      }
-      if (!host || typeof host.secretGet !== "function" || typeof host.secretSet !== "function" || typeof host.secretDelete !== "function") {
-        throw providerSecretError("SECRET_STORE_UNAVAILABLE");
-      }
-      return host;
-    }
-    async function resolve(valueRef) {
-      const normalized = normalizeValueRef3(valueRef);
-      let result;
-      try {
-        result = await requireHost().secretGet(normalized.reference);
-      } catch (error) {
-        throw sanitizeHostError(error);
-      }
-      if (!hasExactKeys3(result, ["reference", "revision", "value"]) || result.reference !== normalized.reference || result.revision !== normalized.revision || typeof result.value !== "string") {
-        throw providerSecretError("SECRET_CONFLICT");
-      }
-      rememberForRedaction(result.value);
-      return result.value;
-    }
-    async function create(input) {
-      if (!input || typeof input !== "object" || typeof input.credentialId !== "string" || !SLOT_PREFIXES.has(input.slotPrefix) || typeof input.value !== "string" || input.value.length === 0) {
-        throw providerSecretError("INVALID_REFERENCE");
-      }
-      let reference;
-      try {
-        reference = createReference({
-          providerId: input.credentialId,
-          slot: `${input.slotPrefix}-${randomSuffix(randomBytes)}`
-        });
-        parseProviderSecretReference(reference);
-      } catch (error) {
-        throw sanitizeHostError(error, "INVALID_REFERENCE");
-      }
-      const host = requireHost();
-      let created;
-      try {
-        created = await host.secretSet({ reference, value: input.value, expectedRevision: null });
-      } catch (error) {
-        if (ambiguousCreateFailure(error)) {
-          let recoveryCompleted = false;
-          let recovered;
-          try {
-            recovered = await host.secretGet(reference);
-            recoveryCompleted = true;
-          } catch {
-          }
-          if (recoveryCompleted) {
-            if (!hasExactKeys3(recovered, ["reference", "revision", "value"]) || recovered.reference !== reference || !validRevision(recovered.revision) || recovered.value !== input.value) {
-              throw providerSecretError("SECRET_CONFLICT");
-            }
-            rememberForRedaction(input.value);
-            return Object.freeze({ kind: "secret", reference, revision: recovered.revision });
-          }
-        }
-        throw sanitizeHostError(error);
-      }
-      if (!created || created.reference !== reference || !validRevision(created.revision)) {
-        throw providerSecretError("SECRET_CONFLICT");
-      }
-      let readback;
-      let readbackError = null;
-      try {
-        readback = await host.secretGet(reference);
-      } catch (error) {
-        readbackError = sanitizeHostError(error);
-      }
-      const readbackMatches = !readbackError && hasExactKeys3(readback, ["reference", "revision", "value"]) && readback.reference === reference && readback.revision === created.revision && readback.value === input.value;
-      if (!readbackMatches) {
-        try {
-          await host.secretDelete({ reference, expectedRevision: created.revision });
-        } catch {
-        }
-        if (readbackError) throw readbackError;
-        throw providerSecretError("SECRET_CONFLICT");
-      }
-      rememberForRedaction(input.value);
-      return Object.freeze({ kind: "secret", reference, revision: created.revision });
-    }
-    async function deleteSecret(valueRef) {
-      const normalized = normalizeValueRef3(valueRef);
-      let result;
-      try {
-        result = await requireHost().secretDelete({
-          reference: normalized.reference,
-          expectedRevision: normalized.revision
-        });
-      } catch (error) {
-        throw sanitizeHostError(error);
-      }
-      if (!result || typeof result.deleted !== "boolean" || result.reference !== void 0 && result.reference !== normalized.reference || result.revision !== null && !validRevision(result.revision)) {
-        throw providerSecretError("SECRET_CONFLICT");
-      }
-      return { deleted: result.deleted, revision: result.revision };
-    }
-    return Object.freeze({ resolve, create, delete: deleteSecret, getRedactionValues });
-  }
-  async function resolveAuth(policy, secretService) {
-    if (policy.kind === "none") return { kind: "none" };
-    const value = await secretService.resolve(policy.valueRef);
-    if (policy.kind === "bearer") {
-      return { kind: "header", name: "Authorization", value: `Bearer ${value}` };
-    }
-    if (policy.kind === "x-api-key") {
-      return { kind: "header", name: "x-api-key", value };
-    }
-    return { kind: "header", name: policy.headerName, value };
-  }
-  function normalizeAuthChoice(value) {
-    if (!hasExactKeys3(value, ["headerName", "scheme"])) {
-      throw providerSecretError("INVALID_REFERENCE");
-    }
-    if (!["none", "bearer", "x-api-key", "custom"].includes(value.scheme)) {
-      throw providerSecretError("INVALID_REFERENCE");
-    }
-    const headerName = value.headerName === null ? null : String(value.headerName || "").trim();
-    if (value.scheme === "custom" !== Boolean(headerName) || headerName !== null && !PROVIDER_HEADER_NAME.test(headerName)) {
-      throw providerSecretError("INVALID_REFERENCE");
-    }
-    return { scheme: value.scheme, headerName };
-  }
-  async function resolveCredentialAuth(choice, valueRef, secretService) {
-    if (choice.scheme === "none") return { kind: "none" };
-    if (!valueRef) throw providerSecretError("INVALID_REFERENCE");
-    const value = await secretService.resolve(valueRef);
-    if (choice.scheme === "bearer") {
-      return { kind: "header", name: "Authorization", value: `Bearer ${value}` };
-    }
-    if (choice.scheme === "x-api-key") {
-      return { kind: "header", name: "x-api-key", value };
-    }
-    return { kind: "header", name: choice.headerName, value };
-  }
-  function capabilityTarget(provider, { modelId, protocol }) {
-    const selectedModelId = String(modelId || "").trim();
-    if (!selectedModelId || !["responses", "chat", "messages"].includes(protocol)) return null;
-    const model = provider.modelCapabilities.find((entry) => entry.modelId === selectedModelId);
-    const capability = model == null ? void 0 : model[protocol];
-    return capability && capability.status !== "unknown" ? capability : null;
-  }
-  function validatedApiRoot(value, provider) {
-    if (!value) return provider.baseUrl;
-    let apiRoot;
-    try {
-      apiRoot = validateProviderBaseUrl(value, {
-        allowInsecureHttp: provider.allowInsecureHttp,
-        requireTransportApproval: true
-      });
-    } catch {
-      throw providerSecretError("INVALID_REFERENCE");
-    }
-    if (new URL(apiRoot).origin !== new URL(provider.baseUrl).origin) {
-      throw providerSecretError("INVALID_REFERENCE");
-    }
-    return apiRoot;
-  }
-  async function resolveProviderRequestProfileV3(provider, {
-    scope,
-    secretService,
-    modelId,
-    protocol,
-    authChoice: authChoice2,
-    apiRoot
-  }) {
-    const target = scope === "model" ? capabilityTarget(provider, { modelId, protocol }) : null;
-    let auth;
-    if (scope === "probe" && provider.probeAuthOverride !== null) {
-      auth = await resolveAuth(provider.probeAuthOverride, secretService);
-    } else {
-      let selectedChoice = authChoice2 === void 0 || authChoice2 === null ? (target == null ? void 0 : target.auth) || (scope === "probe" && provider.modelList.status === "supported" ? provider.modelList.auth : provider.credential.preferredAuth) : normalizeAuthChoice(authChoice2);
-      if (selectedChoice.scheme === "auto") {
-        selectedChoice = provider.credential.valueRef ? { scheme: "bearer", headerName: null } : { scheme: "none", headerName: null };
-      }
-      auth = await resolveCredentialAuth(
-        normalizeAuthChoice(selectedChoice),
-        provider.credential.valueRef,
-        secretService
-      );
-    }
-    const extraHeaders = [];
-    for (const header of provider.headers) {
-      if (!header.scopes.includes(scope)) continue;
-      if (header.valueRef.kind === "literal") {
-        extraHeaders.push({ name: header.name, value: header.valueRef.value, source: "literal" });
-      } else {
-        extraHeaders.push({
-          name: header.name,
-          value: await secretService.resolve(header.valueRef),
-          source: "secret"
-        });
-      }
-    }
-    return {
-      providerId: provider.id,
-      baseUrl: validatedApiRoot(apiRoot || (target == null ? void 0 : target.apiRoot) || (scope === "probe" && provider.modelList.status === "supported" ? provider.modelList.apiRoot : provider.baseUrl), provider),
-      allowInsecureHttp: provider.allowInsecureHttp,
-      auth,
-      extraHeaders,
-      requestProfileRevision: provider.requestProfileRevision
-    };
-  }
-  async function resolveProviderRequestProfile(provider, {
-    scope,
-    secretService,
-    modelId,
-    protocol,
-    authChoice: authChoice2,
-    apiRoot
-  } = {}) {
-    if (scope !== "probe" && scope !== "model") throw new TypeError("scope must be probe or model");
-    if (!secretService || typeof secretService.resolve !== "function") {
-      throw new TypeError("secretService.resolve is required");
-    }
-    if (provider && Object.hasOwn(provider, "credential")) {
-      const normalizedV3 = normalizeProviderEntryV3(provider);
-      return resolveProviderRequestProfileV3(normalizedV3, {
-        scope,
-        secretService,
-        modelId,
-        protocol,
-        authChoice: authChoice2,
-        apiRoot
-      });
-    }
-    const normalized = normalizeProviderEntryV2(provider);
-    const selected = scope === "probe" && normalized.auth.probe.kind === "inherit-model" ? normalized.auth.model : normalized.auth[scope];
-    const extraHeaders = [];
-    for (const header of normalized.headers) {
-      if (!header.scopes.includes(scope)) continue;
-      if (header.valueRef.kind === "literal") {
-        extraHeaders.push({ name: header.name, value: header.valueRef.value, source: "literal" });
-      } else {
-        extraHeaders.push({
-          name: header.name,
-          value: await secretService.resolve(header.valueRef),
-          source: "secret"
-        });
-      }
-    }
-    return {
-      providerId: normalized.id,
-      baseUrl: normalized.baseUrl,
-      allowInsecureHttp: normalized.allowInsecureHttp,
-      auth: await resolveAuth(selected, secretService),
-      extraHeaders,
-      authProfileRevision: normalized.authProfileRevision
-    };
-  }
+  var import_react43 = __toESM(require_react(), 1);
 
-  // src/cep/providerAcceptanceBridge.js
+  // src/lib/providerManagerState.js
   init_cep_runtime_inject();
-  var PROTOCOLS2 = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
-  var CAPABILITY_STATUSES = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
-  var AGENT_FEATURES = Object.freeze([
-    "compact",
-    "continuation",
-    "countTokens",
-    "namespaceTools",
-    "reasoningReplay",
-    "stream",
-    "terminal",
-    "tools"
-  ]);
-  var ROUTE_FEATURES = Object.freeze(["generate", ...AGENT_FEATURES]);
-  var ROUTE_REASON_CODES = /* @__PURE__ */ new Set([
-    "invalid-request",
-    "invalid-provider",
-    "needs-probe",
-    "override-selected",
-    "selected",
-    "unavailable"
-  ]);
-  var PROBE_REASONS = /* @__PURE__ */ new Set([
-    "authentication",
-    "capability-incompatible",
-    "configuration",
-    "network",
-    "path-unsupported"
-  ]);
-  var PROBE_SUPPORT = /* @__PURE__ */ new Set([
-    "authentication",
-    "invalid",
-    "supported",
-    "transient",
-    "unsupported"
-  ]);
-  var PROBE_ERROR_CLASSES = /* @__PURE__ */ new Set([
-    "authentication",
-    "configuration",
-    "endpoint-unsupported",
-    "invalid-schema",
-    "model-unsupported",
-    "network",
-    "protocol-unsupported",
-    "rate-limited",
-    "request-rejected",
-    "upstream-transient"
-  ]);
-  var CLIENTS = Object.freeze({
-    responses: "codex",
-    messages: "claude-code"
-  });
-  function bridgeError(code) {
-    const messages = {
-      PROVIDER_ACCEPTANCE_BRIDGE_DISPOSED: "Provider acceptance bridge is disposed.",
-      PROVIDER_ACCEPTANCE_CALLBACK_FAILED: "Provider acceptance state refresh failed.",
-      PROVIDER_ACCEPTANCE_INVALID_MODELS: "Provider acceptance model list is invalid.",
-      PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN: "Provider acceptance panel turn is invalid.",
-      PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND: "Provider was not found.",
-      PROVIDER_ACCEPTANCE_PROBE_FAILED: "Provider acceptance probe failed.",
-      PROVIDER_ACCEPTANCE_ROUTE_CLOSE_FAILED: "Provider acceptance route did not close cleanly.",
-      PROVIDER_ACCEPTANCE_ROUTE_FAILED: "Provider acceptance route failed.",
-      PROVIDER_ACCEPTANCE_STORE_CONFLICT: "Provider store changed during acceptance probing.",
-      PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE: "Provider acceptance state is unavailable."
-    };
-    const error = new Error(messages[code] || messages.PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE);
-    error.code = messages[code] ? code : "PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE";
-    return error;
-  }
-  function absoluteAttachmentPath(value) {
-    return typeof value === "string" && value.length > 0 && value.length <= 4096 && !/[\0\r\n]/.test(value) && (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value));
-  }
-  function normalizePanelAcceptanceTurns(input = {}) {
-    const hasPrompts = Array.isArray(input.prompts);
-    const hasTurns = Array.isArray(input.turns);
-    if (hasPrompts === hasTurns) {
-      throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN");
-    }
-    const source = hasTurns ? input.turns : input.prompts.map((value) => ({
-      text: String(value || "").trim(),
-      attachments: []
-    }));
-    if (source.length < 1 || source.length > 4) {
-      throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN");
-    }
-    try {
-      return Object.freeze(source.map((value, index) => {
-        if (!value || typeof value !== "object" || Array.isArray(value)) {
-          throw new TypeError("turn must be an object");
-        }
-        const turn = normalizeTurnInput({
-          ...value,
-          turnId: `provider-acceptance-${index + 1}`
-        });
-        if (turn.text.length > 2e3 || turn.attachments.some((attachment) => !absoluteAttachmentPath(
-          attachment.localPath
-        ))) {
-          throw new TypeError("turn is outside the acceptance boundary");
-        }
-        return turn;
-      }));
-    } catch {
-      throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN");
-    }
-  }
-  function countMentionedPanelAttachments(transcript, attachments) {
-    const assistantText = Array.isArray(transcript) ? transcript.filter((message) => (message == null ? void 0 : message.role) === "assistant" && typeof message.text === "string").map((message) => message.text).join("\n") : "";
-    if (!assistantText || !Array.isArray(attachments)) return 0;
-    const names = new Set(attachments.flatMap((attachment) => typeof (attachment == null ? void 0 : attachment.name) === "string" && attachment.name ? [attachment.name] : []));
-    let count = 0;
-    for (const name of names) {
-      if (assistantText.includes(name)) count += 1;
-    }
-    return count;
-  }
-  function dependency(name, value, predicate) {
-    if (!predicate(value)) throw new TypeError(`${name} is required`);
-    return value;
-  }
-  function safeRevision(value) {
-    return Number.isSafeInteger(value) && value >= 0 ? value : 0;
-  }
-  function safeStatus(value) {
-    return CAPABILITY_STATUSES.has(value) ? value : "unknown";
-  }
-  function agentFeatureSummary(value) {
-    return Object.fromEntries(AGENT_FEATURES.map((name) => [name, safeStatus(value == null ? void 0 : value[name])]));
-  }
-  function routeFeatureSummary(value) {
-    return Object.fromEntries(ROUTE_FEATURES.map((name) => [name, safeStatus(value == null ? void 0 : value[name])]));
-  }
-  function capabilitySummary(value) {
+  function emptyDraft() {
     return {
-      status: safeStatus(value == null ? void 0 : value.status),
-      requestProfileRevision: safeRevision(value == null ? void 0 : value.requestProfileRevision),
-      modelListRevision: safeRevision(value == null ? void 0 : value.modelListRevision),
-      agentFeatures: agentFeatureSummary(value == null ? void 0 : value.agentFeatures)
+      id: "",
+      name: "",
+      baseUrl: "",
+      allowInsecureHttp: false,
+      modelAuthKind: "auto",
+      modelAuthAutomatic: false,
+      modelAuthHeaderName: "",
+      modelAuthSecret: "",
+      headers: [],
+      probePreference: ""
     };
   }
-  function modelIdOf(value) {
-    const modelId = typeof value === "string" ? value : value == null ? void 0 : value.id;
-    return typeof modelId === "string" && modelId.trim() ? modelId.trim() : null;
+  function headerDraft(header) {
+    var _a;
+    if (((_a = header == null ? void 0 : header.valueRef) == null ? void 0 : _a.kind) === "literal") {
+      return {
+        id: header.id,
+        name: header.name,
+        scopes: Array.isArray(header.scopes) ? header.scopes.slice() : [],
+        valueKind: "literal",
+        value: header.valueRef.value
+      };
+    }
+    return {
+      id: header.id,
+      name: header.name,
+      scopes: Array.isArray(header.scopes) ? header.scopes.slice() : [],
+      valueKind: "secret",
+      value: ""
+    };
   }
-  function providerSummary(provider) {
+  function legacyAuth(entry) {
+    var _a;
+    const model = ((_a = entry == null ? void 0 : entry.auth) == null ? void 0 : _a.model) || { kind: "none" };
+    return {
+      scheme: model.kind || "none",
+      headerName: model.kind === "custom" ? model.headerName : null
+    };
+  }
+  function draftFromEntry(entry) {
     var _a, _b, _c;
-    const modelIds = [];
-    const seen = /* @__PURE__ */ new Set();
-    const addModelId = (value) => {
-      const modelId = modelIdOf(value);
-      if (!modelId || seen.has(modelId)) return;
-      seen.add(modelId);
-      modelIds.push(modelId);
-    };
-    for (const model of ((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models) || []) addModelId(model);
-    for (const capability of (provider == null ? void 0 : provider.modelCapabilities) || []) addModelId(capability == null ? void 0 : capability.modelId);
+    const auth = ((_a = entry == null ? void 0 : entry.credential) == null ? void 0 : _a.preferredAuth) || legacyAuth(entry);
+    const legacyProbePreference = ((_c = (_b = entry == null ? void 0 : entry.dialect) == null ? void 0 : _b.override) == null ? void 0 : _c.source) === "manual" ? entry.dialect.override.wireApi : "";
     return {
-      id: typeof (provider == null ? void 0 : provider.id) === "string" ? provider.id : "",
-      name: typeof (provider == null ? void 0 : provider.name) === "string" ? provider.name : "",
-      revisions: {
-        requestProfile: safeRevision(provider == null ? void 0 : provider.requestProfileRevision),
-        modelList: safeRevision((_b = provider == null ? void 0 : provider.modelList) == null ? void 0 : _b.revision)
-      },
-      modelListStatus: safeStatus((_c = provider == null ? void 0 : provider.modelList) == null ? void 0 : _c.status),
-      modelIds,
-      capabilities: ((provider == null ? void 0 : provider.modelCapabilities) || []).flatMap((entry) => {
-        const modelId = modelIdOf(entry == null ? void 0 : entry.modelId);
-        if (!modelId) return [];
-        return [{
-          modelId,
-          responses: capabilitySummary(entry.responses),
-          chat: capabilitySummary(entry.chat),
-          messages: capabilitySummary(entry.messages)
-        }];
-      })
+      ...emptyDraft(),
+      id: String((entry == null ? void 0 : entry.id) || ""),
+      name: String((entry == null ? void 0 : entry.name) || ""),
+      baseUrl: String((entry == null ? void 0 : entry.baseUrl) || ""),
+      allowInsecureHttp: (entry == null ? void 0 : entry.allowInsecureHttp) === true,
+      modelAuthKind: auth.scheme || "auto",
+      modelAuthAutomatic: false,
+      modelAuthHeaderName: auth.scheme === "custom" ? String(auth.headerName || "") : "",
+      headers: Array.isArray(entry == null ? void 0 : entry.headers) ? entry.headers.map(headerDraft) : [],
+      probePreference: String((entry == null ? void 0 : entry.probePreference) || legacyProbePreference || "")
     };
   }
-  function routeSummary(route, clientProtocol) {
-    const upstreamProtocol = PROTOCOLS2.has(route == null ? void 0 : route.upstreamProtocol) ? route.upstreamProtocol : null;
-    const ok = (route == null ? void 0 : route.ok) === true && upstreamProtocol !== null;
-    const reasonCode = ROUTE_REASON_CODES.has(route == null ? void 0 : route.reasonCode) ? route.reasonCode : ok ? "selected" : "unavailable";
-    return {
-      ok,
-      clientProtocol,
-      upstreamProtocol,
-      conversion: ok ? clientProtocol === upstreamProtocol ? "native" : `${clientProtocol}-to-${upstreamProtocol}` : null,
-      reasonCode,
-      features: routeFeatureSummary(route == null ? void 0 : route.features)
-    };
-  }
-  function probeReason(value) {
-    return PROBE_REASONS.has(value) ? value : "probe-failed";
-  }
-  function probeDiagnostic(value) {
-    var _a, _b;
-    const protocols = {};
-    for (const protocol of PROTOCOLS2) {
-      const capability = (_a = value == null ? void 0 : value.capabilities) == null ? void 0 : _a[protocol];
-      protocols[protocol] = {
-        support: PROBE_SUPPORT.has(capability == null ? void 0 : capability.support) ? capability.support : "invalid",
-        errorClass: PROBE_ERROR_CLASSES.has(capability == null ? void 0 : capability.errorClass) ? capability.errorClass : null,
-        nonStreaming: ["valid", "invalid", "not-tested"].includes((_b = capability == null ? void 0 : capability.schema) == null ? void 0 : _b.nonStreaming) ? capability.schema.nonStreaming : "not-tested",
-        agentFeatures: agentFeatureSummary(capability == null ? void 0 : capability.agentFeatures)
-      };
+  function validateDraft(draft) {
+    if (!String((draft == null ? void 0 : draft.name) || "").trim() && !String((draft == null ? void 0 : draft.id) || "").trim()) {
+      return "\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A / name is required";
     }
-    return {
-      protocols,
-      attempts: Array.isArray(value == null ? void 0 : value.tried) ? value.tried.flatMap((entry) => {
-        if (typeof (entry == null ? void 0 : entry.step) !== "string" || !entry.step) return [];
-        return [{
-          step: entry.step.slice(0, 80),
-          status: Number.isInteger(entry.status) ? entry.status : 0,
-          outcome: ["network", "received"].includes(entry.outcome) ? entry.outcome : "unknown"
-        }];
-      }).slice(0, 128) : []
-    };
-  }
-  function modelIdsForProbe(value) {
-    if (!Array.isArray(value) || value.length === 0) {
-      throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_MODELS");
-    }
-    const output = [];
-    const seen = /* @__PURE__ */ new Set();
-    for (const raw of value) {
-      const modelId = typeof raw === "string" ? raw.trim() : "";
-      if (!modelId || modelId.length > 512 || /[\0\r\n]/.test(modelId)) {
-        throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_MODELS");
-      }
-      if (!seen.has(modelId)) {
-        seen.add(modelId);
-        output.push(modelId);
-      }
-    }
-    return output;
-  }
-  function localRouteInfo(value) {
-    let parsed;
+    let url;
     try {
-      parsed = new URL(value == null ? void 0 : value.origin);
+      url = new URL(String((draft == null ? void 0 : draft.baseUrl) || "").trim());
     } catch {
-      throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_FAILED");
+      return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
     }
-    const origin = parsed.origin;
-    const loopback = ["127.0.0.1", "[::1]", "::1"].includes(parsed.hostname);
-    if (parsed.protocol !== "http:" || !loopback || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash || (value == null ? void 0 : value.origin) !== origin || (value == null ? void 0 : value.openaiBaseUrl) !== `${origin}/v1` || (value == null ? void 0 : value.anthropicBaseUrl) !== origin || typeof (value == null ? void 0 : value.routeToken) !== "string" || !/^\S{16,512}$/.test(value.routeToken)) {
-      throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_FAILED");
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
     }
+    for (const header of (draft == null ? void 0 : draft.headers) || []) {
+      const name = String((header == null ? void 0 : header.name) || "").trim();
+      if (isReservedProviderExtraHeaderName(name)) {
+        return "\u8BE5 Header \u4E0D\u5141\u8BB8\u8F6C\u53D1 / this header cannot be forwarded";
+      }
+      if ((header == null ? void 0 : header.valueKind) === "literal" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(header == null ? void 0 : header.value))) {
+        return "\u654F\u611F Header \u5FC5\u987B\u4F7F\u7528\u5B89\u5168\u51ED\u636E / sensitive headers require protected secrets";
+      }
+    }
+    return "";
+  }
+  function draftToEntry(draft) {
+    const name = String((draft == null ? void 0 : draft.name) || (draft == null ? void 0 : draft.id) || "").trim();
+    const id = String((draft == null ? void 0 : draft.id) || "").trim() || name.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
     return {
-      origin,
-      openaiBaseUrl: `${origin}/v1`,
-      anthropicBaseUrl: origin,
-      routeToken: value.routeToken
-    };
-  }
-  function mappedOperationalError(error, fallbackCode) {
-    return bridgeError((error == null ? void 0 : error.code) === "PROVIDER_STORE_CONFLICT" ? "PROVIDER_ACCEPTANCE_STORE_CONFLICT" : fallbackCode);
-  }
-  function createProviderAcceptanceBridge({
-    store,
-    secretService,
-    runProviderManagerProbe: runProviderManagerProbe2,
-    createUniversalProviderRoute: createUniversalProviderRoute2,
-    selectProviderRoute: selectProviderRoute2,
-    resolveProviderRequestProfile: resolveProviderRequestProfile2,
-    onProvidersChanged = () => {
-    }
-  } = {}) {
-    dependency("store", store, (value) => value && typeof value.list === "function" && typeof value.get === "function" && typeof value.readState === "function" && typeof value.upsert === "function");
-    dependency("secretService", secretService, (value) => value && typeof value.resolve === "function");
-    dependency("runProviderManagerProbe", runProviderManagerProbe2, (value) => typeof value === "function");
-    dependency("createUniversalProviderRoute", createUniversalProviderRoute2, (value) => typeof value === "function");
-    dependency("selectProviderRoute", selectProviderRoute2, (value) => typeof value === "function");
-    dependency("resolveProviderRequestProfile", resolveProviderRequestProfile2, (value) => typeof value === "function");
-    dependency("onProvidersChanged", onProvidersChanged, (value) => typeof value === "function");
-    let activeRoute = null;
-    let disposed = false;
-    let disposePromise = null;
-    let routeQueue = Promise.resolve();
-    const readRevision = () => {
-      try {
-        return safeRevision(store.readState().revision);
-      } catch {
-        throw bridgeError("PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE");
-      }
-    };
-    const readProvider = (providerId) => {
-      let provider;
-      try {
-        provider = store.get(String(providerId || "").trim());
-      } catch {
-        throw bridgeError("PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE");
-      }
-      if (!provider) throw bridgeError("PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND");
-      return provider;
-    };
-    const snapshot = () => {
-      var _a;
-      try {
-        return {
-          revision: safeRevision(store.readState().revision),
-          providers: store.list().map(providerSummary)
-        };
-      } catch (error) {
-        if ((_a = error == null ? void 0 : error.code) == null ? void 0 : _a.startsWith("PROVIDER_ACCEPTANCE_")) throw error;
-        throw bridgeError("PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE");
-      }
-    };
-    const notifyProvidersChanged = async () => {
-      try {
-        await onProvidersChanged(snapshot());
-      } catch {
-        throw bridgeError("PROVIDER_ACCEPTANCE_CALLBACK_FAILED");
-      }
-    };
-    const assertUsable = () => {
-      if (disposed) throw bridgeError("PROVIDER_ACCEPTANCE_BRIDGE_DISPOSED");
-    };
-    const summarizeSelectedRoutes = (provider, modelId) => ({
-      codex: routeSummary(selectProviderRoute2(provider, {
-        client: "codex",
-        modelId,
-        feature: "generate"
-      }), "responses"),
-      claude: routeSummary(selectProviderRoute2(provider, {
-        client: "claude-code",
-        modelId,
-        feature: "generate"
-      }), "messages")
-    });
-    const routes = (providerId, rawModelIds) => {
-      assertUsable();
-      const wantedProviderId = String(providerId || "").trim();
-      const modelIds = modelIdsForProbe(rawModelIds);
-      const provider = readProvider(wantedProviderId);
-      return {
-        providerId: wantedProviderId,
-        storeRevision: readRevision(),
-        results: modelIds.map((modelId) => ({
-          modelId,
-          routes: summarizeSelectedRoutes(provider, modelId)
-        }))
-      };
-    };
-    const probeAll = async (providerId, rawModelIds) => {
-      assertUsable();
-      const wantedProviderId = String(providerId || "").trim();
-      const modelIds = modelIdsForProbe(rawModelIds);
-      readProvider(wantedProviderId);
-      const initialRevision = readRevision();
-      let changed = false;
-      const results = [];
-      try {
-        for (const modelId of modelIds) {
-          const provider = readProvider(wantedProviderId);
-          const beforeRevision = readRevision();
-          const probe = await runProviderManagerProbe2(provider, {
-            store,
-            modelId,
-            forceDetect: true,
-            resolveRequestProfile: (entry, details) => resolveProviderRequestProfile2(entry, {
-              ...details,
-              secretService
-            })
-          });
-          const afterRevision = readRevision();
-          changed = changed || beforeRevision !== afterRevision;
-          const current = readProvider(wantedProviderId);
-          const preferredProtocol = PROTOCOLS2.has(probe == null ? void 0 : probe.preferredProtocol) ? probe.preferredProtocol : null;
-          results.push({
-            modelId,
-            ok: (probe == null ? void 0 : probe.ok) === true,
-            persisted: beforeRevision !== afterRevision,
-            storeRevision: afterRevision,
-            reason: (probe == null ? void 0 : probe.ok) === true ? null : probeReason(probe == null ? void 0 : probe.reason),
-            preferredProtocol,
-            diagnostic: probeDiagnostic(probe == null ? void 0 : probe.result),
-            routes: summarizeSelectedRoutes(current, modelId)
-          });
-        }
-      } catch (error) {
-        changed = changed || readRevision() !== initialRevision;
-        if (changed) {
-          try {
-            await notifyProvidersChanged();
-          } catch {
-          }
-        }
-        throw mappedOperationalError(error, "PROVIDER_ACCEPTANCE_PROBE_FAILED");
-      }
-      if (changed) await notifyProvidersChanged();
-      return {
-        providerId: wantedProviderId,
-        storeRevision: readRevision(),
-        results
-      };
-    };
-    const enqueueRoute = (operation) => {
-      const next = routeQueue.then(operation, operation);
-      routeQueue = next.then(() => void 0, () => void 0);
-      return next;
-    };
-    const closeActiveRoute = async () => {
-      const closing = activeRoute;
-      if (!closing) return { stopped: false, providerId: null };
-      try {
-        await closing.route.close();
-      } catch {
-        throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_CLOSE_FAILED");
-      }
-      if (activeRoute === closing) activeRoute = null;
-      return { stopped: true, providerId: closing.providerId };
-    };
-    const startRoute = (providerId) => enqueueRoute(async () => {
-      var _a, _b;
-      assertUsable();
-      await closeActiveRoute();
-      const provider = readProvider(providerId);
-      let route;
-      try {
-        route = createUniversalProviderRoute2({
-          provider,
-          resolveCapability: ({ modelId, clientProtocol, feature = "generate" }) => {
-            const client = CLIENTS[clientProtocol];
-            if (!client) {
-              return {
-                ok: false,
-                upstreamProtocol: null,
-                clientProtocol,
-                reasonCode: "invalid-request"
-              };
-            }
-            return selectProviderRoute2(provider, { client, modelId, feature });
-          },
-          resolveRequestProfile: (_entry, details) => resolveProviderRequestProfile2(provider, {
-            ...details,
-            secretService
-          })
-        });
-        if (!route || typeof route.start !== "function" || typeof route.close !== "function") {
-          throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_FAILED");
-        }
-        activeRoute = { providerId: provider.id, route };
-        const info = localRouteInfo(await route.start());
-        return info;
-      } catch (error) {
-        let closed = false;
-        try {
-          await ((_a = route == null ? void 0 : route.close) == null ? void 0 : _a.call(route));
-          closed = true;
-        } catch {
-        }
-        if (closed && (activeRoute == null ? void 0 : activeRoute.route) === route) activeRoute = null;
-        if ((_b = error == null ? void 0 : error.code) == null ? void 0 : _b.startsWith("PROVIDER_ACCEPTANCE_")) throw error;
-        throw bridgeError("PROVIDER_ACCEPTANCE_ROUTE_FAILED");
-      }
-    });
-    const stopRoute = () => enqueueRoute(closeActiveRoute);
-    const dispose = () => {
-      if (disposePromise) return disposePromise;
-      disposed = true;
-      disposePromise = enqueueRoute(async () => {
-        await closeActiveRoute();
-        return { disposed: true };
-      });
-      return disposePromise;
-    };
-    return Object.freeze({ snapshot, routes, probeAll, startRoute, stopRoute, dispose });
-  }
-
-  // src/cep/providerMigration.js
-  init_cep_runtime_inject();
-
-  // src/cep/platform/secret-migration.js
-  init_cep_runtime_inject();
-  var PHASES = /* @__PURE__ */ new Set(["pending", "secrets-written", "state-committed", "committed"]);
-  var JOURNAL_KEYS = ["entries", "migrationId", "phase", "schemaVersion", "sourceRevision", "updatedAt"];
-  var ENTRY_KEYS = ["id", "reference", "revision"];
-  var INITIAL_PHASE_OBSERVER = Symbol.for(
-    "com.junkdoge.ae-mcp.secret-migration.initial-phase"
-  );
-  var JOURNAL_STORES_BY_RUNNER = /* @__PURE__ */ new WeakMap();
-  function migrationError(code, message) {
-    const error = new Error(message);
-    error.code = code;
-    return error;
-  }
-  function invalidPlan() {
-    return migrationError("INVALID_MIGRATION_PLAN", "Secret migration plan is invalid");
-  }
-  function invalidJournal() {
-    return migrationError("INVALID_MIGRATION_JOURNAL", "Secret migration journal is invalid");
-  }
-  function secretConflict() {
-    return migrationError("SECRET_CONFLICT", "Secret migration conflict");
-  }
-  function hasExactKeys4(value, expected) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const keys = Object.keys(value).sort();
-    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
-  }
-  function validRevision2(value) {
-    return Number.isSafeInteger(value) && value > 0;
-  }
-  function normalizeJournalShape(value, migrationId) {
-    if (!hasExactKeys4(value, JOURNAL_KEYS)) throw invalidJournal();
-    if (value.schemaVersion !== 1 || value.migrationId !== migrationId) throw invalidJournal();
-    if (typeof value.sourceRevision !== "string" || !value.sourceRevision) throw invalidJournal();
-    if (!PHASES.has(value.phase)) throw invalidJournal();
-    if (!Number.isFinite(value.updatedAt) || value.updatedAt < 0) throw invalidJournal();
-    if (!Array.isArray(value.entries)) throw invalidJournal();
-    const ids = /* @__PURE__ */ new Set();
-    const references = /* @__PURE__ */ new Set();
-    const entries = value.entries.map((entry) => {
-      if (!hasExactKeys4(entry, ENTRY_KEYS)) throw invalidJournal();
-      if (typeof entry.id !== "string" || !entry.id || !validRevision2(entry.revision)) {
-        throw invalidJournal();
-      }
-      try {
-        parseProviderSecretReference(entry.reference);
-      } catch {
-        throw invalidJournal();
-      }
-      if (ids.has(entry.id) || references.has(entry.reference)) throw invalidJournal();
-      ids.add(entry.id);
-      references.add(entry.reference);
-      return { id: entry.id, reference: entry.reference, revision: entry.revision };
-    });
-    return {
-      schemaVersion: 1,
-      migrationId: value.migrationId,
-      sourceRevision: value.sourceRevision,
-      phase: value.phase,
-      entries,
-      updatedAt: value.updatedAt
-    };
-  }
-  function normalizePlan(plan) {
-    if (!plan || typeof plan !== "object") throw invalidPlan();
-    if (typeof plan.migrationId !== "string" || !plan.migrationId) throw invalidPlan();
-    if (typeof plan.sourceRevision !== "string" || !plan.sourceRevision) throw invalidPlan();
-    if (!Array.isArray(plan.entries)) throw invalidPlan();
-    for (const callback of ["writeRedactedBackup", "commitRedactedState", "cleanupLegacyState"]) {
-      if (typeof plan[callback] !== "function") throw invalidPlan();
-    }
-    if (plan[INITIAL_PHASE_OBSERVER] !== void 0 && typeof plan[INITIAL_PHASE_OBSERVER] !== "function") {
-      throw invalidPlan();
-    }
-    const ids = /* @__PURE__ */ new Set();
-    const references = /* @__PURE__ */ new Set();
-    const entries = plan.entries.map((entry) => {
-      if (!entry || typeof entry !== "object") throw invalidPlan();
-      if (typeof entry.id !== "string" || !entry.id) throw invalidPlan();
-      if (typeof entry.reference !== "string" || typeof entry.legacyValue !== "string") throw invalidPlan();
-      parseProviderSecretReference(entry.reference);
-      if (ids.has(entry.id) || references.has(entry.reference)) throw invalidPlan();
-      ids.add(entry.id);
-      references.add(entry.reference);
-      return {
-        id: entry.id,
-        reference: entry.reference,
-        legacyValue: entry.legacyValue
-      };
-    });
-    return {
-      migrationId: plan.migrationId,
-      sourceRevision: plan.sourceRevision,
-      entries
-    };
-  }
-  function validateJournal(value, plan) {
-    const normalized = normalizeJournalShape(value, plan.migrationId);
-    if (normalized.sourceRevision !== plan.sourceRevision) throw invalidJournal();
-    if (normalized.entries.length > plan.entries.length) throw invalidJournal();
-    if (normalized.phase !== "pending" && normalized.entries.length !== plan.entries.length) {
-      throw invalidJournal();
-    }
-    const entries = normalized.entries.map((entry, index) => {
-      const planned = plan.entries[index];
-      if (!planned || entry.id !== planned.id || entry.reference !== planned.reference) {
-        throw invalidJournal();
-      }
-      return {
-        id: entry.id,
-        reference: entry.reference,
-        revision: entry.revision
-      };
-    });
-    return {
-      schemaVersion: 1,
-      migrationId: normalized.migrationId,
-      sourceRevision: normalized.sourceRevision,
-      phase: normalized.phase,
-      entries,
-      updatedAt: normalized.updatedAt
-    };
-  }
-  function timestamp(now) {
-    const value = now();
-    if (!Number.isFinite(value) || value < 0) throw invalidPlan();
-    return value;
-  }
-  async function persistJournal({ journalStore, now, plan, phase, entries }) {
-    const journal = {
-      schemaVersion: 1,
-      migrationId: plan.migrationId,
-      sourceRevision: plan.sourceRevision,
-      phase,
-      entries: entries.map((entry) => ({
-        id: entry.id,
-        reference: entry.reference,
-        revision: entry.revision
-      })),
-      updatedAt: timestamp(now)
-    };
-    await journalStore.writeAtomic(journal);
-    return journal;
-  }
-  function verifiedReadback(record, expected) {
-    if (!record || typeof record !== "object") throw secretConflict();
-    if (record.value !== expected.legacyValue || !validRevision2(record.revision)) {
-      throw secretConflict();
-    }
-    if (expected.revision !== void 0 && record.revision !== expected.revision) {
-      throw secretConflict();
-    }
-    if (record.reference !== void 0 && record.reference !== expected.reference) {
-      throw secretConflict();
-    }
-    return record.revision;
-  }
-  function publicEntries(entries) {
-    return Object.freeze(entries.map((entry) => Object.freeze({
-      id: entry.id,
-      reference: entry.reference,
-      revision: entry.revision
-    })));
-  }
-  function committedResult(plan, entries) {
-    return Object.freeze({
-      migrationId: plan.migrationId,
-      status: "committed",
-      entries: publicEntries(entries)
-    });
-  }
-  function readonlyJournal(value) {
-    const entries = Object.freeze(value.entries.map((entry) => Object.freeze({ ...entry })));
-    return Object.freeze({ ...value, entries });
-  }
-  async function readSecretMigrationJournalSnapshot(runner, migrationId) {
-    const journalStore = JOURNAL_STORES_BY_RUNNER.get(runner);
-    if (!journalStore || typeof migrationId !== "string" || !migrationId) throw invalidJournal();
-    let stored;
-    try {
-      stored = await journalStore.read(migrationId);
-    } catch {
-      throw invalidJournal();
-    }
-    if (stored === null) return null;
-    return readonlyJournal(normalizeJournalShape(stored, migrationId));
-  }
-  function createSecretMigrationRunner(input = {}) {
-    const { journalStore, secretStore, now = Date.now } = input;
-    if (!journalStore || typeof journalStore.read !== "function" || typeof journalStore.writeAtomic !== "function") {
-      throw new TypeError("An atomic journal store is required");
-    }
-    if (!secretStore || typeof secretStore.get !== "function" || typeof secretStore.set !== "function") {
-      throw new TypeError("A secret store is required");
-    }
-    if (typeof now !== "function") throw new TypeError("now must be a function");
-    const runner = Object.freeze({
-      async run(planInput) {
-        const plan = normalizePlan(planInput);
-        const writeRedactedBackup = planInput.writeRedactedBackup;
-        const commitRedactedState = planInput.commitRedactedState;
-        const cleanupLegacyState = planInput.cleanupLegacyState;
-        const initialPhaseObserver = planInput[INITIAL_PHASE_OBSERVER];
-        const stored = await journalStore.read(plan.migrationId);
-        let journal = stored === null ? null : validateJournal(stored, plan);
-        if (initialPhaseObserver) {
-          initialPhaseObserver(journal === null ? "pending" : journal.phase);
-        }
-        if (journal === null) {
-          journal = await persistJournal({
-            journalStore,
-            now,
-            plan,
-            phase: "pending",
-            entries: []
-          });
-        }
-        if (journal.phase === "committed") return committedResult(plan, journal.entries);
-        if (journal.phase === "pending") {
-          let written = journal.entries.slice();
-          for (let index = 0; index < plan.entries.length; index += 1) {
-            const entry = plan.entries[index];
-            const recorded = written[index];
-            let revision;
-            if (recorded) {
-              const existing = await secretStore.get(entry.reference);
-              revision = verifiedReadback(existing, {
-                reference: entry.reference,
-                legacyValue: entry.legacyValue,
-                revision: recorded.revision
-              });
-            } else {
-              let created = null;
-              try {
-                created = await secretStore.set({
-                  reference: entry.reference,
-                  value: entry.legacyValue,
-                  expectedRevision: null
-                });
-              } catch (error) {
-                if ((error == null ? void 0 : error.code) !== "SECRET_CONFLICT") throw error;
-              }
-              if (created === null) {
-                const existing = await secretStore.get(entry.reference);
-                revision = verifiedReadback(existing, {
-                  reference: entry.reference,
-                  legacyValue: entry.legacyValue
-                });
-              } else {
-                if (!created || created.reference !== entry.reference || !validRevision2(created.revision)) {
-                  throw secretConflict();
-                }
-                const readback = await secretStore.get(entry.reference);
-                revision = verifiedReadback(readback, {
-                  reference: entry.reference,
-                  legacyValue: entry.legacyValue,
-                  revision: created.revision
-                });
-              }
-              written = [...written, {
-                id: entry.id,
-                reference: entry.reference,
-                revision
-              }];
-              journal = await persistJournal({
-                journalStore,
-                now,
-                plan,
-                phase: "pending",
-                entries: written
-              });
-            }
-          }
-          journal = await persistJournal({
-            journalStore,
-            now,
-            plan,
-            phase: "secrets-written",
-            entries: written
-          });
-        }
-        if (journal.phase === "secrets-written") {
-          await writeRedactedBackup();
-          await commitRedactedState(publicEntries(journal.entries));
-          journal = await persistJournal({
-            journalStore,
-            now,
-            plan,
-            phase: "state-committed",
-            entries: journal.entries
-          });
-        }
-        if (journal.phase === "state-committed") {
-          await cleanupLegacyState();
-          journal = await persistJournal({
-            journalStore,
-            now,
-            plan,
-            phase: "committed",
-            entries: journal.entries
-          });
-        }
-        return committedResult(plan, journal.entries);
-      }
-    });
-    JOURNAL_STORES_BY_RUNNER.set(runner, journalStore);
-    return runner;
-  }
-
-  // src/cep/providerMigration.js
-  var DEFAULT_LEGACY_NAMESPACE = "6ba7b811-9dad-11d1-80b4-00c04fd430c8";
-  var MIGRATION_ID = "provider-store-v1-to-v2";
-  var STATE_KEYS2 = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
-  var VALUE_REF_KEYS3 = ["kind", "reference", "revision"];
-  var MIGRATION_PHASES = /* @__PURE__ */ new Set(["pending", "secrets-written", "state-committed", "committed"]);
-  var INITIAL_PHASE_OBSERVER2 = Symbol.for(
-    "com.junkdoge.ae-mcp.secret-migration.initial-phase"
-  );
-  function migrationError2() {
-    const error = new Error("Provider secret migration is invalid");
-    error.code = "INVALID_PROVIDER_MIGRATION";
-    return error;
-  }
-  function secretConflict2() {
-    const error = new Error("Provider secret migration conflict");
-    error.code = "SECRET_CONFLICT";
-    return error;
-  }
-  function hasExactKeys5(value, expected) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const keys = Object.keys(value).sort();
-    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
-  }
-  function uuidBytes(value) {
-    if (typeof value !== "string") throw migrationError2();
-    try {
-      createProviderSecretReference({ providerId: value, slot: "namespace" });
-    } catch {
-      throw migrationError2();
-    }
-    const hex = value.replace(/-/g, "");
-    return Uint8Array.from(hex.match(/../g), (part) => Number.parseInt(part, 16));
-  }
-  function utf8Bytes(value) {
-    if (typeof TextEncoder === "function") return new TextEncoder().encode(value);
-    const encoded = unescape(encodeURIComponent(value));
-    return Uint8Array.from(encoded, (character) => character.charCodeAt(0));
-  }
-  async function sha1(value) {
-    var _a, _b, _c, _d;
-    if (((_a = globalThis.crypto) == null ? void 0 : _a.subtle) && typeof globalThis.crypto.subtle.digest === "function") {
-      return new Uint8Array(await globalThis.crypto.subtle.digest("SHA-1", value));
-    }
-    const req = ((_c = (_b = globalThis.window) == null ? void 0 : _b.cep_node) == null ? void 0 : _c.require) || ((_d = globalThis.window) == null ? void 0 : _d.require) || globalThis.require;
-    if (typeof req === "function") {
-      const cryptoImpl = req("crypto");
-      const digest = cryptoImpl.createHash("sha1").update(value).digest();
-      return Uint8Array.from(digest);
-    }
-    throw migrationError2();
-  }
-  async function uuidV5(name, namespace) {
-    const namespaceBytes = uuidBytes(namespace);
-    const nameBytes = utf8Bytes(name);
-    const input = new Uint8Array(namespaceBytes.length + nameBytes.length);
-    input.set(namespaceBytes, 0);
-    input.set(nameBytes, namespaceBytes.length);
-    const bytes = (await sha1(input)).slice(0, 16);
-    bytes[6] = bytes[6] & 15 | 80;
-    bytes[8] = bytes[8] & 63 | 128;
-    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  }
-  async function credentialIdFor(providerId, legacyCredentialId) {
-    const value = typeof legacyCredentialId === "function" ? await legacyCredentialId(providerId) : await uuidV5(providerId, legacyCredentialId || DEFAULT_LEGACY_NAMESPACE);
-    try {
-      createProviderSecretReference({ providerId: value, slot: "auth-model" });
-    } catch {
-      throw migrationError2();
-    }
-    return value;
-  }
-  function normalizeLegacyProvider(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw migrationError2();
-    if (typeof value.id !== "string" || !value.id.trim()) throw migrationError2();
-    const id = value.id.trim();
-    const name = typeof value.name === "string" && value.name.trim() ? value.name.trim() : id;
-    const protocol = value.protocol === void 0 ? "openai-compatible" : value.protocol;
-    if (protocol !== "openai-compatible" && protocol !== "anthropic") throw migrationError2();
-    if (typeof value.baseUrl !== "string" || !value.baseUrl.trim()) throw migrationError2();
-    if (value.apiKey !== void 0 && typeof value.apiKey !== "string") throw migrationError2();
-    if (value.probedModels !== void 0 && !Array.isArray(value.probedModels)) throw migrationError2();
-    if (value.probedAt !== void 0 && (!Number.isFinite(value.probedAt) || value.probedAt < 0)) {
-      throw migrationError2();
-    }
-    return {
+      ...emptyDraft(),
+      ...draft || {},
       id,
       name,
-      protocol,
-      baseUrl: value.baseUrl,
-      apiKey: value.apiKey || "",
-      probedModels: value.probedModels || [],
-      probedAt: value.probedAt || 0
+      headers: Array.isArray(draft == null ? void 0 : draft.headers) ? draft.headers.map((header) => ({ ...header, scopes: [...header.scopes || []] })) : []
     };
-  }
-  async function buildMigrationInputs(legacyState, legacyCredentialId) {
-    if (!legacyState || typeof legacyState !== "object" || Array.isArray(legacyState)) {
-      throw migrationError2();
-    }
-    if (legacyState.version !== 1 || !Array.isArray(legacyState.providers)) throw migrationError2();
-    const ids = /* @__PURE__ */ new Set();
-    const providers = [];
-    const entries = [];
-    for (const rawProvider of legacyState.providers) {
-      const provider = normalizeLegacyProvider(rawProvider);
-      if (ids.has(provider.id)) throw migrationError2();
-      ids.add(provider.id);
-      const credentialId = await credentialIdFor(provider.id, legacyCredentialId);
-      const entryId = `${provider.id}:auth-model`;
-      const reference = createProviderSecretReference({ providerId: credentialId, slot: "auth-model" });
-      providers.push({ provider, credentialId, entryId });
-      if (provider.apiKey) {
-        entries.push({ entryId, reference, legacyValue: provider.apiKey });
-      }
-    }
-    return { providers, entries };
-  }
-  function normalizeWrittenEntries(entries, migrationInputs) {
-    if (!Array.isArray(entries) || entries.length !== migrationInputs.entries.length) {
-      throw secretConflict2();
-    }
-    return entries.map((entry, index) => {
-      const expected = migrationInputs.entries[index];
-      if (!hasExactKeys5(entry, ["id", "reference", "revision"]) || entry.id !== expected.entryId || entry.reference !== expected.reference || !Number.isSafeInteger(entry.revision) || entry.revision <= 0) {
-        throw secretConflict2();
-      }
-      return { id: entry.id, reference: entry.reference, revision: entry.revision };
-    });
-  }
-  function buildProviderV2State(legacyState, migrationInputs, writes) {
-    const normalizedWrites = normalizeWrittenEntries(writes, migrationInputs);
-    const writesById = new Map(normalizedWrites.map((entry) => [entry.id, entry]));
-    const providers = migrationInputs.providers.map(({ provider, credentialId, entryId }) => {
-      const write = writesById.get(entryId);
-      if (Boolean(provider.apiKey) !== Boolean(write)) throw secretConflict2();
-      return normalizeProviderEntryV2({
-        id: provider.id,
-        credentialId,
-        name: provider.name,
-        protocol: provider.protocol,
-        baseUrl: provider.baseUrl,
-        allowInsecureHttp: false,
-        authProfileRevision: 1,
-        auth: {
-          model: write ? {
-            kind: provider.protocol === "anthropic" ? "x-api-key" : "bearer",
-            valueRef: { kind: "secret", reference: write.reference, revision: write.revision }
-          } : { kind: "none" },
-          probe: { kind: "inherit-model" }
-        },
-        headers: [],
-        dialect: { override: null, detected: null },
-        probedModels: provider.probedModels,
-        probedAt: provider.probedAt
-      });
-    });
-    const state = {
-      version: 2,
-      revision: Number.isSafeInteger(legacyState.revision) && legacyState.revision > 0 ? legacyState.revision : 1,
-      migratedLegacy: true,
-      pendingSecretDeletes: [],
-      providers
-    };
-    assertNoLegacySecretInPersistedFields(
-      state,
-      migrationInputs.entries.map((entry) => entry.legacyValue)
-    );
-    return state;
-  }
-  function isSecretValueRef(value) {
-    return hasExactKeys5(value, VALUE_REF_KEYS3) && value.kind === "secret" && typeof value.reference === "string" && Number.isSafeInteger(value.revision) && value.revision > 0;
-  }
-  function assertNoLegacySecretInPersistedFields(value, legacySecrets) {
-    const forbidden = legacySecrets.filter((secret) => typeof secret === "string" && secret);
-    const embeddedForbidden = forbidden.filter((secret) => utf8Bytes(secret).length >= 8);
-    const decodePercentRuns3 = (input) => String(input).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
-      try {
-        return decodeURIComponent(run);
-      } catch {
-        return run;
-      }
-    });
-    const containsForbidden = (input) => {
-      let current = String(input);
-      for (let layer = 0; layer <= 3; layer += 1) {
-        if (forbidden.some((secret) => current === secret)) return true;
-        if (embeddedForbidden.some((secret) => current.includes(secret))) return true;
-        const decoded = decodePercentRuns3(current);
-        if (decoded === current) break;
-        current = decoded;
-      }
-      return false;
-    };
-    const visit = (current) => {
-      if (typeof current === "string") {
-        if (containsForbidden(current)) throw secretConflict2();
-        return;
-      }
-      if (!current || typeof current !== "object") return;
-      if (isSecretValueRef(current)) return;
-      if (Array.isArray(current)) {
-        current.forEach(visit);
-        return;
-      }
-      Object.values(current).forEach(visit);
-    };
-    visit(value);
-  }
-  function providerActiveReferences(provider) {
-    const references = [];
-    const add = (valueRef) => {
-      if ((valueRef == null ? void 0 : valueRef.kind) === "secret") references.push(valueRef.reference);
-    };
-    add(provider.auth.model.valueRef);
-    add(provider.auth.probe.valueRef);
-    provider.headers.forEach((header) => add(header.valueRef));
-    return references;
-  }
-  function readStrictProviderStateV2(value) {
-    if (!hasExactKeys5(value, STATE_KEYS2)) throw migrationError2();
-    if (value.version !== 2 || !Number.isSafeInteger(value.revision) || value.revision <= 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
-      throw migrationError2();
-    }
-    let providers;
-    try {
-      providers = value.providers.map((provider) => normalizeProviderEntryV2(provider));
-    } catch {
-      throw migrationError2();
-    }
-    const ids = /* @__PURE__ */ new Set();
-    const activeReferences = /* @__PURE__ */ new Set();
-    for (const provider of providers) {
-      if (ids.has(provider.id)) throw migrationError2();
-      ids.add(provider.id);
-      providerActiveReferences(provider).forEach((reference) => activeReferences.add(reference));
-    }
-    const pendingReferences = /* @__PURE__ */ new Set();
-    const pendingSecretDeletes = value.pendingSecretDeletes.map((ref) => {
-      if (!isSecretValueRef(ref)) throw migrationError2();
-      try {
-        parseProviderSecretReference(ref.reference);
-      } catch {
-        throw migrationError2();
-      }
-      if (pendingReferences.has(ref.reference) || activeReferences.has(ref.reference)) throw migrationError2();
-      pendingReferences.add(ref.reference);
-      return { kind: "secret", reference: ref.reference, revision: ref.revision };
-    });
-    return { ...value, pendingSecretDeletes, providers };
-  }
-  function validateProviderStateV2(value) {
-    const state = readStrictProviderStateV2(value);
-    if (state.pendingSecretDeletes.length !== 0) throw migrationError2();
-    return state;
-  }
-  function expectedMigrationEntriesFromV2State(value) {
-    var _a;
-    const state = validateProviderStateV2(value);
-    const entries = [];
-    for (const provider of state.providers) {
-      if (provider.allowInsecureHttp !== false || provider.authProfileRevision !== 1 || provider.auth.probe.kind !== "inherit-model" || provider.headers.length !== 0 || provider.dialect.override !== null || !Array.isArray(provider.dialect.detected) || provider.dialect.detected.length !== 0) {
-        throw migrationError2();
-      }
-      const model = provider.auth.model;
-      if (model.kind === "none") continue;
-      const expectedKind = provider.protocol === "anthropic" ? "x-api-key" : "bearer";
-      if (model.kind !== expectedKind || ((_a = model.valueRef) == null ? void 0 : _a.kind) !== "secret") throw migrationError2();
-      entries.push({
-        id: `${provider.id}:auth-model`,
-        reference: model.valueRef.reference,
-        revision: model.valueRef.revision
-      });
-    }
-    return entries;
-  }
-  function assertRecoveryStateMatchesJournal(state, journal) {
-    if (!journal || journal.phase === "pending") throw migrationError2();
-    const expected = expectedMigrationEntriesFromV2State(state);
-    if (expected.length !== journal.entries.length) throw migrationError2();
-    for (let index = 0; index < expected.length; index += 1) {
-      const actual = journal.entries[index];
-      const wanted = expected[index];
-      if (actual.id !== wanted.id || actual.reference !== wanted.reference || actual.revision !== wanted.revision) {
-        throw migrationError2();
-      }
-    }
-  }
-  async function recoverCommittedProviderState({ store, legacyKeyStore, runner, journal }) {
-    if (typeof store.readState !== "function") throw migrationError2();
-    const readCurrentState = () => {
-      let state;
-      try {
-        const schemaInput = typeof store.readSchemaMigrationInput === "function" ? store.readSchemaMigrationInput() : null;
-        state = (schemaInput == null ? void 0 : schemaInput.state) || store.readState();
-      } catch {
-        throw migrationError2();
-      }
-      return readStrictProviderStateV2(state);
-    };
-    if (journal.phase === "committed") {
-      readCurrentState();
-      return { status: "already-committed", written: 0, resumedFrom: "committed" };
-    }
-    if (typeof (legacyKeyStore == null ? void 0 : legacyKeyStore.cleanupCommittedProviderSecrets) !== "function") throw migrationError2();
-    const validateCurrentState = () => assertRecoveryStateMatchesJournal(readCurrentState(), journal);
-    validateCurrentState();
-    let resumedFrom = null;
-    const result = await runner.run({
-      migrationId: MIGRATION_ID,
-      sourceRevision: journal.sourceRevision,
-      entries: journal.entries.map((entry) => ({
-        id: entry.id,
-        reference: entry.reference,
-        legacyValue: ""
-      })),
-      [INITIAL_PHASE_OBSERVER2](phase) {
-        if (resumedFrom !== null || phase !== "secrets-written" && phase !== "state-committed") {
-          throw migrationError2();
-        }
-        resumedFrom = phase;
-      },
-      async writeRedactedBackup() {
-        validateCurrentState();
-      },
-      async commitRedactedState(entries) {
-        if (JSON.stringify(entries) !== JSON.stringify(journal.entries)) throw migrationError2();
-        validateCurrentState();
-      },
-      async cleanupLegacyState() {
-        await legacyKeyStore.cleanupCommittedProviderSecrets();
-      }
-    });
-    if (!result || result.status !== "committed" || resumedFrom === null || result.entries.length !== journal.entries.length) {
-      throw migrationError2();
-    }
-    return { status: "committed", written: result.entries.length, resumedFrom };
-  }
-  async function readWrittenEntries(secretStore, migrationInputs) {
-    const entries = [];
-    for (const expected of migrationInputs.entries) {
-      let record;
-      try {
-        if (secretStore && typeof secretStore.secretGet === "function") {
-          record = await secretStore.secretGet(expected.reference);
-        } else if (secretStore && typeof secretStore.get === "function") {
-          record = await secretStore.get(expected.reference);
-        } else {
-          throw migrationError2();
-        }
-      } catch (error) {
-        if ((error == null ? void 0 : error.code) === "INVALID_PROVIDER_MIGRATION") throw error;
-        throw secretConflict2();
-      }
-      if (!record || !hasExactKeys5(record, ["reference", "revision", "value"]) || record.reference !== expected.reference || record.value !== expected.legacyValue || !Number.isSafeInteger(record.revision) || record.revision <= 0) {
-        throw secretConflict2();
-      }
-      entries.push({ id: expected.entryId, reference: expected.reference, revision: record.revision });
-    }
-    return entries;
-  }
-  async function migrateProviderStoreSecrets({
-    store,
-    legacyKeyStore,
-    runner,
-    secretStore,
-    now = Date.now,
-    legacyCredentialId
-  } = {}) {
-    if (!store || typeof store.readLegacyMigrationInput !== "function" || typeof (runner == null ? void 0 : runner.run) !== "function" || typeof now !== "function") {
-      throw migrationError2();
-    }
-    const legacyInput = await store.readLegacyMigrationInput();
-    if (legacyInput === null) {
-      let journal;
-      try {
-        journal = await readSecretMigrationJournalSnapshot(runner, MIGRATION_ID);
-      } catch {
-        throw migrationError2();
-      }
-      if (journal === null) {
-        return { status: "already-committed", written: 0, resumedFrom: "committed" };
-      }
-      return recoverCommittedProviderState({ store, legacyKeyStore, runner, journal });
-    }
-    if (!legacyInput || typeof legacyInput !== "object" || typeof legacyInput.sourceRevision !== "string" || !legacyInput.sourceRevision) {
-      throw migrationError2();
-    }
-    if (typeof store.writeRedactedBackup !== "function" || typeof store.replaceState !== "function" || typeof (legacyKeyStore == null ? void 0 : legacyKeyStore.cleanupCommittedProviderSecrets) !== "function") {
-      throw migrationError2();
-    }
-    const migrationInputs = await buildMigrationInputs(legacyInput.state, legacyCredentialId);
-    let backupState = null;
-    let resumedFrom = null;
-    const result = await runner.run({
-      migrationId: MIGRATION_ID,
-      sourceRevision: legacyInput.sourceRevision,
-      entries: migrationInputs.entries.map((entry) => ({
-        id: entry.entryId,
-        reference: entry.reference,
-        legacyValue: entry.legacyValue
-      })),
-      [INITIAL_PHASE_OBSERVER2](phase) {
-        if (resumedFrom !== null || !MIGRATION_PHASES.has(phase)) throw migrationError2();
-        resumedFrom = phase;
-      },
-      async writeRedactedBackup() {
-        const writes = await readWrittenEntries(secretStore, migrationInputs);
-        backupState = validateProviderStateV2(
-          buildProviderV2State(legacyInput.state, migrationInputs, writes)
-        );
-        await store.writeRedactedBackup(backupState, { keep: 3, maxAgeDays: 30 });
-      },
-      async commitRedactedState(entries) {
-        const state = validateProviderStateV2(
-          buildProviderV2State(legacyInput.state, migrationInputs, entries)
-        );
-        if (backupState === null || JSON.stringify(backupState) !== JSON.stringify(state)) {
-          throw secretConflict2();
-        }
-        await store.replaceState(state, { expectedSourceRevision: legacyInput.sourceRevision });
-      },
-      async cleanupLegacyState() {
-        await legacyKeyStore.cleanupCommittedProviderSecrets();
-      }
-    });
-    if (!result || result.status !== "committed" || !Array.isArray(result.entries) || resumedFrom === null) {
-      throw migrationError2();
-    }
-    return { status: "committed", written: result.entries.length, resumedFrom };
   }
 
-  // src/cep/providerSchemaMigration.js
+  // src/lib/providerDialectBadge.js
   init_cep_runtime_inject();
-  var STATE_KEYS3 = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
-  var VALUE_REF_KEYS4 = ["kind", "reference", "revision"];
-  var MODEL_LIST_TTL_MS = 36e5;
-  function migrationError3() {
-    const error = new Error("Provider schema migration is invalid");
-    error.code = "INVALID_PROVIDER_MIGRATION";
-    return error;
-  }
-  function hasExactKeys6(value, expected) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const keys = Object.keys(value).sort();
-    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
-  }
-  function clone6(value) {
-    return value == null ? value : JSON.parse(JSON.stringify(value));
-  }
-  function normalizeValueRef4(value) {
-    if (!hasExactKeys6(value, VALUE_REF_KEYS4) || value.kind !== "secret" || !Number.isSafeInteger(value.revision) || value.revision <= 0) {
-      throw migrationError3();
-    }
-    try {
-      parseProviderSecretReference(value.reference);
-    } catch {
-      throw migrationError3();
-    }
-    return { kind: "secret", reference: value.reference, revision: value.revision };
-  }
-  function providerReferences(provider) {
-    const refs = [];
-    const add = (valueRef) => {
-      if ((valueRef == null ? void 0 : valueRef.kind) === "secret") refs.push(valueRef);
-    };
-    add(provider.auth.model.valueRef);
-    add(provider.auth.probe.valueRef);
-    provider.headers.forEach((header) => add(header.valueRef));
-    return refs;
-  }
-  function normalizeStateV22(value) {
-    if (!hasExactKeys6(value, STATE_KEYS3) || value.version !== 2 || !Number.isSafeInteger(value.revision) || value.revision < 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
-      throw migrationError3();
-    }
-    let providers;
-    try {
-      providers = value.providers.map(normalizeProviderEntryV2);
-    } catch {
-      throw migrationError3();
-    }
-    const providerIds = /* @__PURE__ */ new Set();
-    const activeReferences = /* @__PURE__ */ new Map();
-    for (const provider of providers) {
-      if (providerIds.has(provider.id)) throw migrationError3();
-      providerIds.add(provider.id);
-      for (const ref of providerReferences(provider)) {
-        const existingRevision = activeReferences.get(ref.reference);
-        if (existingRevision !== void 0 && existingRevision !== ref.revision) throw migrationError3();
-        activeReferences.set(ref.reference, ref.revision);
-      }
-    }
-    const pendingReferences = /* @__PURE__ */ new Set();
-    const pendingSecretDeletes = value.pendingSecretDeletes.map((entry) => {
-      const ref = normalizeValueRef4(entry);
-      if (pendingReferences.has(ref.reference) || activeReferences.has(ref.reference)) {
-        throw migrationError3();
-      }
-      pendingReferences.add(ref.reference);
-      return ref;
-    });
-    return {
-      version: 2,
-      revision: value.revision,
-      migratedLegacy: true,
-      pendingSecretDeletes,
-      providers
-    };
-  }
-  function preferredAuth(policy) {
-    if (policy.kind === "none") return { scheme: "none", headerName: null };
-    return {
-      scheme: policy.kind,
-      headerName: policy.kind === "custom" ? policy.headerName : null
-    };
-  }
-  function credentialFromV2(provider) {
-    const modelAuth = provider.auth.model;
-    return {
-      valueRef: modelAuth.kind === "none" ? null : clone6(modelAuth.valueRef),
-      preferredAuth: preferredAuth(modelAuth)
-    };
-  }
-  function probeOverrideFromV2(provider) {
-    return provider.auth.probe.kind === "inherit-model" ? null : clone6(provider.auth.probe);
-  }
-  function safeExpiry(checkedAt) {
-    return Math.min(Number.MAX_SAFE_INTEGER, checkedAt + MODEL_LIST_TTL_MS);
-  }
-  function modelListFromV2(provider) {
-    if (!provider.probedModels.length || provider.probedAt <= 0) {
+  var CLIENT_LABELS = Object.freeze({
+    codex: "Codex",
+    "claude-code": "Claude"
+  });
+  function providerClientRouteBadge(provider, {
+    client,
+    modelId,
+    lang = "zh",
+    now
+  } = {}) {
+    const clientLabel = CLIENT_LABELS[client];
+    if (!clientLabel) return null;
+    const selectedModelId = String(modelId || "").trim();
+    if (!selectedModelId) {
       return {
-        revision: 0,
-        status: "unknown",
-        apiRoot: null,
-        auth: null,
-        models: [],
-        checkedAt: 0,
-        validUntil: 0,
-        requestProfileRevision: provider.authProfileRevision
+        label: `${clientLabel} \xB7 ${lang === "en" ? "select model" : "\u8BF7\u9009\u6A21\u578B"}`,
+        title: lang === "en" ? "Select a model to inspect its Provider route." : "\u9009\u62E9\u6A21\u578B\u540E\u53EF\u67E5\u770B\u8BE5 Provider \u7684\u9010\u6A21\u578B\u9009\u8DEF\u3002",
+        status: "warn"
       };
     }
-    const probePolicy = provider.auth.probe.kind === "inherit-model" ? provider.auth.model : provider.auth.probe;
-    return {
-      revision: 1,
-      status: "supported",
-      apiRoot: buildProviderApiBaseUrl({
-        baseUrl: provider.baseUrl,
-        allowInsecureHttp: provider.allowInsecureHttp
-      }).toString(),
-      auth: preferredAuth(probePolicy),
-      models: provider.probedModels.map((model) => ({
-        ...clone6(model),
-        metadata: {
-          task: null,
-          inputModalities: [],
-          outputModalities: [],
-          capabilities: []
-        }
-      })),
-      checkedAt: provider.probedAt,
-      validUntil: safeExpiry(provider.probedAt),
-      requestProfileRevision: provider.authProfileRevision
-    };
-  }
-  function providerV3FromV2(rawProvider) {
-    var _a;
-    const provider = normalizeProviderEntryV2(rawProvider);
-    const probePreference = ((_a = provider.dialect.override) == null ? void 0 : _a.wireApi) || (provider.protocol === "anthropic" ? "messages" : null);
-    return normalizeProviderEntryV3({
-      id: provider.id,
-      credentialId: provider.credentialId,
-      name: provider.name,
-      baseUrl: provider.baseUrl,
-      allowInsecureHttp: provider.allowInsecureHttp,
-      requestProfileRevision: provider.authProfileRevision,
-      credential: credentialFromV2(provider),
-      probeAuthOverride: probeOverrideFromV2(provider),
-      headers: clone6(provider.headers),
-      probePreference,
-      modelList: modelListFromV2(provider),
-      // Only the full three-protocol probe can publish role and token-field capabilities.
-      modelCapabilities: [],
-      routeOverrides: []
+    const route = selectProviderRoute(provider, {
+      client,
+      modelId: selectedModelId,
+      feature: "generate",
+      now
     });
-  }
-  function buildProviderStateV3FromV2(value) {
-    const state = normalizeStateV22(value);
+    if (route.ok) {
+      return {
+        label: `${clientLabel} \xB7 ${providerRouteLabel(route, lang)}`,
+        title: lang === "en" ? `Current route for ${selectedModelId}` : `${selectedModelId} \u7684\u5F53\u524D\u9009\u8DEF`,
+        status: "neutral"
+      };
+    }
+    if (route.reasonCode === "needs-probe") {
+      return {
+        label: `${clientLabel} \xB7 ${lang === "en" ? "probe required" : "\u9700\u63A2\u6D4B"}`,
+        title: lang === "en" ? `Probe ${selectedModelId} before selecting a protocol route.` : `\u9700\u5148\u63A2\u6D4B ${selectedModelId} \u7684\u534F\u8BAE\u4E0E Agent \u7279\u6027\u3002`,
+        status: "warn"
+      };
+    }
     return {
-      version: 3,
-      revision: state.revision + 1,
-      migratedLegacy: true,
-      pendingSecretDeletes: clone6(state.pendingSecretDeletes),
-      providers: state.providers.map(providerV3FromV2)
-    };
-  }
-  async function migrateProviderStoreV2ToV3({ store } = {}) {
-    if (!store || typeof store.readSchemaMigrationInput !== "function" || typeof store.writeRedactedBackup !== "function" || typeof store.replaceState !== "function") {
-      throw migrationError3();
-    }
-    const input = store.readSchemaMigrationInput();
-    if (input === null) {
-      return { status: "already-committed", migrated: 0, fromVersion: 3, toVersion: 3 };
-    }
-    if (!input || typeof input.sourceRevision !== "string" || !input.sourceRevision) {
-      throw migrationError3();
-    }
-    const source = normalizeStateV22(input.state);
-    const next = buildProviderStateV3FromV2(source);
-    await store.writeRedactedBackup(source, { keep: 3, maxAgeDays: 30 });
-    const result = store.replaceState(next, {
-      expectedSourceRevision: input.sourceRevision,
-      expectedSourceVersion: 2
-    });
-    if (!result || result.stateRevision !== next.revision) throw migrationError3();
-    return {
-      status: "committed",
-      migrated: next.providers.length,
-      fromVersion: 2,
-      toVersion: 3
+      label: `${clientLabel} \xB7 ${lang === "en" ? "unavailable" : "\u4E0D\u53EF\u7528"}`,
+      title: lang === "en" ? `No verified route is available for ${selectedModelId}.` : `${selectedModelId} \u6682\u65E0\u5DF2\u9A8C\u8BC1\u7684\u53EF\u7528\u9009\u8DEF\u3002`,
+      status: "error"
     };
   }
 
-  // src/app/providerProfileFlow.js
-  init_cep_runtime_inject();
-  function flowError(code) {
-    const messages = {
-      provider_draft_invalid: "Provider draft is invalid",
-      provider_secret_required: "Provider secret is required",
-      provider_insecure_http_forbidden: "Insecure provider HTTP is forbidden",
-      provider_insecure_http_confirmation_required: "Insecure provider HTTP confirmation is required",
-      provider_draft_contains_credential: "Provider draft contains protected credential material"
-    };
-    const error = new Error(messages[code] || messages.provider_draft_invalid);
-    error.code = messages[code] ? code : "provider_draft_invalid";
-    return error;
-  }
-  function assertProviderCandidateCredentialFree(candidate, secretService) {
-    if (typeof (secretService == null ? void 0 : secretService.getRedactionValues) !== "function") {
-      throw flowError("provider_draft_contains_credential");
+  // src/components/settings/ProviderManagerSection.jsx
+  var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
+  var L4 = {
+    zh: {
+      title: "Provider \u7BA1\u7406",
+      add: "\u65B0\u589E",
+      edit: "\u7F16\u8F91",
+      del: "\u5220\u9664",
+      probe: "\u63A2\u6D4B\u6A21\u578B",
+      redetect: "\u91CD\u65B0\u63A2\u6D4B\u5F53\u524D\u6A21\u578B",
+      probing: "\u63A2\u6D4B\u4E2D\u2026",
+      save: "\u4FDD\u5B58",
+      cancel: "\u53D6\u6D88",
+      name: "\u540D\u79F0",
+      baseUrl: "Base URL",
+      apiKey: "API Key",
+      model: "\u6A21\u578B",
+      openCodeKeyCap: "\u5BC6\u94A5\u5199\u5165 OpenCode auth.json\uFF1B\u4ECE\u65E7\u7248\u672C\u5347\u7EA7\u7684 Provider \u5FC5\u987B\u91CD\u65B0\u586B\u5199\u3002",
+      needsApiKey: "\u9700\u91CD\u586B key",
+      autoAuthCap: "\u81EA\u52A8\u8BC6\u522B Authorization: Bearer\u3001x-api-key \u6216\u65E0\u8BA4\u8BC1\uFF1B\u586B\u5199\u5E73\u53F0\u7ED9\u51FA\u7684 API Key\u3002",
+      overrideAuthCap: "\u5DF2\u542F\u7528\u9AD8\u7EA7\u8BA4\u8BC1\u89C4\u5219\uFF1B\u586B\u5199\u5E73\u53F0\u63D0\u4F9B\u7684\u8BA4\u8BC1\u503C\u3002",
+      noApiKey: "\u9AD8\u7EA7\u8BBE\u7F6E\u4E3A\u65E0\u9700\u51ED\u636E\u3002",
+      advancedAuth: "\u9AD8\u7EA7\u8BA4\u8BC1\u4E0E\u8BF7\u6C42\u5934",
+      authType: "\u8BA4\u8BC1\u89C4\u5219",
+      probePreference: "\u63A2\u6D4B\u4F18\u5148\u534F\u8BAE",
+      probePreferenceCap: "\u4EC5\u8C03\u6574\u63A2\u6D4B\u987A\u5E8F\uFF1B\u5B9E\u9645\u8DEF\u7531\u6BCF\u4E2A\u6A21\u578B\u7684\u80FD\u529B\u77E9\u9635\u51B3\u5B9A\u3002",
+      auto: "\u81EA\u52A8\uFF08\u63A8\u8350\uFF09",
+      models: (n) => `${n} \u4E2A\u6A21\u578B`,
+      probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF1A",
+      importCc: "\u4ECE cc-switch \u5BFC\u5165",
+      insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09",
+      extraHeaders: "\u989D\u5916\u8BF7\u6C42\u5934",
+      addHeader: "\u65B0\u589E\u8BF7\u6C42\u5934",
+      removeHeader: "\u79FB\u9664",
+      headerName: "Header \u540D\u79F0",
+      literal: "\u666E\u901A\u6587\u672C",
+      secretValue: "\u7CFB\u7EDF\u51ED\u636E",
+      scopeProbe: "\u63A2\u6D4B",
+      scopeModel: "\u6A21\u578B\u8BF7\u6C42",
+      perModel: "\u9010\u6A21\u578B",
+      selected: "\u5DF2\u9009"
+    },
+    en: {
+      title: "Provider manager",
+      add: "Add",
+      edit: "Edit",
+      del: "Delete",
+      probe: "Probe models",
+      redetect: "Re-probe current model",
+      probing: "Probing\u2026",
+      save: "Save",
+      cancel: "Cancel",
+      name: "Name",
+      baseUrl: "Base URL",
+      apiKey: "API Key",
+      model: "Model",
+      openCodeKeyCap: "The key is written to OpenCode auth.json. Older providers must be entered again.",
+      needsApiKey: "API key required",
+      autoAuthCap: "Automatically detects Authorization: Bearer, x-api-key, or no authentication. Enter the provider API key.",
+      overrideAuthCap: "An advanced authentication rule is active. Enter the provider credential.",
+      noApiKey: "Advanced settings specify that no credential is required.",
+      advancedAuth: "Advanced authentication and headers",
+      authType: "Authentication rule",
+      probePreference: "Probe protocol preference",
+      probePreferenceCap: "Changes probe order only; each model's capability matrix determines its actual route.",
+      auto: "Auto (recommended)",
+      models: (n) => `${n} models`,
+      probeFailed: "Probe failed: ",
+      importCc: "Import from cc-switch",
+      insecure: "Allow non-loopback HTTP (confirmed again on save)",
+      extraHeaders: "Extra headers",
+      addHeader: "Add header",
+      removeHeader: "Remove",
+      headerName: "Header name",
+      literal: "Literal text",
+      secretValue: "Credential store",
+      scopeProbe: "Probe",
+      scopeModel: "Model request",
+      perModel: "per-model",
+      selected: "selected"
     }
-    const values = secretService.getRedactionValues();
-    if (!Array.isArray(values) || containsExactSecret(candidate, values)) {
-      throw flowError("provider_draft_contains_credential");
-    }
-  }
-  function slug(value) {
-    return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-  }
-  function normalizedBaseUrl(value) {
-    try {
-      return validateProviderBaseUrl(value);
-    } catch {
-      throw flowError("provider_draft_invalid");
-    }
-  }
-  async function enforceInsecureHttp({ baseUrl, providerId, current, allowInsecureHttp, confirmInsecureHttp }) {
-    const url = new URL(baseUrl);
-    if (url.protocol !== "http:" || isLoopbackProviderHostname(url.hostname)) return false;
-    if (!allowInsecureHttp) throw flowError("provider_insecure_http_forbidden");
-    const changed = !current || current.allowInsecureHttp !== true || normalizedBaseUrl(current.baseUrl) !== baseUrl;
-    if (changed) {
-      if (typeof confirmInsecureHttp !== "function") {
-        throw flowError("provider_insecure_http_confirmation_required");
-      }
-      const confirmed = await confirmInsecureHttp({ baseUrl, providerId });
-      if (confirmed !== true) throw flowError("provider_insecure_http_confirmation_required");
-    }
-    return true;
-  }
-  function currentPrimaryRef(provider) {
-    var _a, _b;
-    return ((_b = (_a = provider == null ? void 0 : provider.credential) == null ? void 0 : _a.valueRef) == null ? void 0 : _b.kind) === "secret" ? provider.credential.valueRef : null;
-  }
-  function preferredAuthFromDraft(draft, current) {
-    var _a, _b;
-    let scheme = String(draft.modelAuthKind || "").trim();
-    if (draft.modelAuthAutomatic === true || !scheme) {
-      scheme = ((_b = (_a = current == null ? void 0 : current.credential) == null ? void 0 : _a.preferredAuth) == null ? void 0 : _b.scheme) || "auto";
-    }
-    if (!["auto", "none", "bearer", "x-api-key", "custom"].includes(scheme)) {
-      throw flowError("provider_draft_invalid");
-    }
-    const headerName = scheme === "custom" ? String(draft.modelAuthHeaderName || "").trim() : null;
-    if (scheme === "custom" && !headerName) throw flowError("provider_draft_invalid");
-    return { scheme, headerName };
-  }
-  async function buildCredential({ draft, current, credentialId, secretService, created }) {
-    const preferredAuth2 = preferredAuthFromDraft(draft, current);
-    if (preferredAuth2.scheme === "none") return { valueRef: null, preferredAuth: preferredAuth2 };
-    const rawSecret = typeof draft.modelAuthSecret === "string" ? draft.modelAuthSecret : "";
-    let valueRef = null;
-    if (rawSecret) {
-      valueRef = await secretService.create({
-        credentialId,
-        slotPrefix: "auth-model",
-        value: rawSecret
-      });
-      created.push(valueRef);
-    } else {
-      valueRef = currentPrimaryRef(current);
-    }
-    if (!valueRef && preferredAuth2.scheme !== "auto") {
-      throw flowError("provider_secret_required");
-    }
-    return { valueRef, preferredAuth: preferredAuth2 };
-  }
-  async function buildHeaders({ draftHeaders, currentHeaders, credentialId, secretService, created }) {
-    var _a, _b, _c;
-    if (!Array.isArray(draftHeaders)) throw flowError("provider_draft_invalid");
-    const currentById = new Map((currentHeaders || []).map((header) => [header.id, header]));
-    const output = [];
-    for (const raw of draftHeaders) {
-      if (!raw || typeof raw !== "object") throw flowError("provider_draft_invalid");
-      const id = String(raw.id || "").trim();
-      const name = String(raw.name || "").trim();
-      const scopes = Array.isArray(raw.scopes) ? raw.scopes.slice() : [];
-      if (!id || !name || !scopes.length) throw flowError("provider_draft_invalid");
-      const current = currentById.get(id);
-      const valueKind = raw.valueKind || ((_a = raw.valueRef) == null ? void 0 : _a.kind) || "literal";
-      if (isReservedProviderExtraHeaderName(name)) throw flowError("provider_draft_invalid");
-      if (valueKind === "literal") {
-        const value = ((_b = raw.valueRef) == null ? void 0 : _b.kind) === "literal" ? raw.valueRef.value : raw.value;
-        if (typeof value !== "string") throw flowError("provider_draft_invalid");
-        if (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(value)) {
-          throw flowError("provider_draft_invalid");
-        }
-        output.push({ id, name, scopes, valueRef: { kind: "literal", value } });
-        continue;
-      }
-      if (valueKind !== "secret") throw flowError("provider_draft_invalid");
-      const secret = typeof raw.secret === "string" ? raw.secret : typeof raw.value === "string" ? raw.value : "";
-      let valueRef;
-      if (secret) {
-        valueRef = await secretService.create({ credentialId, slotPrefix: "header", value: secret });
-        created.push(valueRef);
-      } else if (((_c = current == null ? void 0 : current.valueRef) == null ? void 0 : _c.kind) === "secret") {
-        valueRef = current.valueRef;
-      } else {
-        throw flowError("provider_secret_required");
-      }
-      output.push({ id, name, scopes, valueRef });
-    }
-    return output;
-  }
-  function allSecretRefs(provider) {
-    var _a, _b;
-    if (!provider) return [];
-    const refs = [];
-    const add = (ref) => {
-      if ((ref == null ? void 0 : ref.kind) !== "secret") return;
-      if (!refs.some((item) => item.reference === ref.reference && item.revision === ref.revision)) refs.push(ref);
-    };
-    add((_a = provider.credential) == null ? void 0 : _a.valueRef);
-    add((_b = provider.probeAuthOverride) == null ? void 0 : _b.valueRef);
-    for (const header of provider.headers || []) add(header.valueRef);
-    return refs;
-  }
-  function refsRemoved(previous, next) {
-    const retained = new Set(allSecretRefs(next).map((ref) => `${ref.reference}\0${ref.revision}`));
-    return allSecretRefs(previous).filter((ref) => !retained.has(`${ref.reference}\0${ref.revision}`));
-  }
-  function requestFingerprint(provider) {
-    return JSON.stringify({
-      baseUrl: provider.baseUrl,
-      allowInsecureHttp: provider.allowInsecureHttp,
-      credential: provider.credential,
-      probeAuthOverride: provider.probeAuthOverride,
-      headers: provider.headers
-    });
-  }
-  function unknownModelList(requestProfileRevision, revision = 0) {
-    return {
-      revision,
-      status: "unknown",
-      apiRoot: null,
-      auth: null,
-      models: [],
-      checkedAt: 0,
-      validUntil: 0,
-      requestProfileRevision
-    };
-  }
-  async function rollbackCreated(created, secretService) {
-    for (const ref of created.slice().reverse()) {
-      try {
-        await secretService.delete(ref);
-      } catch {
-      }
-    }
-  }
-  async function bestEffortDeleteCommitted(refs, initialRevision, store, secretService) {
-    let revision = initialRevision;
-    for (const ref of refs) {
-      try {
-        const result = await secretService.delete(ref);
-        if (!result || result.deleted !== true && result.revision !== null) continue;
-        if (typeof store.acknowledgeSecretDelete === "function") {
-          const result2 = store.acknowledgeSecretDelete(ref.reference, { expectedRevision: revision });
-          revision = result2.stateRevision;
-        }
-      } catch {
-      }
-    }
-  }
-  async function saveProviderDraft({
-    draft,
-    current,
-    store,
-    secretService,
-    confirmInsecureHttp,
-    randomUUID
-  } = {}) {
-    if (!draft || typeof draft !== "object" || !store || !secretService) throw flowError("provider_draft_invalid");
-    const id = String(draft.id || "").trim() || slug(draft.name);
-    const name = String(draft.name || "").trim() || id;
-    if (!id || !name) throw flowError("provider_draft_invalid");
-    const protocolHint = draft.protocol || "openai-compatible";
-    if (protocolHint !== "openai-compatible" && protocolHint !== "anthropic") {
-      throw flowError("provider_draft_invalid");
-    }
-    const currentProvider = current ? normalizeProviderEntryV3(current) : null;
-    const baseUrl = normalizedBaseUrl(draft.baseUrl);
-    const credentialId = (currentProvider == null ? void 0 : currentProvider.credentialId) || (typeof randomUUID === "function" ? randomUUID() : "");
-    if (!credentialId) throw flowError("provider_draft_invalid");
-    const expectedRevision = store.readState().revision;
-    const allowInsecureHttp = await enforceInsecureHttp({
-      baseUrl,
-      providerId: id,
-      current: currentProvider,
-      allowInsecureHttp: draft.allowInsecureHttp === true,
-      confirmInsecureHttp
-    });
-    const created = [];
-    let entry;
-    try {
-      const credential = await buildCredential({
-        draft,
-        current: currentProvider,
-        credentialId,
-        secretService,
-        created
-      });
-      const headers = await buildHeaders({
-        draftHeaders: draft.headers || [],
-        currentHeaders: (currentProvider == null ? void 0 : currentProvider.headers) || [],
-        credentialId,
-        secretService,
-        created
-      });
-      const hasProbePreference = Object.hasOwn(draft, "probePreference") || Object.hasOwn(draft, "dialectOverride");
-      const rawProbePreference = Object.hasOwn(draft, "probePreference") ? draft.probePreference : draft.dialectOverride;
-      const selectedProbePreference = hasProbePreference ? String(rawProbePreference || "").trim() || (currentProvider ? null : protocolHint === "anthropic" ? "messages" : null) : (currentProvider == null ? void 0 : currentProvider.probePreference) || (protocolHint === "anthropic" ? "messages" : null);
-      if (selectedProbePreference !== null && !["responses", "chat", "messages"].includes(selectedProbePreference)) {
-        throw flowError("provider_draft_invalid");
-      }
-      const candidate = {
-        id,
-        credentialId,
+  };
+  function SecretInput({ name, disabled = false }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+      "input",
+      {
         name,
-        baseUrl,
-        allowInsecureHttp,
-        requestProfileRevision: (currentProvider == null ? void 0 : currentProvider.requestProfileRevision) || 1,
-        credential,
-        probeAuthOverride: null,
-        headers,
-        probePreference: selectedProbePreference,
-        modelList: (currentProvider == null ? void 0 : currentProvider.modelList) || unknownModelList(1),
-        modelCapabilities: (currentProvider == null ? void 0 : currentProvider.modelCapabilities) || [],
-        routeOverrides: (currentProvider == null ? void 0 : currentProvider.routeOverrides) || []
-      };
-      if (currentProvider && requestFingerprint(candidate) !== requestFingerprint(currentProvider)) {
-        candidate.requestProfileRevision = currentProvider.requestProfileRevision + 1;
-        candidate.modelList = unknownModelList(
-          candidate.requestProfileRevision,
-          currentProvider.modelList.revision + 1
-        );
-        candidate.modelCapabilities = [];
+        type: "password",
+        autoComplete: "new-password",
+        defaultValue: "",
+        disabled,
+        style: {
+          width: "100%",
+          height: 24,
+          boxSizing: "border-box",
+          padding: "0 8px",
+          color: "var(--text-primary)",
+          background: "var(--bg-well)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-md)",
+          outline: "none",
+          font: "var(--weight-regular) var(--text-caption)/1 var(--font-mono)"
+        }
       }
-      entry = normalizeProviderEntryV3(candidate);
-      assertProviderCandidateCredentialFree(entry, secretService);
-      const pendingSecretDeletes = refsRemoved(currentProvider, entry);
-      const committed = store.upsert(entry, {
-        expectedRevision,
-        pendingSecretDeletes
-      });
-      await bestEffortDeleteCommitted(
-        pendingSecretDeletes,
-        committed.stateRevision,
-        store,
-        secretService
-      );
-      return committed.entry;
-    } catch (error) {
-      await rollbackCreated(created, secretService);
-      throw error;
-    }
+    );
   }
-  async function deleteProviderProfile({ provider, store, secretService } = {}) {
-    if (!provider || !store || !secretService) throw flowError("provider_draft_invalid");
-    const normalized = normalizeProviderEntryV3(provider);
-    const pendingSecretDeletes = allSecretRefs(normalized);
-    const state = store.readState();
-    const committed = store.remove(normalized.id, {
-      expectedRevision: state.revision,
-      pendingSecretDeletes
-    });
-    if (committed.removed) {
-      await bestEffortDeleteCommitted(
-        pendingSecretDeletes,
-        committed.stateRevision,
-        store,
-        secretService
-      );
-    }
-    return { removed: committed.removed };
+  function nextHeaderId(headers) {
+    let index = headers.length + 1;
+    while (headers.some((header) => header.id === `header-${index}`)) index += 1;
+    return `header-${index}`;
   }
-  async function importProviderDraft({ candidate, store, secretService, randomUUID } = {}) {
-    if (!candidate || typeof candidate !== "object") throw flowError("provider_draft_invalid");
-    let draft = {
-      id: candidate.candidateId || "",
-      name: candidate.name,
-      protocol: candidate.protocol,
-      baseUrl: candidate.baseUrl,
-      allowInsecureHttp: false,
-      modelAuthKind: candidate.modelAuthKind || "auto",
-      modelAuthAutomatic: candidate.modelAuthKind === void 0,
-      modelAuthHeaderName: "",
-      modelAuthSecret: candidate.modelAuthSecret,
-      probeAuthMode: "inherit-model",
-      probeAuthKind: "none",
-      probeAuthHeaderName: "",
-      probeAuthSecret: "",
-      headers: [],
-      dialectOverride: "",
-      dialectSource: ""
-    };
-    try {
-      const candidateId = String(draft.id || "").trim() || slug(draft.name);
-      const current = typeof (store == null ? void 0 : store.get) === "function" ? store.get(candidateId) : null;
-      return await saveProviderDraft({
-        draft,
-        current,
-        store,
-        secretService,
-        confirmInsecureHttp: async () => false,
-        randomUUID
-      });
-    } finally {
-      draft = null;
-    }
+  function providerModelCount(provider) {
+    var _a;
+    if (Array.isArray(provider == null ? void 0 : provider.modelIds)) return provider.modelIds.length;
+    if (Array.isArray((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models)) return provider.modelList.models.length;
+    return Array.isArray(provider == null ? void 0 : provider.probedModels) ? provider.probedModels.length : 0;
   }
-  async function drainPendingProviderSecretDeletes({ store, secretService } = {}) {
-    if (!store || !secretService) throw flowError("provider_draft_invalid");
-    let deleted = 0;
-    const snapshot = store.readState();
-    for (const ref of snapshot.pendingSecretDeletes) {
+  function ProviderManagerSection({
+    lang = "zh",
+    providers = [],
+    activeProviderId = "",
+    activeModelId = "",
+    onUpsert,
+    onRemove,
+    onProbe,
+    probing = "",
+    probeErrors = {},
+    ccSwitch = null,
+    onImportCcSwitch,
+    disabled = false,
+    opencodeMode = false
+  }) {
+    const t = L4[lang] || L4.zh;
+    const [draft, setDraft] = import_react43.default.useState(null);
+    const [error, setError] = import_react43.default.useState("");
+    const currentModelId = String(activeModelId || "").trim();
+    const save = async (event) => {
+      var _a;
+      event.preventDefault();
+      const formElement = event.currentTarget;
+      const message = validateDraft(draft);
+      if (message) {
+        setError(message);
+        return;
+      }
       try {
-        const result = await secretService.delete(ref);
-        if (!result || result.deleted !== true && result.revision !== null) continue;
-        const current = store.readState();
-        store.acknowledgeSecretDelete(ref.reference, { expectedRevision: current.revision });
-        deleted += 1;
-      } catch {
+        await onUpsert(event, draftToEntry(draft));
+        setDraft(null);
+        setError("");
+      } catch (saveError) {
+        setError((saveError == null ? void 0 : saveError.message) || "Provider save failed");
+      } finally {
+        (_a = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a.call(formElement);
       }
-    }
-    return { deleted, pending: store.readState().pendingSecretDeletes.length };
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: { flex: 1, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (event) => {
+          event.preventDefault();
+          setDraft(emptyDraft());
+        }, children: t.add })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
+        providers.map((provider) => {
+          const modelCount = providerModelCount(provider);
+          const selected = provider.id === activeProviderId;
+          const routeBadges = opencodeMode ? [] : ["codex", "claude-code"].map((client) => providerClientRouteBadge(provider, { client, modelId: currentModelId, lang })).filter(Boolean);
+          const canRedetectCurrentModel = Boolean(currentModelId && Array.isArray(provider.modelCapabilities));
+          return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { "data-provider-id": provider.id, style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: `1px solid ${selected ? "var(--accent-border)" : "var(--border-default)"}`, borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: { flex: 1, minWidth: 120, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
+              selected ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "accent", children: t.selected }) : null,
+              provider.needsApiKey ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "warn", children: t.needsApiKey }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "neutral", children: t.perModel }),
+              modelCount ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }, children: routeBadges.map((badge) => /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { title: badge.title, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: badge.status, children: badge.label }) }, badge.label)) }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
+              !opencodeMode ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+                Button,
+                {
+                  variant: "ghost",
+                  size: "sm",
+                  disabled: disabled || probing === provider.id,
+                  onClick: () => onProbe(provider),
+                  children: probing === provider.id ? t.probing : t.probe
+                }
+              ) : null,
+              !opencodeMode ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+                Button,
+                {
+                  variant: "ghost",
+                  size: "sm",
+                  disabled: disabled || probing === provider.id || !canRedetectCurrentModel,
+                  onClick: () => onProbe(provider, {
+                    forceDetect: true,
+                    modelId: currentModelId
+                  }),
+                  children: t.redetect
+                }
+              ) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
+                const next = draftFromEntry(provider);
+                setDraft({ ...next, modelId: (provider.modelIds || []).join(", ") });
+                setError("");
+              }, children: t.edit }),
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
+            ] }),
+            probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
+              t.probeFailed,
+              probeErrors[provider.id]
+            ] }) : null
+          ] }, provider.id);
+        }),
+        draft ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+          opencodeMode ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(import_jsx_runtime41.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+              Input,
+              {
+                mono: true,
+                value: draft.baseUrl,
+                onChange: (value) => setDraft({ ...draft, baseUrl: value }),
+                placeholder: "https://api.example.com/v1"
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+              Input,
+              {
+                mono: true,
+                value: draft.modelId || "",
+                onChange: (value) => setDraft({ ...draft, modelId: value }),
+                placeholder: "claude-sonnet-4"
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: {
+              display: "flex",
+              gap: 6,
+              alignItems: "center",
+              font: "400 11px/1.35 var(--font-ui)"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: draft.allowInsecureHttp,
+                  onChange: (event) => setDraft({
+                    ...draft,
+                    allowInsecureHttp: event.target.checked
+                  })
+                }
+              ),
+              t.insecure
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(import_jsx_runtime41.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (value) => setDraft({ ...draft, baseUrl: value }), placeholder: "https://api.example.com/v1" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: { display: "flex", gap: 6, alignItems: "center", font: "400 11px/1.35 var(--font-ui)" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("input", { type: "checkbox", checked: draft.allowInsecureHttp, onChange: (event) => setDraft({ ...draft, allowInsecureHttp: event.target.checked }) }),
+              t.insecure
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.apiKey, caption: draft.modelAuthKind === "auto" ? t.autoAuthCap : t.overrideAuthCap, children: draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.noApiKey }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("details", { "data-provider-advanced-auth": true, style: { border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", padding: "5px 6px" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("summary", { style: { cursor: "pointer", font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.advancedAuth }),
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(Field, { label: t.authType, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value, modelAuthAutomatic: false }), options: [
+                    { value: "auto", label: t.auto },
+                    { value: "bearer", label: "Authorization: Bearer" },
+                    { value: "x-api-key", label: "x-api-key" },
+                    { value: "custom", label: "Custom header" },
+                    { value: "none", label: "None" }
+                  ] }),
+                  draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.probePreference, caption: t.probePreferenceCap, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Select, { value: draft.probePreference, onChange: (value) => setDraft({ ...draft, probePreference: value }), options: [
+                  { value: "", label: t.auto },
+                  { value: "responses", label: "Responses" },
+                  { value: "chat", label: "Chat Completions" },
+                  { value: "messages", label: "Messages" }
+                ] }) }),
+                /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+                  draft.headers.map((header, index) => {
+                    const sensitiveName = isSensitiveProviderHeaderName(header.name);
+                    const valueKind = sensitiveName ? "secret" : header.valueKind;
+                    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, ...isSensitiveProviderHeaderName(value) ? { valueKind: "secret", value: "" } : {} } : item) }), placeholder: t.headerName }),
+                      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Select, { value: valueKind, onChange: (nextValueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind: nextValueKind, value: nextValueKind === "literal" ? item.value || "" : "" } : item) }), options: sensitiveName ? [{ value: "secret", label: t.secretValue }] : [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
+                      valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
+                      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
+                        scope === "probe" ? t.scopeProbe : t.scopeModel
+                      ] }, scope)) }),
+                      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
+                    ] }, header.id);
+                  }),
+                  /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "secret", value: "" }] }), children: t.addHeader })
+                ] }) })
+              ] })
+            ] })
+          ] }),
+          error ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
+              setDraft(null);
+              setError("");
+            }, children: t.cancel }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "primary", size: "sm", disabled, onClick: (event) => {
+              var _a;
+              return (_a = event.currentTarget.closest("form")) == null ? void 0 : _a.requestSubmit();
+            }, children: t.save })
+          ] })
+        ] }) : null
+      ] })
+    ] });
   }
-
-  // src/app/providerProbeFlow.js
-  init_cep_runtime_inject();
 
   // src/cep/modelProbe.js
   init_cep_runtime_inject();
@@ -46682,14 +41373,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       detail: "Provider model request timed out"
     };
   }
-  function resultFromResponse(status, body, sensitiveValues2 = []) {
+  function resultFromResponse(status, body, sensitiveValues = []) {
     if (status !== 200) {
       return { ok: false, status, models: [], detail: "HTTP " + status + " from provider" };
     }
     try {
       const inventory = parseProviderModelInventory(JSON.parse(body));
       const models = inventory.map(({ id, label }) => ({ id, label }));
-      if (containsExactSecret(inventory, sensitiveValues2)) {
+      if (containsExactSecret(inventory, sensitiveValues)) {
         return { ok: false, status: 200, models: [], detail: "Provider model metadata was rejected" };
       }
       return models.length ? { ok: true, status: 200, models, inventory, detail: "" } : { ok: false, status: 200, models: [], detail: "Empty model list" };
@@ -46700,7 +41391,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function requestWithTransport({
     endpoint,
     headers,
-    sensitiveValues: sensitiveValues2,
+    sensitiveValues,
     httpsImpl,
     timeoutMs,
     responseBodyBytes
@@ -46765,7 +41456,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           if (settled) return;
           const body = BufferImpl.concat(chunks, responseBytes).toString("utf8");
           chunks = [];
-          finish(resultFromResponse(res.statusCode || 0, body, sensitiveValues2));
+          finish(resultFromResponse(res.statusCode || 0, body, sensitiveValues));
         });
       });
       req.on("error", () => finish(networkFailure()));
@@ -46826,17 +41517,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     } catch {
       return { ok: false, status: 0, models: [], detail: "Invalid provider request profile" };
     }
-    const sensitiveValues2 = [];
+    const sensitiveValues = [];
     if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header" && profile.auth.value) {
       const value = String(profile.auth.value);
-      sensitiveValues2.push(value);
+      sensitiveValues.push(value);
       const bearer = /^Bearer\s+(.+)$/i.exec(value);
-      if (bearer == null ? void 0 : bearer[1]) sensitiveValues2.push(bearer[1]);
+      if (bearer == null ? void 0 : bearer[1]) sensitiveValues.push(bearer[1]);
     } else if (apiKey) {
-      sensitiveValues2.push(String(apiKey));
+      sensitiveValues.push(String(apiKey));
     }
     for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
-      if (header.source === "secret" && header.value) sensitiveValues2.push(String(header.value));
+      if (header.source === "secret" && header.value) sensitiveValues.push(String(header.value));
     }
     let lastResult = null;
     for (const endpoint of endpoints) {
@@ -46855,7 +41546,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             result = status === 0 ? networkFailure() : resultFromResponse(
               status,
               typeof (response == null ? void 0 : response.body) === "string" ? response.body : "",
-              sensitiveValues2
+              sensitiveValues
             );
           } catch {
             result = networkFailure();
@@ -46864,7 +41555,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           result = await requestWithTransport({
             endpoint: endpoint.url,
             headers: authCandidate2.headers,
-            sensitiveValues: sensitiveValues2,
+            sensitiveValues,
             httpsImpl,
             timeoutMs,
             responseBodyBytes: Number.isSafeInteger(responseBodyBytes) && responseBodyBytes > 0 ? responseBodyBytes : MAX_MODELS_RESPONSE_BYTES
@@ -46885,2411 +41576,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (![0, 401, 403, 404, 405].includes(lastResult == null ? void 0 : lastResult.status) && (lastResult == null ? void 0 : lastResult.redirected) !== true) return lastResult;
     }
     return lastResult || networkFailure();
-  }
-
-  // src/cep/providerDetect.js
-  init_cep_runtime_inject();
-
-  // src/cep/providerCapabilityProbe.js
-  init_cep_runtime_inject();
-  var OUTPUT_BUDGETS = Object.freeze([16, 64, 128]);
-  var TOOL_OUTPUT_BUDGETS = Object.freeze([...OUTPUT_BUDGETS, 256, 512]);
-  var MAX_RESPONSE_BYTES = 512 * 1024;
-  var SUCCESS_TTL_MS = 864e5;
-  var TRANSIENT_TTL_MS = 6e4;
-  var INVALID_TTL_MS = 3e5;
-  var PROTOCOL_ORDER = Object.freeze(["responses", "messages", "chat"]);
-  var TRANSIENT_STATUSES = /* @__PURE__ */ new Set([408, 425, 429, 500, 502, 503, 504]);
-  var ALWAYS_TRANSIENT_STATUSES = /* @__PURE__ */ new Set([408, 425, 429, 500, 502, 504]);
-  var UNSUPPORTED_CODES = /* @__PURE__ */ new Set([
-    "convert_request_failed",
-    "not_implemented",
-    "not_supported",
-    "unsupported_endpoint",
-    "unsupported_operation"
-  ]);
-  function getCepRequire5() {
-    var _a, _b, _c;
-    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
-    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function normalizedHeaders(value) {
-    const output = {};
-    if (!value || typeof value !== "object") return output;
-    for (const [name, headerValue] of Object.entries(value)) {
-      if (headerValue === void 0 || headerValue === null) continue;
-      output[String(name).toLowerCase()] = Array.isArray(headerValue) ? headerValue.map(String).join(", ") : String(headerValue);
-    }
-    return output;
-  }
-  function sseTerminalObserved(protocol, value) {
-    const normalized = String(value || "").replace(/\r\n/g, "\n");
-    const frames = normalized.split("\n\n");
-    if (!normalized.endsWith("\n\n")) frames.pop();
-    for (const frame of frames) {
-      let event = "";
-      const dataLines = [];
-      for (const line of frame.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
-      }
-      const data2 = dataLines.join("\n").trim();
-      if (protocol === "chat" && data2 === "[DONE]") return true;
-      let parsed = null;
-      try {
-        parsed = data2 ? JSON.parse(data2) : null;
-      } catch {
-      }
-      const type = String((parsed == null ? void 0 : parsed.type) || event || "");
-      if (type === "error" || (parsed == null ? void 0 : parsed.error)) return true;
-      if (protocol === "responses" && ["response.completed", "response.incomplete", "response.failed"].includes(type)) {
-        return true;
-      }
-      if (protocol === "messages" && type === "message_stop") return true;
-      if (protocol === "chat" && Array.isArray(parsed == null ? void 0 : parsed.choices) && parsed.choices.some((choice) => typeof (choice == null ? void 0 : choice.finish_reason) === "string" && choice.finish_reason)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  function utf8ByteLength2(value) {
-    var _a;
-    const BufferImpl = globalThis.Buffer || ((_a = getCepRequire5()("buffer")) == null ? void 0 : _a.Buffer);
-    if (!BufferImpl || typeof BufferImpl.byteLength !== "function") {
-      throw new Error("provider request setup failed");
-    }
-    return BufferImpl.byteLength(value, "utf8");
-  }
-  function defaultRequest({ url, method, headers, body, timeoutMs, streamProtocol }) {
-    return new Promise((resolve, reject) => {
-      let endpoint;
-      let transport;
-      try {
-        endpoint = new URL(url);
-        transport = getCepRequire5()(endpoint.protocol === "http:" ? "http" : "https");
-      } catch {
-        reject(new Error("provider request setup failed"));
-        return;
-      }
-      const payload = body === void 0 ? null : JSON.stringify(body);
-      const requestHeaders = { ...headers };
-      if (payload !== null && !Object.keys(requestHeaders).some((name) => name.toLowerCase() === "content-length")) {
-        requestHeaders["content-length"] = String(utf8ByteLength2(payload));
-      }
-      let settled = false;
-      const finish = (callback, value) => {
-        if (settled) return;
-        settled = true;
-        callback(value);
-      };
-      const req = transport.request({
-        hostname: endpoint.hostname,
-        port: endpoint.port || void 0,
-        protocol: endpoint.protocol,
-        path: endpoint.pathname + endpoint.search,
-        method,
-        headers: requestHeaders,
-        agent: false
-      }, (res) => {
-        let responseBody = "";
-        let responseBytes = 0;
-        res.on("data", (chunk) => {
-          responseBytes += chunk.length;
-          if (responseBytes > MAX_RESPONSE_BYTES) {
-            try {
-              req.destroy();
-            } catch {
-            }
-            finish(reject, new Error("provider response too large"));
-            return;
-          }
-          responseBody += String(chunk);
-          if (["responses", "chat", "messages"].includes(streamProtocol) && sseTerminalObserved(streamProtocol, responseBody)) {
-            finish(resolve, {
-              status: res.statusCode || 0,
-              headers: normalizedHeaders(res.headers),
-              body: responseBody
-            });
-            try {
-              res.destroy();
-            } catch {
-            }
-            try {
-              req.destroy();
-            } catch {
-            }
-          }
-        });
-        res.on("end", () => finish(resolve, {
-          status: res.statusCode || 0,
-          headers: normalizedHeaders(res.headers),
-          body: responseBody
-        }));
-      });
-      req.on("error", () => finish(reject, new Error("provider request failed")));
-      if (req.setTimeout) {
-        req.setTimeout(timeoutMs, () => {
-          try {
-            req.destroy();
-          } catch {
-          }
-          finish(reject, new Error("provider request timed out"));
-        });
-      }
-      if (payload !== null && req.write) req.write(payload);
-      req.end();
-    });
-  }
-  function safeResult(raw) {
-    const result = raw && typeof raw === "object" ? raw : {};
-    return {
-      status: Number.isInteger(result.status) ? result.status : 0,
-      headers: normalizedHeaders(result.headers),
-      body: typeof result.body === "string" ? result.body : "",
-      redirected: result.redirected === true
-    };
-  }
-  function isJsonContentType(headers) {
-    const value = String((headers == null ? void 0 : headers["content-type"]) || "").split(";", 1)[0].trim().toLowerCase();
-    return value === "application/json" || value.endsWith("+json");
-  }
-  function parsedJson(result) {
-    if (!isJsonContentType(result.headers)) return null;
-    try {
-      const parsed = JSON.parse(result.body || "");
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-  function errorFacts(result) {
-    const parsed = parsedJson(result);
-    const raw = (parsed == null ? void 0 : parsed.error) && typeof parsed.error === "object" ? parsed.error : parsed || {};
-    return {
-      code: String(raw.code || raw.type || "").trim().toLowerCase(),
-      param: String(raw.param || "").trim().toLowerCase(),
-      message: String(raw.message || (parsed == null ? void 0 : parsed.message) || "").trim().toLowerCase()
-    };
-  }
-  function explicitlyUnsupported(result) {
-    const facts = errorFacts(result);
-    if (UNSUPPORTED_CODES.has(facts.code)) return true;
-    return /\bconvert_request_failed\b|\bnot implemented\b|\boperation is unsupported\b|\bendpoint\b.{0,32}\bnot supported\b/.test(facts.message);
-  }
-  function modelRejected(result) {
-    const facts = errorFacts(result);
-    return facts.param === "model" || /\bmodel\b.{0,32}\b(?:not found|does not exist|unavailable|unsupported)\b/.test(facts.message);
-  }
-  function pathRejected(result) {
-    if (result.redirected || result.status >= 300 && result.status < 400) return true;
-    return [404, 405, 501].includes(result.status) && !modelRejected(result);
-  }
-  function authenticationRejected(result) {
-    return result.status === 401 || result.status === 403;
-  }
-  function developerRoleRejected(result) {
-    if (![400, 422, 500].includes(result.status)) return false;
-    const facts = errorFacts(result);
-    const text = `${facts.code} ${facts.param} ${facts.message}`;
-    const roleContext = facts.param.includes("role") || /\brole\b.{0,80}\bdeveloper\b|\bunknown variant\b.{0,48}\bdeveloper\b|\bdeveloper\b.{0,80}\b(?:role|unknown variant|expected one of)\b/.test(text);
-    return roleContext && /(^|[^a-z])developer([^a-z]|$)/.test(text) && /\bunknown variant\b|\bexpected one of\b|\b(?:unsupported|invalid|disallowed|forbidden)\b|\bnot (?:supported|allowed|accepted|permitted)\b/.test(text);
-  }
-  var AGENT_FEATURE_NAMES = Object.freeze([
-    "stream",
-    "terminal",
-    "tools",
-    "compact",
-    "continuation",
-    "namespaceTools",
-    "reasoningReplay",
-    "countTokens"
-  ]);
-  function unknownAgentFeatures() {
-    return Object.fromEntries(AGENT_FEATURE_NAMES.map((name) => [name, "unknown"]));
-  }
-  function unknownAgentFeatureEvidence() {
-    return Object.fromEntries(AGENT_FEATURE_NAMES.map((name) => [name, "not-probed"]));
-  }
-  function featureResult(status, evidence) {
-    return { status, evidence };
-  }
-  function setFeature(capability, name, result) {
-    return {
-      ...capability,
-      agentFeatures: { ...capability.agentFeatures, [name]: result.status },
-      agentFeatureEvidence: { ...capability.agentFeatureEvidence, [name]: result.evidence }
-    };
-  }
-  function baseCapability(protocol) {
-    return {
-      protocol,
-      support: "invalid",
-      apiRoot: null,
-      authScheme: null,
-      schema: { nonStreaming: "not-tested", evidence: "not-tested" },
-      stream: { support: "not-probed", terminal: null, evidence: "not-probed" },
-      tool: { support: "not-probed", evidence: "not-probed" },
-      agentFeatures: unknownAgentFeatures(),
-      agentFeatureEvidence: unknownAgentFeatureEvidence(),
-      terminal: { kind: null, budgetLimited: false },
-      compatibility: {
-        instructionRole: protocol === "chat" ? "developer" : protocol === "messages" ? "system" : null,
-        tokenField: protocol === "responses" ? "max_output_tokens" : "max_tokens",
-        outputBudget: null
-      },
-      errorClass: null,
-      ttl: {
-        class: "invalid",
-        maxAgeMs: INVALID_TTL_MS,
-        evidence: "not-tested",
-        invalidatedBy: ["provider-config", "auth-profile", "model-inventory"]
-      }
-    };
-  }
-  function withEndpoint(capability, endpoint, authScheme) {
-    var _a;
-    return {
-      ...capability,
-      apiRoot: ((_a = endpoint == null ? void 0 : endpoint.apiRoot) == null ? void 0 : _a.toString().replace(/\/$/, "")) || null,
-      authScheme: authScheme || null
-    };
-  }
-  function supportedCapability(protocol, endpoint, authScheme, schema, compatibility2) {
-    const capability = withEndpoint(baseCapability(protocol), endpoint, authScheme);
-    return {
-      ...capability,
-      support: "supported",
-      schema: { nonStreaming: "valid", evidence: schema.evidence },
-      terminal: { kind: schema.terminal, budgetLimited: schema.budgetLimited },
-      compatibility: { ...capability.compatibility, ...compatibility2 },
-      ttl: {
-        class: "success",
-        maxAgeMs: SUCCESS_TTL_MS,
-        evidence: schema.budgetLimited ? "verified-valid-budget-terminal" : "verified-success-schema",
-        invalidatedBy: ["provider-config", "auth-profile", "model-inventory"]
-      }
-    };
-  }
-  function failedCapability(protocol, endpoint, authScheme, errorClass, evidence) {
-    const capability = withEndpoint(baseCapability(protocol), endpoint, authScheme);
-    let support = "invalid";
-    let ttlClass = "invalid";
-    let maxAgeMs = INVALID_TTL_MS;
-    if (errorClass === "authentication") {
-      support = "authentication";
-      ttlClass = "authentication";
-      maxAgeMs = 0;
-    } else if (errorClass === "network" || errorClass === "rate-limited" || errorClass === "upstream-transient") {
-      support = "transient";
-      ttlClass = "transient";
-      maxAgeMs = TRANSIENT_TTL_MS;
-    } else if (errorClass === "endpoint-unsupported" || errorClass === "protocol-unsupported" || errorClass === "model-unsupported") {
-      support = "unsupported";
-      ttlClass = "unsupported";
-      maxAgeMs = null;
-    }
-    return {
-      ...capability,
-      support,
-      schema: { nonStreaming: errorClass === "invalid-schema" ? "invalid" : "not-tested", evidence },
-      errorClass,
-      ttl: {
-        class: ttlClass,
-        maxAgeMs,
-        evidence,
-        invalidatedBy: ["provider-config", "auth-profile", "model-inventory"]
-      }
-    };
-  }
-  function usableResponsesOutput(output) {
-    return output.some((item) => item && item.type === "message" && Array.isArray(item.content) && item.content.some((part) => part && part.type === "output_text" && typeof part.text === "string" && part.text.length > 0));
-  }
-  function responsesSchema(result) {
-    var _a;
-    const parsed = parsedJson(result);
-    if (result.status !== 200 || !parsed || parsed.object !== "response" || typeof parsed.id !== "string" || !parsed.id || !Array.isArray(parsed.output) || !["completed", "incomplete", "failed"].includes(parsed.status)) return null;
-    if (parsed.status === "completed" && !usableResponsesOutput(parsed.output)) return null;
-    if (parsed.status === "failed") return { failed: true, terminal: "failed", budgetLimited: false, evidence: "responses-failed-schema" };
-    const budgetLimited = parsed.status === "incomplete" && ((_a = parsed.incomplete_details) == null ? void 0 : _a.reason) === "max_output_tokens";
-    return {
-      terminal: parsed.status,
-      budgetLimited,
-      evidence: parsed.status === "incomplete" ? "responses-incomplete-schema" : "responses-success-schema"
-    };
-  }
-  function chatSchema(result) {
-    const parsed = parsedJson(result);
-    if (result.status !== 200 || !parsed || parsed.object !== "chat.completion" || typeof parsed.id !== "string" || !parsed.id || !Array.isArray(parsed.choices) || parsed.choices.length === 0) return null;
-    const choice = parsed.choices[0];
-    if (!choice || !Number.isInteger(choice.index) || !choice.message || choice.message.role !== "assistant") return null;
-    if (!["stop", "length", "tool_calls", "content_filter", "function_call"].includes(choice.finish_reason)) return null;
-    const content = choice.message.content;
-    const hasContent = typeof content === "string" && content.length > 0;
-    const hasTool = Array.isArray(choice.message.tool_calls) && choice.message.tool_calls.length > 0;
-    if (!hasContent && !hasTool && choice.finish_reason !== "length" && choice.finish_reason !== "content_filter") return null;
-    return {
-      terminal: choice.finish_reason,
-      budgetLimited: choice.finish_reason === "length",
-      evidence: choice.finish_reason === "length" ? "chat-length-schema" : "chat-success-schema"
-    };
-  }
-  function messagesSchema(result) {
-    const parsed = parsedJson(result);
-    if (result.status !== 200 || !parsed || parsed.type !== "message" || typeof parsed.id !== "string" || !parsed.id || parsed.role !== "assistant" || typeof parsed.model !== "string" || !parsed.model || !Array.isArray(parsed.content) || !["end_turn", "max_tokens", "stop_sequence", "tool_use"].includes(parsed.stop_reason)) return null;
-    const hasContent = parsed.content.some((part) => part && (part.type === "tool_use" || part.type === "text" && typeof part.text === "string" && part.text.length > 0));
-    if (!hasContent && parsed.stop_reason !== "max_tokens") return null;
-    return {
-      terminal: parsed.stop_reason,
-      budgetLimited: parsed.stop_reason === "max_tokens",
-      evidence: parsed.stop_reason === "max_tokens" ? "messages-max-tokens-schema" : "messages-success-schema"
-    };
-  }
-  function requestBody(protocol, modelId, budget, compatibility2 = {}) {
-    if (protocol === "responses") {
-      return { model: modelId, input: "OK", max_output_tokens: budget, stream: false };
-    }
-    if (protocol === "messages") {
-      return {
-        model: modelId,
-        system: "Reply only OK.",
-        messages: [{ role: "user", content: "OK" }],
-        max_tokens: budget,
-        stream: false
-      };
-    }
-    const role = compatibility2.instructionRole || "developer";
-    const tokenField = compatibility2.tokenField || "max_tokens";
-    return {
-      model: modelId,
-      messages: [
-        { role, content: "Reply only OK." },
-        { role: "user", content: "OK" }
-      ],
-      [tokenField]: budget,
-      stream: false
-    };
-  }
-  function featureEndpoint(endpoint, suffix, id) {
-    const apiRoot = new URL(endpoint.apiRoot.toString());
-    apiRoot.pathname = apiRoot.pathname.replace(/\/+$/, "");
-    const url = new URL(apiRoot.toString());
-    url.pathname = apiRoot.pathname + suffix;
-    return { id: `${endpoint.id}-${id}`, apiRoot, url };
-  }
-  function featureFailure(result, evidence) {
-    if (!result || result.network || result.status === 0) {
-      return featureResult("unknown", `${evidence}-network`);
-    }
-    if (authenticationRejected(result)) {
-      return featureResult("unknown", `${evidence}-authentication`);
-    }
-    if (ALWAYS_TRANSIENT_STATUSES.has(result.status)) {
-      return featureResult("unknown", `${evidence}-transient`);
-    }
-    if (result.status === 503) {
-      if (modelRejected(result) || explicitlyUnsupported(result)) {
-        return featureResult("unsupported", `${evidence}-rejected`);
-      }
-      return featureResult("unknown", `${evidence}-transient`);
-    }
-    return featureResult("unsupported", `${evidence}-rejected`);
-  }
-  function streamCollector(protocol) {
-    if (protocol === "responses") return createResponsesSseCollector();
-    if (protocol === "messages") return createMessagesSseCollector();
-    return createChatSseCollector();
-  }
-  async function probeStreamFeature({
-    protocol,
-    modelId,
-    endpoint,
-    authCandidate: authCandidate2,
-    compatibility: compatibility2,
-    requestImpl,
-    timeoutMs,
-    tried
-  }) {
-    var _a;
-    const body = {
-      ...requestBody(protocol, modelId, OUTPUT_BUDGETS[0], compatibility2),
-      stream: true
-    };
-    const result = await requestStep({
-      step: `${protocol}-stream`,
-      endpoint,
-      authCandidate: authCandidate2,
-      body,
-      requestImpl,
-      timeoutMs,
-      tried
-    });
-    if (result.status !== 200 || !String(((_a = result.headers) == null ? void 0 : _a["content-type"]) || "").toLowerCase().includes("text/event-stream")) {
-      return featureFailure(result, `${protocol}-stream`);
-    }
-    try {
-      const collector2 = streamCollector(protocol);
-      collector2.feed(result.body);
-      collector2.end();
-      return featureResult("supported", `${protocol}-stream-terminal-valid`);
-    } catch {
-      return featureResult("unsupported", `${protocol}-stream-terminal-invalid`);
-    }
-  }
-  function toolChoiceCandidates(protocol) {
-    if (protocol === "messages") {
-      return [
-        { id: "named", value: { type: "tool", name: "noop" } },
-        { id: "any", value: { type: "any" } },
-        { id: "auto", value: { type: "auto" } },
-        { id: "implicit", value: void 0 }
-      ];
-    }
-    const named = protocol === "responses" ? { type: "function", name: "noop" } : { type: "function", function: { name: "noop" } };
-    return [
-      { id: "named", value: named },
-      { id: "required", value: "required" },
-      { id: "auto", value: "auto" },
-      { id: "implicit", value: void 0 }
-    ];
-  }
-  function toolRequestBody(protocol, modelId, compatibility2, budget, toolChoice) {
-    const parameters = {
-      type: "object",
-      properties: { value: { type: "string" } },
-      required: ["value"],
-      additionalProperties: false
-    };
-    const toolChoiceField = toolChoice === void 0 ? {} : { tool_choice: toolChoice };
-    if (protocol === "responses") {
-      return {
-        model: modelId,
-        input: 'Call the noop tool once with value "ok".',
-        max_output_tokens: budget,
-        stream: false,
-        tools: [{ type: "function", name: "noop", description: "Compatibility probe.", parameters }],
-        ...toolChoiceField
-      };
-    }
-    if (protocol === "messages") {
-      return {
-        model: modelId,
-        system: "Call the requested tool exactly once.",
-        messages: [{ role: "user", content: 'Call noop with value "ok".' }],
-        max_tokens: budget,
-        stream: false,
-        tools: [{ name: "noop", description: "Compatibility probe.", input_schema: parameters }],
-        ...toolChoiceField
-      };
-    }
-    const role = compatibility2.instructionRole || "developer";
-    const tokenField = compatibility2.tokenField || "max_tokens";
-    return {
-      model: modelId,
-      messages: [
-        { role, content: "Call the requested tool exactly once." },
-        { role: "user", content: 'Call noop with value "ok".' }
-      ],
-      [tokenField]: budget,
-      stream: false,
-      tools: [{ type: "function", function: { name: "noop", description: "Compatibility probe.", parameters } }],
-      ...toolChoiceField
-    };
-  }
-  function jsonObjectText(value) {
-    if (typeof value !== "string") return false;
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed);
-    } catch {
-      return false;
-    }
-  }
-  function validToolResponse(protocol, result) {
-    var _a;
-    const parsed = parsedJson(result);
-    if (result.status !== 200 || !parsed) return false;
-    if (protocol === "responses") {
-      return parsed.object === "response" && Array.isArray(parsed.output) && parsed.output.some((item) => (item == null ? void 0 : item.type) === "function_call" && item.name === "noop" && jsonObjectText(item.arguments));
-    }
-    if (protocol === "messages") {
-      return parsed.type === "message" && Array.isArray(parsed.content) && parsed.content.some((item) => (item == null ? void 0 : item.type) === "tool_use" && item.name === "noop" && item.input && typeof item.input === "object" && !Array.isArray(item.input));
-    }
-    const choice = Array.isArray(parsed.choices) ? parsed.choices[0] : null;
-    return parsed.object === "chat.completion" && Array.isArray((_a = choice == null ? void 0 : choice.message) == null ? void 0 : _a.tool_calls) && choice.message.tool_calls.some((item) => {
-      var _a2;
-      return (item == null ? void 0 : item.type) === "function" && ((_a2 = item.function) == null ? void 0 : _a2.name) === "noop" && jsonObjectText(item.function.arguments);
-    });
-  }
-  function retryToolBudget(protocol, schema) {
-    return (schema == null ? void 0 : schema.budgetLimited) === true || protocol === "chat" && (schema == null ? void 0 : schema.terminal) === "content_filter";
-  }
-  async function probeToolFeature({
-    protocol,
-    modelId,
-    endpoint,
-    authCandidate: authCandidate2,
-    compatibility: compatibility2,
-    requestImpl,
-    timeoutMs,
-    tried
-  }) {
-    let result = null;
-    for (const candidate of toolChoiceCandidates(protocol)) {
-      for (const budget of TOOL_OUTPUT_BUDGETS) {
-        for (let networkAttempt = 0; networkAttempt < 2; networkAttempt += 1) {
-          result = await requestStep({
-            step: candidate.id === "named" ? `${protocol}-tool` : `${protocol}-tool-${candidate.id}`,
-            endpoint,
-            authCandidate: authCandidate2,
-            body: toolRequestBody(protocol, modelId, compatibility2, budget, candidate.value),
-            requestImpl,
-            timeoutMs,
-            tried
-          });
-          if (!((result == null ? void 0 : result.network) || (result == null ? void 0 : result.status) === 0)) break;
-        }
-        if (validToolResponse(protocol, result)) {
-          return featureResult("supported", `${protocol}-tool-call-valid`);
-        }
-        const failure2 = featureFailure(result, `${protocol}-tool`);
-        if (failure2.status === "unknown") return failure2;
-        const schema = protocol === "responses" ? responsesSchema(result) : protocol === "messages" ? messagesSchema(result) : chatSchema(result);
-        if (!retryToolBudget(protocol, schema)) break;
-      }
-      if ((result == null ? void 0 : result.status) !== 200 && ![400, 422].includes(result == null ? void 0 : result.status)) break;
-    }
-    return featureFailure(result, `${protocol}-tool`);
-  }
-  async function enrichAgentFeatures({
-    capability,
-    protocol,
-    modelId,
-    endpoint,
-    authCandidate: authCandidate2,
-    requestImpl,
-    timeoutMs,
-    tried
-  }) {
-    const compatibility2 = capability.compatibility || {};
-    const stream = await probeStreamFeature({
-      protocol,
-      modelId,
-      endpoint,
-      authCandidate: authCandidate2,
-      compatibility: compatibility2,
-      requestImpl,
-      timeoutMs,
-      tried
-    });
-    let next = setFeature(capability, "stream", stream);
-    next = setFeature(next, "terminal", stream.status === "supported" ? featureResult("supported", stream.evidence) : stream);
-    next = {
-      ...next,
-      stream: {
-        support: stream.status,
-        terminal: stream.status === "supported" ? "valid" : null,
-        evidence: stream.evidence
-      }
-    };
-    const tools = await probeToolFeature({
-      protocol,
-      modelId,
-      endpoint,
-      authCandidate: authCandidate2,
-      compatibility: compatibility2,
-      requestImpl,
-      timeoutMs,
-      tried
-    });
-    next = setFeature(next, "tools", tools);
-    next = { ...next, tool: { support: tools.status, evidence: tools.evidence } };
-    if (protocol === "responses") {
-      const features = await probeResponsesFeatures({
-        modelId,
-        endpoint,
-        authCandidate: authCandidate2,
-        requestImpl,
-        timeoutMs,
-        tried
-      });
-      for (const [name, result] of Object.entries(features)) next = setFeature(next, name, result);
-    }
-    if (protocol === "messages") {
-      next = setFeature(next, "countTokens", await probeCountTokensFeature({
-        modelId,
-        endpoint,
-        authCandidate: authCandidate2,
-        requestImpl,
-        timeoutMs,
-        tried
-      }));
-    }
-    return next;
-  }
-  function validResponseObject(result, object = "response") {
-    const parsed = parsedJson(result);
-    return result.status === 200 && (parsed == null ? void 0 : parsed.object) === object && typeof parsed.id === "string" && Boolean(parsed.id);
-  }
-  async function probeResponsesFeatures({
-    modelId,
-    endpoint,
-    authCandidate: authCandidate2,
-    requestImpl,
-    timeoutMs,
-    tried
-  }) {
-    const features = {};
-    const seed = await requestStep({
-      step: "responses-continuation-seed",
-      endpoint,
-      authCandidate: authCandidate2,
-      body: {
-        model: modelId,
-        input: "Reply exactly OK.",
-        max_output_tokens: OUTPUT_BUDGETS.at(-1),
-        store: true
-      },
-      requestImpl,
-      timeoutMs,
-      tried
-    });
-    const first = parsedJson(seed);
-    if (validResponseObject(seed)) {
-      const continuation = await requestStep({
-        step: "responses-continuation",
-        endpoint,
-        authCandidate: authCandidate2,
-        body: {
-          model: modelId,
-          input: "Reply exactly OK.",
-          max_output_tokens: OUTPUT_BUDGETS.at(-1),
-          previous_response_id: first.id,
-          store: false
-        },
-        requestImpl,
-        timeoutMs,
-        tried
-      });
-      features.continuation = validResponseObject(continuation) ? featureResult("supported", "responses-continuation-valid") : featureFailure(continuation, "responses-continuation");
-    } else {
-      features.continuation = featureFailure(seed, "responses-continuation");
-    }
-    const namespace = await requestStep({
-      step: "responses-namespace-tools",
-      endpoint,
-      authCandidate: authCandidate2,
-      body: {
-        model: modelId,
-        input: "Do not call tools. Reply exactly OK.",
-        max_output_tokens: OUTPUT_BUDGETS.at(-1),
-        tools: [{
-          type: "namespace",
-          name: "probe",
-          description: "Compatibility probe.",
-          tools: [{
-            type: "function",
-            name: "noop",
-            description: "Unused compatibility probe.",
-            parameters: { type: "object", properties: {} },
-            strict: false
-          }]
-        }]
-      },
-      requestImpl,
-      timeoutMs,
-      tried
-    });
-    features.namespaceTools = validResponseObject(namespace) ? featureResult("supported", "responses-namespace-tools-valid") : featureFailure(namespace, "responses-namespace-tools");
-    const compact = await requestStep({
-      step: "responses-compact",
-      endpoint: featureEndpoint(endpoint, "/responses/compact", "responses-compact"),
-      authCandidate: authCandidate2,
-      body: { model: modelId },
-      requestImpl,
-      timeoutMs,
-      tried
-    });
-    features.compact = validResponseObject(compact, "response.compaction") ? featureResult("supported", "responses-compact-valid") : featureFailure(compact, "responses-compact");
-    return features;
-  }
-  async function probeCountTokensFeature({
-    modelId,
-    endpoint,
-    authCandidate: authCandidate2,
-    requestImpl,
-    timeoutMs,
-    tried
-  }) {
-    const result = await requestStep({
-      step: "messages-count-tokens",
-      endpoint: featureEndpoint(endpoint, "/messages/count_tokens", "messages-count-tokens"),
-      authCandidate: authCandidate2,
-      body: {
-        model: modelId,
-        system: "Reply only OK.",
-        messages: [{ role: "user", content: "OK" }]
-      },
-      requestImpl,
-      timeoutMs,
-      tried
-    });
-    const parsed = parsedJson(result);
-    if (result.status === 200 && Number.isInteger(parsed == null ? void 0 : parsed.input_tokens) && parsed.input_tokens >= 0) {
-      return featureResult("supported", "messages-count-tokens-valid");
-    }
-    return featureFailure(result, "messages-count-tokens");
-  }
-  function failureClass(result) {
-    if (result.network || result.status === 0) return "network";
-    if (authenticationRejected(result)) return "authentication";
-    if (ALWAYS_TRANSIENT_STATUSES.has(result.status)) {
-      return result.status === 429 ? "rate-limited" : "upstream-transient";
-    }
-    if (result.status === 503 && !modelRejected(result) && !explicitlyUnsupported(result)) {
-      return "upstream-transient";
-    }
-    if (modelRejected(result)) return "model-unsupported";
-    if (explicitlyUnsupported(result)) return "protocol-unsupported";
-    if (pathRejected(result)) return "endpoint-unsupported";
-    if (TRANSIENT_STATUSES.has(result.status)) return "upstream-transient";
-    if (result.status === 200) return "invalid-schema";
-    return "request-rejected";
-  }
-  function failureEvidence(errorClass) {
-    const evidence = {
-      authentication: "authentication-rejected",
-      network: "network-transient",
-      "rate-limited": "rate-limited",
-      "upstream-transient": "upstream-transient",
-      "endpoint-unsupported": "verified-endpoint-unsupported",
-      "protocol-unsupported": "verified-protocol-unsupported",
-      "model-unsupported": "verified-model-unsupported",
-      "invalid-schema": "invalid-nonstream-schema",
-      "request-rejected": "provider-request-rejected"
-    };
-    return evidence[errorClass] || "provider-request-failed";
-  }
-  async function requestStep({
-    step,
-    endpoint,
-    authCandidate: authCandidate2,
-    body,
-    requestImpl,
-    timeoutMs,
-    tried
-  }) {
-    const headers = {
-      ...authCandidate2.headers,
-      accept: (body == null ? void 0 : body.stream) === true ? "text/event-stream" : "application/json",
-      "content-type": "application/json"
-    };
-    const audit = {
-      step,
-      method: "POST",
-      path: endpoint.url.pathname + endpoint.url.search,
-      apiRootId: endpoint.id,
-      authScheme: authCandidate2.scheme,
-      headerNames: Object.keys(headers).sort()
-    };
-    try {
-      const result = safeResult(await requestImpl({
-        url: endpoint.url.toString(),
-        method: "POST",
-        headers,
-        body,
-        timeoutMs,
-        streamProtocol: (body == null ? void 0 : body.stream) === true ? String(step).split("-", 1)[0] : null
-      }));
-      tried.push({ ...audit, status: result.status, outcome: "received" });
-      return result;
-    } catch {
-      tried.push({ ...audit, status: 0, outcome: "network" });
-      return { network: true, status: 0, headers: {}, body: "", redirected: false };
-    }
-  }
-  async function probeBudgeted({
-    protocol,
-    modelId,
-    endpoint,
-    authCandidate: authCandidate2,
-    compatibility: compatibility2,
-    requestImpl,
-    timeoutMs,
-    tried
-  }) {
-    const schemaFor = protocol === "responses" ? responsesSchema : messagesSchema;
-    let lastResult = null;
-    for (const budget of OUTPUT_BUDGETS) {
-      lastResult = await requestStep({
-        step: `${protocol}-${budget}`,
-        endpoint,
-        authCandidate: authCandidate2,
-        body: requestBody(protocol, modelId, budget, compatibility2),
-        requestImpl,
-        timeoutMs,
-        tried
-      });
-      if (authenticationRejected(lastResult) || pathRejected(lastResult)) {
-        return { result: lastResult, capability: null };
-      }
-      const schema = schemaFor(lastResult);
-      if (!schema) {
-        const errorClass = failureClass(lastResult);
-        return {
-          result: lastResult,
-          capability: failedCapability(protocol, endpoint, authCandidate2.scheme, errorClass, failureEvidence(errorClass))
-        };
-      }
-      if (schema.failed) {
-        return {
-          result: lastResult,
-          capability: failedCapability(protocol, endpoint, authCandidate2.scheme, "upstream-transient", schema.evidence)
-        };
-      }
-      if (!schema.budgetLimited || budget === OUTPUT_BUDGETS.at(-1)) {
-        return {
-          result: lastResult,
-          capability: supportedCapability(protocol, endpoint, authCandidate2.scheme, schema, {
-            ...compatibility2,
-            outputBudget: budget
-          })
-        };
-      }
-    }
-    return { result: lastResult, capability: null };
-  }
-  async function probeChat({ modelId, endpoint, authCandidate: authCandidate2, requestImpl, timeoutMs, tried }) {
-    const compatibility2 = { instructionRole: "developer", tokenField: "max_tokens" };
-    let result = null;
-    let schema = null;
-    let compatibilityAttempt = 0;
-    while (compatibilityAttempt < 3) {
-      compatibilityAttempt += 1;
-      result = await requestStep({
-        step: `chat-compat-${compatibilityAttempt}`,
-        endpoint,
-        authCandidate: authCandidate2,
-        body: requestBody("chat", modelId, OUTPUT_BUDGETS[0], compatibility2),
-        requestImpl,
-        timeoutMs,
-        tried
-      });
-      if (authenticationRejected(result) || pathRejected(result)) return { result, capability: null };
-      if (compatibility2.instructionRole === "developer" && developerRoleRejected(result)) {
-        compatibility2.instructionRole = "system";
-        continue;
-      }
-      if (compatibility2.tokenField === "max_tokens" && chatErrorRequestsMaxCompletionTokens(result.status, parsedJson(result))) {
-        compatibility2.tokenField = "max_completion_tokens";
-        continue;
-      }
-      schema = chatSchema(result);
-      break;
-    }
-    if (!schema) {
-      const errorClass = failureClass(result);
-      return {
-        result,
-        capability: failedCapability("chat", endpoint, authCandidate2.scheme, errorClass, failureEvidence(errorClass))
-      };
-    }
-    let budget = OUTPUT_BUDGETS[0];
-    for (let index = 1; schema.budgetLimited && index < OUTPUT_BUDGETS.length; index += 1) {
-      budget = OUTPUT_BUDGETS[index];
-      result = await requestStep({
-        step: `chat-budget-${budget}`,
-        endpoint,
-        authCandidate: authCandidate2,
-        body: requestBody("chat", modelId, budget, compatibility2),
-        requestImpl,
-        timeoutMs,
-        tried
-      });
-      schema = chatSchema(result);
-      if (!schema) {
-        const errorClass = failureClass(result);
-        return {
-          result,
-          capability: failedCapability("chat", endpoint, authCandidate2.scheme, errorClass, failureEvidence(errorClass))
-        };
-      }
-    }
-    return {
-      result,
-      capability: supportedCapability("chat", endpoint, authCandidate2.scheme, schema, {
-        ...compatibility2,
-        outputBudget: budget
-      })
-    };
-  }
-  async function probeProtocol({ protocol, profile, modelId, requestImpl, timeoutMs, tried }) {
-    var _a, _b, _c, _d, _e, _f;
-    const resource = protocol === "chat" ? "chat-completions" : protocol;
-    let endpoints;
-    let authCandidates;
-    try {
-      endpoints = buildProviderEndpointCandidates({
-        baseUrl: profile.baseUrl,
-        resource,
-        allowInsecureHttp: profile.allowInsecureHttp
-      });
-      authCandidates = buildProtocolAuthCandidates(profile, protocol);
-    } catch {
-      return failedCapability(protocol, null, null, "configuration", "provider-configuration-invalid");
-    }
-    let last = null;
-    let lastPrimary = null;
-    for (const endpoint of endpoints) {
-      for (let authIndex = 0; authIndex < authCandidates.length; authIndex += 1) {
-        const authCandidate2 = authCandidates[authIndex];
-        let outcome;
-        for (let networkAttempt = 0; networkAttempt < 2; networkAttempt += 1) {
-          outcome = protocol === "chat" ? await probeChat({ modelId, endpoint, authCandidate: authCandidate2, requestImpl, timeoutMs, tried }) : await probeBudgeted({
-            protocol,
-            modelId,
-            endpoint,
-            authCandidate: authCandidate2,
-            compatibility: {},
-            requestImpl,
-            timeoutMs,
-            tried
-          });
-          if (authIndex !== 0 || !(((_a = outcome.result) == null ? void 0 : _a.network) || ((_b = outcome.result) == null ? void 0 : _b.status) === 0)) break;
-        }
-        last = { ...outcome, endpoint, authCandidate: authCandidate2 };
-        if (authIndex === 0) lastPrimary = last;
-        if (((_c = outcome.capability) == null ? void 0 : _c.support) === "supported") {
-          return enrichAgentFeatures({
-            capability: outcome.capability,
-            protocol,
-            modelId,
-            endpoint,
-            authCandidate: authCandidate2,
-            requestImpl,
-            timeoutMs,
-            tried
-          });
-        }
-        if ((authenticationRejected(outcome.result) || ((_d = outcome.result) == null ? void 0 : _d.network) || ((_e = outcome.result) == null ? void 0 : _e.status) === 0) && authIndex + 1 < authCandidates.length) continue;
-        break;
-      }
-    }
-    const terminal = lastPrimary || last;
-    const errorClass = failureClass((terminal == null ? void 0 : terminal.result) || { status: 0, network: true });
-    return failedCapability(
-      protocol,
-      (terminal == null ? void 0 : terminal.endpoint) || null,
-      ((_f = terminal == null ? void 0 : terminal.authCandidate) == null ? void 0 : _f.scheme) || null,
-      errorClass,
-      failureEvidence(errorClass)
-    );
-  }
-  function profileMatchesProvider(profile, provider) {
-    var _a, _b;
-    return Boolean(
-      profile && profile.providerId === provider.id && normalizeBaseUrl(profile.baseUrl) === normalizeBaseUrl(provider.baseUrl) && profile.allowInsecureHttp === provider.allowInsecureHttp && profile.authProfileRevision === provider.authProfileRevision && (((_a = profile.auth) == null ? void 0 : _a.kind) === "none" || ((_b = profile.auth) == null ? void 0 : _b.kind) === "header") && Array.isArray(profile.extraHeaders)
-    );
-  }
-  function profileSensitiveValues(profile) {
-    var _a;
-    const values = [];
-    if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header" && profile.auth.value) {
-      const value = String(profile.auth.value);
-      values.push(value);
-      const bearer = /^Bearer\s+(.+)$/i.exec(value);
-      if (bearer == null ? void 0 : bearer[1]) values.push(bearer[1]);
-    }
-    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
-      if (header.source === "secret" && header.value) values.push(String(header.value));
-    }
-    return [...new Set(values.filter(Boolean))];
-  }
-  function capabilityFailure(reason, detail, tried, capabilities = null, modelListProbe = null) {
-    return {
-      ok: false,
-      reason,
-      detail,
-      ...capabilities ? { capabilities } : {},
-      preferredProtocol: null,
-      preferredProtocolEvidence: "none-supported",
-      models: [],
-      inventory: [],
-      modelListProbe,
-      tried
-    };
-  }
-  async function probeProviderCapabilities({
-    provider,
-    resolveRequestProfile,
-    requestImpl = defaultRequest,
-    modelId,
-    timeoutMs = 8e3,
-    now = Date.now
-  } = {}) {
-    const tried = [];
-    if (!provider || !["openai-compatible", "anthropic"].includes(provider.protocol) || typeof resolveRequestProfile !== "function" || typeof requestImpl !== "function") {
-      return capabilityFailure("configuration", "Provider capability detection is not configured", tried);
-    }
-    const selectedModel = typeof modelId === "string" ? modelId.trim() : "";
-    if (!selectedModel) return capabilityFailure("configuration", "Provider detection needs a model id", tried);
-    let probeProfile = null;
-    let modelProfile = null;
-    let models = [];
-    let inventory = [];
-    let modelListProbe = null;
-    try {
-      try {
-        probeProfile = await resolveRequestProfile(provider, { scope: "probe" });
-      } catch {
-      }
-      if (profileMatchesProvider(probeProfile, provider)) {
-        const recordedRequest = async (input) => {
-          const url = new URL(input.url);
-          try {
-            const result = safeResult(await requestImpl(input));
-            tried.push({
-              step: "models",
-              method: "GET",
-              path: url.pathname + url.search,
-              apiRootId: null,
-              authScheme: Object.hasOwn(input.headers || {}, "authorization") ? "bearer" : Object.hasOwn(input.headers || {}, "x-api-key") ? "x-api-key" : "custom-or-none",
-              headerNames: Object.keys(input.headers || {}).map((name) => name.toLowerCase()).sort(),
-              status: result.status,
-              outcome: "received"
-            });
-            return result;
-          } catch (error) {
-            tried.push({
-              step: "models",
-              method: "GET",
-              path: url.pathname + url.search,
-              apiRootId: null,
-              authScheme: "unknown",
-              headerNames: Object.keys(input.headers || {}).map((name) => name.toLowerCase()).sort(),
-              status: 0,
-              outcome: "network"
-            });
-            throw error;
-          }
-        };
-        const modelResult = await probeProviderModels({
-          requestProfile: probeProfile,
-          protocol: provider.protocol,
-          requestImpl: recordedRequest,
-          timeoutMs
-        });
-        if (modelResult.ok) {
-          const sensitiveValues2 = profileSensitiveValues(probeProfile);
-          const candidate = {
-            status: "supported",
-            apiRoot: modelResult.apiRoot,
-            authScheme: modelResult.authScheme,
-            models: modelResult.models,
-            inventory: modelResult.inventory || []
-          };
-          if (!containsExactSecret(candidate, sensitiveValues2)) {
-            models = candidate.models;
-            inventory = candidate.inventory;
-            modelListProbe = candidate;
-          }
-        }
-      }
-      try {
-        modelProfile = await resolveRequestProfile(provider, { scope: "model" });
-      } catch {
-        return capabilityFailure(
-          "configuration",
-          "Provider model profile could not be resolved",
-          tried,
-          null,
-          modelListProbe
-        );
-      }
-      if (!profileMatchesProvider(modelProfile, provider)) {
-        return capabilityFailure(
-          "configuration",
-          "Provider model profile does not match the provider",
-          tried,
-          null,
-          modelListProbe
-        );
-      }
-      const capabilities = {};
-      for (const protocol of ["responses", "chat", "messages"]) {
-        capabilities[protocol] = await probeProtocol({
-          protocol,
-          profile: modelProfile,
-          modelId: selectedModel,
-          requestImpl,
-          timeoutMs,
-          tried
-        });
-      }
-      const supported = PROTOCOL_ORDER.filter((protocol) => capabilities[protocol].support === "supported");
-      let observedAt;
-      try {
-        observedAt = now();
-      } catch {
-        observedAt = NaN;
-      }
-      if (!Number.isFinite(observedAt) || observedAt < 0) {
-        return capabilityFailure(
-          "configuration",
-          "Provider detection clock is invalid",
-          tried,
-          capabilities,
-          modelListProbe
-        );
-      }
-      return {
-        ok: supported.length > 0,
-        ...supported.length === 0 ? { reason: "capability-incompatible", detail: "Provider did not expose a verified Responses, Chat, or Messages API" } : {},
-        modelId: selectedModel,
-        capabilities,
-        preferredProtocol: supported[0] || null,
-        preferredProtocolEvidence: supported.length ? "observed-supported-protocol-order" : "none-supported",
-        observedAt,
-        models,
-        inventory,
-        modelListProbe,
-        tried
-      };
-    } finally {
-      probeProfile = null;
-      modelProfile = null;
-    }
-  }
-
-  // src/app/providerProbeFlow.js
-  var MODEL_LIST_TTL_MS2 = 36e5;
-  var DEFAULT_CAPABILITY_TTL_MS = 864e5;
-  var PROBE_REQUEST_TIMEOUT_MS = 3e4;
-  var PROTOCOLS3 = ["responses", "chat", "messages"];
-  var SUPPORTED_EVIDENCE = Object.freeze({
-    responses: /* @__PURE__ */ new Set(["responses-success-schema", "responses-incomplete-schema"]),
-    chat: /* @__PURE__ */ new Set(["chat-success-schema", "chat-length-schema"]),
-    messages: /* @__PURE__ */ new Set(["messages-success-schema", "messages-max-tokens-schema"])
-  });
-  var AGENT_FEATURE_KEYS2 = Object.freeze([
-    "compact",
-    "continuation",
-    "countTokens",
-    "namespaceTools",
-    "reasoningReplay",
-    "stream",
-    "terminal",
-    "tools"
-  ]);
-  var AGENT_FEATURE_STATUSES = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
-  var APPLICABLE_AGENT_FEATURES = Object.freeze({
-    responses: /* @__PURE__ */ new Set(["compact", "continuation", "namespaceTools", "stream", "terminal", "tools"]),
-    chat: /* @__PURE__ */ new Set(["stream", "terminal", "tools"]),
-    messages: /* @__PURE__ */ new Set(["countTokens", "stream", "terminal", "tools"])
-  });
-  function storeConflict() {
-    const error = new Error("Provider store revision conflict");
-    error.code = "PROVIDER_STORE_CONFLICT";
-    return error;
-  }
-  function persistEntry(entry, store, expectedRevision) {
-    if (!store) return { entry, stateRevision: null };
-    return store.upsert(entry, { expectedRevision });
-  }
-  function effectiveProbeApiRoot(provider) {
-    var _a;
-    return ((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.status) === "supported" && typeof provider.modelList.apiRoot === "string" && provider.modelList.apiRoot.trim() ? provider.modelList.apiRoot : provider.baseUrl;
-  }
-  function profileAdapter(provider) {
-    return {
-      ...provider,
-      baseUrl: effectiveProbeApiRoot(provider),
-      protocol: provider.probePreference === "messages" ? "anthropic" : "openai-compatible",
-      authProfileRevision: provider.requestProfileRevision
-    };
-  }
-  function wrappedResolver(provider, resolveRequestProfile) {
-    return async (_adapter, options) => {
-      const apiRoot = (options == null ? void 0 : options.apiRoot) || effectiveProbeApiRoot(provider);
-      const profile = await resolveRequestProfile(provider, {
-        ...options,
-        apiRoot
-      });
-      return {
-        ...profile,
-        baseUrl: apiRoot,
-        authProfileRevision: provider.requestProfileRevision
-      };
-    };
-  }
-  function safeExpiry2(checkedAt, maxAgeMs) {
-    const age = Number.isFinite(maxAgeMs) && maxAgeMs > 0 ? maxAgeMs : DEFAULT_CAPABILITY_TTL_MS;
-    return Math.min(Number.MAX_SAFE_INTEGER, checkedAt + age);
-  }
-  function metadataStringList(value) {
-    return [...new Set((Array.isArray(value) ? value : []).filter((entry) => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean))].sort();
-  }
-  function modelMetadata(value) {
-    const metadata = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-    const task = typeof metadata.task === "string" && metadata.task.trim() ? metadata.task.trim() : null;
-    return {
-      task,
-      inputModalities: metadataStringList(metadata.inputModalities),
-      outputModalities: metadataStringList(metadata.outputModalities),
-      capabilities: metadataStringList(metadata.capabilities)
-    };
-  }
-  function modelInventory(models, inventory) {
-    const records = /* @__PURE__ */ new Map();
-    const ingest = (raw, preferMetadata) => {
-      const id = String((raw == null ? void 0 : raw.id) || "").trim();
-      const label = String((raw == null ? void 0 : raw.label) || id).trim();
-      if (!id || !label) return;
-      const previous = records.get(id);
-      records.set(id, {
-        id,
-        label: label || (previous == null ? void 0 : previous.label) || id,
-        metadata: preferMetadata || !previous ? modelMetadata(raw.metadata) : previous.metadata
-      });
-    };
-    for (const raw of Array.isArray(models) ? models : []) ingest(raw, false);
-    for (const raw of Array.isArray(inventory) ? inventory : []) ingest(raw, true);
-    const output = Array.from(records.values());
-    output.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-    return output;
-  }
-  function authChoice(provider, scheme, scope) {
-    if (!["none", "bearer", "x-api-key", "custom"].includes(scheme)) return null;
-    let headerName = null;
-    if (scheme === "custom") {
-      const policy = scope === "probe" && provider.probeAuthOverride ? provider.probeAuthOverride : provider.credential.preferredAuth;
-      const configuredScheme = policy.kind || policy.scheme;
-      headerName = configuredScheme === "custom" ? policy.headerName : null;
-      if (!headerName) return null;
-    }
-    return { scheme, headerName };
-  }
-  function apiRootForProvider(provider, value) {
-    if (typeof value !== "string" || !value.trim()) return null;
-    try {
-      const apiRoot = new URL(value.trim());
-      return apiRoot.origin === new URL(provider.baseUrl).origin ? apiRoot.toString().replace(/\/$/, "") : null;
-    } catch {
-      return null;
-    }
-  }
-  function modelListFromProbe(provider, result, checkedAt) {
-    if (!(result == null ? void 0 : result.ok) || !result.apiRoot || !result.authScheme || checkedAt <= 0) return null;
-    const auth = authChoice(provider, result.authScheme, "probe");
-    const apiRoot = apiRootForProvider(provider, result.apiRoot);
-    const models = modelInventory(result.models, result.inventory);
-    if (!apiRoot || !auth || models.length === 0) return null;
-    const identity = JSON.stringify({ apiRoot, auth, models });
-    const currentIdentity = provider.modelList.status === "supported" ? JSON.stringify({
-      apiRoot: provider.modelList.apiRoot,
-      auth: provider.modelList.auth,
-      models: provider.modelList.models
-    }) : "";
-    const revision = identity === currentIdentity && provider.modelList.revision > 0 ? provider.modelList.revision : provider.modelList.revision + 1;
-    return {
-      revision,
-      status: "supported",
-      apiRoot,
-      auth,
-      models,
-      checkedAt,
-      validUntil: safeExpiry2(checkedAt, MODEL_LIST_TTL_MS2),
-      requestProfileRevision: provider.requestProfileRevision
-    };
-  }
-  function modelListProbeFromMatrix(matrix) {
-    const probe = matrix == null ? void 0 : matrix.modelListProbe;
-    if (!probe || probe.status !== "supported") return null;
-    return {
-      ok: true,
-      apiRoot: probe.apiRoot,
-      authScheme: probe.authScheme,
-      models: probe.models,
-      inventory: probe.inventory
-    };
-  }
-  function compatibility(protocol, raw) {
-    var _a, _b;
-    if (protocol === "responses") {
-      return { instructionMode: "responses-instructions", tokenField: "max_output_tokens" };
-    }
-    if (protocol === "messages") {
-      return { instructionMode: "messages-system", tokenField: "max_tokens" };
-    }
-    const instructionRole = (_a = raw == null ? void 0 : raw.compatibility) == null ? void 0 : _a.instructionRole;
-    const tokenField = (_b = raw == null ? void 0 : raw.compatibility) == null ? void 0 : _b.tokenField;
-    if (!["developer", "system"].includes(instructionRole) || !["max_tokens", "max_completion_tokens"].includes(tokenField)) {
-      return null;
-    }
-    return { instructionMode: `chat-${instructionRole}`, tokenField };
-  }
-  function exactFeatureObject(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const keys = Object.keys(value).sort();
-    return keys.length === AGENT_FEATURE_KEYS2.length && keys.every((key, index) => key === AGENT_FEATURE_KEYS2[index]);
-  }
-  function featureEvidenceStem(protocol, feature) {
-    if (feature === "stream" || feature === "terminal") return `${protocol}-stream`;
-    if (feature === "tools") return `${protocol}-tool`;
-    if (feature === "namespaceTools") return `${protocol}-namespace-tools`;
-    if (feature === "countTokens") return `${protocol}-count-tokens`;
-    if (feature === "reasoningReplay") return `${protocol}-reasoning-replay`;
-    return `${protocol}-${feature}`;
-  }
-  function validAgentFeatureEvidence(protocol, feature, status, evidence) {
-    if (typeof evidence !== "string" || !evidence) return false;
-    if (status === "unknown") {
-      if (evidence === "not-probed") return true;
-      const stem2 = featureEvidenceStem(protocol, feature);
-      return [`${stem2}-network`, `${stem2}-authentication`, `${stem2}-transient`].includes(evidence);
-    }
-    if (!APPLICABLE_AGENT_FEATURES[protocol].has(feature)) return false;
-    const stem = featureEvidenceStem(protocol, feature);
-    if (status === "unsupported") {
-      return evidence === `${stem}-rejected` || (feature === "stream" || feature === "terminal") && evidence === `${protocol}-stream-terminal-invalid`;
-    }
-    if (feature === "stream" || feature === "terminal") {
-      return evidence === `${protocol}-stream-terminal-valid`;
-    }
-    if (feature === "tools") return evidence === `${protocol}-tool-call-valid`;
-    return evidence === `${stem}-valid`;
-  }
-  function mappedAgentFeatures(protocol, raw) {
-    if (!exactFeatureObject(raw == null ? void 0 : raw.agentFeatures) || !exactFeatureObject(raw == null ? void 0 : raw.agentFeatureEvidence)) return null;
-    const output = {};
-    for (const feature of AGENT_FEATURE_KEYS2) {
-      const status = raw.agentFeatures[feature];
-      const evidence = raw.agentFeatureEvidence[feature];
-      if (!AGENT_FEATURE_STATUSES.has(status) || !validAgentFeatureEvidence(protocol, feature, status, evidence)) return null;
-      output[feature] = status;
-    }
-    if (output.stream !== output.terminal || raw.agentFeatureEvidence.stream !== raw.agentFeatureEvidence.terminal) return null;
-    return output;
-  }
-  function priorCapability(provider, modelId, protocol, modelListRevision, observedAt) {
-    var _a;
-    const prior = (_a = provider.modelCapabilities.find((entry) => entry.modelId === modelId)) == null ? void 0 : _a[protocol];
-    if (!prior || prior.status === "unknown") return null;
-    if (prior.requestProfileRevision !== provider.requestProfileRevision || prior.modelListRevision !== modelListRevision || prior.checkedAt > observedAt || prior.validUntil !== null && prior.validUntil < observedAt) {
-      return null;
-    }
-    return prior;
-  }
-  function stableUnsupportedEvidence(errorClass) {
-    if (errorClass === "endpoint-unsupported") return "endpoint-unsupported";
-    if (errorClass === "protocol-unsupported" || errorClass === "model-unsupported") {
-      return "model-protocol-unsupported";
-    }
-    return null;
-  }
-  function mappedCapability(provider, modelId, protocol, raw, modelListRevision, observedAt) {
-    var _a, _b, _c;
-    const prior = priorCapability(provider, modelId, protocol, modelListRevision, observedAt);
-    if (!raw || typeof raw !== "object") {
-      return prior || unknownProviderProtocolCapability({
-        requestProfileRevision: provider.requestProfileRevision,
-        modelListRevision
-      });
-    }
-    const auth = authChoice(provider, raw.authScheme, "model");
-    const apiRoot = apiRootForProvider(provider, raw.apiRoot);
-    if (raw.support === "supported") {
-      const requestCompatibility = compatibility(protocol, raw);
-      const evidence = typeof ((_a = raw.schema) == null ? void 0 : _a.evidence) === "string" ? raw.schema.evidence : null;
-      const agentFeatures = mappedAgentFeatures(protocol, raw);
-      const effectiveAgentFeatures = agentFeatures && (prior == null ? void 0 : prior.status) === "supported" ? Object.fromEntries(AGENT_FEATURE_KEYS2.map((feature) => [
-        feature,
-        agentFeatures[feature] === "unknown" ? prior.agentFeatures[feature] : agentFeatures[feature]
-      ])) : agentFeatures;
-      const maxAgeMs = (_b = raw.ttl) == null ? void 0 : _b.maxAgeMs;
-      if (apiRoot && auth && requestCompatibility && effectiveAgentFeatures && SUPPORTED_EVIDENCE[protocol].has(evidence) && Number.isFinite(maxAgeMs) && maxAgeMs > 0) {
-        return {
-          status: "supported",
-          apiRoot,
-          auth,
-          compatibility: requestCompatibility,
-          agentFeatures: effectiveAgentFeatures,
-          checkedAt: observedAt,
-          validUntil: safeExpiry2(observedAt, maxAgeMs),
-          requestProfileRevision: provider.requestProfileRevision,
-          modelListRevision,
-          evidence
-        };
-      }
-      return null;
-    }
-    if (raw.support === "unsupported" && ((_c = raw.ttl) == null ? void 0 : _c.class) === "unsupported") {
-      const evidence = stableUnsupportedEvidence(raw.errorClass);
-      const agentFeatures = mappedAgentFeatures(protocol, raw);
-      if (apiRoot && auth && evidence && agentFeatures) {
-        return {
-          status: "unsupported",
-          apiRoot,
-          auth,
-          compatibility: null,
-          agentFeatures: unknownProviderAgentFeatures(),
-          checkedAt: observedAt,
-          validUntil: null,
-          requestProfileRevision: provider.requestProfileRevision,
-          modelListRevision,
-          evidence
-        };
-      }
-      return null;
-    }
-    return prior || unknownProviderProtocolCapability({
-      requestProfileRevision: provider.requestProfileRevision,
-      modelListRevision
-    });
-  }
-  function entryWithMatrix(provider, matrix) {
-    const observedAt = matrix.observedAt;
-    if (!Number.isFinite(observedAt) || observedAt <= 0) return null;
-    const probedModelList = modelListFromProbe(
-      provider,
-      modelListProbeFromMatrix(matrix),
-      observedAt
-    );
-    const modelList = probedModelList || provider.modelList;
-    const modelId = String(matrix.modelId || "").trim();
-    if (!modelId || !matrix.capabilities || typeof matrix.capabilities !== "object") return null;
-    const mapped = {
-      modelId,
-      responses: mappedCapability(
-        provider,
-        modelId,
-        "responses",
-        matrix.capabilities.responses,
-        modelList.revision,
-        observedAt
-      ),
-      chat: mappedCapability(
-        provider,
-        modelId,
-        "chat",
-        matrix.capabilities.chat,
-        modelList.revision,
-        observedAt
-      ),
-      messages: mappedCapability(
-        provider,
-        modelId,
-        "messages",
-        matrix.capabilities.messages,
-        modelList.revision,
-        observedAt
-      )
-    };
-    if (PROTOCOLS3.some((protocol) => mapped[protocol] === null)) return null;
-    const record = mapped;
-    const previous = provider.modelCapabilities.find((entry) => entry.modelId === modelId) || null;
-    const hasKnowledge = PROTOCOLS3.some((protocol) => record[protocol].status !== "unknown");
-    const modelCapabilities = previous || hasKnowledge ? [
-      ...provider.modelCapabilities.filter((entry) => entry.modelId !== modelId),
-      record
-    ] : provider.modelCapabilities;
-    return normalizeProviderEntryV3({
-      ...provider,
-      modelList,
-      modelCapabilities
-    });
-  }
-  function probeFailureReason(result) {
-    if ((result == null ? void 0 : result.status) === 401 || (result == null ? void 0 : result.status) === 403) return "authentication";
-    if (!(result == null ? void 0 : result.status)) return "network";
-    return "path-unsupported";
-  }
-  function retryableCapabilityMatrix(matrix) {
-    if (!matrix || !matrix.capabilities || typeof matrix.capabilities !== "object") {
-      return false;
-    }
-    const retryableClasses = /* @__PURE__ */ new Set(["network", "rate-limited", "upstream-transient"]);
-    return PROTOCOLS3.some((protocol) => {
-      const capability = matrix.capabilities[protocol];
-      if ((capability == null ? void 0 : capability.support) === "transient" && retryableClasses.has(capability.errorClass)) return true;
-      if ((capability == null ? void 0 : capability.support) !== "supported") return false;
-      return ["stream", "terminal", "tools"].some((feature) => {
-        var _a, _b;
-        return ((_a = capability.agentFeatures) == null ? void 0 : _a[feature]) === "unknown" && /-(?:network|transient)$/.test(String(((_b = capability.agentFeatureEvidence) == null ? void 0 : _b[feature]) || ""));
-      });
-    });
-  }
-  function generateCapabilityAvailable(record) {
-    return PROTOCOLS3.some((protocol) => {
-      const capability = record == null ? void 0 : record[protocol];
-      return ((capability == null ? void 0 : capability.support) || (capability == null ? void 0 : capability.status)) === "supported" && ["stream", "terminal", "tools"].every(
-        (feature) => {
-          var _a;
-          return ((_a = capability.agentFeatures) == null ? void 0 : _a[feature]) === "supported";
-        }
-      );
-    });
-  }
-  async function runProviderManagerProbe(provider, {
-    store = null,
-    modelId,
-    forceDetect = false,
-    resolveRequestProfile,
-    probeProviderModelsImpl = probeProviderModels,
-    probeProviderCapabilitiesImpl = probeProviderCapabilities,
-    now = Date.now
-  } = {}) {
-    const normalized = normalizeProviderEntryV3(provider);
-    const selectedModelId = typeof modelId === "string" ? modelId.trim() : "";
-    if (forceDetect === true && !selectedModelId) {
-      return {
-        ok: false,
-        reason: "configuration",
-        detail: "Provider capability detection needs a model id"
-      };
-    }
-    if (typeof resolveRequestProfile !== "function") {
-      return { ok: false, reason: "configuration", detail: "Provider request profile resolver is unavailable" };
-    }
-    if (store && (typeof store.readState !== "function" || typeof store.get !== "function" || typeof store.upsert !== "function")) {
-      return { ok: false, reason: "configuration", detail: "Provider store is unavailable" };
-    }
-    const expectedRevision = store ? store.readState().revision : void 0;
-    if (store) {
-      const current = store.get(normalized.id);
-      if (!current || JSON.stringify(normalizeProviderEntryV3(current)) !== JSON.stringify(normalized)) {
-        throw storeConflict();
-      }
-    }
-    if (!selectedModelId) {
-      let requestProfile = null;
-      try {
-        requestProfile = await resolveRequestProfile(normalized, { scope: "probe" });
-        const result = await probeProviderModelsImpl({
-          requestProfile,
-          protocol: normalized.probePreference === "messages" ? "anthropic" : "openai-compatible"
-        });
-        if (!(result == null ? void 0 : result.ok)) {
-          return {
-            ok: false,
-            reason: probeFailureReason(result),
-            detail: (result == null ? void 0 : result.detail) || "Provider model probe failed",
-            result
-          };
-        }
-        const checkedAt = typeof now === "function" ? now() : Date.now();
-        const modelList = modelListFromProbe(normalized, result, checkedAt);
-        if (!modelList) {
-          return { ok: false, reason: "configuration", detail: "Provider model probe result is invalid", result };
-        }
-        const entry2 = normalizeProviderEntryV3({ ...normalized, modelList });
-        const persisted2 = persistEntry(entry2, store, expectedRevision);
-        return { ok: true, entry: persisted2.entry, stateRevision: persisted2.stateRevision, result };
-      } finally {
-        requestProfile = null;
-      }
-    }
-    const probeOptions = {
-      provider: profileAdapter(normalized),
-      modelId: selectedModelId,
-      resolveRequestProfile: wrappedResolver(normalized, resolveRequestProfile),
-      timeoutMs: PROBE_REQUEST_TIMEOUT_MS,
-      now
-    };
-    let matrix = await probeProviderCapabilitiesImpl(probeOptions);
-    let matrixAttempts = 1;
-    while (matrixAttempts < 3 && String((matrix == null ? void 0 : matrix.modelId) || "").trim() === selectedModelId && retryableCapabilityMatrix(matrix)) {
-      matrix = await probeProviderCapabilitiesImpl(probeOptions);
-      matrixAttempts += 1;
-    }
-    if (String((matrix == null ? void 0 : matrix.modelId) || "").trim() !== selectedModelId) {
-      return {
-        ok: false,
-        reason: "configuration",
-        detail: "Provider capability detection returned a different model id",
-        result: matrix
-      };
-    }
-    const entry = entryWithMatrix(normalized, matrix);
-    if (!entry) {
-      return {
-        ok: false,
-        reason: (matrix == null ? void 0 : matrix.reason) || "configuration",
-        detail: (matrix == null ? void 0 : matrix.detail) || "Provider capability detection failed",
-        result: matrix
-      };
-    }
-    const changed = JSON.stringify(entry) !== JSON.stringify(normalized);
-    const persisted = changed ? persistEntry(entry, store, expectedRevision) : { entry, stateRevision: null };
-    const ready = generateCapabilityAvailable(
-      entry.modelCapabilities.find((record) => record.modelId === selectedModelId)
-    );
-    return {
-      ok: ready,
-      ...!ready ? {
-        reason: matrix.reason || "capability-incompatible",
-        detail: matrix.detail || "Provider did not expose a verified agent-ready protocol"
-      } : {},
-      entry: persisted.entry,
-      stateRevision: persisted.stateRevision,
-      result: matrix,
-      capabilities: matrix.capabilities,
-      preferredProtocol: matrix.preferredProtocol || null
-    };
-  }
-
-  // src/components/settings/ProviderManagerSection.jsx
-  init_cep_runtime_inject();
-  var import_react45 = __toESM(require_react(), 1);
-
-  // src/lib/providerManagerState.js
-  init_cep_runtime_inject();
-  function defaultProviderModelAuthKind(protocol) {
-    return protocol === "anthropic" ? "x-api-key" : "bearer";
-  }
-  function emptyDraft() {
-    return {
-      id: "",
-      name: "",
-      baseUrl: "",
-      allowInsecureHttp: false,
-      modelAuthKind: "auto",
-      modelAuthAutomatic: false,
-      modelAuthHeaderName: "",
-      modelAuthSecret: "",
-      headers: [],
-      probePreference: ""
-    };
-  }
-  function headerDraft(header) {
-    var _a;
-    if (((_a = header == null ? void 0 : header.valueRef) == null ? void 0 : _a.kind) === "literal") {
-      return {
-        id: header.id,
-        name: header.name,
-        scopes: Array.isArray(header.scopes) ? header.scopes.slice() : [],
-        valueKind: "literal",
-        value: header.valueRef.value
-      };
-    }
-    return {
-      id: header.id,
-      name: header.name,
-      scopes: Array.isArray(header.scopes) ? header.scopes.slice() : [],
-      valueKind: "secret",
-      value: ""
-    };
-  }
-  function legacyAuth(entry) {
-    var _a;
-    const model = ((_a = entry == null ? void 0 : entry.auth) == null ? void 0 : _a.model) || { kind: "none" };
-    return {
-      scheme: model.kind || "none",
-      headerName: model.kind === "custom" ? model.headerName : null
-    };
-  }
-  function draftFromEntry(entry) {
-    var _a, _b, _c;
-    const auth = ((_a = entry == null ? void 0 : entry.credential) == null ? void 0 : _a.preferredAuth) || legacyAuth(entry);
-    const legacyProbePreference = ((_c = (_b = entry == null ? void 0 : entry.dialect) == null ? void 0 : _b.override) == null ? void 0 : _c.source) === "manual" ? entry.dialect.override.wireApi : "";
-    return {
-      ...emptyDraft(),
-      id: String((entry == null ? void 0 : entry.id) || ""),
-      name: String((entry == null ? void 0 : entry.name) || ""),
-      baseUrl: String((entry == null ? void 0 : entry.baseUrl) || ""),
-      allowInsecureHttp: (entry == null ? void 0 : entry.allowInsecureHttp) === true,
-      modelAuthKind: auth.scheme || "auto",
-      modelAuthAutomatic: false,
-      modelAuthHeaderName: auth.scheme === "custom" ? String(auth.headerName || "") : "",
-      headers: Array.isArray(entry == null ? void 0 : entry.headers) ? entry.headers.map(headerDraft) : [],
-      probePreference: String((entry == null ? void 0 : entry.probePreference) || legacyProbePreference || "")
-    };
-  }
-  function validateDraft(draft) {
-    if (!String((draft == null ? void 0 : draft.name) || "").trim() && !String((draft == null ? void 0 : draft.id) || "").trim()) {
-      return "\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A / name is required";
-    }
-    let url;
-    try {
-      url = new URL(String((draft == null ? void 0 : draft.baseUrl) || "").trim());
-    } catch {
-      return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
-    }
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
-    }
-    for (const header of (draft == null ? void 0 : draft.headers) || []) {
-      const name = String((header == null ? void 0 : header.name) || "").trim();
-      if (isReservedProviderExtraHeaderName(name)) {
-        return "\u8BE5 Header \u4E0D\u5141\u8BB8\u8F6C\u53D1 / this header cannot be forwarded";
-      }
-      if ((header == null ? void 0 : header.valueKind) === "literal" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(header == null ? void 0 : header.value))) {
-        return "\u654F\u611F Header \u5FC5\u987B\u4F7F\u7528\u5B89\u5168\u51ED\u636E / sensitive headers require protected secrets";
-      }
-    }
-    return "";
-  }
-  function draftToEntry(draft) {
-    const name = String((draft == null ? void 0 : draft.name) || (draft == null ? void 0 : draft.id) || "").trim();
-    const id = String((draft == null ? void 0 : draft.id) || "").trim() || name.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-    return {
-      ...emptyDraft(),
-      ...draft || {},
-      id,
-      name,
-      headers: Array.isArray(draft == null ? void 0 : draft.headers) ? draft.headers.map((header) => ({ ...header, scopes: [...header.scopes || []] })) : []
-    };
-  }
-
-  // src/lib/providerDialectBadge.js
-  init_cep_runtime_inject();
-  var CLIENT_LABELS = Object.freeze({
-    codex: "Codex",
-    "claude-code": "Claude"
-  });
-  function providerClientRouteBadge(provider, {
-    client,
-    modelId,
-    lang = "zh",
-    now
-  } = {}) {
-    const clientLabel = CLIENT_LABELS[client];
-    if (!clientLabel) return null;
-    const selectedModelId = String(modelId || "").trim();
-    if (!selectedModelId) {
-      return {
-        label: `${clientLabel} \xB7 ${lang === "en" ? "select model" : "\u8BF7\u9009\u6A21\u578B"}`,
-        title: lang === "en" ? "Select a model to inspect its Provider route." : "\u9009\u62E9\u6A21\u578B\u540E\u53EF\u67E5\u770B\u8BE5 Provider \u7684\u9010\u6A21\u578B\u9009\u8DEF\u3002",
-        status: "warn"
-      };
-    }
-    const route = selectProviderRoute(provider, {
-      client,
-      modelId: selectedModelId,
-      feature: "generate",
-      now
-    });
-    if (route.ok) {
-      return {
-        label: `${clientLabel} \xB7 ${providerRouteLabel(route, lang)}`,
-        title: lang === "en" ? `Current route for ${selectedModelId}` : `${selectedModelId} \u7684\u5F53\u524D\u9009\u8DEF`,
-        status: "neutral"
-      };
-    }
-    if (route.reasonCode === "needs-probe") {
-      return {
-        label: `${clientLabel} \xB7 ${lang === "en" ? "probe required" : "\u9700\u63A2\u6D4B"}`,
-        title: lang === "en" ? `Probe ${selectedModelId} before selecting a protocol route.` : `\u9700\u5148\u63A2\u6D4B ${selectedModelId} \u7684\u534F\u8BAE\u4E0E Agent \u7279\u6027\u3002`,
-        status: "warn"
-      };
-    }
-    return {
-      label: `${clientLabel} \xB7 ${lang === "en" ? "unavailable" : "\u4E0D\u53EF\u7528"}`,
-      title: lang === "en" ? `No verified route is available for ${selectedModelId}.` : `${selectedModelId} \u6682\u65E0\u5DF2\u9A8C\u8BC1\u7684\u53EF\u7528\u9009\u8DEF\u3002`,
-      status: "error"
-    };
-  }
-
-  // src/components/settings/ProviderManagerSection.jsx
-  var import_jsx_runtime43 = __toESM(require_jsx_runtime(), 1);
-  var L5 = {
-    zh: {
-      title: "Provider \u7BA1\u7406",
-      add: "\u65B0\u589E",
-      edit: "\u7F16\u8F91",
-      del: "\u5220\u9664",
-      probe: "\u63A2\u6D4B\u6A21\u578B",
-      redetect: "\u91CD\u65B0\u63A2\u6D4B\u5F53\u524D\u6A21\u578B",
-      probing: "\u63A2\u6D4B\u4E2D\u2026",
-      save: "\u4FDD\u5B58",
-      cancel: "\u53D6\u6D88",
-      name: "\u540D\u79F0",
-      baseUrl: "Base URL",
-      apiKey: "API Key",
-      autoAuthCap: "\u81EA\u52A8\u8BC6\u522B Authorization: Bearer\u3001x-api-key \u6216\u65E0\u8BA4\u8BC1\uFF1B\u53EA\u9700\u586B\u5199\u5E73\u53F0\u7ED9\u51FA\u7684 API Key\u3002\u5BC6\u94A5\u5199\u5165\u7CFB\u7EDF\u51ED\u636E\u5E93\uFF0C\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u7559\u3002",
-      overrideAuthCap: "\u5DF2\u542F\u7528\u9AD8\u7EA7\u8BA4\u8BC1\u89C4\u5219\uFF1B\u5BC6\u94A5\u5199\u5165\u7CFB\u7EDF\u51ED\u636E\u5E93\uFF0C\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u7559\u3002",
-      noApiKey: "\u9AD8\u7EA7\u8BBE\u7F6E\u4E3A\u65E0\u9700\u51ED\u636E\u3002",
-      advancedAuth: "\u9AD8\u7EA7\u8BA4\u8BC1\u4E0E\u8BF7\u6C42\u5934",
-      authType: "\u8BA4\u8BC1\u89C4\u5219",
-      probePreference: "\u63A2\u6D4B\u4F18\u5148\u534F\u8BAE",
-      probePreferenceCap: "\u4EC5\u8C03\u6574\u63A2\u6D4B\u987A\u5E8F\uFF1B\u5B9E\u9645\u8DEF\u7531\u6BCF\u4E2A\u6A21\u578B\u7684\u80FD\u529B\u77E9\u9635\u51B3\u5B9A\u3002",
-      auto: "\u81EA\u52A8\uFF08\u63A8\u8350\uFF09",
-      models: (n) => `${n} \u4E2A\u6A21\u578B`,
-      probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF1A",
-      importCc: "\u4ECE cc-switch \u5BFC\u5165",
-      insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09",
-      extraHeaders: "\u989D\u5916\u8BF7\u6C42\u5934",
-      addHeader: "\u65B0\u589E\u8BF7\u6C42\u5934",
-      removeHeader: "\u79FB\u9664",
-      headerName: "Header \u540D\u79F0",
-      literal: "\u666E\u901A\u6587\u672C",
-      secretValue: "\u7CFB\u7EDF\u51ED\u636E",
-      scopeProbe: "\u63A2\u6D4B",
-      scopeModel: "\u6A21\u578B\u8BF7\u6C42",
-      perModel: "\u9010\u6A21\u578B",
-      selected: "\u5DF2\u9009"
-    },
-    en: {
-      title: "Provider manager",
-      add: "Add",
-      edit: "Edit",
-      del: "Delete",
-      probe: "Probe models",
-      redetect: "Re-probe current model",
-      probing: "Probing\u2026",
-      save: "Save",
-      cancel: "Cancel",
-      name: "Name",
-      baseUrl: "Base URL",
-      apiKey: "API Key",
-      autoAuthCap: "Automatically detects Authorization: Bearer, x-api-key, or no authentication. Enter the API key supplied by the platform. It is stored in the system credential store; leave blank while editing to retain it.",
-      overrideAuthCap: "An advanced authentication rule is active. The key is stored in the system credential store; leave blank while editing to retain it.",
-      noApiKey: "Advanced settings specify that no credential is required.",
-      advancedAuth: "Advanced authentication and headers",
-      authType: "Authentication rule",
-      probePreference: "Probe protocol preference",
-      probePreferenceCap: "Changes probe order only; each model's capability matrix determines its actual route.",
-      auto: "Auto (recommended)",
-      models: (n) => `${n} models`,
-      probeFailed: "Probe failed: ",
-      importCc: "Import from cc-switch",
-      insecure: "Allow non-loopback HTTP (confirmed again on save)",
-      extraHeaders: "Extra headers",
-      addHeader: "Add header",
-      removeHeader: "Remove",
-      headerName: "Header name",
-      literal: "Literal text",
-      secretValue: "Credential store",
-      scopeProbe: "Probe",
-      scopeModel: "Model request",
-      perModel: "per-model",
-      selected: "selected"
-    }
-  };
-  function SecretInput({ name, disabled = false }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
-      "input",
-      {
-        name,
-        type: "password",
-        autoComplete: "new-password",
-        defaultValue: "",
-        disabled,
-        style: {
-          width: "100%",
-          height: 24,
-          boxSizing: "border-box",
-          padding: "0 8px",
-          color: "var(--text-primary)",
-          background: "var(--bg-well)",
-          border: "1px solid var(--border-default)",
-          borderRadius: "var(--radius-md)",
-          outline: "none",
-          font: "var(--weight-regular) var(--text-caption)/1 var(--font-mono)"
-        }
-      }
-    );
-  }
-  function nextHeaderId(headers) {
-    let index = headers.length + 1;
-    while (headers.some((header) => header.id === `header-${index}`)) index += 1;
-    return `header-${index}`;
-  }
-  function providerModelCount(provider) {
-    var _a;
-    if (Array.isArray((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models)) return provider.modelList.models.length;
-    return Array.isArray(provider == null ? void 0 : provider.probedModels) ? provider.probedModels.length : 0;
-  }
-  function ProviderManagerSection({
-    lang = "zh",
-    providers = [],
-    activeProviderId = "",
-    activeModelId = "",
-    onUpsert,
-    onRemove,
-    onProbe,
-    probing = "",
-    probeErrors = {},
-    ccSwitch = null,
-    onImportCcSwitch,
-    disabled = false
-  }) {
-    const t = L5[lang] || L5.zh;
-    const [draft, setDraft] = import_react45.default.useState(null);
-    const [error, setError] = import_react45.default.useState("");
-    const currentModelId = String(activeModelId || "").trim();
-    const save = async (event) => {
-      var _a;
-      event.preventDefault();
-      const formElement = event.currentTarget;
-      const message = validateDraft(draft);
-      if (message) {
-        setError(message);
-        return;
-      }
-      try {
-        await onUpsert(event, draftToEntry(draft));
-        setDraft(null);
-        setError("");
-      } catch (saveError) {
-        setError((saveError == null ? void 0 : saveError.message) || "Provider save failed");
-      } finally {
-        (_a = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a.call(formElement);
-      }
-    };
-    return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { style: { flex: 1, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (event) => {
-          event.preventDefault();
-          setDraft(emptyDraft());
-        }, children: t.add })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
-        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
-        providers.map((provider) => {
-          const modelCount = providerModelCount(provider);
-          const selected = provider.id === activeProviderId;
-          const routeBadges = ["codex", "claude-code"].map((client) => providerClientRouteBadge(provider, { client, modelId: currentModelId, lang })).filter(Boolean);
-          const canRedetectCurrentModel = Boolean(currentModelId && Array.isArray(provider.modelCapabilities));
-          return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { "data-provider-id": provider.id, style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: `1px solid ${selected ? "var(--accent-border)" : "var(--border-default)"}`, borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { style: { flex: 1, minWidth: 120, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
-              selected ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: "accent", children: t.selected }) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: "neutral", children: t.perModel }),
-              modelCount ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: { display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }, children: routeBadges.map((badge) => /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { title: badge.title, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: badge.status, children: badge.label }) }, badge.label)) }),
-            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
-            /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider), children: probing === provider.id ? t.probing : t.probe }),
-              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id || !canRedetectCurrentModel, onClick: () => onProbe(provider, { forceDetect: true, modelId: currentModelId }), children: t.redetect }),
-              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
-                setDraft(draftFromEntry(provider));
-                setError("");
-              }, children: t.edit }),
-              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
-            ] }),
-            probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
-              t.probeFailed,
-              probeErrors[provider.id]
-            ] }) : null
-          ] }, provider.id);
-        }),
-        draft ? /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (value) => setDraft({ ...draft, baseUrl: value }), placeholder: "https://api.example.com/v1" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("label", { style: { display: "flex", gap: 6, alignItems: "center", font: "400 11px/1.35 var(--font-ui)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("input", { type: "checkbox", checked: draft.allowInsecureHttp, onChange: (event) => setDraft({ ...draft, allowInsecureHttp: event.target.checked }) }),
-            t.insecure
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.apiKey, caption: draft.modelAuthKind === "auto" ? t.autoAuthCap : t.overrideAuthCap, children: draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.noApiKey }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("details", { "data-provider-advanced-auth": true, style: { border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", padding: "5px 6px" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("summary", { style: { cursor: "pointer", font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.advancedAuth }),
-            /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)(Field, { label: t.authType, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value, modelAuthAutomatic: false }), options: [
-                  { value: "auto", label: t.auto },
-                  { value: "bearer", label: "Authorization: Bearer" },
-                  { value: "x-api-key", label: "x-api-key" },
-                  { value: "custom", label: "Custom header" },
-                  { value: "none", label: "None" }
-                ] }),
-                draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.probePreference, caption: t.probePreferenceCap, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Select, { value: draft.probePreference, onChange: (value) => setDraft({ ...draft, probePreference: value }), options: [
-                { value: "", label: t.auto },
-                { value: "responses", label: "Responses" },
-                { value: "chat", label: "Chat Completions" },
-                { value: "messages", label: "Messages" }
-              ] }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-                draft.headers.map((header, index) => {
-                  const sensitiveName = isSensitiveProviderHeaderName(header.name);
-                  const valueKind = sensitiveName ? "secret" : header.valueKind;
-                  return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, ...isSensitiveProviderHeaderName(value) ? { valueKind: "secret", value: "" } : {} } : item) }), placeholder: t.headerName }),
-                    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Select, { value: valueKind, onChange: (nextValueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind: nextValueKind, value: nextValueKind === "literal" ? item.value || "" : "" } : item) }), options: sensitiveName ? [{ value: "secret", label: t.secretValue }] : [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
-                    valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
-                    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
-                      scope === "probe" ? t.scopeProbe : t.scopeModel
-                    ] }, scope)) }),
-                    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
-                  ] }, header.id);
-                }),
-                /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "secret", value: "" }] }), children: t.addHeader })
-              ] }) })
-            ] })
-          ] }),
-          error ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
-              setDraft(null);
-              setError("");
-            }, children: t.cancel }),
-            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "primary", size: "sm", disabled, onClick: (event) => {
-              var _a;
-              return (_a = event.currentTarget.closest("form")) == null ? void 0 : _a.requestSubmit();
-            }, children: t.save })
-          ] })
-        ] }) : null
-      ] })
-    ] });
-  }
-
-  // src/cep/ccSwitch.js
-  init_cep_runtime_inject();
-  var CONFIG_NAMES = ["config.json", "providers.json"];
-  var API_FORMAT_TO_WIRE_API = {
-    openai_responses: "responses",
-    "openai-responses": "responses",
-    responses: "responses",
-    openai_chat: "chat",
-    "openai-chat": "chat",
-    chat: "chat",
-    "chat-completions": "chat",
-    chat_completions: "chat"
-  };
-  function rotateRight2(value, count) {
-    return value >>> count | value << 32 - count;
-  }
-  function sha256Text2(text) {
-    const bytes = typeof TextEncoder === "function" ? new TextEncoder().encode(String(text)) : Uint8Array.from(unescape(encodeURIComponent(String(text))), (char) => char.charCodeAt(0));
-    const bitLength = bytes.length * 8;
-    const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
-    const padded = new Uint8Array(paddedLength);
-    padded.set(bytes);
-    padded[bytes.length] = 128;
-    const view = new DataView(padded.buffer);
-    const high = Math.floor(bitLength / 4294967296);
-    const low = bitLength >>> 0;
-    view.setUint32(paddedLength - 8, high);
-    view.setUint32(paddedLength - 4, low);
-    const constants = [
-      1116352408,
-      1899447441,
-      3049323471,
-      3921009573,
-      961987163,
-      1508970993,
-      2453635748,
-      2870763221,
-      3624381080,
-      310598401,
-      607225278,
-      1426881987,
-      1925078388,
-      2162078206,
-      2614888103,
-      3248222580,
-      3835390401,
-      4022224774,
-      264347078,
-      604807628,
-      770255983,
-      1249150122,
-      1555081692,
-      1996064986,
-      2554220882,
-      2821834349,
-      2952996808,
-      3210313671,
-      3336571891,
-      3584528711,
-      113926993,
-      338241895,
-      666307205,
-      773529912,
-      1294757372,
-      1396182291,
-      1695183700,
-      1986661051,
-      2177026350,
-      2456956037,
-      2730485921,
-      2820302411,
-      3259730800,
-      3345764771,
-      3516065817,
-      3600352804,
-      4094571909,
-      275423344,
-      430227734,
-      506948616,
-      659060556,
-      883997877,
-      958139571,
-      1322822218,
-      1537002063,
-      1747873779,
-      1955562222,
-      2024104815,
-      2227730452,
-      2361852424,
-      2428436474,
-      2756734187,
-      3204031479,
-      3329325298
-    ];
-    const hash = [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225];
-    const words = new Uint32Array(64);
-    for (let offset = 0; offset < paddedLength; offset += 64) {
-      for (let index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4);
-      for (let index = 16; index < 64; index += 1) {
-        const x = words[index - 15];
-        const y = words[index - 2];
-        const s0 = rotateRight2(x, 7) ^ rotateRight2(x, 18) ^ x >>> 3;
-        const s1 = rotateRight2(y, 17) ^ rotateRight2(y, 19) ^ y >>> 10;
-        words[index] = words[index - 16] + s0 + words[index - 7] + s1 >>> 0;
-      }
-      let [a, b, c, d, e, f, g, h] = hash;
-      for (let index = 0; index < 64; index += 1) {
-        const s1 = rotateRight2(e, 6) ^ rotateRight2(e, 11) ^ rotateRight2(e, 25);
-        const choose = e & f ^ ~e & g;
-        const temp1 = h + s1 + choose + constants[index] + words[index] >>> 0;
-        const s0 = rotateRight2(a, 2) ^ rotateRight2(a, 13) ^ rotateRight2(a, 22);
-        const majority = a & b ^ a & c ^ b & c;
-        const temp2 = s0 + majority >>> 0;
-        h = g;
-        g = f;
-        f = e;
-        e = d + temp1 >>> 0;
-        d = c;
-        c = b;
-        b = a;
-        a = temp1 + temp2 >>> 0;
-      }
-      hash[0] = hash[0] + a >>> 0;
-      hash[1] = hash[1] + b >>> 0;
-      hash[2] = hash[2] + c >>> 0;
-      hash[3] = hash[3] + d >>> 0;
-      hash[4] = hash[4] + e >>> 0;
-      hash[5] = hash[5] + f >>> 0;
-      hash[6] = hash[6] + g >>> 0;
-      hash[7] = hash[7] + h >>> 0;
-    }
-    return hash.map((word) => word.toString(16).padStart(8, "0")).join("");
-  }
-  function candidateDirs(platform) {
-    const home = platform.paths.home;
-    const completed = platform.completeSpawnEnv ? platform.completeSpawnEnv() : {};
-    const appData = completed.APPDATA || platform.paths.join([home, "AppData", "Roaming"]);
-    const dirs = [];
-    if (home) {
-      dirs.push(platform.paths.join([home, ".cc-switch"]));
-      dirs.push(platform.paths.join([home, ".config", "cc-switch"]));
-    }
-    if (appData) dirs.push(platform.paths.join([appData, "cc-switch"]));
-    return dirs;
-  }
-  function rawProviders(parsed) {
-    if (!parsed || typeof parsed !== "object") return [];
-    if (Array.isArray(parsed.providers)) return parsed.providers;
-    if (Array.isArray(parsed.profiles)) return parsed.profiles;
-    if (parsed.providers && typeof parsed.providers === "object") return Object.values(parsed.providers);
-    return [];
-  }
-  function objectValue(value) {
-    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  }
-  function hasOwn(value, key) {
-    return Object.prototype.hasOwnProperty.call(value, key);
-  }
-  function wireApiFromValue(value) {
-    return API_FORMAT_TO_WIRE_API[String(value || "").trim().toLowerCase()] || "";
-  }
-  function wireApiFromConfig(value) {
-    if (typeof value !== "string") return "";
-    const match = value.match(/(?:^|\n)\s*wire_api\s*=\s*["'](responses|chat)["']/i);
-    return match ? match[1].toLowerCase() : "";
-  }
-  function dialectHint(provider) {
-    const meta = objectValue(provider == null ? void 0 : provider.meta);
-    const settingsConfig = objectValue((provider == null ? void 0 : provider.settingsConfig) || (provider == null ? void 0 : provider.settings_config));
-    const dialect = objectValue(provider == null ? void 0 : provider.dialect);
-    return wireApiFromValue(meta.apiFormat || meta.api_format) || wireApiFromValue((provider == null ? void 0 : provider.apiFormat) || (provider == null ? void 0 : provider.api_format)) || wireApiFromConfig(settingsConfig.config) || wireApiFromValue((provider == null ? void 0 : provider.wireApi) || (provider == null ? void 0 : provider.wire_api) || dialect.wireApi || dialect.wire_api) || null;
-  }
-  function authSchemeFromValue(value) {
-    const text = String(value || "").trim().toLowerCase();
-    if (text === "none" || text === "no-auth" || text === "no_auth") return "none";
-    if (text === "bearer" || text === "authorization" || text === "openai_api_key") return "bearer";
-    if (text === "x-api-key" || text === "x_api_key" || text === "anthropic_api_key") return "x-api-key";
-    return "";
-  }
-  function authSchemeFromKeyField(value) {
-    const field = String(value || "").trim();
-    const direct = authSchemeFromValue(field);
-    if (direct) return direct;
-    if (/x[-_]?api[-_]?key/i.test(field) || field === "ANTHROPIC_API_KEY") return "x-api-key";
-    if (/authorization/i.test(field) || field === "OPENAI_API_KEY" || field === "ANTHROPIC_AUTH_TOKEN") return "bearer";
-    return "";
-  }
-  function authHint(provider) {
-    const meta = objectValue(provider == null ? void 0 : provider.meta);
-    const settingsConfig = objectValue((provider == null ? void 0 : provider.settingsConfig) || (provider == null ? void 0 : provider.settings_config));
-    const auth = objectValue(settingsConfig.auth);
-    const env = objectValue(settingsConfig.env);
-    const explicit = authSchemeFromValue(
-      (provider == null ? void 0 : provider.authScheme) || (provider == null ? void 0 : provider.auth_scheme) || meta.authScheme || meta.auth_scheme || auth.type || auth.scheme
-    );
-    if (explicit) return explicit;
-    const keyField = authSchemeFromKeyField(meta.apiKeyField || meta.api_key_field);
-    if (keyField) return keyField;
-    if (hasOwn(auth, "OPENAI_API_KEY") || hasOwn(env, "OPENAI_API_KEY")) return "bearer";
-    if (hasOwn(auth, "ANTHROPIC_AUTH_TOKEN") || hasOwn(env, "ANTHROPIC_AUTH_TOKEN")) return "bearer";
-    if (hasOwn(auth, "ANTHROPIC_API_KEY") || hasOwn(env, "ANTHROPIC_API_KEY")) return "x-api-key";
-    return null;
-  }
-  function safeBaseUrl(value) {
-    const text = String(value || "").trim();
-    let url;
-    try {
-      url = new URL(text);
-    } catch {
-      return "";
-    }
-    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) return "";
-    const sensitiveName = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password|auth)(?:$|[-_])/i;
-    for (const name of url.searchParams.keys()) {
-      if (sensitiveName.test(name)) return "";
-    }
-    return text;
-  }
-  function previewEntry(provider) {
-    if (!provider || typeof provider !== "object") return null;
-    const name = String(provider.name || provider.title || provider.id || "").trim();
-    const baseUrl = safeBaseUrl(provider.baseUrl || provider.base_url || provider.url || "");
-    if (!name || !baseUrl) return null;
-    const protocol = /anthropic/i.test(String(provider.type || provider.protocol || provider.kind || "")) ? "anthropic" : "openai-compatible";
-    return {
-      candidateId: `ccswitch-${name.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase()}`,
-      name,
-      protocol,
-      baseUrl,
-      dialectHint: protocol === "openai-compatible" ? dialectHint(provider) : null,
-      authHint: authHint(provider)
-    };
-  }
-  function ccSwitchProviderEntries(list) {
-    return (Array.isArray(list) ? list : []).map(previewEntry).filter(Boolean);
-  }
-  function importChanged() {
-    const error = new Error("Provider import source changed");
-    error.code = "provider_import_source_changed";
-    return error;
-  }
-  function detectCcSwitch({ platform, fsImpl } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    const fs = fsImpl || adapter.fs;
-    if (!fs) return null;
-    for (const dir of candidateDirs(adapter)) {
-      for (const name of CONFIG_NAMES) {
-        const file = adapter.paths.join([dir, name]);
-        try {
-          if (fs.existsSync && !fs.existsSync(file)) continue;
-          const text = String(fs.readFileSync(file, "utf8"));
-          const providers = ccSwitchProviderEntries(rawProviders(JSON.parse(text)));
-          if (providers.length) return { dir, file, sourceRevision: sha256Text2(text), providers };
-        } catch {
-        }
-      }
-    }
-    return null;
-  }
-  function readCcSwitchProviderDrafts({ file, expectedSourceRevision, fsImpl } = {}) {
-    if (!file || !expectedSourceRevision || !(fsImpl == null ? void 0 : fsImpl.readFileSync)) throw importChanged();
-    let text;
-    try {
-      text = String(fsImpl.readFileSync(file, "utf8"));
-    } catch {
-      throw importChanged();
-    }
-    if (sha256Text2(text) !== expectedSourceRevision) throw importChanged();
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      throw importChanged();
-    }
-    return rawProviders(parsed).map((provider) => {
-      const preview = previewEntry(provider);
-      if (!preview) return null;
-      return {
-        ...preview,
-        modelAuthKind: preview.authHint || defaultProviderModelAuthKind(preview.protocol),
-        modelAuthSecret: String(provider.apiKey || provider.api_key || provider.key || provider.token || "").trim()
-      };
-    }).filter(Boolean);
-  }
-
-  // src/cep/claudeSettingsImport.js
-  init_cep_runtime_inject();
-  function settingsFile(platform) {
-    const home = platform.paths.home;
-    if (!home) return "";
-    return platform.paths.join([home, ".claude", "settings.json"]);
-  }
-  function parseSettings(text) {
-    const parsed = JSON.parse(text);
-    const settingsEnv = (parsed == null ? void 0 : parsed.env) && typeof parsed.env === "object" && !Array.isArray(parsed.env) ? parsed.env : {};
-    const baseUrl = String(settingsEnv.ANTHROPIC_BASE_URL || "https://api.anthropic.com").trim();
-    const secret = String(settingsEnv.ANTHROPIC_AUTH_TOKEN || "").trim();
-    if (!secret) return null;
-    const url = new URL(baseUrl);
-    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) return null;
-    const sensitiveName = /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|password|auth)(?:$|[-_])/i;
-    for (const name of url.searchParams.keys()) {
-      if (sensitiveName.test(name)) return null;
-    }
-    return { baseUrl, secret };
-  }
-  function sourceChanged() {
-    const error = new Error("Provider import source changed");
-    error.code = "provider_import_source_changed";
-    return error;
-  }
-  function inspectClaudeSettingsEnv({ platform, fsImpl } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    const fs = fsImpl || adapter.fs;
-    const file = settingsFile(adapter);
-    if (!file || !(fs == null ? void 0 : fs.readFileSync)) return null;
-    try {
-      const text = String(fs.readFileSync(file, "utf8"));
-      const settings = parseSettings(text);
-      if (!settings) return null;
-      return { available: true, baseUrl: settings.baseUrl, sourceRevision: sha256Text2(text) };
-    } catch {
-      return null;
-    }
-  }
-  function readClaudeSettingsProviderDraft({ platform, expectedSourceRevision, fsImpl } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    const fs = fsImpl || adapter.fs;
-    const file = settingsFile(adapter);
-    if (!file || !expectedSourceRevision || !(fs == null ? void 0 : fs.readFileSync)) throw sourceChanged();
-    let text;
-    try {
-      text = String(fs.readFileSync(file, "utf8"));
-    } catch {
-      throw sourceChanged();
-    }
-    if (sha256Text2(text) !== expectedSourceRevision) throw sourceChanged();
-    let settings;
-    try {
-      settings = parseSettings(text);
-    } catch {
-      throw sourceChanged();
-    }
-    if (!settings) return null;
-    return {
-      name: "Claude Code config",
-      protocol: "anthropic",
-      baseUrl: settings.baseUrl,
-      modelAuthKind: "bearer",
-      modelAuthSecret: settings.secret
-    };
   }
 
   // src/cep/codexConfig.js
@@ -49768,6 +42054,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     });
   }
 
+  // src/lib/anthropic.js
+  init_cep_runtime_inject();
+  var DEFAULT_MODEL = "claude-sonnet-4-6";
+
   // src/lib/descriptorSelect.js
   init_cep_runtime_inject();
   function isClaudeApiBackend(effectiveBackend) {
@@ -49791,6 +42081,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     customProviderCredentialResolverReady = false,
     byokApiModels = null,
     codexCachedModels = null,
+    openCodeProviders = [],
     zcodeSessionModels = null,
     zcodeProbedModels = null
   }) {
@@ -49818,6 +42109,18 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return descriptorWithCustomModel(channelDescriptor, customId);
       }
       return effectiveChannel === "cli" ? descriptorWithCustomModel(mergeCodexOfficialLoginModels(baseDescriptor), customId) : baseDescriptor;
+    }
+    if (backendPref === "opencode" || effectiveBackend === "opencode") {
+      const providerResult = {};
+      for (const provider of openCodeProviders || []) {
+        if (!provider || provider.needsApiKey === true) continue;
+        const models = {};
+        for (const modelId of provider.modelIds || []) {
+          models[modelId] = { name: modelId };
+        }
+        providerResult[provider.id] = { id: provider.id, name: provider.name, models };
+      }
+      return Object.keys(providerResult).length ? openCodeDescriptorFromModels(providerResult) : baseDescriptor;
     }
     if (backendPref === "zcode" || effectiveBackend === "zcode") {
       const available = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available) ? zcodeSessionModels.settings.model.available : [];
@@ -49850,10 +42153,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/cep/useActivity.js
   init_cep_runtime_inject();
-  var import_react46 = __toESM(require_react(), 1);
+  var import_react44 = __toESM(require_react(), 1);
   function useActivity(getHost) {
-    const [events, setEvents] = import_react46.default.useState([]);
-    import_react46.default.useEffect(() => {
+    const [events, setEvents] = import_react44.default.useState([]);
+    import_react44.default.useEffect(() => {
       let unsub = null;
       let retry = null;
       let disposed = false;
@@ -49875,7 +42178,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (retry) clearTimeout(retry);
       };
     }, [getHost]);
-    const clear = import_react46.default.useCallback(() => setEvents([]), []);
+    const clear = import_react44.default.useCallback(() => setEvents([]), []);
     return { events, clear };
   }
 
@@ -49904,36 +42207,43 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/app/wizardWiring.js
   init_cep_runtime_inject();
-  var import_react47 = __toESM(require_react(), 1);
+  var import_react45 = __toESM(require_react(), 1);
 
   // src/cep/wizardActions.js
   init_cep_runtime_inject();
   var OUTPUT_TAIL = 8192;
-  var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
-  var TOOL_IDS = { aeMcp: "ae-mcp", uv: "uv", node: "node", claude: "claude" };
-  async function detectTool(id, { platform, extRoot, runtimeManager } = {}) {
-    const adapter = platform || createPlatformAdapter();
+  var TOOL_IDS = {
+    node: "node",
+    claude: "claude",
+    codex: "codex",
+    opencode: "opencode"
+  };
+  async function detectHost({ port = 11488, fetchImpl } = {}) {
+    const fetcher = fetchImpl || globalThis.fetch;
+    if (typeof fetcher !== "function") return { ok: false, detail: "fetch unavailable" };
+    try {
+      const response = await fetcher("http://127.0.0.1:" + port + "/health");
+      const body = response && typeof response.json === "function" ? await response.json() : {};
+      const ok = response && response.ok !== false && body.ok === true;
+      return {
+        ok,
+        version: ok ? "Host " + (body.pluginVersion || "ready") : "",
+        detail: ok ? "127.0.0.1:" + (body.port || port) : "Host did not return ok"
+      };
+    } catch (error) {
+      return { ok: false, detail: error.message || String(error) };
+    }
+  }
+  async function detectTool(id, options = {}) {
+    if (id === "host") return detectHost(options);
+    const adapter = options.platform || createPlatformAdapter();
     const executableId = TOOL_IDS[id];
     if (!executableId) return { ok: false, detail: "unsupported tool id" };
-    if (id === "node" && adapter.id === "macos-arm64" && runtimeManager) {
-      try {
-        const resolved2 = await runtimeManager.resolveNode();
-        return { ok: true, version: resolved2.version, path: resolved2.nodePath, source: "runtime-manager", runtime: resolved2.runtime };
-      } catch (error) {
-        return { ok: false, detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED" };
-      }
+    const resolveOptions = id === "node" ? { minimumVersion: "18.0.0" } : id === "claude" ? { minimumVersion: "2.0.0" } : {};
+    const resolved = await adapter.resolveExecutable(executableId, resolveOptions);
+    if (!resolved.ok) {
+      return { ok: false, detail: resolved.code, resolution: resolved };
     }
-    if (id === "aeMcp" && adapter.id === "macos-arm64" && (runtimeManager || extRoot)) {
-      try {
-        const resolved2 = await resolveMcpCommand({ platform: adapter, extRoot, runtimeManager });
-        return { ok: true, version: resolved2.command, path: resolved2.command, source: resolved2.source, runtime: resolved2.runtime };
-      } catch (error) {
-        return { ok: false, detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED" };
-      }
-    }
-    const options = executableId === "node" ? { minimumVersion: "18.0.0" } : executableId === "claude" ? { minimumVersion: "2.0.0" } : {};
-    const resolved = await adapter.resolveExecutable(executableId, options);
-    if (!resolved.ok) return { ok: false, detail: resolved.code, resolution: resolved };
     return {
       ok: true,
       version: resolved.version || resolved.path,
@@ -49941,20 +42251,43 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       source: resolved.source
     };
   }
-  function buildInstallCommands({ panelVersion, repoRoot, platform } = {}) {
+  function buildInstallCommands({ platform } = {}) {
     const adapter = platform || createPlatformAdapter();
-    if (typeof adapter.legacyWizardInstallCommands !== "function") {
-      throw new Error("Legacy wizard command catalog is unavailable on this platform");
-    }
-    return adapter.legacyWizardInstallCommands({ panelVersion, repoRoot, repo: REPO });
+    if (typeof adapter.legacyWizardInstallCommands !== "function") return {};
+    const commands = adapter.legacyWizardInstallCommands({
+      panelVersion: "",
+      repoRoot: "",
+      repo: ""
+    });
+    return commands && commands.node ? { node: commands.node } : {};
   }
-  async function runAction({ file, executableId, args, platform, env, onChunk }) {
+  async function runAction({
+    file,
+    executableId,
+    args,
+    platform,
+    env,
+    onChunk
+  }) {
     const adapter = platform || createPlatformAdapter();
     if (!executableId || typeof executableId !== "string") {
-      return { ok: false, code: -1, output: "Installer command is missing a platform executable id: " + String(file || "") };
+      return {
+        ok: false,
+        code: -1,
+        output: "Installer command is missing a platform executable id: " + String(file || "")
+      };
     }
-    const executable = await adapter.resolveExecutable(executableId, env === void 0 ? {} : { env });
-    if (!executable.ok) return { ok: false, code: -1, output: executableId + " resolution failed: " + executable.code };
+    const executable = await adapter.resolveExecutable(
+      executableId,
+      env === void 0 ? {} : { env }
+    );
+    if (!executable.ok) {
+      return {
+        ok: false,
+        code: -1,
+        output: executableId + " resolution failed: " + executable.code
+      };
+    }
     return new Promise((resolve) => {
       var _a, _b, _c, _d, _e, _f;
       let output = "";
@@ -49979,154 +42312,78 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         spawnError = error;
         push(String(error && error.message || error));
       });
-      (_f = child.on) == null ? void 0 : _f.call(child, "close", (code) => resolve({ ok: !spawnError && code === 0, code: spawnError ? -1 : code, output }));
+      (_f = child.on) == null ? void 0 : _f.call(child, "close", (code) => {
+        resolve({
+          ok: !spawnError && code === 0,
+          code: spawnError ? -1 : code,
+          output
+        });
+      });
     });
   }
-  function commandPreview({ file, args }) {
+  function commandPreview({ file, args } = {}) {
+    if (!file) return "";
     return [file, ...(args || []).map((value) => /\s/.test(value) ? `"${value}"` : value)].join(" ");
-  }
-  function detectRepoRoot({ extRoot, fsImpl, platform }) {
-    const adapter = platform || createPlatformAdapter();
-    return findProjectRoot({ extRoot, repoRoot: "", fsImpl: fsImpl || adapter.fs, platform: adapter });
-  }
-  async function openLoginTerminal({ tool, platform } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    await adapter.openLoginTerminal(tool === "codex" ? "codex" : "claude");
-    return true;
   }
 
   // src/app/wizardWiring.js
-  function isLoginOk(claudeStatus) {
-    return Boolean(claudeStatus && claudeStatus.state === "ready");
-  }
-  function versionFrom(status) {
-    if (!status) return "";
-    if (status.cliVersion) return "Claude CLI " + String(status.cliVersion).replace(/^v?/, "v");
-    return String(status.detail || "").trim();
-  }
-  function wingetMissing(output) {
-    const text = String(output || "").toLowerCase();
-    return text.includes("winget") && (text.includes("not recognized") || text.includes("not found") || text.includes("enoent") || text.includes("cannot find"));
-  }
-  function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, platform, runtimeManager, onRuntimeReady } = {}) {
-    const [stepStates, dispatch] = import_react47.default.useReducer(stepReducer, null, initialStepStates);
-    const [useUvFallback, setUseUvFallback] = import_react47.default.useState(false);
-    const repoRoot = import_react47.default.useMemo(() => {
-      try {
-        return detectRepoRoot({ extRoot });
-      } catch (e) {
-        return "";
-      }
-    }, [extRoot]);
-    const cmds = import_react47.default.useMemo(() => buildInstallCommands({
-      panelVersion: PANEL_VERSION,
-      repoRoot,
-      platform
-    }), [platform, repoRoot]);
-    const localSteps = import_react47.default.useMemo(
-      () => (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? ["aeMcp"] : LOCAL_STEPS,
-      [platform, runtimeManager]
+  function useWizardWiring({
+    port = 11488,
+    fetchImpl,
+    platform
+  } = {}) {
+    const [stepStates, dispatch] = import_react45.default.useReducer(stepReducer, null, initialStepStates);
+    const commands = import_react45.default.useMemo(
+      () => buildInstallCommands({ platform }),
+      [platform]
     );
-    const activeCmds = import_react47.default.useMemo(() => ({
-      ...cmds,
-      uv: useUvFallback ? cmds.uvFallback : cmds.uv
-    }), [cmds, useUvFallback]);
-    const commandPreviews = import_react47.default.useMemo(() => ({
-      uv: commandPreview(activeCmds.uv),
-      aeMcp: (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? lang === "zh" ? "\u9A8C\u8BC1\u5E76\u6FC0\u6D3B\u63D2\u4EF6\u5185\u7F6E\u79BB\u7EBF\u8FD0\u884C\u65F6" : "Verify and activate the bundled offline runtime" : commandPreview(activeCmds.aeMcp),
-      node: (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? lang === "zh" ? "\u4FEE\u590D\u63D2\u4EF6\u5185\u7F6E\u79BB\u7EBF Node \u8FD0\u884C\u65F6" : "Repair the bundled offline Node runtime" : commandPreview(activeCmds.node),
-      claude: commandPreview(activeCmds.claude),
-      login: "claude"
-    }), [activeCmds, lang, platform, runtimeManager]);
-    const detect = import_react47.default.useCallback(async (id) => {
+    const commandPreviews = import_react45.default.useMemo(() => ({
+      node: commandPreview(commands.node)
+    }), [commands]);
+    const detect = import_react45.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
-      if (id === "login") {
-        if (recheckLogin) {
-          recheckLogin();
-          return { ok: false, pending: true };
-        }
-        const ok = isLoginOk(claudeStatus);
-        dispatch({ type: "detect-result", id, ok, version: ok ? versionFrom(claudeStatus) : "" });
-        return { ok, version: versionFrom(claudeStatus) };
-      }
-      const result = await detectTool(id, { platform, extRoot, runtimeManager });
-      if (result.ok && result.runtime && onRuntimeReady) onRuntimeReady(result.runtime);
-      dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
+      const result = await detectTool(id, {
+        platform,
+        port,
+        fetchImpl
+      });
+      dispatch({
+        type: "detect-result",
+        id,
+        ok: result.ok,
+        version: result.version || "",
+        detail: result.detail || ""
+      });
       return result;
-    }, [claudeStatus, extRoot, onRuntimeReady, platform, recheckLogin, runtimeManager]);
-    const install = import_react47.default.useCallback(async (id) => {
-      if (["aeMcp", "node"].includes(id) && (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager) {
-        dispatch({ type: "run-start", id });
-        try {
-          const repaired = await runtimeManager.repair();
-          if (onRuntimeReady) onRuntimeReady(repaired);
-          const output = `Offline runtime ${repaired.version} activated at ${repaired.launcher}`;
-          dispatch({ type: "run-done", id, ok: true, output });
-          await detect(id);
-          return { ok: true, output };
-        } catch (error) {
-          const output = `${(error == null ? void 0 : error.code) || "RUNTIME_MANAGER_FAILED"}: ${(error == null ? void 0 : error.message) || error}`;
-          dispatch({ type: "run-done", id, ok: false, output });
-          return { ok: false, output };
-        }
-      }
-      const cmd = activeCmds[id];
-      if (!cmd) return { ok: false, output: "No command configured for " + id };
-      if (id === "uv" && useUvFallback) {
-        const msg = lang === "zh" ? "winget \u4E0D\u53EF\u7528\u3002\u662F\u5426\u6539\u7528 astral \u5B98\u65B9 PowerShell \u5B89\u88C5\u811A\u672C\uFF1F" : "winget is unavailable. Use the official astral PowerShell installer instead?";
-        if (globalThis.window && globalThis.window.confirm && !globalThis.window.confirm(msg)) {
-          return { ok: false, output: "uv fallback cancelled" };
-        }
-      }
+    }, [fetchImpl, platform, port]);
+    const install = import_react45.default.useCallback(async (id) => {
+      const command = commands[id];
+      if (!command) return { ok: false, output: "No install command configured for " + id };
       dispatch({ type: "run-start", id });
       const result = await runAction({
-        ...cmd,
+        ...command,
+        platform,
         onChunk: (text) => dispatch({ type: "run-chunk", id, text })
       });
-      if (id === "uv" && !result.ok && !useUvFallback && wingetMissing(result.output)) {
-        setUseUvFallback(true);
-        dispatch({
-          type: "run-done",
-          id,
-          ok: false,
-          output: result.output + "\nwinget was not found. Re-run Install to use the official astral PowerShell installer."
-        });
-        return result;
-      }
       dispatch({ type: "run-done", id, ok: result.ok, output: result.output });
       await detect(id);
       return result;
-    }, [activeCmds, detect, lang, onRuntimeReady, platform, runtimeManager, useUvFallback]);
-    const openLogin = import_react47.default.useCallback(() => {
-      openLoginTerminal({ tool: "claude" });
-      dispatch({ type: "detect-result", id: "login", ok: false });
-    }, []);
-    const bootDetectRef = import_react47.default.useRef(false);
-    import_react47.default.useEffect(() => {
+    }, [commands, detect, platform]);
+    const bootDetectRef = import_react45.default.useRef(false);
+    import_react45.default.useEffect(() => {
       if (bootDetectRef.current) return;
       bootDetectRef.current = true;
-      [...localSteps, ...SUBSCRIPTION_STEPS].forEach((id) => {
+      [...HOST_STEPS, ...CLI_STEPS, ...OPTIONAL_CLIENT_STEPS].forEach((id) => {
         detect(id);
       });
-    }, [detect, localSteps]);
-    import_react47.default.useEffect(() => {
-      if (!claudeStatus) return;
-      if (claudeStatus.state === "checking") {
-        dispatch({ type: "detect-start", id: "login" });
-        return;
-      }
-      const ok = isLoginOk(claudeStatus);
-      dispatch({ type: "detect-result", id: "login", ok, version: ok ? versionFrom(claudeStatus) : "" });
-    }, [claudeStatus]);
+    }, [detect]);
     return {
       stepStates,
       props: {
         stepStates,
         commandPreviews,
-        localSteps,
         onDetect: detect,
-        onInstall: install,
-        onOpenLogin: openLogin
+        onInstall: install
       }
     };
   }
@@ -50135,40 +42392,36 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   init_cep_runtime_inject();
   var HINTS = {
     "host-listening": {
-      zh: "\u786E\u8BA4 ae-mcp \u9762\u677F\u5DF2\u6253\u5F00\uFF1B\u5982\u7AEF\u53E3\u88AB\u5360\u7528\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u91CC\u6362\u4E00\u4E2A\u7AEF\u53E3\u5E76\u91CD\u542F\u670D\u52A1\u3002",
-      en: "Make sure the ae-mcp panel is open. If the port is busy, choose another port in Settings and restart the service."
+      zh: "\u786E\u8BA4 ae-mcp \u9762\u677F\u5DF2\u6253\u5F00\uFF1B\u5982\u7AEF\u53E3\u88AB\u5360\u7528\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u91CC\u6362\u7AEF\u53E3\u5E76\u91CD\u542F\u5BBF\u4E3B\u3002",
+      en: "Keep the ae-mcp panel open. If the port is busy, change it in Settings and restart the host."
     },
     "token-file": {
-      zh: "\u91CD\u542F After Effects \u9762\u677F\u4EE5\u91CD\u65B0\u751F\u6210 ~/.ae-mcp/auth-token\uFF0C\u7136\u540E\u91CD\u542F\u4F60\u7684 AI \u5BA2\u6237\u7AEF\u3002",
-      en: "Restart the After Effects panel to regenerate ~/.ae-mcp/auth-token, then restart your AI client."
+      zh: "\u91CD\u542F After Effects \u9762\u677F\u4EE5\u91CD\u65B0\u751F\u6210 ~/.ae-mcp/auth-token\u3002",
+      en: "Restart the After Effects panel to regenerate ~/.ae-mcp/auth-token."
     },
-    "python-seen": {
-      zh: "\u8FD0\u884C\u4F60\u7684 AI \u5BA2\u6237\u7AEF\u53D1\u8D77\u4E00\u6B21\u5BF9\u8BDD\uFF0C\u6216\u68C0\u67E5\u5176 MCP \u914D\u7F6E\u3002",
-      en: "Start a conversation in your AI client, or check its MCP configuration."
+    "mcp-session": {
+      zh: "\u4ECE\u9762\u677F\u5BF9\u8BDD\u6216\u5916\u90E8\u5BA2\u6237\u7AEF\u53D1\u8D77\u4E00\u6B21 MCP \u8BF7\u6C42\uFF1B\u5916\u90E8\u5BA2\u6237\u7AEF\u5E94\u8FDE\u63A5\u5BBF\u4E3B /mcp URL\u3002",
+      en: "Send an MCP request from panel chat or an external client connected to the host /mcp URL."
     },
     "ae-project": {
-      zh: "\u786E\u8BA4 After Effects \u5141\u8BB8\u811A\u672C\u8BBF\u95EE\uFF0C\u5E76\u4FDD\u6301\u9762\u677F\u670D\u52A1\u8FD0\u884C\u3002",
-      en: "Confirm After Effects allows script access and keep the panel service running."
+      zh: "\u786E\u8BA4 After Effects \u5141\u8BB8\u811A\u672C\u8BBF\u95EE\uFF0C\u5E76\u4FDD\u6301\u9762\u677F\u5BBF\u4E3B\u8FD0\u884C\u3002",
+      en: "Confirm After Effects allows script access and keep the panel host running."
     },
     "extendscript-ping": {
-      zh: "\u91CD\u542F\u9762\u677F\u670D\u52A1\uFF1B\u5982\u679C\u4ECD\u5931\u8D25\uFF0C\u8BF7\u91CD\u542F After Effects \u540E\u518D\u8BD5\u3002",
-      en: "Restart the panel service. If it still fails, restart After Effects and try again."
-    },
-    "ae-mcp": {
-      zh: "\u5728\u8BBE\u7F6E\u4E2D\u4FEE\u590D\u79BB\u7EBF\u8FD0\u884C\u65F6\u5E76\u91CD\u65B0\u9A8C\u8BC1\u7A33\u5B9A\u542F\u52A8\u5668\u3002",
-      en: "Repair the offline runtime in Settings, then verify the stable launcher again."
-    },
-    node: {
-      zh: "\u5728\u8BBE\u7F6E\u4E2D\u4FEE\u590D\u968F\u63D2\u4EF6\u5B89\u88C5\u7684 Node \u8FD0\u884C\u65F6\u3002",
-      en: "Repair the Node runtime bundled with the plugin in Settings."
+      zh: "\u91CD\u542F\u9762\u677F\u5BBF\u4E3B\uFF1B\u5982\u679C\u4ECD\u5931\u8D25\uFF0C\u8BF7\u91CD\u542F After Effects \u540E\u518D\u8BD5\u3002",
+      en: "Restart the panel host. If it still fails, restart After Effects and try again."
     },
     claude: {
-      zh: "Claude CLI \u4E3A\u53EF\u9009\u9879\uFF1B\u5982\u9700\u8BA2\u9605\u901A\u9053\uFF0C\u8BF7\u6253\u5F00\u767B\u5F55\u7EC8\u7AEF\u5B8C\u6210\u914D\u7F6E\u3002",
-      en: "Claude CLI is optional. Open its login terminal if you want the subscription channel."
+      zh: "Claude CLI \u4E3A\u53EF\u9009\u9879\uFF1B\u5982\u9700\u8BE5\u901A\u9053\uFF0C\u8BF7\u5B89\u88C5\u5E76\u5B8C\u6210\u767B\u5F55\u3002",
+      en: "Claude CLI is optional. Install it and sign in to use that channel."
     },
     codex: {
-      zh: "Codex CLI \u4E3A\u53EF\u9009\u9879\uFF1B\u5982\u9700\u8BA2\u9605\u901A\u9053\uFF0C\u8BF7\u6253\u5F00\u767B\u5F55\u7EC8\u7AEF\u5B8C\u6210\u914D\u7F6E\u3002",
-      en: "Codex CLI is optional. Open its login terminal if you want the subscription channel."
+      zh: "Codex CLI \u4E3A\u53EF\u9009\u9879\uFF1B\u5982\u9700\u8BE5\u901A\u9053\uFF0C\u8BF7\u5B89\u88C5\u5E76\u5B8C\u6210\u767B\u5F55\u3002",
+      en: "Codex CLI is optional. Install it and sign in to use that channel."
+    },
+    opencode: {
+      zh: "opencode CLI \u4E3A\u53EF\u9009\u9879\uFF1B\u5982\u9700\u81EA\u5B9A\u4E49 provider \u901A\u9053\uFF0C\u8BF7\u5B89\u88C5\u5E76\u914D\u7F6E\u5B83\u3002",
+      en: "The opencode CLI is optional. Install and configure it for custom providers."
     }
   };
   function tokenPath(platform) {
@@ -50182,10 +42435,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     return {
       "content-type": "application/json",
       "x-ae-mcp-token": token,
-      // Must match INTERNAL_CLIENT in plugin/host/server.js: panel-origin
-      // probes are kept out of the client registry (and therefore out of
-      // lastClientSeenAt) so running diagnostics can never green-light the
-      // python-seen check or list a phantom client in Settings.
       "x-ae-mcp-client": "panel-diagnostics/internal"
     };
   }
@@ -50197,16 +42446,23 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     });
     return { response, body: await readJson(response) };
   }
+  function recentMcpSession(getHost) {
+    const host = getHost && getHost();
+    const sessions = host && typeof host.getMcpSessions === "function" ? host.getMcpSessions() : [];
+    const latest = sessions.reduce((value, session) => Math.max(value, Number(session.lastActivityAt) || 0), 0);
+    const age = latest ? Date.now() - latest : Infinity;
+    return {
+      ok: age < 10 * 60 * 1e3,
+      detail: latest ? "Last MCP session activity " + Math.round(age / 1e3) + "s ago" : "No MCP session activity yet"
+    };
+  }
   async function runDiagnostics({
     getHost,
     port,
     fs,
     fetchImpl,
-    platform,
-    runtimeManager,
-    allowDevelopmentPath = false
+    platform
   }) {
-    var _a, _b, _c, _d, _e, _f, _g;
     const adapter = platform || createPlatformAdapter();
     const fileSystem = fs || adapter.fs;
     const fetcher = fetchImpl || globalThis.fetch;
@@ -50222,8 +42478,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         detail: ok ? "Host v" + (body.pluginVersion || "unknown") + " on port " + (body.port || port) : "Host did not return ok",
         fixHint: HINTS["host-listening"]
       });
-    } catch (e) {
-      items.push({ id: "host-listening", ok: false, detail: e.message, fixHint: HINTS["host-listening"] });
+    } catch (error) {
+      items.push({
+        id: "host-listening",
+        ok: false,
+        detail: error.message,
+        fixHint: HINTS["host-listening"]
+      });
     }
     try {
       const file = tokenPath(adapter);
@@ -50235,23 +42496,27 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         detail: exists ? "Token length " + token.length : "Token file missing",
         fixHint: HINTS["token-file"]
       });
-    } catch (e) {
-      items.push({ id: "token-file", ok: false, detail: e.message, fixHint: HINTS["token-file"] });
+    } catch (error) {
+      items.push({
+        id: "token-file",
+        ok: false,
+        detail: error.message,
+        fixHint: HINTS["token-file"]
+      });
     }
     try {
-      const host = getHost && getHost();
-      const info = host && host.getConnectionInfo && host.getConnectionInfo();
-      const lastPythonSeenAt = info ? Math.max(info.lastHealthAt || 0, info.lastClientSeenAt || 0) : 0;
-      const age = lastPythonSeenAt ? Date.now() - lastPythonSeenAt : Infinity;
-      const ok = age < 10 * 60 * 1e3;
       items.push({
-        id: "python-seen",
-        ok,
-        detail: ok ? "Last Python signal " + Math.round(age / 1e3) + "s ago" : "No recent Python signal",
-        fixHint: HINTS["python-seen"]
+        id: "mcp-session",
+        ...recentMcpSession(getHost),
+        fixHint: HINTS["mcp-session"]
       });
-    } catch (e) {
-      items.push({ id: "python-seen", ok: false, detail: e.message, fixHint: HINTS["python-seen"] });
+    } catch (error) {
+      items.push({
+        id: "mcp-session",
+        ok: false,
+        detail: error.message,
+        fixHint: HINTS["mcp-session"]
+      });
     }
     try {
       const code = 'app.project && app.project.file ? app.project.file.name : (app.project ? "unsaved" : "none")';
@@ -50264,8 +42529,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         detail: project === "unsaved" ? "Project unsaved" : "Project " + project,
         fixHint: HINTS["ae-project"]
       });
-    } catch (e) {
-      items.push({ id: "ae-project", ok: false, detail: e.message, fixHint: HINTS["ae-project"] });
+    } catch (error) {
+      items.push({
+        id: "ae-project",
+        ok: false,
+        detail: error.message,
+        fixHint: HINTS["ae-project"]
+      });
     }
     try {
       const { response, body } = await execCode(fetcher, port, token, '"pong"');
@@ -50276,72 +42546,23 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         detail: ok ? "pong" : "Unexpected result: " + String(body.result || body.error || ""),
         fixHint: HINTS["extendscript-ping"]
       });
-    } catch (e) {
-      items.push({ id: "extendscript-ping", ok: false, detail: e.message, fixHint: HINTS["extendscript-ping"] });
+    } catch (error) {
+      items.push({
+        id: "extendscript-ping",
+        ok: false,
+        detail: error.message,
+        fixHint: HINTS["extendscript-ping"]
+      });
     }
-    if (runtimeManager) {
-      let node = null;
-      let nodeError = null;
-      try {
-        node = await runtimeManager.resolveNode();
-      } catch (error) {
-        nodeError = error;
-      }
-      try {
-        const state = await runtimeManager.inspect();
-        const current = ((_a = state.current) == null ? void 0 : _a.ok) ? state.current.record : null;
-        const developmentRuntime = state.developmentRuntime === true;
-        items.push({
-          id: "ae-mcp",
-          ok: state.ok,
-          detail: state.ok && developmentRuntime ? [
-            "DEVELOPMENT CHECKOUT",
-            state.checkoutPath,
-            (_b = state.interpreter) == null ? void 0 : _b.path,
-            (_c = state.interpreter) == null ? void 0 : _c.resolvedPath,
-            (_e = (_d = state.diagnostics) == null ? void 0 : _d[0]) == null ? void 0 : _e.code
-          ].filter(Boolean).join(" \xB7 ") : state.ok ? `${current.version} \xB7 ${state.launcher.path} \xB7 ${current.sourceCommitSha}` : [(_f = state.current) == null ? void 0 : _f.code, (_g = state.launcher) == null ? void 0 : _g.code].filter(Boolean).join(" \xB7 "),
-          fixHint: HINTS["ae-mcp"],
-          action: { kind: "repair-runtime" }
-        });
-      } catch (error) {
-        items.push({
-          id: "ae-mcp",
-          ok: false,
-          detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED",
-          fixHint: HINTS["ae-mcp"],
-          action: { kind: "repair-runtime" }
-        });
-      }
-      if (node) {
-        items.push({
-          id: "node",
-          ok: node.ok,
-          detail: node.ok ? [node.version, node.nodePath].filter(Boolean).join(" \xB7 ") : node.detail,
-          runtime: node.runtime,
-          fixHint: HINTS.node,
-          action: { kind: "repair-runtime" }
-        });
-      } else {
-        items.push({
-          id: "node",
-          ok: false,
-          detail: (nodeError == null ? void 0 : nodeError.code) || (nodeError == null ? void 0 : nodeError.message) || "RUNTIME_MANAGER_FAILED",
-          fixHint: HINTS.node,
-          action: { kind: "repair-runtime" }
-        });
-      }
-    }
-    for (const id of runtimeManager ? ["claude", "codex"] : ["ae-mcp", "node", "claude", "codex"]) {
-      const options = id === "node" ? { minimumVersion: "24.17.0", requiredArch: adapter.id === "macos-arm64" ? "arm64" : "x64" } : id === "ae-mcp" && allowDevelopmentPath ? { allowDevelopmentPath: true } : {};
+    for (const id of ["claude", "codex", "opencode"]) {
+      const options = id === "claude" ? { minimumVersion: "2.0.0" } : {};
       const result = await adapter.resolveExecutable(id, options);
-      const action = id === "ae-mcp" || id === "node" ? { kind: "repair-runtime" } : { kind: "open-login-terminal", tool: id };
       items.push({
         id,
         ok: result.ok,
         detail: result.ok ? [result.version, result.path].filter(Boolean).join(" \xB7 ") : result.code,
         fixHint: HINTS[id],
-        action
+        ...id === "opencode" ? {} : { action: { kind: "open-login-terminal", tool: id } }
       });
     }
     return items;
@@ -50378,21 +42599,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     } catch (e) {
     }
   }
-  function buildMcpConfig(port, expertGuidance = true, command = "ae-mcp") {
-    return {
-      mcpServers: {
-        ae: {
-          command,
-          env: Object.assign(
-            { AE_MCP_BACKEND: "ae-mcp" },
-            expertGuidanceEnv(expertGuidance !== false),
-            { AE_MCP_PLUGIN_URL: "http://127.0.0.1:" + port }
-          )
-        }
-      }
-    };
-  }
-  function getCepRequire6() {
+  function getCepRequire5() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -50400,8 +42607,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function loadBundledHostDependencies({ cepRequire: cepRequire5, adapter, extensionRoot }) {
-    if (typeof cepRequire5 !== "function") throw new TypeError("CEP Node require is unavailable");
+  function loadBundledHostDependencies({ cepRequire: cepRequire4, adapter, extensionRoot }) {
+    if (typeof cepRequire4 !== "function") throw new TypeError("CEP Node require is unavailable");
     if (!adapter || !["macos-arm64", "windows-x64"].includes(adapter.id)) {
       throw new TypeError("A supported platform adapter is required");
     }
@@ -50412,11 +42619,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     if (typeof nativePath.resolve !== "function" || typeof nativePath.dirname !== "function" || typeof nativePath.isAbsolute !== "function" || typeof nativePath.contains !== "function" || typeof nativePath.same !== "function") {
       throw new TypeError("A complete native platform path catalog is required");
     }
-    const moduleApi = cepRequire5("module");
+    const moduleApi = cepRequire4("module");
     if (!moduleApi || typeof moduleApi.createRequire !== "function") {
       throw new Error("CEP Node module.createRequire is unavailable");
     }
-    const fs = adapter.fs || cepRequire5("fs");
+    const fs = adapter.fs || cepRequire4("fs");
     if (!fs || typeof fs.existsSync !== "function" || typeof fs.lstatSync !== "function" || typeof fs.realpathSync !== "function" || typeof fs.statSync !== "function" || typeof fs.readFileSync !== "function") {
       throw new Error("CEP Node filesystem is unavailable");
     }
@@ -50544,20 +42751,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       throw unavailable2(cause);
     }
   }
-  function helperUnavailableError() {
-    const error = new Error("Platform helper is unavailable");
-    error.code = "HELPER_UNAVAILABLE";
-    error.retryable = true;
-    return error;
-  }
-  function sanitizeHelperError(error) {
-    const code = typeof (error == null ? void 0 : error.code) === "string" && /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code) ? error.code : "HELPER_UNAVAILABLE";
-    const sanitized = new Error(code === "HELPER_UNAVAILABLE" ? "Platform helper is unavailable" : `Platform helper request failed with ${code}`);
-    sanitized.code = code;
-    sanitized.retryable = (error == null ? void 0 : error.retryable) === true || code === "HELPER_UNAVAILABLE";
-    return sanitized;
-  }
-  function helperRuntime(platformId) {
+  function nativeAegpRuntime(platformId) {
     return platformId === "macos-arm64" ? { platform: "darwin", arch: "arm64" } : { platform: "win32", arch: "x64" };
   }
   function createHostController({
@@ -50567,138 +42761,57 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     platform,
     requireImpl,
     addBeforeUnload,
-    extensionRoot,
-    createPlatformHelperTransportImpl,
-    createPlatformHelperClientImpl
+    extensionRoot
   }) {
     const adapter = platform || createPlatformAdapter();
     let host = null;
-    let helperClient = null;
-    let helperBindingContext = null;
     let platformRoots = null;
     let beforeUnloadInstalled = false;
     let lifecycleGeneration = 0;
-    function closeHelperClient(client, fallbackTransport = null) {
-      const closable = client && typeof client.close === "function" ? client : fallbackTransport;
-      if (!closable || typeof closable.close !== "function") return;
-      try {
-        Promise.resolve(closable.close()).catch(() => {
-        });
-      } catch {
-      }
-    }
-    function disposeLifecycle(client, hostInstance, { closeClient = true } = {}) {
-      if (closeClient) closeHelperClient(client);
+    function disposeLifecycle(hostInstance) {
       try {
         if (hostInstance && typeof hostInstance.stop === "function") hostInstance.stop();
       } catch {
       }
     }
-    function bindPlatformHelperFacade({
-      cepRequire: cepRequire5,
-      extRoot,
-      hostInstance,
-      repairRegistration = false
-    }) {
-      let transport = null;
-      let nextClient = null;
-      let bindingError = null;
-      try {
-        const transportFactory = createPlatformHelperTransportImpl || (() => {
-          const modulePath = adapter.paths.join([extRoot, "host", "platform-helper-transport.js"]);
-          const loaded = cepRequire5(modulePath);
-          if (typeof (loaded == null ? void 0 : loaded.createPlatformHelperTransport) !== "function") throw helperUnavailableError();
-          return loaded.createPlatformHelperTransport;
-        })();
-        const clientFactory = createPlatformHelperClientImpl || (() => {
-          const modulePath = adapter.paths.join([extRoot, "host", "platform-helper-client.js"]);
-          const loaded = cepRequire5(modulePath);
-          if (typeof (loaded == null ? void 0 : loaded.createPlatformHelperClient) !== "function") throw helperUnavailableError();
-          return loaded.createPlatformHelperClient;
-        })();
-        transport = transportFactory({
-          platformId: adapter.id,
-          runtime: helperRuntime(adapter.id),
-          repairRegistration
-        });
-        if (!transport || typeof transport.request !== "function" || typeof transport.close !== "function") {
-          throw helperUnavailableError();
-        }
-        nextClient = clientFactory({ transport });
-        for (const method of ["capabilities", "secretGet", "secretSet", "secretDelete", "close"]) {
-          if (typeof (nextClient == null ? void 0 : nextClient[method]) !== "function") throw helperUnavailableError();
-        }
-      } catch (error) {
-        bindingError = sanitizeHelperError(error);
-        closeHelperClient(nextClient, transport);
-        nextClient = null;
-      }
-      helperClient = nextClient;
-      const facadeClient = nextClient;
-      const invoke = (method, value, hasValue) => {
-        const client = facadeClient;
-        if (!client) return Promise.reject(bindingError || helperUnavailableError());
-        let request;
-        try {
-          request = hasValue ? client[method](value) : client[method]();
-        } catch (error) {
-          return Promise.reject(sanitizeHelperError(error));
-        }
-        return Promise.resolve(request).catch((error) => {
-          throw sanitizeHelperError(error);
-        });
-      };
-      hostInstance.capabilities = () => invoke("capabilities", void 0, false);
-      hostInstance.secretGet = (reference) => invoke("secretGet", reference, true);
-      hostInstance.secretSet = (value) => invoke("secretSet", value, true);
-      hostInstance.secretDelete = (value) => invoke("secretDelete", value, true);
-    }
     function start(port) {
       const generation = lifecycleGeneration += 1;
       onStatus("starting", port);
       const priorHost = host;
-      const priorClient = helperClient;
       host = null;
-      helperClient = null;
-      helperBindingContext = null;
       platformRoots = null;
-      if (priorHost || priorClient) disposeLifecycle(priorClient, priorHost);
+      if (priorHost) disposeLifecycle(priorHost);
       try {
-        const cepRequire5 = requireImpl || getCepRequire6();
+        const cepRequire4 = requireImpl || getCepRequire5();
         const extRoot = normalizeCepPath(extensionRoot || cs2.getSystemPath("extension"), adapter);
         const hostPath = adapter.paths.join([extRoot, "host", "server.js"]);
         const roots = { extensionRoot: extRoot, runtimeRoot: adapter.paths.runtimeRoot };
         platformRoots = roots;
         onLog("host: " + hostPath);
         const runtimeDependencies = loadBundledHostDependencies({
-          cepRequire: cepRequire5,
+          cepRequire: cepRequire4,
           adapter,
           extensionRoot: extRoot
         });
-        const nextHost = cepRequire5(hostPath);
+        const nextHost = cepRequire4(hostPath);
         if (!nextHost || typeof nextHost.setRuntimeDependencies !== "function") {
           throw new Error("Host runtime dependency binding is unavailable");
         }
         nextHost.setRuntimeDependencies(runtimeDependencies);
         if (nextHost.setNativeAegpRuntime) {
-          nextHost.setNativeAegpRuntime(helperRuntime(adapter.id));
+          nextHost.setNativeAegpRuntime(nativeAegpRuntime(adapter.id));
         }
         nextHost.setCSInterface(cs2);
         if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
         host = nextHost;
-        helperBindingContext = { cepRequire: cepRequire5, extRoot, hostInstance: nextHost };
-        bindPlatformHelperFacade({ cepRequire: cepRequire5, extRoot, hostInstance: nextHost });
         if (!beforeUnloadInstalled) {
           const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener("beforeunload", handler));
           installBeforeUnload(() => {
             lifecycleGeneration += 1;
-            const closingClient = helperClient;
             const closingHost = host;
-            helperClient = null;
-            helperBindingContext = null;
             host = null;
             platformRoots = null;
-            disposeLifecycle(closingClient, closingHost, { closeClient: false });
+            disposeLifecycle(closingHost);
           });
           beforeUnloadInstalled = true;
         }
@@ -50709,12 +42822,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }, roots);
       } catch (e) {
         const failedHost = host;
-        const failedClient = helperClient;
         host = null;
-        helperClient = null;
-        helperBindingContext = null;
         platformRoots = null;
-        disposeLifecycle(failedClient, failedHost);
+        disposeLifecycle(failedHost);
         if (generation === lifecycleGeneration) onStatus("error", port, e.message);
       }
     }
@@ -50730,29 +42840,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }, platformRoots);
       }
     }
-    async function repairPlatformHelper() {
-      const context = helperBindingContext;
-      const currentHost = host;
-      if (!["macos-arm64", "windows-x64"].includes(adapter.id) || !context || !currentHost || context.hostInstance !== currentHost) {
-        throw helperUnavailableError();
-      }
-      const priorClient = helperClient;
-      helperClient = null;
-      closeHelperClient(priorClient);
-      bindPlatformHelperFacade({
-        ...context,
-        repairRegistration: adapter.id === "macos-arm64"
-      });
-      if (host !== currentHost) {
-        throw helperUnavailableError();
-      }
-      try {
-        return await currentHost.capabilities();
-      } catch (error) {
-        throw sanitizeHelperError(error);
-      }
-    }
-    return { start, restart, repairPlatformHelper, getHost: () => host };
+    return { start, restart, getHost: () => host };
   }
 
   // src/lib/expertGuidance.js
@@ -51017,26 +43105,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       recent: branches.slice(-20).map((branch) => branch.raw)
     };
   }
-  function readDatedLogTail({ fsImpl, pathJoin, dir, prefix, suffix, now = /* @__PURE__ */ new Date(), days = 2, lines = 300 } = {}) {
-    if (!fsImpl || typeof fsImpl.readFileSync !== "function" || typeof pathJoin !== "function") {
-      throw new Error("filesystem is unavailable");
-    }
-    const result = [];
-    const count = Math.max(1, Math.floor(Number(days) || 2));
-    const limit = Math.max(0, Math.floor(Number(lines) || 300));
-    for (let offset = count - 1; offset >= 0; offset -= 1) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - offset);
-      const key = date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
-      const file = pathJoin([dir, prefix + key + suffix]);
-      try {
-        result.push(String(fsImpl.readFileSync(file, "utf8")));
-      } catch (error) {
-        if ((error == null ? void 0 : error.code) !== "ENOENT") throw error;
-      }
-    }
-    return result.join("\n").split(/\r?\n/).filter(Boolean).slice(-limit).join("\n");
-  }
   function buildLogExport({
     panelLogs = [],
     hostInfo = {},
@@ -51047,8 +43115,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     hostLogDisk,
     diagnostics,
     diagnosticsError,
-    pythonServerLog,
-    pythonLogPath,
     version = "",
     now = /* @__PURE__ */ new Date(),
     exactSecrets = []
@@ -51059,7 +43125,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       ["exported-at", now.toISOString()],
       ["panel-version", version || "-"],
       ["host-version", hostInfo.hostVersion || "-"],
-      ["python-version", hostInfo.pythonVersion || "-"],
       ["ae-app", formatObject(hostInfo.aeApp)],
       ["cep", hostInfo.cepVersion || "-"],
       ["os", formatObject(hostInfo.os)],
@@ -51099,14 +43164,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       return result;
     }, exactSecrets);
-    section(lines, "## python server log (tail)", () => {
-      if (pythonServerLog === void 0 || pythonServerLog === null) {
-        return pythonLogPath ? "(no file: " + pythonLogPath + ")" : unavailable("python server log is unavailable");
-      }
-      return pythonServerLog ? String(pythonServerLog) : "(empty)";
-    }, exactSecrets);
     section(lines, "## previewFrame branches", () => {
-      const summary = summarizePreviewFrameBranches(pythonServerLog || "");
+      const previewSource = [hostLogMemory, hostLogDisk].filter(Array.isArray).flat().map(formatHostLog).join("\n");
+      const summary = summarizePreviewFrameBranches(previewSource);
       const result = ["summary: " + summary.summary];
       result.push("fallbackReason counts:");
       if (!summary.fallbackReasons.length) result.push("(none)");
@@ -51606,52 +43666,25 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/lib/mcpEngine.js
   init_cep_runtime_inject();
-  var MCP_ENGINE_PREF_KEY = "ae_mcp_mcp_engine";
-  var MCP_ENGINE_PYTHON = "python";
-  var MCP_ENGINE_CEP_HOST = "cep-host";
-  function normalizeMcpEngine(value) {
-    return value === MCP_ENGINE_CEP_HOST ? MCP_ENGINE_CEP_HOST : MCP_ENGINE_PYTHON;
-  }
-  function loadMcpEngine(storage) {
-    try {
-      return normalizeMcpEngine(storage && storage.getItem(MCP_ENGINE_PREF_KEY));
-    } catch (error) {
-      return MCP_ENGINE_PYTHON;
-    }
-  }
-  function saveMcpEngine(storage, value) {
-    const engine = normalizeMcpEngine(value);
-    try {
-      if (storage) storage.setItem(MCP_ENGINE_PREF_KEY, engine);
-    } catch (error) {
-    }
-    return engine;
-  }
-  function cepHostUnavailableError() {
+  function hostUnavailableError() {
     const error = new Error("CEP host MCP server is not running");
     error.code = "CEP_HOST_MCP_NOT_RUNNING";
     return error;
   }
   async function getMcpSpec({
-    engine,
     port,
     label,
     approvalTier,
     expertGuidance,
-    hostConversation,
-    resolvePythonSpec
+    hostConversation
   }) {
-    if (normalizeMcpEngine(engine) === MCP_ENGINE_PYTHON) {
-      if (typeof resolvePythonSpec !== "function") throw new TypeError("resolvePythonSpec is required");
-      return resolvePythonSpec();
-    }
     const conversation = hostConversation && hostConversation.ensureConversation({
       label,
       approvalTier,
       expertGuidance
     });
     if (!conversation || typeof conversation.path !== "string" || !conversation.path) {
-      throw cepHostUnavailableError();
+      throw hostUnavailableError();
     }
     return {
       kind: "http",
@@ -51661,7 +43694,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
 
   // src/app/App.jsx
-  var import_jsx_runtime44 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
   var T = {
     zh: {
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
@@ -51724,138 +43757,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
   }
   var CODEX_MODELS_CACHE_KEY = "ae_mcp_codex_models";
-  var CLIENT_NAMES = {
-    builtin: { zh: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD", en: "Built-in chat" },
-    "claude-desktop": { zh: "Claude Desktop", en: "Claude Desktop" },
-    "claude-code": { zh: "Claude Code", en: "Claude Code" },
-    cursor: { zh: "Cursor", en: "Cursor" }
-  };
-  function cepRequire4(mod) {
+  function cepRequire3(mod) {
     if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
     if (window.require) return window.require(mod);
     return null;
   }
   function randomProviderCredentialId() {
-    const cryptoImpl = cepRequire4("crypto");
+    const cryptoImpl = cepRequire3("crypto");
     if (!cryptoImpl || typeof cryptoImpl.randomUUID !== "function") throw new Error("Secure UUID generation is unavailable");
     return cryptoImpl.randomUUID();
-  }
-  function createProviderMigrationJournalStore(platform) {
-    const fs = platform.fs;
-    const root = platform.paths.migrationRoot;
-    const file = platform.paths.join([root, "provider-store-v1-to-v2.json"]);
-    return {
-      async read(migrationId) {
-        if (migrationId !== "provider-store-v1-to-v2") {
-          const error = new Error("Invalid provider migration id");
-          error.code = "INVALID_MIGRATION_JOURNAL";
-          throw error;
-        }
-        try {
-          return JSON.parse(String(fs.readFileSync(file, "utf8")));
-        } catch (error) {
-          if ((error == null ? void 0 : error.code) === "ENOENT" || !fs.existsSync(file)) return null;
-          const invalid = new Error("Provider migration journal is invalid");
-          invalid.code = "INVALID_MIGRATION_JOURNAL";
-          throw invalid;
-        }
-      },
-      async writeAtomic(journal) {
-        if (!fs.existsSync(root)) fs.mkdirSync(root, { recursive: true });
-        const tmp = platform.paths.join([root, `provider-store-v1-to-v2.${Date.now()}.tmp`]);
-        try {
-          fs.writeFileSync(tmp, `${JSON.stringify(journal, null, 2)}
-`, "utf8");
-          try {
-            fs.chmodSync(tmp, 384);
-          } catch {
-          }
-          fs.renameSync(tmp, file);
-        } catch (error) {
-          try {
-            fs.unlinkSync(tmp);
-          } catch {
-          }
-          const unavailable2 = new Error("Provider migration journal is unavailable");
-          unavailable2.code = "INVALID_MIGRATION_JOURNAL";
-          throw unavailable2;
-        }
-      }
-    };
-  }
-  function createHostSecretStore(host) {
-    if (!host || typeof host.secretGet !== "function" || typeof host.secretSet !== "function" || typeof host.secretDelete !== "function") {
-      const error = new Error("Provider secret store is unavailable");
-      error.code = "SECRET_STORE_UNAVAILABLE";
-      throw error;
-    }
-    return {
-      get: (reference) => host.secretGet(reference),
-      set: (input) => host.secretSet(input),
-      delete: (input) => host.secretDelete(input)
-    };
-  }
-  var PLATFORM_HELPER_METHODS = Object.freeze([
-    "capabilities",
-    "secret.get",
-    "secret.set",
-    "secret.delete",
-    "window.find",
-    "window.describe",
-    "window.capture"
-  ]);
-  var PLATFORM_CAPABILITY_KEYS = Object.freeze([
-    "authenticatedCaller",
-    "captureBackend",
-    "helperVersion",
-    "maxMessageBytes",
-    "methods",
-    "platform",
-    "protocolVersion",
-    "secretBackend"
-  ]);
-  function requireProviderHelperCapabilities(value, platformId) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerRuntimeUnavailableError();
-    const keys = Object.keys(value).sort();
-    if (keys.length !== PLATFORM_CAPABILITY_KEYS.length || !keys.every((key, index) => key === PLATFORM_CAPABILITY_KEYS[index])) {
-      throw providerRuntimeUnavailableError();
-    }
-    const methods = Array.isArray(value.methods) ? value.methods : [];
-    const methodSet = new Set(methods);
-    if (value.protocolVersion !== 1 || value.authenticatedCaller !== true || value.platform !== platformId || typeof value.helperVersion !== "string" || !value.helperVersion.trim() || !["keychain", "credential-manager"].includes(value.secretBackend) || !["screen-capture-kit", "windows-graphics-capture"].includes(value.captureBackend) || value.maxMessageBytes !== 65536 || methods.length !== PLATFORM_HELPER_METHODS.length || methodSet.size !== PLATFORM_HELPER_METHODS.length || !PLATFORM_HELPER_METHODS.every((method) => methodSet.has(method))) {
-      throw providerRuntimeUnavailableError();
-    }
-    return value;
-  }
-  function activeProviderSecretRefs(providers) {
-    var _a, _b, _c, _d, _e;
-    const byReference = /* @__PURE__ */ new Map();
-    const add = (ref) => {
-      if ((ref == null ? void 0 : ref.kind) !== "secret") return;
-      const existing = byReference.get(ref.reference);
-      if (existing !== void 0 && existing !== ref.revision) {
-        const error = new Error("Provider secret reference revisions conflict.");
-        error.code = "SECRET_CONFLICT";
-        throw error;
-      }
-      byReference.set(ref.reference, ref.revision);
-    };
-    for (const provider of providers) {
-      if (provider.credential) {
-        add(provider.credential.valueRef);
-        add((_a = provider.probeAuthOverride) == null ? void 0 : _a.valueRef);
-      } else {
-        add((_c = (_b = provider.auth) == null ? void 0 : _b.model) == null ? void 0 : _c.valueRef);
-        add((_e = (_d = provider.auth) == null ? void 0 : _d.probe) == null ? void 0 : _e.valueRef);
-      }
-      for (const header of provider.headers || []) add(header.valueRef);
-    }
-    return Array.from(byReference, ([reference, revision]) => ({ kind: "secret", reference, revision }));
-  }
-  function providerRuntimeUnavailableError() {
-    const error = new Error("Repair the platform Helper and re-check provider credentials.");
-    error.code = "PLATFORM_HELPER_REPAIR_REQUIRED";
-    return error;
   }
   function modelMetadataContainsCredential(models, credentials = []) {
     const values = Array.isArray(credentials) ? credentials : credentials ? [credentials] : [];
@@ -51864,70 +43774,54 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
     const t = T[lang];
-    const [tab, setTab] = import_react48.default.useState("chat");
-    const [status, setStatus] = import_react48.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const [paused, setPaused] = import_react48.default.useState(false);
-    const [logs, setLogs] = import_react48.default.useState([]);
-    const ctrl = import_react48.default.useRef(null);
-    const getHost = import_react48.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const hostConversation = import_react48.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
-    const hostApprovalBridge = import_react48.default.useMemo(() => createHostApprovalBridge(), []);
-    const [wizardDone, setWizardDone] = import_react48.default.useState(() => isWizardDone(window.localStorage));
-    const [wizStep, setWizStep] = import_react48.default.useState(1);
-    const [wizClient, setWizClient] = import_react48.default.useState("claude-desktop");
-    const [drawerOpen, setDrawerOpen] = import_react48.default.useState(false);
-    const [connInfo, setConnInfo] = import_react48.default.useState(null);
-    const [diagnostics, setDiagnostics] = import_react48.default.useState(null);
+    const [tab, setTab] = import_react46.default.useState("chat");
+    const [status, setStatus] = import_react46.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [paused, setPaused] = import_react46.default.useState(false);
+    const [logs, setLogs] = import_react46.default.useState([]);
+    const ctrl = import_react46.default.useRef(null);
+    const getHost = import_react46.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const hostConversation = import_react46.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
+    const hostApprovalBridge = import_react46.default.useMemo(() => createHostApprovalBridge(), []);
+    const [wizardDone, setWizardDone] = import_react46.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react46.default.useState(1);
+    const [wizClient, setWizClient] = import_react46.default.useState("claude-desktop");
+    const [drawerOpen, setDrawerOpen] = import_react46.default.useState(false);
+    const [connInfo, setConnInfo] = import_react46.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react46.default.useState(null);
     const { events, clear } = useActivity(getHost);
-    const [clients, setClients] = import_react48.default.useState([]);
-    const [mcpSessions, setMcpSessions] = import_react48.default.useState([]);
-    const [confirmRegen, setConfirmRegen] = import_react48.default.useState(false);
-    const [tokenEpoch, setTokenEpoch] = import_react48.default.useState(0);
-    const platform = import_react48.default.useMemo(() => createPlatformAdapter(), []);
-    const attachmentStore = import_react48.default.useMemo(() => createAttachmentStore({
+    const [clients, setClients] = import_react46.default.useState([]);
+    const [mcpSessions, setMcpSessions] = import_react46.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react46.default.useState(false);
+    const [tokenEpoch, setTokenEpoch] = import_react46.default.useState(0);
+    const platform = import_react46.default.useMemo(() => createPlatformAdapter(), []);
+    const attachmentStore = import_react46.default.useMemo(() => createAttachmentStore({
       platform,
       randomUUID: randomProviderCredentialId
     }), [platform]);
-    const [attachmentDraft, dispatchAttachmentDraft] = import_react48.default.useReducer(
+    const [attachmentDraft, dispatchAttachmentDraft] = import_react46.default.useReducer(
       reduceAttachmentDraft,
       void 0,
       createAttachmentDraftState
     );
-    const [chatSessionId, setChatSessionId] = import_react48.default.useState("chat-0");
-    const chatSessionIdRef = import_react48.default.useRef(chatSessionId);
+    const [chatSessionId, setChatSessionId] = import_react46.default.useState("chat-0");
+    const chatSessionIdRef = import_react46.default.useRef(chatSessionId);
     chatSessionIdRef.current = chatSessionId;
-    const attachmentOperationsRef = import_react48.default.useRef(/* @__PURE__ */ new Map());
-    const pendingTurnRef = import_react48.default.useRef(null);
-    const acceptedTurnRef = import_react48.default.useRef(null);
-    import_react48.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-    const legacyKeyStore = import_react48.default.useMemo(() => {
-      try {
-        return createLegacyApiKeyStore();
-      } catch (e) {
-        return null;
-      }
-    }, []);
-    const [customModel, setCustomModel] = import_react48.default.useState(() => readPref("ae_mcp_custom_model", ""));
-    const [model, setModel] = import_react48.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
-    const [logLevel, setLogLevel] = import_react48.default.useState(() => readPref("ae_mcp_log_level", "info"));
-    const logLevelRef = import_react48.default.useRef(logLevel);
+    const attachmentOperationsRef = import_react46.default.useRef(/* @__PURE__ */ new Map());
+    const pendingTurnRef = import_react46.default.useRef(null);
+    const acceptedTurnRef = import_react46.default.useRef(null);
+    import_react46.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
+    const [customModel, setCustomModel] = import_react46.default.useState(() => readPref("ae_mcp_custom_model", ""));
+    const [model, setModel] = import_react46.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [logLevel, setLogLevel] = import_react46.default.useState(() => readPref("ae_mcp_log_level", "info"));
+    const logLevelRef = import_react46.default.useRef(logLevel);
     logLevelRef.current = logLevel;
-    const [sessionModel, setSessionModel] = import_react48.default.useState(null);
-    const [sessionEffort, setSessionEffort] = import_react48.default.useState(null);
-    const [sessionFast, setSessionFast] = import_react48.default.useState(null);
-    const [mcpEngine, setMcpEngine] = import_react48.default.useState(() => loadMcpEngine(window.localStorage));
-    const mcpEngineRef = import_react48.default.useRef(mcpEngine);
-    mcpEngineRef.current = mcpEngine;
-    const [permissionMode, setPermissionMode] = import_react48.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
-    const permissionModeRef = import_react48.default.useRef(permissionMode);
+    const [sessionModel, setSessionModel] = import_react46.default.useState(null);
+    const [sessionEffort, setSessionEffort] = import_react46.default.useState(null);
+    const [sessionFast, setSessionFast] = import_react46.default.useState(null);
+    const [permissionMode, setPermissionMode] = import_react46.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const permissionModeRef = import_react46.default.useRef(permissionMode);
     permissionModeRef.current = permissionMode;
-    const approvalTierFile = import_react48.default.useMemo(() => createApprovalTierFile({
-      fs: platform.fs,
-      paths: platform.paths,
-      platformId: platform.id,
-      pid: window.cep_node && window.cep_node.process && window.cep_node.process.pid || 0
-    }), [platform]);
-    const elicitationCoordinator = import_react48.default.useMemo(() => createElicitationCoordinator({
+    const elicitationCoordinator = import_react46.default.useMemo(() => createElicitationCoordinator({
       resolveApproval: (_request, { plan }) => decideToolPlan({
         tier: permissionModeRef.current,
         plan
@@ -51948,73 +43842,48 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         };
       }
     }), []);
-    const [toolApproval, setToolApproval] = import_react48.default.useState(() => elicitationCoordinator.snapshot());
-    import_react48.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
-    import_react48.default.useEffect(() => {
-      approvalTierFile.write(permissionMode);
-      if (mcpEngine === MCP_ENGINE_CEP_HOST) {
-        hostConversation.updatePolicy({ approvalTier: permissionMode });
-      }
-    }, [approvalTierFile, hostConversation, mcpEngine, permissionMode]);
-    import_react48.default.useEffect(() => () => {
+    const [toolApproval, setToolApproval] = import_react46.default.useState(() => elicitationCoordinator.snapshot());
+    import_react46.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
+    import_react46.default.useEffect(() => {
+      hostConversation.updatePolicy({ approvalTier: permissionMode });
+    }, [hostConversation, permissionMode]);
+    import_react46.default.useEffect(() => () => {
       elicitationCoordinator.dispose();
-      try {
-        approvalTierFile.dispose();
-      } catch (error) {
-      }
-    }, [approvalTierFile, elicitationCoordinator]);
-    import_react48.default.useEffect(() => {
+    }, [elicitationCoordinator]);
+    import_react46.default.useEffect(() => {
       const guard = createPanelFileDropGuard({ target: window });
       return guard.dispose;
     }, []);
-    const backendMigration = import_react48.default.useMemo(() => migrateBackendPref(window.localStorage), []);
-    const [backendPref, setBackendPref] = import_react48.default.useState(() => backendMigration.pref);
-    const [channelChoices, setChannelChoices] = import_react48.default.useState(() => backendMigration.channelChoices);
-    const providerStore = import_react48.default.useMemo(() => {
+    const backendMigration = import_react46.default.useMemo(() => migrateBackendPref(window.localStorage), []);
+    const [backendPref, setBackendPref] = import_react46.default.useState(() => backendMigration.pref);
+    const [channelChoices, setChannelChoices] = import_react46.default.useState(() => backendMigration.channelChoices);
+    const legacyProviderStore = import_react46.default.useMemo(() => {
       try {
         return createProviderStore();
       } catch (e) {
         return null;
       }
     }, []);
-    const providerSecretService = import_react48.default.useMemo(() => createProviderSecretService({
-      getHost,
-      randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
-    }), [getHost]);
-    const zcodeCredentialManager = import_react48.default.useMemo(() => createZcodeCredentialManager({
-      storage: window.localStorage,
-      secretService: providerSecretService,
-      legacyKeyStore
-    }), [legacyKeyStore, providerSecretService]);
-    const zcodeStoredKeyRef = import_react48.default.useRef("");
-    const [zcodeCredentialEpoch, setZcodeCredentialEpoch] = import_react48.default.useState(0);
-    const [providerInit, setProviderInit] = import_react48.default.useState({ state: "checking", error: "" });
-    const [providerRepairing, setProviderRepairing] = import_react48.default.useState(false);
-    const [providerInitEpoch, setProviderInitEpoch] = import_react48.default.useState(0);
-    const [providers, setProviders] = import_react48.default.useState([]);
-    const [claudeProviderId, setClaudeProviderId] = import_react48.default.useState(() => readPref("ae_mcp_claude_provider", ""));
-    const [codexProviderId, setCodexProviderId] = import_react48.default.useState(() => readPref("ae_mcp_codex_provider", ""));
-    const [expertGuidance, setExpertGuidance] = import_react48.default.useState(() => loadExpertGuidance(window.localStorage));
-    const expertGuidanceRef = import_react48.default.useRef(expertGuidance);
+    const openCodeProviderStore = import_react46.default.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
+    const [providerInit, setProviderInit] = import_react46.default.useState({ state: "checking", error: "" });
+    const [providers, setProviders] = import_react46.default.useState([]);
+    const providersRef = import_react46.default.useRef(providers);
+    providersRef.current = providers;
+    const [expertGuidance, setExpertGuidance] = import_react46.default.useState(() => loadExpertGuidance(window.localStorage));
+    const expertGuidanceRef = import_react46.default.useRef(expertGuidance);
     expertGuidanceRef.current = expertGuidance;
-    import_react48.default.useEffect(() => {
-      if (mcpEngine === MCP_ENGINE_CEP_HOST) {
-        hostConversation.updatePolicy({ expertGuidance });
-      }
-    }, [expertGuidance, hostConversation, mcpEngine]);
-    import_react48.default.useEffect(() => {
-      if (mcpEngine !== MCP_ENGINE_CEP_HOST) {
-        hostConversation.closeConversation();
-        return;
-      }
+    import_react46.default.useEffect(() => {
+      hostConversation.updatePolicy({ expertGuidance });
+    }, [expertGuidance, hostConversation]);
+    import_react46.default.useEffect(() => {
       if (status.state !== "ok") return;
       hostConversation.ensureConversation({
         label: chatSessionIdRef.current,
         approvalTier: permissionModeRef.current,
         expertGuidance: expertGuidanceRef.current
       });
-    }, [hostConversation, mcpEngine, status.state]);
-    const resolveHostConversationContext = import_react48.default.useCallback((conversationId) => {
+    }, [hostConversation, status.state]);
+    const resolveHostConversationContext = import_react46.default.useCallback((conversationId) => {
       const current = hostConversation.currentConversation();
       if (!current || current.id !== conversationId) return null;
       return {
@@ -52022,8 +43891,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         conversationLabel: current.label || chatSessionIdRef.current
       };
     }, [hostConversation]);
-    import_react48.default.useEffect(() => {
-      if (mcpEngine !== MCP_ENGINE_CEP_HOST || status.state !== "ok") {
+    import_react46.default.useEffect(() => {
+      if (status.state !== "ok") {
         hostApprovalBridge.detach();
         return void 0;
       }
@@ -52035,26 +43904,27 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         resolveConversationContext: resolveHostConversationContext
       });
       return () => hostApprovalBridge.detach();
-    }, [elicitationCoordinator, getHost, hostApprovalBridge, mcpEngine, resolveHostConversationContext, status.state]);
-    const [probe, setProbe] = import_react48.default.useState(null);
-    const [codexProbe, setCodexProbe] = import_react48.default.useState(null);
-    const [codexModels, setCodexModels] = import_react48.default.useState(null);
-    const [zcodeProbe, setZcodeProbe] = import_react48.default.useState(null);
-    const [zcodeSessionModels, setZcodeSessionModels] = import_react48.default.useState(null);
-    const [zcodeProbedModels, setZcodeProbedModels] = import_react48.default.useState(null);
-    import_react48.default.useEffect(() => {
+    }, [elicitationCoordinator, getHost, hostApprovalBridge, resolveHostConversationContext, status.state]);
+    const [probe, setProbe] = import_react46.default.useState(null);
+    const [codexProbe, setCodexProbe] = import_react46.default.useState(null);
+    const [codexModels, setCodexModels] = import_react46.default.useState(null);
+    const [openCodeProbe, setOpenCodeProbe] = import_react46.default.useState(null);
+    const [zcodeProbe, setZcodeProbe] = import_react46.default.useState(null);
+    const [zcodeSessionModels, setZcodeSessionModels] = import_react46.default.useState(null);
+    const [zcodeProbedModels, setZcodeProbedModels] = import_react46.default.useState(null);
+    import_react46.default.useEffect(() => {
       try {
         window.localStorage.removeItem(CODEX_MODELS_CACHE_KEY);
         window.localStorage.removeItem(ZCODE_PROBED_MODELS_CACHE_KEY);
       } catch {
       }
     }, []);
-    const [chatEntries, setChatEntries] = import_react48.default.useState([]);
-    const [chatStreaming, setChatStreaming] = import_react48.default.useState(false);
-    const [thinkingActive, setThinkingActive] = import_react48.default.useState(false);
+    const [chatEntries, setChatEntries] = import_react46.default.useState([]);
+    const [chatStreaming, setChatStreaming] = import_react46.default.useState(false);
+    const [thinkingActive, setThinkingActive] = import_react46.default.useState(false);
     const customModelForBackend = backendPref === "codex" ? customModel : "";
-    const baseDescriptor = import_react48.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, window.cep_node && window.cep_node.process && window.cep_node.process.env || {}), customModelForBackend), [backendPref, customModelForBackend]);
-    const [descriptor, setDescriptor] = import_react48.default.useState(() => baseDescriptor);
+    const baseDescriptor = import_react46.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, window.cep_node && window.cep_node.process && window.cep_node.process.env || {}), customModelForBackend), [backendPref, customModelForBackend]);
+    const [descriptor, setDescriptor] = import_react46.default.useState(() => baseDescriptor);
     const requestedModel = sessionModel || model;
     const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
@@ -52064,143 +43934,51 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       defaultEffort: descriptor.defaultEffort
     });
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-    const claudeApiProvider = import_react48.default.useMemo(() => {
-      return providers.find((provider) => provider.id === claudeProviderId) || null;
-    }, [providers, claudeProviderId]);
-    const codexCustomProvider = import_react48.default.useMemo(() => {
-      return providers.find((provider) => provider.id === codexProviderId) || null;
-    }, [providers, codexProviderId]);
-    const [providerProbing, setProviderProbing] = import_react48.default.useState("");
-    const [providerProbeErrors, setProviderProbeErrors] = import_react48.default.useState({});
-    const ccSwitchFound = import_react48.default.useMemo(() => {
-      try {
-        return detectCcSwitch({ platform, fsImpl: platform.fs });
-      } catch (e) {
-        return null;
-      }
-    }, [platform]);
-    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
       ProviderManagerSection,
       {
         lang,
         providers,
-        activeProviderId: codexProviderId,
-        activeModelId: effectiveModel,
-        probing: providerProbing,
-        probeErrors: providerProbeErrors,
         disabled: providerInit.state !== "ready",
-        ccSwitch: ccSwitchFound,
-        onImportCcSwitch: async () => {
-          if (!ccSwitchFound || !providerStore) return;
-          if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
-          let drafts = null;
-          try {
-            drafts = readCcSwitchProviderDrafts({
-              file: ccSwitchFound.file,
-              expectedSourceRevision: ccSwitchFound.sourceRevision,
-              fsImpl: platform.fs
-            });
-            for (let index = 0; index < drafts.length; index += 1) {
-              let draft = drafts[index];
-              try {
-                await importProviderDraft({ candidate: draft, store: providerStore, secretService: providerSecretService, randomUUID: randomProviderCredentialId });
-              } finally {
-                drafts[index] = null;
-                draft = null;
-              }
-            }
-            setProviders(providerStore.list());
-          } finally {
-            drafts = null;
-          }
-        },
+        opencodeMode: true,
         onUpsert: async (event, draft) => {
           var _a;
-          if (!providerStore) return;
-          if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
           const formElement = event.currentTarget;
           const form = new FormData(event.currentTarget);
-          let ephemeralDraft = {
-            ...draft,
-            modelAuthSecret: String(form.get("modelAuthSecret") || ""),
-            probeAuthSecret: String(form.get("probeAuthSecret") || ""),
-            headers: (draft.headers || []).map((header) => header.valueKind === "secret" ? { ...header, secret: String(form.get(`headerSecret:${header.id}`) || "") } : { ...header })
-          };
+          const apiKey = String(form.get("modelAuthSecret") || "");
           form.delete("modelAuthSecret");
-          form.delete("probeAuthSecret");
-          for (const header of draft.headers || []) form.delete(`headerSecret:${header.id}`);
           (_a = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a.call(formElement);
           try {
-            const existing = providerStore.get(draft.id);
-            await saveProviderDraft({
-              draft: ephemeralDraft,
-              current: existing,
-              store: providerStore,
-              secretService: providerSecretService,
-              confirmInsecureHttp: async ({ baseUrl }) => window.confirm(`Allow provider requests over insecure HTTP?
-${baseUrl}`),
-              randomUUID: randomProviderCredentialId
-            });
-            setProviders(providerStore.list());
+            if (String(draft.baseUrl || "").startsWith("http:") && draft.allowInsecureHttp === true) {
+              if (!window.confirm(`Allow provider requests over insecure HTTP?
+${draft.baseUrl}`)) return;
+            }
+            openCodeProviderStore.save(draft, { apiKey, currentId: draft.id });
+            setProviders(openCodeProviderStore.list());
+            openCodeBackend.reset();
+            runOpenCodeProbe();
           } finally {
-            ephemeralDraft.modelAuthSecret = "";
-            ephemeralDraft.probeAuthSecret = "";
-            ephemeralDraft.headers.forEach((header) => {
-              if (header.secret) header.secret = "";
-            });
-            ephemeralDraft = null;
+            form.delete("modelAuthSecret");
           }
         },
         onRemove: async (provider) => {
-          if (!providerStore) return;
-          if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
-          await deleteProviderProfile({ provider, store: providerStore, secretService: providerSecretService });
-          setProviders(providerStore.list());
-          if (claudeProviderId === provider.id) {
-            setClaudeProviderId("");
-            writePref("ae_mcp_claude_provider", "");
-          }
-          if (codexProviderId === provider.id) {
-            setCodexProviderId("");
-            writePref("ae_mcp_codex_provider", "");
-          }
-        },
-        onProbe: async (provider, options = {}) => {
-          if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
-          setProviderProbing(provider.id);
-          try {
-            const result = await runProviderManagerProbe(provider, {
-              store: providerStore,
-              resolveRequestProfile: (entry, { scope }) => resolveProviderRequestProfile(entry, {
-                scope,
-                secretService: providerSecretService
-              }),
-              forceDetect: options.forceDetect === true,
-              modelId: options.modelId
-            });
-            if (result.ok && providerStore) {
-              setProviders(providerStore.list());
-              setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: "" }));
-            } else {
-              setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: result.detail || "Provider probe failed" }));
-            }
-          } catch (error) {
-            setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: (error == null ? void 0 : error.message) || "Provider probe failed" }));
-          } finally {
-            setProviderProbing("");
-          }
+          openCodeProviderStore.remove(provider.id);
+          setProviders(openCodeProviderStore.list());
+          openCodeBackend.reset();
+          runOpenCodeProbe();
         }
       }
     );
-    const zcodeConfigSummary = import_react48.default.useMemo(() => {
+    const zcodeConfigSummary = import_react46.default.useMemo(() => {
       try {
-        return summarizeZcodeConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {}, storedKey: zcodeStoredKeyRef.current });
+        const env = window.cep_node && window.cep_node.process && window.cep_node.process.env || {};
+        return summarizeZcodeConfig({ env });
       } catch (e) {
         return null;
       }
-    }, [zcodeCredentialEpoch, zcodeProbe]);
-    const codexCliConfigStableRef = import_react48.default.useRef(null);
-    const codexCliConfig = import_react48.default.useMemo(() => {
+    }, [zcodeProbe]);
+    const codexCliConfigStableRef = import_react46.default.useRef(null);
+    const codexCliConfig = import_react46.default.useMemo(() => {
       let next;
       try {
         next = readCodexCliConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
@@ -52210,119 +43988,65 @@ ${baseUrl}`),
       codexCliConfigStableRef.current = reconcileStableJsonValue(codexCliConfigStableRef.current, next);
       return codexCliConfigStableRef.current.value;
     }, [codexProbe]);
-    const codexCliCredentialReady = import_react48.default.useMemo(() => {
+    const codexCliCredentialReady = import_react46.default.useMemo(() => {
       const env = window.cep_node && window.cep_node.process && window.cep_node.process.env || {};
       return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
     }, [codexCliConfig]);
-    const codexProviderCredentialResolverReady = providerInit.state === "ready";
-    const channels = import_react48.default.useMemo(() => ({
-      claude: claudeChannels({ probe, apiProvider: claudeApiProvider, apiProviderSelected: Boolean(claudeProviderId), providerAvailable: providerInit.state === "ready" && Boolean(claudeApiProvider), providerCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === "checking" }),
-      codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === "ready" && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === "checking", cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
+    const channels = import_react46.default.useMemo(() => ({
+      claude: claudeChannels({ probe }),
+      codex: codexChannels({
+        codexProbe,
+        cliConfig: codexCliConfig,
+        cliCredentialAvailable: codexCliCredentialReady
+      }),
+      opencode: openCodeChannels({ probe: openCodeProbe, providers }),
       zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
-    }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
+    }), [
+      probe,
+      codexProbe,
+      codexCliConfig,
+      codexCliCredentialReady,
+      openCodeProbe,
+      providers,
+      zcodeProbe,
+      zcodeConfigSummary
+    ]);
     const effective = pickBackend({ pref: backendPref, channels, channelChoices });
-    const claudeSettingsHint = import_react48.default.useMemo(() => {
-      try {
-        return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs });
-      } catch (e) {
-        return null;
-      }
-    }, [platform]);
-    const providerProfile = import_react48.default.useMemo(() => codexRuntimeProviderProfile({
-      effectiveChannel: effective.channel,
-      customProvider: codexCustomProvider,
-      customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
-      modelId: effectiveModel
-    }), [effective.channel, codexCustomProvider, codexProviderCredentialResolverReady, effectiveModel]);
-    const runtimeRef = import_react48.default.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
-    const previousCodexProviderProfileRef = import_react48.default.useRef(providerProfile);
-    const extRoot = import_react48.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
-    const developmentRuntimeFallback = import_react48.default.useMemo(() => {
-      if (platform.id !== "macos-arm64") return false;
-      const debugMarker = platform.paths.join([extRoot, ".debug"]);
-      const bundleManifest = platform.paths.join([extRoot, "bundle-manifest.json"]);
-      return platform.fs.existsSync(debugMarker) && !platform.fs.existsSync(bundleManifest);
-    }, [extRoot, platform]);
-    const developmentRuntimeOverride = import_react48.default.useMemo(
-      () => hasDevelopmentRuntimeOverride(platform.env),
-      [platform]
-    );
-    const runtimeManager = import_react48.default.useMemo(() => platform.id === "macos-arm64" && (!developmentRuntimeFallback || developmentRuntimeOverride) ? createRuntimeManager({ platform, extensionRoot: extRoot }) : null, [developmentRuntimeFallback, developmentRuntimeOverride, extRoot, platform]);
-    const [runtimeActivation, setRuntimeActivation] = import_react48.default.useState(() => ({
-      state: runtimeManager ? "starting" : "ready",
-      result: null,
-      error: null
-    }));
-    const markRuntimeReady = import_react48.default.useCallback((result) => {
-      setRuntimeActivation({ state: "ready", result: result || null, error: null });
-    }, []);
-    import_react48.default.useEffect(() => {
-      if (!runtimeManager) {
-        setRuntimeActivation({ state: "ready", result: null, error: null });
-        return void 0;
-      }
-      let alive = true;
-      setRuntimeActivation({ state: "starting", result: null, error: null });
-      let retryTimer = null;
-      const activate = () => {
-        runtimeManager.ensureReady().then((result) => {
-          if (alive) markRuntimeReady(result);
-        }).catch((error) => {
-          if (!alive) return;
-          setRuntimeActivation({ state: "error", result: null, error });
-          if (error && error.code === "RUNTIME_MANAGER_LOCKED") {
-            retryTimer = setTimeout(activate, 1e3);
-          }
-        });
-      };
-      activate();
-      return () => {
-        alive = false;
-        if (retryTimer) clearTimeout(retryTimer);
-      };
-    }, [markRuntimeReady, runtimeManager]);
-    const runtimeReady = runtimeActivation.state === "ready";
-    const mcpCommand = runtimeManager ? platform.paths.launcher : "ae-mcp";
-    const getPythonMcpSpec = import_react48.default.useCallback(async () => {
-      try {
-        const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
-        if (runtimeManager && spec.runtime) markRuntimeReady(spec.runtime);
-        return withToolApprovalTier(spec, approvalTierFile);
-      } catch (error) {
-        if (runtimeManager) setRuntimeActivation({ state: "error", result: null, error });
-        throw error;
-      }
-    }, [approvalTierFile, extRoot, markRuntimeReady, platform, runtimeManager]);
-    const hostPortRef = import_react48.default.useRef(status.port);
+    const runtimeRef = import_react46.default.useRef({
+      model: effectiveModel,
+      permissionMode,
+      effort: effectiveEffort,
+      thinking: null,
+      fast: effectiveFast
+    });
+    const extRoot = import_react46.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
+    const hostPortRef = import_react46.default.useRef(status.port);
     hostPortRef.current = status.port;
-    const getMcpSpec2 = import_react48.default.useCallback(() => getMcpSpec({
-      engine: mcpEngineRef.current,
+    const getMcpSpec2 = import_react46.default.useCallback(() => getMcpSpec({
       port: hostPortRef.current,
       label: chatSessionIdRef.current,
       approvalTier: permissionModeRef.current,
       expertGuidance: expertGuidanceRef.current,
-      hostConversation,
-      resolvePythonSpec: getPythonMcpSpec
-    }), [getPythonMcpSpec, hostConversation]);
-    const mcp = import_react48.default.useMemo(() => createMcpClient({
-      platform,
+      hostConversation
+    }), [hostConversation]);
+    const mcp = import_react46.default.useMemo(() => createMcpClient({
       extRoot,
-      // Tool Library and the panel's own Tools UI stay on Python stdio until
-      // their server-side implementation moves into the CEP host.
-      resolveCommand: getPythonMcpSpec,
-      env: approvalTierFile.env(),
-      onElicitation: elicitationCoordinator.handle,
-      getExpertGuidance: () => loadExpertGuidance(window.localStorage),
-      randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
-    }), [approvalTierFile, elicitationCoordinator, extRoot, getPythonMcpSpec, platform]);
-    const toolsApi = import_react48.default.useMemo(() => createToolsApi(mcp), [mcp]);
-    import_react48.default.useEffect(() => () => mcp.stop(), [mcp]);
-    const releaseTurnAttachments = import_react48.default.useCallback((turn) => {
+      getHost,
+      getPort: () => hostPortRef.current,
+      getConversation: () => hostConversation.ensureConversation({
+        label: chatSessionIdRef.current,
+        approvalTier: permissionModeRef.current,
+        expertGuidance: expertGuidanceRef.current
+      })
+    }), [extRoot, getHost, hostConversation]);
+    const toolsApi = import_react46.default.useMemo(() => createToolsApi(mcp), [mcp]);
+    import_react46.default.useEffect(() => () => mcp.stop(), [mcp]);
+    const releaseTurnAttachments = import_react46.default.useCallback((turn) => {
       for (const attachment of (turn == null ? void 0 : turn.attachments) || []) {
         attachmentStore.release(attachment.id);
       }
     }, [attachmentStore]);
-    const resetAttachmentDraftSession = import_react48.default.useCallback(() => {
+    const resetAttachmentDraftSession = import_react46.default.useCallback(() => {
       attachmentStore.releaseSession(chatSessionIdRef.current);
       attachmentOperationsRef.current.clear();
       pendingTurnRef.current = null;
@@ -52332,7 +44056,7 @@ ${baseUrl}`),
       chatSessionIdRef.current = nextSessionId;
       setChatSessionId(nextSessionId);
     }, [attachmentStore]);
-    const addAttachment = import_react48.default.useCallback(async ({ pondId, file }) => {
+    const addAttachment = import_react46.default.useCallback(async ({ pondId, file }) => {
       const operation = {};
       const sessionId = chatSessionId;
       attachmentOperationsRef.current.set(pondId, operation);
@@ -52358,24 +44082,15 @@ ${baseUrl}`),
         });
       }
     }, [attachmentStore, chatSessionId]);
-    const removeAttachment = import_react48.default.useCallback((item) => {
+    const removeAttachment = import_react46.default.useCallback((item) => {
       attachmentOperationsRef.current.delete(item.pondId);
       if (item.ref) attachmentStore.release(item.ref.id);
       dispatchAttachmentDraft({ type: "remove", pondId: item.pondId });
     }, [attachmentStore]);
-    const retryAttachment = import_react48.default.useCallback((item) => {
+    const retryAttachment = import_react46.default.useCallback((item) => {
       addAttachment({ pondId: item.pondId, file: item.file });
     }, [addAttachment]);
-    const providerAcceptanceEventsRef = import_react48.default.useRef([]);
-    const handleChatEvent = import_react48.default.useCallback((evt) => {
-      if (evt && typeof evt.type === "string") {
-        providerAcceptanceEventsRef.current.push({
-          type: evt.type,
-          ...typeof evt.kind === "string" ? { kind: evt.kind } : {},
-          ...typeof evt.code === "string" ? { code: evt.code } : {}
-        });
-        if (providerAcceptanceEventsRef.current.length > 256) providerAcceptanceEventsRef.current.shift();
-      }
+    const handleChatEvent = import_react46.default.useCallback((evt) => {
       const pending = pendingTurnRef.current;
       if (evt.type === "turn-accepted") {
         if (!pending || evt.turnId !== pending.turnId) return;
@@ -52418,48 +44133,7 @@ ${baseUrl}`),
       if (evt.type === "zcode-session-created") setZcodeSessionModels(evt.result || null);
       setChatEntries((entries) => reduceEvent(entries, evt));
     }, [releaseTurnAttachments]);
-    const recoverRuntimeProvider = import_react48.default.useCallback(async (provider, _failureFacts, requestedModelId) => {
-      if (!providerStore) return null;
-      const modelId = String(requestedModelId || "").trim();
-      if (!modelId) return null;
-      const result = await runProviderManagerProbe(provider, {
-        store: providerStore,
-        resolveRequestProfile: (entry, details) => resolveProviderRequestProfile(entry, {
-          ...details,
-          secretService: providerSecretService
-        }),
-        forceDetect: true,
-        modelId
-      });
-      if (!result.ok) {
-        const detail = redactText(String(result.detail || ""), providerSecretService.getRedactionValues());
-        const error = new Error(detail || `Provider did not expose a verified API for model ${modelId}`);
-        error.kind = "model";
-        error.code = "provider_preflight_failed";
-        throw error;
-      }
-      return { provider: result.entry, modelId };
-    }, [providerSecretService, providerStore]);
-    const refreshRuntimeProviders = import_react48.default.useCallback(() => {
-      if (providerStore) setProviders(providerStore.list());
-    }, [providerStore]);
-    const byokLoop = import_react48.default.useMemo(() => {
-      return createAgentLoop({
-        resolveRequestProfile: () => {
-          const provider = runtimeRef.current.claudeApiProvider;
-          if (!provider) throw new Error("Anthropic provider is unavailable");
-          return resolveProviderRequestProfile(provider, { scope: "model", secretService: providerSecretService });
-        },
-        getModel: () => runtimeRef.current.model,
-        getPermissionMode: () => runtimeRef.current.permissionMode,
-        getEffort: () => runtimeRef.current.effort,
-        getFast: () => runtimeRef.current.fast,
-        mcp,
-        lang,
-        onEvent: handleChatEvent
-      });
-    }, [mcp, handleChatEvent, providerSecretService]);
-    const claudeBackend = import_react48.default.useMemo(() => createClaudeAgentBackend({
+    const claudeBackend = import_react46.default.useMemo(() => createClaudeAgentBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
@@ -52467,31 +44141,16 @@ ${baseUrl}`),
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
       getThinking: () => runtimeRef.current.thinking,
-      getChannel: () => runtimeRef.current.claudeChannel || "subscription",
-      getProviderSensitiveValues: () => providerSecretService.getRedactionValues(),
-      resolveApiProvider: () => {
-        const provider = runtimeRef.current.claudeApiProvider;
-        if (!provider) throw new Error("Custom Provider is unavailable");
-        return provider;
-      },
-      resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
-        ...details,
-        secretService: providerSecretService
-      }),
-      recoverProviderProfile: recoverRuntimeProvider,
-      onProviderProfileRecovered: refreshRuntimeProviders,
+      getChannel: () => "subscription",
       lang,
       onEvent: handleChatEvent
     }), [
       getMcpSpec2,
       mcp,
       handleChatEvent,
-      platform,
-      providerSecretService,
-      recoverRuntimeProvider,
-      refreshRuntimeProviders
+      platform
     ]);
-    const codexBackend = import_react48.default.useMemo(() => createCodexBackend({
+    const codexBackend = import_react46.default.useMemo(() => createCodexBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
@@ -52501,157 +44160,27 @@ ${baseUrl}`),
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
-      getProviderProfile: () => runtimeRef.current.providerProfile,
-      getProviderCandidate: () => runtimeRef.current.providerCandidate,
-      getProviderSensitiveValues: () => providerSecretService.getRedactionValues(),
-      resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
-        ...details,
-        secretService: providerSecretService
-      }),
-      recoverProviderProfile: recoverRuntimeProvider,
-      onProviderProfileRecovered: refreshRuntimeProviders,
       getCliConfigProvider: () => null,
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
-    import_react48.default.useEffect(() => {
-      if (providerInit.state !== "ready" || !providerStore) return void 0;
-      let debugMarker = false;
-      try {
-        debugMarker = platform.fs.existsSync(platform.paths.join([extRoot, ".debug"]));
-      } catch {
-      }
-      if (!debugMarker) return void 0;
-      const key = "__AE_MCP_PROVIDER_ACCEPTANCE__";
-      const previous = window[key];
-      if (previous == null ? void 0 : previous.dispose) Promise.resolve(previous.dispose()).catch(() => {
-      });
-      const bridge = createProviderAcceptanceBridge({
-        store: providerStore,
-        secretService: providerSecretService,
-        runProviderManagerProbe,
-        createUniversalProviderRoute,
-        selectProviderRoute,
-        resolveProviderRequestProfile,
-        onProvidersChanged: refreshRuntimeProviders
-      });
-      let panelQueue = Promise.resolve();
-      const panelTurns = (input = {}) => {
-        const run = async () => {
-          const client = input.client === "claude" ? "claude" : input.client === "codex" ? "codex" : "";
-          const providerId = typeof input.providerId === "string" ? input.providerId.trim() : "";
-          const modelId = typeof input.modelId === "string" ? input.modelId.trim() : "";
-          let plannedTurns;
-          try {
-            plannedTurns = normalizePanelAcceptanceTurns(input);
-          } catch {
-            return { ok: false, errorCode: "PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN", turns: [] };
-          }
-          const graceMs = Number.isInteger(input.graceMs) && input.graceMs >= 0 && input.graceMs <= 1e4 ? input.graceMs : 3e3;
-          if (!client || !providerId || !modelId) {
-            return { ok: false, errorCode: "PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN", turns: [] };
-          }
-          let provider = null;
-          try {
-            provider = providerStore.get(providerId);
-          } catch {
-          }
-          if (!provider) return { ok: false, errorCode: "PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND", turns: [] };
-          const backend = client === "codex" ? codexBackend : claudeBackend;
-          const savedRuntime = runtimeRef.current;
-          const turns = [];
-          providerAcceptanceEventsRef.current = [];
-          runtimeRef.current = {
-            ...savedRuntime,
-            providerProfile: { provider, modelId },
-            providerCandidate: { provider, modelId },
-            model: modelId,
-            permissionMode: "none",
-            effort: "low",
-            thinking: input.thinking === "adaptive" ? "adaptive" : null,
-            fast: false,
-            claudeChannel: "api",
-            claudeApiProvider: provider
-          };
-          backend.reset();
-          try {
-            for (const plannedTurn of plannedTurns) {
-              const eventStart = providerAcceptanceEventsRef.current.length;
-              const startedAt = Date.now();
-              await backend.sendUser(plannedTurn);
-              await new Promise((resolve) => setTimeout(resolve, graceMs));
-              const events2 = providerAcceptanceEventsRef.current.slice(eventStart);
-              const error = events2.find((event) => event.type === "error");
-              const accepted = events2.some((event) => event.type === "turn-accepted");
-              const terminal = events2.some((event) => event.type === "turn-end");
-              const transcript = backend.getMessages();
-              const hasAssistant = transcript.some((message) => (message == null ? void 0 : message.role) === "assistant" && typeof message.text === "string" && message.text.trim());
-              turns.push({
-                ok: !error && terminal && hasAssistant,
-                terminal: terminal ? "turn-end" : null,
-                durationMs: Date.now() - startedAt,
-                errorCode: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.kind) || null,
-                attachmentCount: plannedTurn.attachments.length,
-                mentionedAttachmentCount: countMentionedPanelAttachments(
-                  transcript,
-                  plannedTurn.attachments
-                ),
-                accepted
-              });
-              if (!turns.at(-1).ok) break;
-            }
-            return {
-              ok: turns.length === plannedTurns.length && turns.every((turn) => turn.ok),
-              client,
-              modelId,
-              turns
-            };
-          } catch (error) {
-            return {
-              ok: false,
-              client,
-              modelId,
-              turns,
-              errorCode: typeof (error == null ? void 0 : error.code) === "string" ? error.code : "PROVIDER_ACCEPTANCE_PANEL_TURN_FAILED"
-            };
-          } finally {
-            backend.reset();
-            runtimeRef.current = savedRuntime;
-          }
-        };
-        const pending = panelQueue.then(run, run);
-        panelQueue = pending.then(() => void 0, () => void 0);
-        return pending;
-      };
-      const acceptance = Object.freeze({ ...bridge, panelTurns });
-      window[key] = acceptance;
-      return () => {
-        if (window[key] === acceptance) delete window[key];
-        Promise.resolve(bridge.dispose()).catch(() => {
-        });
-      };
-    }, [claudeBackend, codexBackend, extRoot, platform, providerInit.state, providerSecretService, providerStore, refreshRuntimeProviders]);
-    import_react48.default.useEffect(
+    }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
+    import_react46.default.useEffect(
       () => installBeforeUnloadReset(window, codexBackend),
       [codexBackend]
     );
-    import_react48.default.useEffect(() => {
-      if (previousCodexProviderProfileRef.current === providerProfile) return;
-      previousCodexProviderProfileRef.current = providerProfile;
-      codexBackend.reset();
-    }, [codexBackend, providerProfile]);
-    const openCodeBackend = import_react48.default.useMemo(() => createOpenCodeBackend({
+    const openCodeBackend = import_react46.default.useMemo(() => createOpenCodeBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+      getProviders: () => providersRef.current,
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
-    const zcodeBackend = import_react48.default.useMemo(() => createZcodeBackend({
+    const zcodeBackend = import_react46.default.useMemo(() => createZcodeBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
@@ -52660,57 +44189,58 @@ ${baseUrl}`),
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
-      readStoredZcodeKey: () => zcodeStoredKeyRef.current,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
-    import_react48.default.useEffect(() => () => {
-      zcodeStoredKeyRef.current = "";
-      zcodeBackend.reset();
-    }, [zcodeBackend]);
     runtimeRef.current = {
-      providerProfile,
-      providerCandidate: effective.channel === "custom" && codexCustomProvider ? { provider: codexCustomProvider, modelId: effectiveModel } : null,
       model: effectiveModel,
       permissionMode,
       effort: effectiveEffort,
       thinking: modelMeta.adaptive === true ? "adaptive" : null,
-      fast: effectiveFast,
-      claudeChannel: effective.backend === "claude-api" ? "api" : "subscription",
-      claudeApiProvider
+      fast: effectiveFast
     };
-    const backendInstances = { subscription: claudeBackend, "claude-api": claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
-    const activeBackend = backendInstances[effective.backend] || byokLoop;
-    import_react48.default.useEffect(() => {
+    const backendInstances = {
+      subscription: claudeBackend,
+      codex: codexBackend,
+      opencode: openCodeBackend,
+      zcode: zcodeBackend
+    };
+    const activeBackend = backendInstances[effective.backend] || null;
+    import_react46.default.useEffect(() => {
       const facts = {
         effectiveBackend: effective.backend,
         effectiveChannel: effective.channel,
         backendPref,
         baseDescriptor,
         customModel,
-        claudeApiProvider,
-        codexCustomProvider,
-        customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
-        byokApiModels: null,
         codexCachedModels: codexModels,
+        openCodeProviders: providers,
         zcodeSessionModels,
         zcodeProbedModels
       };
       const nextDescriptor = selectDescriptor(facts);
       setDescriptor(nextDescriptor);
       const isCustomModelPath = backendPref === "codex" && customModelForBackend && model === customModelForBackend;
-      const providerFactsPending = backendPref === "codex" && Boolean(codexProviderId) && providerInit.state === "checking";
       const reconciled = reconcileModelPref(model, nextDescriptor, {
-        isCustom: isCustomModelPath,
-        providerFactsPending
+        isCustom: isCustomModelPath
       });
       if (reconciled !== model) {
         setModel(reconciled);
         writePref("ae_mcp_model", reconciled);
       }
-    }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady, codexProviderId, providerInit.state]);
-    const activeBackendRef = import_react48.default.useRef(null);
-    import_react48.default.useEffect(() => {
+    }, [
+      effective.backend,
+      effective.channel,
+      backendPref,
+      baseDescriptor,
+      customModel,
+      codexModels,
+      providers,
+      zcodeSessionModels,
+      zcodeProbedModels
+    ]);
+    const activeBackendRef = import_react46.default.useRef(null);
+    import_react46.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;
       const sessionAvailable = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available) ? zcodeSessionModels.settings.model.available : [];
       if (sessionAvailable.length > 1) return void 0;
@@ -52720,7 +44250,7 @@ ${baseUrl}`),
       const providerId = cli.providerId || "";
       probeProviderModels({
         baseUrl: cli.baseUrl,
-        ["apiKey"]: zcodeStoredKeyRef.current,
+        ["apiKey"]: "",
         protocol: cli.protocol,
         allowInsecureHttp: false
       }).then((result) => {
@@ -52734,8 +44264,8 @@ ${baseUrl}`),
       return () => {
         alive = false;
       };
-    }, [backendPref, zcodeCredentialEpoch, zcodeSessionModels, zcodeConfigSummary]);
-    const runClaudeProbe = import_react48.default.useCallback(() => {
+    }, [backendPref, zcodeSessionModels, zcodeConfigSummary]);
+    const runClaudeProbe = import_react46.default.useCallback(() => {
       let alive = true;
       setProbe(null);
       probeClaudeLogin({
@@ -52756,23 +44286,22 @@ ${baseUrl}`),
         alive = false;
       };
     }, [platform]);
-    import_react48.default.useEffect(() => {
+    import_react46.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
     }, [backendPref, runClaudeProbe]);
-    const runCodexProbe = import_react48.default.useCallback(() => {
+    const runCodexProbe = import_react46.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
       codexBackend.probeAccount().then((result) => {
         if (!alive) return;
-        const redactionValues = providerSecretService.getRedactionValues();
-        if (containsExactSecret(result, ["aemcp-secret://", ...redactionValues])) {
+        if (containsExactSecret(result, ["aemcp-secret://"])) {
           setCodexProbe({ loggedIn: false, runtimeOk: false, detail: "Codex probe metadata was rejected" });
           setCodexModels(null);
           return;
         }
         setCodexProbe(result);
-        if (result && Array.isArray(result.models) && !modelMetadataContainsCredential(result.models, redactionValues)) {
+        if (result && Array.isArray(result.models) && !modelMetadataContainsCredential(result.models)) {
           setCodexModels(result.models);
         }
       }).catch((e) => {
@@ -52781,15 +44310,30 @@ ${baseUrl}`),
       return () => {
         alive = false;
       };
-    }, [codexBackend, providerSecretService]);
-    import_react48.default.useEffect(() => {
+    }, [codexBackend]);
+    import_react46.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
-    import_react48.default.useEffect(() => {
+    const runOpenCodeProbe = import_react46.default.useCallback(() => {
+      let alive = true;
+      setOpenCodeProbe(null);
+      openCodeBackend.probeAccount().then((result) => {
+        if (alive) setOpenCodeProbe(result);
+      }).catch((error) => {
+        if (alive) setOpenCodeProbe({ loggedIn: false, detail: (error == null ? void 0 : error.message) || String(error) });
+      });
+      return () => {
+        alive = false;
+      };
+    }, [openCodeBackend]);
+    import_react46.default.useEffect(() => {
+      if (backendPref !== "opencode") return void 0;
+      return runOpenCodeProbe();
+    }, [backendPref, runOpenCodeProbe]);
+    import_react46.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       if (!codexCliConfig || !codexCliConfig.provider || !codexCliCredentialReady) return void 0;
-      if (effective.channel === "custom" && codexCustomProvider && codexCustomProvider.baseUrl) return void 0;
       if (codexModels && codexModels.length > 1) return void 0;
       let alive = true;
       (async () => {
@@ -52798,8 +44342,7 @@ ${baseUrl}`),
           credential = await resolveCodexCliCredential({
             provider: codexCliConfig.provider,
             env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {},
-            storedValueRef: null,
-            secretService: providerSecretService
+            storedValueRef: null
           });
           const result = await probeProviderModels({
             baseUrl: codexCliConfig.provider.baseUrl,
@@ -52819,8 +44362,8 @@ ${baseUrl}`),
       return () => {
         alive = false;
       };
-    }, [backendPref, effective.channel, codexCliConfig, codexCliCredentialReady, codexCustomProvider, codexModels, providerSecretService]);
-    const runZcodeProbe = import_react48.default.useCallback(() => {
+    }, [backendPref, codexCliConfig, codexCliCredentialReady, codexModels]);
+    const runZcodeProbe = import_react46.default.useCallback(() => {
       let alive = true;
       setZcodeProbe(null);
       zcodeBackend.probeAccount().then((result) => {
@@ -52832,19 +44375,18 @@ ${baseUrl}`),
         alive = false;
       };
     }, [zcodeBackend]);
-    import_react48.default.useEffect(() => {
+    import_react46.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;
       return runZcodeProbe();
     }, [backendPref, runZcodeProbe]);
-    import_react48.default.useEffect(() => {
+    import_react46.default.useEffect(() => {
       if (effective.backend !== "zcode" || !effectiveEffort) return;
       zcodeBackend.setThoughtLevel(effectiveEffort);
     }, [effective.backend, effectiveEffort, zcodeBackend]);
-    import_react48.default.useEffect(() => {
+    import_react46.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;
       if (!decision.reset) return;
-      byokLoop.reset();
       claudeBackend.reset();
       codexBackend.reset();
       openCodeBackend.reset();
@@ -52856,8 +44398,16 @@ ${baseUrl}`),
       setSessionEffort(null);
       setSessionFast(null);
       if (decision.nextReal !== "zcode") setZcodeSessionModels(null);
-    }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, resetAttachmentDraftSession, zcodeBackend]);
+    }, [
+      effective.backend,
+      claudeBackend,
+      codexBackend,
+      openCodeBackend,
+      resetAttachmentDraftSession,
+      zcodeBackend
+    ]);
     const sendChat = (input) => {
+      var _a;
       if (pendingTurnRef.current) return;
       let turn;
       try {
@@ -52873,11 +44423,22 @@ ${baseUrl}`),
       }
       pendingTurnRef.current = turn;
       acceptedTurnRef.current = null;
+      if (!activeBackend) {
+        handleChatEvent({
+          type: "error",
+          kind: "backend",
+          code: "BACKEND_UNAVAILABLE",
+          message: ((_a = effective.fixHint) == null ? void 0 : _a.en) || "Configure an available chat backend first.",
+          turnId: turn.turnId,
+          dispatchState: "not-started"
+        });
+        return;
+      }
       try {
         const result = activeBackend.sendUser(turn);
         Promise.resolve(result).catch((error) => {
-          var _a;
-          if (((_a = pendingTurnRef.current) == null ? void 0 : _a.turnId) !== turn.turnId) return;
+          var _a2;
+          if (((_a2 = pendingTurnRef.current) == null ? void 0 : _a2.turnId) !== turn.turnId) return;
           handleChatEvent({
             type: "error",
             kind: (error == null ? void 0 : error.kind) || "backend",
@@ -52900,9 +44461,9 @@ ${baseUrl}`),
     };
     const newChatSession = () => {
       hostConversation.closeConversation();
-      activeBackend.reset();
+      if (activeBackend) activeBackend.reset();
       resetAttachmentDraftSession();
-      if (mcpEngineRef.current === MCP_ENGINE_CEP_HOST && status.state === "ok") {
+      if (status.state === "ok") {
         hostConversation.ensureConversation({
           label: chatSessionIdRef.current,
           approvalTier: permissionModeRef.current,
@@ -52913,7 +44474,7 @@ ${baseUrl}`),
       setThinkingActive(false);
       setChatEntries([]);
     };
-    const pushLog = import_react48.default.useCallback((m) => {
+    const pushLog = import_react46.default.useCallback((m) => {
       const message = String(m != null ? m : "");
       const host = getHost();
       try {
@@ -52926,34 +44487,10 @@ ${baseUrl}`),
       if (!keepLogLine(logLevelRef.current, message)) return;
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${message}`]);
     }, [getHost]);
-    const repairPlatformHelper = import_react48.default.useCallback(async () => {
-      if (providerRepairing) return;
-      setProviderRepairing(true);
-      try {
-        const controller = ctrl.current;
-        if (!controller || typeof controller.repairPlatformHelper !== "function") {
-          throw providerRuntimeUnavailableError();
-        }
-        await controller.repairPlatformHelper();
-        pushLog("Platform Helper repaired; rechecking protected provider state");
-        setProviderInitEpoch((current) => current + 1);
-      } catch (error) {
-        setProviderInit(providerRepairFailure(error));
-        pushLog("Platform Helper repair failed: " + (typeof (error == null ? void 0 : error.code) === "string" ? error.code : "HELPER_UNAVAILABLE"));
-      } finally {
-        setProviderRepairing(false);
-      }
-    }, [providerRepairing, pushLog]);
-    const exportLogs = import_react48.default.useCallback(async () => {
+    const exportLogs = import_react46.default.useCallback(async () => {
       var _a;
       try {
-        let exactSecrets = [];
-        try {
-          exactSecrets = providerSecretService.getRedactionValues() || [];
-        } catch (error) {
-          exactSecrets = [];
-        }
-        if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
+        const exactSecrets = [];
         const attachmentSecrets = attachmentPathSecrets({
           draft: attachmentDraft,
           pendingTurn: pendingTurnRef.current
@@ -52966,11 +44503,9 @@ ${baseUrl}`),
           diagnosticItems = await runDiagnostics({
             getHost,
             port: status.port,
-            fs: cepRequire4("fs"),
+            fs: cepRequire3("fs"),
             fetchImpl: window.fetch.bind(window),
-            platform,
-            runtimeManager,
-            allowDevelopmentPath: developmentRuntimeFallback
+            platform
           });
         } catch (error) {
           diagnosticsError = (error == null ? void 0 : error.message) || String(error);
@@ -53005,30 +44540,6 @@ ${baseUrl}`),
         }
         const osInfo = { platform: platform.id || "-" };
         const versions = processApi.versions || {};
-        const today = /* @__PURE__ */ new Date();
-        const dateKey = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
-        const pythonLogPath = platform.paths.join([logsDir, "server-" + dateKey + ".log"]);
-        let pythonServerLog;
-        try {
-          const hasFile = [0, 1].some((offset) => {
-            const date = new Date(today);
-            date.setDate(date.getDate() - offset);
-            const key = date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
-            return platform.fs.existsSync(platform.paths.join([logsDir, "server-" + key + ".log"]));
-          });
-          pythonServerLog = hasFile ? readDatedLogTail({
-            fsImpl: platform.fs,
-            pathJoin: platform.paths.join,
-            dir: logsDir,
-            prefix: "server-",
-            suffix: ".log",
-            now: today,
-            days: 2,
-            lines: 300
-          }) : void 0;
-        } catch (error) {
-          pythonServerLog = void 0;
-        }
         const backendStderrTails = {};
         for (const [name, backend] of [
           ["claude", claudeBackend],
@@ -53047,7 +44558,6 @@ ${baseUrl}`),
           panelLogs: logs,
           hostInfo: {
             hostVersion: connection.hostVersion || "-",
-            pythonVersion: connection.pythonVersion || "-",
             aeApp,
             cepVersion,
             os: osInfo,
@@ -53063,8 +44573,6 @@ ${baseUrl}`),
           diagnostics: diagnosticItems,
           diagnosticsError,
           backendStderrTails,
-          pythonServerLog,
-          pythonLogPath,
           version: pkgVersion,
           exactSecrets
         });
@@ -53074,8 +44582,21 @@ ${baseUrl}`),
       } catch (e) {
         pushLog("Log export failed: " + (e && e.message ? e.message : String(e)));
       }
-    }, [logs, connInfo, claudeBackend, codexBackend, openCodeBackend, zcodeBackend, providerSecretService, pushLog, attachmentDraft, getHost, platform, runtimeManager, developmentRuntimeFallback, status.port, cs2]);
-    const undoToPreviousCheckpoint = import_react48.default.useCallback(async () => {
+    }, [
+      logs,
+      connInfo,
+      claudeBackend,
+      codexBackend,
+      openCodeBackend,
+      zcodeBackend,
+      pushLog,
+      attachmentDraft,
+      getHost,
+      platform,
+      status.port,
+      cs2
+    ]);
+    const undoToPreviousCheckpoint = import_react46.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
         pushLog("Reverted to previous checkpoint");
@@ -53083,7 +44604,7 @@ ${baseUrl}`),
         pushLog("Checkpoint revert failed: " + (e && e.message ? e.message : String(e)));
       }
     }, [mcp, pushLog]);
-    import_react48.default.useEffect(() => {
+    import_react46.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -53101,95 +44622,34 @@ ${baseUrl}`),
       });
       ctrl.current.start(port);
     }, [cs2, extRoot, platform, pushLog]);
-    import_react48.default.useEffect(() => {
+    import_react46.default.useEffect(() => {
       if (status.state !== "ok") return void 0;
       let alive = true;
       setProviderInit({ state: "checking", error: "" });
       (async () => {
         try {
-          const host = getHost();
-          if (!host || typeof host.capabilities !== "function") throw providerRuntimeUnavailableError();
-          const capabilities = await host.capabilities();
-          requireProviderHelperCapabilities(capabilities, platform.id);
+          let legacyProviders = [];
           try {
-            const value = await zcodeCredentialManager.loadOrMigrate();
-            if (alive) {
-              zcodeStoredKeyRef.current = value;
-              setZcodeCredentialEpoch((current) => current + 1);
-            }
+            legacyProviders = legacyProviderStore ? legacyProviderStore.list() : [];
           } catch {
-            if (alive) {
-              zcodeStoredKeyRef.current = "";
-              setZcodeCredentialEpoch((current) => current + 1);
-            }
-            pushLog("ZCode credential unavailable: protected credential migration is required");
           }
-          if (!providerStore) {
-            const error = new Error("Provider store is unavailable");
-            error.code = "PROVIDER_STORE_UNAVAILABLE";
-            throw error;
-          }
-          if (providerStore.needsSecretMigration() || providerStore.needsSchemaMigration()) {
-            const secretStore = createHostSecretStore(host);
-            const runner = createSecretMigrationRunner({
-              journalStore: createProviderMigrationJournalStore(platform),
-              secretStore
-            });
-            await migrateProviderStoreSecrets({
-              store: providerStore,
-              legacyKeyStore: {
-                readKey: (name) => {
-                  try {
-                    return legacyKeyStore ? legacyKeyStore.readKey(name) : "";
-                  } catch {
-                    return "";
-                  }
-                },
-                async cleanupCommittedProviderSecrets() {
-                  if (!legacyKeyStore) return;
-                  legacyKeyStore.clearKey("anthropic");
-                  legacyKeyStore.clearKey("codex");
-                }
-              },
-              runner,
-              secretStore: host
-            });
-          }
-          if (providerStore.needsSchemaMigration()) {
-            await migrateProviderStoreV2ToV3({ store: providerStore });
-          }
-          await drainPendingProviderSecretDeletes({ store: providerStore, secretService: providerSecretService });
-          const providerState = providerStore.readState();
-          for (const ref of activeProviderSecretRefs(providerState.providers)) {
-            let resolved = null;
-            try {
-              resolved = await providerSecretService.resolve(ref);
-              if (typeof resolved !== "string") {
-                const error = new Error("Provider secret resolution returned an invalid value.");
-                error.code = "SECRET_CONFLICT";
-                throw error;
-              }
-            } finally {
-              resolved = null;
-            }
-          }
-          assertProviderStateCredentialFree(
-            providerState,
-            providerSecretService.getRedactionValues()
-          );
+          openCodeProviderStore.importLegacyProviders(legacyProviders);
           if (!alive) return;
-          setProviders(providerState.providers);
+          setProviders(openCodeProviderStore.list());
           setProviderInit({ state: "ready", error: "" });
         } catch (error) {
           if (!alive) return;
-          setProviderInit(providerInitFailure(error));
+          setProviderInit({
+            state: "unavailable",
+            error: (error == null ? void 0 : error.code) || "OPENCODE_PROVIDER_STORE_UNAVAILABLE"
+          });
         }
       })();
       return () => {
         alive = false;
       };
-    }, [status.state, providerStore, providerSecretService, getHost, legacyKeyStore, platform, pushLog, providerInitEpoch, zcodeCredentialManager]);
-    import_react48.default.useEffect(() => {
+    }, [legacyProviderStore, openCodeProviderStore, status.state]);
+    import_react46.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
         const h = getHost();
@@ -53199,7 +44659,7 @@ ${baseUrl}`),
       const i = setInterval(update, 3e3);
       return () => clearInterval(i);
     }, [drawerOpen, getHost]);
-    import_react48.default.useEffect(() => {
+    import_react46.default.useEffect(() => {
       if (tab !== "settings") return void 0;
       const update = () => {
         const h = getHost();
@@ -53211,26 +44671,21 @@ ${baseUrl}`),
       const i = setInterval(update, 4e3);
       return () => clearInterval(i);
     }, [tab, getHost]);
-    const runDiag = import_react48.default.useCallback(async () => {
-      var _a;
+    const runDiag = import_react46.default.useCallback(async () => {
       setDiagnostics("running");
       try {
         const items = await runDiagnostics({
           getHost,
           port: status.port,
-          fs: cepRequire4("fs"),
+          fs: cepRequire3("fs"),
           fetchImpl: window.fetch.bind(window),
-          platform,
-          runtimeManager,
-          allowDevelopmentPath: developmentRuntimeFallback
+          platform
         });
-        const verifiedRuntime = (_a = items.find((item) => item.id === "node" && item.ok && item.runtime)) == null ? void 0 : _a.runtime;
-        if (verifiedRuntime) markRuntimeReady(verifiedRuntime);
         setDiagnostics(items);
       } catch (e) {
         setDiagnostics([{ id: "host-listening", ok: false, detail: String(e && e.message), fixHint: { zh: "\u8BCA\u65AD\u6267\u884C\u5931\u8D25\uFF0C\u91CD\u542F\u9762\u677F\u540E\u91CD\u8BD5\u3002", en: "Diagnostics failed to run; reload the panel and retry." } }]);
       }
-    }, [developmentRuntimeFallback, getHost, markRuntimeReady, platform, runtimeManager, status.port]);
+    }, [getHost, platform, status.port]);
     const togglePause = () => {
       const host = getHost();
       if (!host || typeof host.setPaused !== "function") {
@@ -53256,24 +44711,16 @@ ${baseUrl}`),
       markWizardDone(window.localStorage);
       setWizardDone(true);
     };
-    const externalMcpReady = mcpEngine === MCP_ENGINE_CEP_HOST ? status.state === "ok" : runtimeReady;
-    const mcpConfigStr = externalMcpReady ? JSON.stringify(
-      mcpEngine === MCP_ENGINE_CEP_HOST ? httpConfigFor("claude-desktop", status.port, extRoot) : buildMcpConfig(status.port, expertGuidance, mcpCommand),
-      null,
-      2
-    ) : "";
-    const claudeStatus = probe === null ? { state: "checking" } : probe.reason === "cli-too-old" ? { state: "cli-too-old", detail: probe.detail } : probe.cliOk === false ? { state: "no-cli", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", cliVersion: probe.cliVersion };
+    const externalMcpReady = status.state === "ok";
+    const mcpConfigStr = externalMcpReady ? JSON.stringify(httpConfigFor("claude-desktop", status.port, extRoot), null, 2) : "";
     const wizard = useWizardWiring({
-      extRoot,
       lang,
-      claudeStatus,
-      recheckLogin: runClaudeProbe,
       platform,
-      runtimeManager,
-      onRuntimeReady: markRuntimeReady
+      port: status.port,
+      fetchImpl: window.fetch.bind(window)
     });
     if (!wizardDone) {
-      return /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
         WizardScreen,
         {
           step: wizStep,
@@ -53281,15 +44728,9 @@ ${baseUrl}`),
           onLangChange: setLang,
           client: wizClient,
           onClient: setWizClient,
-          clientName: (CLIENT_NAMES[wizClient] || CLIENT_NAMES["claude-desktop"])[lang],
-          mcpConfig: mcpConfigStr,
-          mcpCommand,
+          extensionRoot: extRoot,
           mcpReady: externalMcpReady,
-          mcpEngine,
           port: status.port,
-          expertGuidance,
-          channels,
-          activeChannel: effective.channel || "",
           onNext: () => setWizStep((s) => Math.min(3, s + 1)),
           onBack: () => setWizStep((s) => Math.max(1, s - 1)),
           onCopy: (text) => copyWizardConfig(copyText, mcpConfigStr, text),
@@ -53309,8 +44750,8 @@ ${baseUrl}`),
     const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
-    return /* @__PURE__ */ (0, import_jsx_runtime44.jsxs)(import_react48.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)(import_react46.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
         StatusBar,
         {
           status: statusForBar,
@@ -53325,8 +44766,8 @@ ${baseUrl}`),
           settingsTitle: t.settings
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime44.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
-        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
+        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
           ChatScreen,
           {
             lang,
@@ -53338,9 +44779,9 @@ ${baseUrl}`),
             noticeActionLabel: paused ? t.resume : t.goSettings,
             onNoticeAction: () => paused ? togglePause() : setTab("settings"),
             onSend: sendChat,
-            onStop: () => activeBackend.stop(),
-            onApprove: (id, decision) => activeBackend.approve(id, decision),
-            onAnswerQuestion: (id, result) => activeBackend.answerQuestion && activeBackend.answerQuestion(id, result),
+            onStop: () => activeBackend == null ? void 0 : activeBackend.stop(),
+            onApprove: (id, decision) => activeBackend == null ? void 0 : activeBackend.approve(id, decision),
+            onAnswerQuestion: (id, result) => (activeBackend == null ? void 0 : activeBackend.answerQuestion) && activeBackend.answerQuestion(id, result),
             onNewSession: newChatSession,
             chipState: {
               descriptor,
@@ -53364,7 +44805,7 @@ ${baseUrl}`),
             onRetryAttachment: retryAttachment
           }
         ) : null,
-        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
           ActivityScreen,
           {
             events,
@@ -53375,16 +44816,14 @@ ${baseUrl}`),
             emptyCaption: t.actEmptyB
           }
         ) : null,
-        tab === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+        tab === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
           ToolsScreen,
           {
             api: toolsApi,
-            lang,
-            cepFs: window.cep && window.cep.fs,
-            initialPath: extRoot
+            lang
           }
         ) : null,
-        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
           SettingsScreen,
           {
             lang,
@@ -53392,12 +44831,7 @@ ${baseUrl}`),
             port: status.port,
             onApplyPort: applyPort,
             mcpConfig: mcpConfigStr,
-            mcpCommand,
             mcpReady: externalMcpReady,
-            mcpEngine,
-            onMcpEngineChange: (value) => {
-              setMcpEngine(saveMcpEngine(window.localStorage, value));
-            },
             logs,
             clients,
             mcpSessions,
@@ -53420,81 +44854,33 @@ ${baseUrl}`),
             },
             onRegenToken: () => setConfirmRegen(true),
             hostVersion: connInfo && connInfo.hostVersion || "-",
-            pythonVersion: connInfo && connInfo.pythonVersion || "-",
             channels,
             activeChannel: effective.channel || "",
-            selectedChannel: channelChoices[backendPref === "codex" ? "codex" : "claude"] || "",
+            selectedChannel: channelChoices[backendPref === "codex" ? "codex" : backendPref === "opencode" ? "opencode" : "claude"] || "",
             onSelectChannel: (channel) => {
-              const group = backendPref === "codex" ? "codex" : "claude";
+              const group = backendPref === "codex" ? "codex" : backendPref === "opencode" ? "opencode" : "claude";
               setChannelChoices((current) => ({ ...current, [group]: channel }));
               writePref("ae_mcp_channel_" + group, channel);
               if (group === "codex") {
                 codexBackend.reset();
                 runCodexProbe();
+              } else if (group === "opencode") {
+                openCodeBackend.reset();
+                runOpenCodeProbe();
               } else {
                 runClaudeProbe();
               }
             },
             onRecheckBackend: () => {
               if (backendPref === "codex") runCodexProbe();
+              else if (backendPref === "opencode") runOpenCodeProbe();
               else if (backendPref === "zcode") runZcodeProbe();
               else runClaudeProbe();
             },
-            recheckDisabled: backendPref === "codex" ? codexProbe === null : backendPref === "zcode" ? zcodeProbe === null : probe === null,
+            recheckDisabled: backendPref === "codex" ? codexProbe === null : backendPref === "opencode" ? openCodeProbe === null : backendPref === "zcode" ? zcodeProbe === null : probe === null,
             providers,
             providerManager,
             providerInit,
-            providerRepairing,
-            onRepairPlatformHelper: repairPlatformHelper,
-            claudeProviderId,
-            onClaudeProviderChange: (id) => {
-              setClaudeProviderId(id);
-              writePref("ae_mcp_claude_provider", id);
-            },
-            codexProviderId,
-            onCodexProviderChange: (id) => {
-              setCodexProviderId(id);
-              writePref("ae_mcp_codex_provider", id);
-              setCodexProbe(null);
-              codexBackend.reset();
-            },
-            claudeSettingsImportAvailable: Boolean(claudeSettingsHint),
-            onImportClaudeSettings: async () => {
-              if (!claudeSettingsHint || !providerStore) return;
-              if (providerInit.state !== "ready") throw providerRuntimeUnavailableError();
-              let draft = null;
-              try {
-                draft = readClaudeSettingsProviderDraft({
-                  platform,
-                  expectedSourceRevision: claudeSettingsHint.sourceRevision,
-                  fsImpl: platform.fs
-                });
-                if (!draft) return;
-                const entry = await importProviderDraft({ candidate: draft, store: providerStore, secretService: providerSecretService, randomUUID: randomProviderCredentialId });
-                setProviders(providerStore.list());
-                setClaudeProviderId(entry.id);
-                writePref("ae_mcp_claude_provider", entry.id);
-              } finally {
-                draft = null;
-              }
-            },
-            onSaveZcodeKey: async (k) => {
-              try {
-                const value = await zcodeCredentialManager.save(k);
-                zcodeStoredKeyRef.current = value;
-                setZcodeCredentialEpoch((current) => current + 1);
-                setZcodeProbe(null);
-                zcodeBackend.reset();
-                runZcodeProbe();
-                return true;
-              } catch {
-                pushLog("ZCode credential save failed: protected credential store is unavailable");
-                return false;
-              }
-            },
-            zcodeKeyStored: Boolean(zcodeStoredKeyRef.current),
-            onSaveCodexKey: void 0,
-            codexKeyStored: false,
             codexCliConfig,
             model: effectiveModel,
             modelOptions,
@@ -53537,8 +44923,8 @@ ${baseUrl}`),
           tokenEpoch
         ) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
-      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
         ConnectionDrawer,
         {
           open: drawerOpen,
@@ -53546,13 +44932,13 @@ ${baseUrl}`),
           lang,
           info: connInfo || {},
           diagnostics: Array.isArray(diagnostics) ? diagnostics : [],
-          copyReady: runtimeReady,
+          copyReady: externalMcpReady,
           onDiagnose: runDiag,
           onCopyConfig: () => copyText(mcpConfigStr),
           onRestart: () => applyPort(status.port)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
         ConfirmDialog,
         {
           open: confirmRegen,
@@ -53574,7 +44960,7 @@ ${baseUrl}`),
           }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
         ToolApprovalDialog,
         {
           record: toolApproval && toolApproval.plan ? toolApproval : null,
@@ -53582,7 +44968,7 @@ ${baseUrl}`),
           onResolve: (result) => elicitationCoordinator.resolveVisible(result)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
         QuestionFormDialog,
         {
           record: toolApproval && !toolApproval.plan ? toolApproval : null,
@@ -53593,13 +44979,13 @@ ${baseUrl}`),
     ] });
   }
   function App({ cs: cs2 }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(Shell, { cs: cs2 }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Shell, { cs: cs2 }) });
   }
 
   // src/main.jsx
-  var import_jsx_runtime45 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime43 = __toESM(require_jsx_runtime(), 1);
   var cs = new window.CSInterface();
-  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime45.jsx)(App, { cs }));
+  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime43.jsx)(App, { cs }));
 })();
 /*! Bundled license information:
 
