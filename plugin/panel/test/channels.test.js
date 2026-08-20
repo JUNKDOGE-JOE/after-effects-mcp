@@ -11,13 +11,13 @@ test('claudeChannels: subscription reflects probe, api reflects provider entry',
   const probing = claudeChannels({ probe: null, apiProvider: null });
   assert.equal(probing[0].channel, 'subscription');
   assert.equal(probing[0].checking, true);
-  const ready = claudeChannels({ probe: { nodeOk: true, loggedIn: true }, apiProvider: null });
+  const ready = claudeChannels({ probe: { cliOk: true, loggedIn: true }, apiProvider: null });
   assert.equal(ready[0].ok, true);
   assert.equal(ready[1].channel, 'api');
   assert.equal(ready[1].ok, false);
   assert.match(ready[1].fixHint.zh, /Provider 管理/);
   const withApi = claudeChannels({
-    probe: { nodeOk: true, loggedIn: false },
+    probe: { cliOk: true, loggedIn: false },
     apiProvider: { baseUrl: 'https://r', auth: { model: { kind: 'x-api-key', valueRef: { kind: 'secret', reference: 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1', revision: 1 } } } },
     providerAvailable: true,
   });
@@ -28,7 +28,7 @@ test('claudeChannels: subscription reflects probe, api reflects provider entry',
   assert.equal(withApi[1].selected, true);
 });
 
-test('claudeChannels fails a custom Provider closed when the shared Agent SDK runtime is unavailable', () => {
+test('claudeChannels closes both channels when Claude CLI is unavailable', () => {
   const provider = {
     baseUrl: 'https://r',
     auth: {
@@ -43,14 +43,14 @@ test('claudeChannels fails a custom Provider closed when the shared Agent SDK ru
     },
   };
   const channels = claudeChannels({
-    probe: { nodeOk: false, loggedIn: false },
+    probe: { cliOk: false, loggedIn: false, reason: 'cli-missing' },
     apiProvider: provider,
     providerAvailable: true,
   });
   assert.equal(channels[1].ok, false);
   assert.equal(channels[1].canPreflight, false);
-  assert.match(channels[1].fixHint.zh, /Node 运行时/);
-  assert.match(channels[1].fixHint.en, /Node runtime/);
+  assert.match(channels[1].fixHint.zh, /Claude CLI/);
+  assert.match(channels[1].fixHint.en, /Claude CLI/);
 });
 
 test('codexChannels: cli login state + custom provider channel', () => {

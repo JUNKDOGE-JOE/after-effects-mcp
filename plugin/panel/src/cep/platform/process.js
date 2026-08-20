@@ -420,6 +420,53 @@ export function createProcessBoundary({ deps, paths, platform }) {
     }
   }
 
+  function strictClaudeNativeEntry(candidate) {
+    if (!/\.cmd$/i.test(candidate.path) || !Buffer.isBuffer(candidate.prefixBytes)) return null;
+    const text = candidate.prefixBytes.toString('utf8');
+    if (text.includes('\0') || /\r(?!\n)/.test(text)) return null;
+    const lines = text.replace(/\r\n/g, '\n').split('\n');
+    if (lines.at(-1) === '') lines.pop();
+    const common = [
+      '@ECHO off',
+      'GOTO start',
+      ':find_dp0',
+      'SET dp0=%~dp0',
+      'EXIT /b',
+      ':start',
+      'SETLOCAL',
+      'CALL :find_dp0',
+    ];
+    if (lines.length !== common.length + 1) return null;
+    if (common.some((line, index) => lines[index] !== line)) return null;
+
+    const shimDirectory = paths.dirname(candidate.displayPath);
+    const localNodeModules = paths.basename(shimDirectory).toLowerCase() === '.bin'
+      && paths.basename(paths.dirname(shimDirectory)).toLowerCase() === 'node_modules'
+      ? paths.dirname(shimDirectory)
+      : null;
+    const nodeModules = localNodeModules || paths.join([shimDirectory, 'node_modules']);
+    const relativeEntry = localNodeModules
+      ? '..\\@anthropic-ai\\claude-code\\bin\\claude.exe'
+      : 'node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe';
+    const invocation = lines[common.length].match(/^"%dp0%\\([^"]+)"\s+%\*$/);
+    if (!invocation || invocation[1].toLowerCase() !== relativeEntry.toLowerCase()) return null;
+
+    const packageRoot = paths.join([nodeModules, '@anthropic-ai', 'claude-code']);
+    const lexicalEntry = paths.join([packageRoot, 'bin', 'claude.exe']);
+    if (!windowsPathInside(packageRoot, lexicalEntry) || !deps.fs.existsSync(lexicalEntry)) return null;
+    try {
+      const entryInfo = (deps.fs.lstatSync || deps.fs.statSync).call(deps.fs, lexicalEntry);
+      if (!entryInfo || !entryInfo.isFile() || entryInfo.isSymbolicLink?.()) return null;
+      deps.fs.accessSync?.(lexicalEntry, deps.fs.constants?.X_OK ?? 1);
+      const realEntry = deps.fs.realpathSync ? deps.fs.realpathSync(lexicalEntry) : lexicalEntry;
+      const realRoot = deps.fs.realpathSync ? deps.fs.realpathSync(packageRoot) : packageRoot;
+      if (!windowsPathInside(realRoot, realEntry)) return null;
+      return realEntry;
+    } catch (error) {
+      return null;
+    }
+  }
+
   async function materializeScriptCandidate(candidate, id, options, attempts) {
     if (candidate.windowsCommandScript && id === 'node') {
       attempts.push({ path: candidate.displayPath, source: candidate.source, detail: 'Node command wrappers are not trusted interpreters' });
@@ -427,6 +474,27 @@ export function createProcessBoundary({ deps, paths, platform }) {
     }
     if (!candidate.nodeScript && !candidate.windowsCommandScript) {
       return { candidate, failure: null };
+    }
+    if (candidate.windowsCommandScript && id === 'claude') {
+      const nativeEntry = strictClaudeNativeEntry(candidate);
+      const nativeCandidate = nativeEntry
+        ? fileCandidate(nativeEntry, candidate.source, options.env)
+        : null;
+      if (!nativeCandidate) {
+        attempts.push({
+          path: candidate.displayPath,
+          source: candidate.source,
+          detail: 'Claude command wrapper does not select the in-package native executable',
+        });
+        return { candidate: null, failure: 'NOT_FOUND' };
+      }
+      return {
+        failure: null,
+        candidate: {
+          ...nativeCandidate,
+          displayPath: candidate.displayPath,
+        },
+      };
     }
     let scriptEntry = candidate.displayPath;
     if (candidate.windowsCommandScript) {

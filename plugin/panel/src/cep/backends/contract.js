@@ -1,6 +1,6 @@
-// Embedded chat backend contract. Every backend (Claude sidecar, Codex
+// Embedded chat backend contract. Every backend (Claude CLI, Codex
 // app-server, OpenCode serve) conforms to this regardless of transport
-// (stdio+SDK / stdio+JSON-RPC / HTTP+SSE).
+// (stdio stream-json / stdio JSON-RPC / HTTP+SSE).
 //
 // Factory(deps) -> {
 //   sendUser(text): Promise        // resolves when the turn settles
@@ -10,8 +10,8 @@
 //   reset()                        // kill process/session, clear conversation
 //   getMessages(): {role,text}[]
 // }
-// (Login/readiness probing is backend-specific: probeClaudeLogin for the
-//  sidecar, codex/openCode backends expose probeAccount.)
+// (Login/readiness probing is backend-specific: probeClaudeLogin uses
+//  `claude auth status`; codex/openCode backends expose probeAccount.)
 //
 // onEvent emission contract (order within a turn):
 //   turn-start

@@ -361,6 +361,55 @@ test('a Windows npm cmd shim is rewritten to its entry through a verified Node',
   assert.deepEqual(calls[1].args, [entry, '--version']);
 });
 
+test('a Windows Claude npm cmd shim resolves to the in-package native exe', async () => {
+  const calls = [];
+  const npmRoot = 'C:\\Users\\a\\AppData\\Roaming\\npm';
+  const shim = npmRoot + '\\claude.cmd';
+  const native = npmRoot
+    + '\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe';
+  const contents = [
+    '@ECHO off',
+    'GOTO start',
+    ':find_dp0',
+    'SET dp0=%~dp0',
+    'EXIT /b',
+    ':start',
+    'SETLOCAL',
+    'CALL :find_dp0',
+    '"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*',
+    '',
+  ].join('\r\n');
+  const adapter = createWindowsAdapter({
+    platform: 'win32',
+    arch: 'x64',
+    home: 'C:\\Users\\a',
+    temp: 'C:\\Temp',
+    env: { Path: npmRoot },
+    fs: fakeFs(new Set([shim, native]), {}, {
+      [shim]: Buffer.from(contents),
+      [native]: pe64(0x8664),
+    }),
+    spawnImpl: processFactory([
+      { stdout: '2.1.227 (Claude Code)\n' },
+    ], calls),
+    now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('claude', {
+    minimumVersion: '2.0.0',
+    requiredArch: 'x64',
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, native);
+  assert.equal(result.displayPath, shim);
+  assert.deepEqual(result.argsPrefix, []);
+  assert.equal(result.version, '2.1.227');
+  assert.equal(result.arch, 'x64');
+  assert.deepEqual(calls.map((call) => call.file), [native]);
+  assert.deepEqual(calls[0].args, ['--version']);
+});
+
 test('a node.cmd candidate fails closed without recursively resolving Node', async () => {
   const calls = [];
   const shim = 'C:\\Tools\\node.cmd';
