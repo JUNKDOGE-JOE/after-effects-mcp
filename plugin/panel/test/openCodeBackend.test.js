@@ -178,7 +178,7 @@ function makeBackend(options = {}) {
   return { backend, events, spawned, fetched, fsImpl };
 }
 
-test('createOpenCodeBackend sends official file parts and accepts after the message POST', async () => {
+test('createOpenCodeBackend sends official file parts and accepts at dispatch', async () => {
   const { backend, events, fetched } = makeBackend();
   const pending = backend.sendUser({
     turnId: 'turn-1',
@@ -349,15 +349,19 @@ test('createOpenCodeBackend correlates a failed message POST as uncertain withou
   });
   for (let index = 0; index < 20 && !rejectMessage; index += 1) await flush();
   assert.equal(typeof rejectMessage, 'function');
+  // Accepted must land while the POST is still in flight (SSE deltas can
+  // arrive before the blocking POST returns; see the reply-order fix).
+  assert.equal(events.some((evt) => evt.type === 'turn-accepted' && evt.turnId === 'turn-post-failed'), true);
   rejectMessage(new Error('message POST disconnected'));
   await pending;
 
+  // The turn was accepted at dispatch, so a POST failure is an in-chat error
+  // for the already-rendered turn, not a draft-recovery dispatchState.
   assert.deepEqual(events.at(-1), {
     type: 'error',
     kind: 'mcp',
     message: 'message POST disconnected',
     turnId: 'turn-post-failed',
-    dispatchState: 'uncertain',
   });
   assert.equal(base.calls.filter((call) => call.path === '/session/session_1/message').length, 1);
 });

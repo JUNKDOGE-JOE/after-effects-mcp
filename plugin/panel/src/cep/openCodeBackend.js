@@ -652,13 +652,19 @@ export function createOpenCodeBackend({
       const userText = turn.text;
       transcript.push({ role: 'user', text: userText });
       messageDispatched = true;
-      await postJson('/session/' + encodeURIComponent(id) + '/message', {
-        parts: openCodeParts(turn),
-      });
+      // Accept at dispatch, not on POST completion: OpenCode's message POST
+      // blocks until the model finishes while assistant deltas stream over
+      // SSE, so a late accept rendered the reply ABOVE the user's message.
+      // ensureSession failures above still reject as not-started (draft is
+      // restored); a POST failure after this point surfaces as an in-chat
+      // error under the already-rendered user turn.
       if (turn.turnId) {
         activeTurnAccepted = true;
         emit({ type: 'turn-accepted', turnId: turn.turnId, transport: 'opencode-file-part' });
       }
+      await postJson('/session/' + encodeURIComponent(id) + '/message', {
+        parts: openCodeParts(turn),
+      });
     } catch (e) {
       emit({
         type: 'error',

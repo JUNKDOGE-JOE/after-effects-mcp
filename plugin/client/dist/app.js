@@ -30197,13 +30197,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         const userText = turn.text;
         transcript.push({ role: "user", text: userText });
         messageDispatched = true;
-        await postJson("/session/" + encodeURIComponent(id) + "/message", {
-          parts: openCodeParts(turn)
-        });
         if (turn.turnId) {
           activeTurnAccepted = true;
           emit({ type: "turn-accepted", turnId: turn.turnId, transport: "opencode-file-part" });
         }
+        await postJson("/session/" + encodeURIComponent(id) + "/message", {
+          parts: openCodeParts(turn)
+        });
       } catch (e) {
         emit({
           type: "error",
@@ -33114,7 +33114,9 @@ ${draft.baseUrl}`)) return;
       };
       const nextDescriptor = selectDescriptor(facts);
       setDescriptor(nextDescriptor);
-      const reconciled = reconcileModelPref(model, nextDescriptor);
+      const reconciled = reconcileModelPref(model, nextDescriptor, {
+        providerFactsPending: backendPref === "opencode" && providerInit.state !== "ready"
+      });
       if (reconciled !== model) {
         setModel(reconciled);
         writePref("ae_mcp_model", reconciled);
@@ -33125,7 +33127,8 @@ ${draft.baseUrl}`)) return;
       backendPref,
       baseDescriptor,
       codexModels,
-      providers
+      providers,
+      providerInit.state
     ]);
     const activeBackendRef = import_react46.default.useRef(null);
     const runClaudeProbe = import_react46.default.useCallback(() => {

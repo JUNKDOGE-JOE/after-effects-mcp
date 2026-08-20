@@ -570,8 +570,13 @@ function Shell({ cs }) {
     const nextDescriptor = selectDescriptor(facts);
     setDescriptor(nextDescriptor);
     // A persisted model id can outlive its backend or model catalog. Reset it
-    // when the current model isn't in the new descriptor's model list.
-    const reconciled = reconcileModelPref(model, nextDescriptor);
+    // when the current model isn't in the new descriptor's model list — but
+    // never while the OpenCode provider registry is still loading: the static
+    // fallback descriptor would clobber a valid provider-model pref at boot
+    // (live-seen: pref reset to the first relay model on every restart).
+    const reconciled = reconcileModelPref(model, nextDescriptor, {
+      providerFactsPending: backendPref === 'opencode' && providerInit.state !== 'ready',
+    });
     if (reconciled !== model) {
       setModel(reconciled);
       writePref('ae_mcp_model', reconciled);
@@ -583,6 +588,7 @@ function Shell({ cs }) {
     baseDescriptor,
     codexModels,
     providers,
+    providerInit.state,
   ]);
   const activeBackendRef = React.useRef(null);
 
