@@ -2,40 +2,36 @@ import { createPlatformAdapter } from './platform/index.js';
 
 const HINTS = {
   'host-listening': {
-    zh: '确认 ae-mcp 面板已打开；如端口被占用，请在设置里换一个端口并重启服务。',
-    en: 'Make sure the ae-mcp panel is open. If the port is busy, choose another port in Settings and restart the service.',
+    zh: '确认 ae-mcp 面板已打开；如端口被占用，请在设置里换端口并重启宿主。',
+    en: 'Keep the ae-mcp panel open. If the port is busy, change it in Settings and restart the host.',
   },
   'token-file': {
-    zh: '重启 After Effects 面板以重新生成 ~/.ae-mcp/auth-token，然后重启你的 AI 客户端。',
-    en: 'Restart the After Effects panel to regenerate ~/.ae-mcp/auth-token, then restart your AI client.',
+    zh: '重启 After Effects 面板以重新生成 ~/.ae-mcp/auth-token。',
+    en: 'Restart the After Effects panel to regenerate ~/.ae-mcp/auth-token.',
   },
-  'python-seen': {
-    zh: '运行你的 AI 客户端发起一次对话，或检查其 MCP 配置。',
-    en: 'Start a conversation in your AI client, or check its MCP configuration.',
+  'mcp-session': {
+    zh: '从面板对话或外部客户端发起一次 MCP 请求；外部客户端应连接宿主 /mcp URL。',
+    en: 'Send an MCP request from panel chat or an external client connected to the host /mcp URL.',
   },
   'ae-project': {
-    zh: '确认 After Effects 允许脚本访问，并保持面板服务运行。',
-    en: 'Confirm After Effects allows script access and keep the panel service running.',
+    zh: '确认 After Effects 允许脚本访问，并保持面板宿主运行。',
+    en: 'Confirm After Effects allows script access and keep the panel host running.',
   },
   'extendscript-ping': {
-    zh: '重启面板服务；如果仍失败，请重启 After Effects 后再试。',
-    en: 'Restart the panel service. If it still fails, restart After Effects and try again.',
-  },
-  'ae-mcp': {
-    zh: '在设置中修复离线运行时并重新验证稳定启动器。',
-    en: 'Repair the offline runtime in Settings, then verify the stable launcher again.',
-  },
-  node: {
-    zh: '在设置中修复随插件安装的 Node 运行时。',
-    en: 'Repair the Node runtime bundled with the plugin in Settings.',
+    zh: '重启面板宿主；如果仍失败，请重启 After Effects 后再试。',
+    en: 'Restart the panel host. If it still fails, restart After Effects and try again.',
   },
   claude: {
-    zh: 'Claude CLI 为可选项；如需订阅通道，请打开登录终端完成配置。',
-    en: 'Claude CLI is optional. Open its login terminal if you want the subscription channel.',
+    zh: 'Claude CLI 为可选项；如需该通道，请安装并完成登录。',
+    en: 'Claude CLI is optional. Install it and sign in to use that channel.',
   },
   codex: {
-    zh: 'Codex CLI 为可选项；如需订阅通道，请打开登录终端完成配置。',
-    en: 'Codex CLI is optional. Open its login terminal if you want the subscription channel.',
+    zh: 'Codex CLI 为可选项；如需该通道，请安装并完成登录。',
+    en: 'Codex CLI is optional. Install it and sign in to use that channel.',
+  },
+  opencode: {
+    zh: 'opencode CLI 为可选项；如需自定义 provider 通道，请安装并配置它。',
+    en: 'The opencode CLI is optional. Install and configure it for custom providers.',
   },
 };
 
@@ -52,10 +48,6 @@ function tokenHeaders(token) {
   return {
     'content-type': 'application/json',
     'x-ae-mcp-token': token,
-    // Must match INTERNAL_CLIENT in plugin/host/server.js: panel-origin
-    // probes are kept out of the client registry (and therefore out of
-    // lastClientSeenAt) so running diagnostics can never green-light the
-    // python-seen check or list a phantom client in Settings.
     'x-ae-mcp-client': 'panel-diagnostics/internal',
   };
 }
@@ -69,14 +61,29 @@ async function execCode(fetchImpl, port, token, code) {
   return { response, body: await readJson(response) };
 }
 
+function recentMcpSession(getHost) {
+  const host = getHost && getHost();
+  const sessions = host && typeof host.getMcpSessions === 'function'
+    ? host.getMcpSessions()
+    : [];
+  const latest = sessions.reduce((value, session) => (
+    Math.max(value, Number(session.lastActivityAt) || 0)
+  ), 0);
+  const age = latest ? Date.now() - latest : Infinity;
+  return {
+    ok: age < 10 * 60 * 1000,
+    detail: latest
+      ? 'Last MCP session activity ' + Math.round(age / 1000) + 's ago'
+      : 'No MCP session activity yet',
+  };
+}
+
 export async function runDiagnostics({
   getHost,
   port,
   fs,
   fetchImpl,
   platform,
-  runtimeManager,
-  allowDevelopmentPath = false,
 }) {
   const adapter = platform || createPlatformAdapter();
   const fileSystem = fs || adapter.fs;
@@ -91,45 +98,59 @@ export async function runDiagnostics({
     items.push({
       id: 'host-listening',
       ok,
-      detail: ok ? 'Host v' + (body.pluginVersion || 'unknown') + ' on port ' + (body.port || port) : 'Host did not return ok',
+      detail: ok
+        ? 'Host v' + (body.pluginVersion || 'unknown') + ' on port ' + (body.port || port)
+        : 'Host did not return ok',
       fixHint: HINTS['host-listening'],
     });
-  } catch (e) {
-    items.push({ id: 'host-listening', ok: false, detail: e.message, fixHint: HINTS['host-listening'] });
+  } catch (error) {
+    items.push({
+      id: 'host-listening',
+      ok: false,
+      detail: error.message,
+      fixHint: HINTS['host-listening'],
+    });
   }
 
   try {
     const file = tokenPath(adapter);
     const exists = fileSystem && fileSystem.existsSync && fileSystem.existsSync(file);
-    token = exists && fileSystem.readFileSync ? String(fileSystem.readFileSync(file, 'utf8')).trim() : '';
+    token = exists && fileSystem.readFileSync
+      ? String(fileSystem.readFileSync(file, 'utf8')).trim()
+      : '';
     items.push({
       id: 'token-file',
       ok: exists && token.length === 64,
       detail: exists ? 'Token length ' + token.length : 'Token file missing',
       fixHint: HINTS['token-file'],
     });
-  } catch (e) {
-    items.push({ id: 'token-file', ok: false, detail: e.message, fixHint: HINTS['token-file'] });
-  }
-
-  try {
-    const host = getHost && getHost();
-    const info = host && host.getConnectionInfo && host.getConnectionInfo();
-    const lastPythonSeenAt = info ? Math.max(info.lastHealthAt || 0, info.lastClientSeenAt || 0) : 0;
-    const age = lastPythonSeenAt ? Date.now() - lastPythonSeenAt : Infinity;
-    const ok = age < 10 * 60 * 1000;
+  } catch (error) {
     items.push({
-      id: 'python-seen',
-      ok,
-      detail: ok ? 'Last Python signal ' + Math.round(age / 1000) + 's ago' : 'No recent Python signal',
-      fixHint: HINTS['python-seen'],
+      id: 'token-file',
+      ok: false,
+      detail: error.message,
+      fixHint: HINTS['token-file'],
     });
-  } catch (e) {
-    items.push({ id: 'python-seen', ok: false, detail: e.message, fixHint: HINTS['python-seen'] });
   }
 
   try {
-    const code = 'app.project && app.project.file ? app.project.file.name : (app.project ? "unsaved" : "none")';
+    items.push({
+      id: 'mcp-session',
+      ...recentMcpSession(getHost),
+      fixHint: HINTS['mcp-session'],
+    });
+  } catch (error) {
+    items.push({
+      id: 'mcp-session',
+      ok: false,
+      detail: error.message,
+      fixHint: HINTS['mcp-session'],
+    });
+  }
+
+  try {
+    const code = 'app.project && app.project.file ? app.project.file.name '
+      + ': (app.project ? "unsaved" : "none")';
     const { response, body } = await execCode(fetcher, port, token, code);
     const ok = response && response.ok !== false && body.ok !== false;
     const project = body.result || 'none';
@@ -139,8 +160,13 @@ export async function runDiagnostics({
       detail: project === 'unsaved' ? 'Project unsaved' : 'Project ' + project,
       fixHint: HINTS['ae-project'],
     });
-  } catch (e) {
-    items.push({ id: 'ae-project', ok: false, detail: e.message, fixHint: HINTS['ae-project'] });
+  } catch (error) {
+    items.push({
+      id: 'ae-project',
+      ok: false,
+      detail: error.message,
+      fixHint: HINTS['ae-project'],
+    });
   }
 
   try {
@@ -152,82 +178,28 @@ export async function runDiagnostics({
       detail: ok ? 'pong' : 'Unexpected result: ' + String(body.result || body.error || ''),
       fixHint: HINTS['extendscript-ping'],
     });
-  } catch (e) {
-    items.push({ id: 'extendscript-ping', ok: false, detail: e.message, fixHint: HINTS['extendscript-ping'] });
+  } catch (error) {
+    items.push({
+      id: 'extendscript-ping',
+      ok: false,
+      detail: error.message,
+      fixHint: HINTS['extendscript-ping'],
+    });
   }
 
-  if (runtimeManager) {
-    let node = null;
-    let nodeError = null;
-    try {
-      node = await runtimeManager.resolveNode();
-    } catch (error) {
-      nodeError = error;
-    }
-    try {
-      const state = await runtimeManager.inspect();
-      const current = state.current?.ok ? state.current.record : null;
-      const developmentRuntime = state.developmentRuntime === true;
-      items.push({
-        id: 'ae-mcp',
-        ok: state.ok,
-        detail: state.ok && developmentRuntime
-          ? [
-            'DEVELOPMENT CHECKOUT',
-            state.checkoutPath,
-            state.interpreter?.path,
-            state.interpreter?.resolvedPath,
-            state.diagnostics?.[0]?.code,
-          ].filter(Boolean).join(' · ')
-          : state.ok
-            ? `${current.version} · ${state.launcher.path} · ${current.sourceCommitSha}`
-          : [state.current?.code, state.launcher?.code].filter(Boolean).join(' · '),
-        fixHint: HINTS['ae-mcp'],
-        action: { kind: 'repair-runtime' },
-      });
-    } catch (error) {
-      items.push({
-        id: 'ae-mcp',
-        ok: false,
-        detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED',
-        fixHint: HINTS['ae-mcp'],
-        action: { kind: 'repair-runtime' },
-      });
-    }
-    if (node) {
-      items.push({
-        id: 'node',
-        ok: node.ok,
-        detail: node.ok ? [node.version, node.nodePath].filter(Boolean).join(' · ') : node.detail,
-        runtime: node.runtime,
-        fixHint: HINTS.node,
-        action: { kind: 'repair-runtime' },
-      });
-    } else {
-      items.push({
-        id: 'node',
-        ok: false,
-        detail: nodeError?.code || nodeError?.message || 'RUNTIME_MANAGER_FAILED',
-        fixHint: HINTS.node,
-        action: { kind: 'repair-runtime' },
-      });
-    }
-  }
-
-  for (const id of runtimeManager ? ['claude', 'codex'] : ['ae-mcp', 'node', 'claude', 'codex']) {
-    const options = id === 'node'
-      ? { minimumVersion: '24.17.0', requiredArch: adapter.id === 'macos-arm64' ? 'arm64' : 'x64' }
-      : (id === 'ae-mcp' && allowDevelopmentPath ? { allowDevelopmentPath: true } : {});
+  for (const id of ['claude', 'codex', 'opencode']) {
+    const options = id === 'claude' ? { minimumVersion: '2.0.0' } : {};
     const result = await adapter.resolveExecutable(id, options);
-    const action = id === 'ae-mcp' || id === 'node'
-      ? { kind: 'repair-runtime' }
-      : { kind: 'open-login-terminal', tool: id };
     items.push({
       id,
       ok: result.ok,
-      detail: result.ok ? [result.version, result.path].filter(Boolean).join(' · ') : result.code,
+      detail: result.ok
+        ? [result.version, result.path].filter(Boolean).join(' · ')
+        : result.code,
       fixHint: HINTS[id],
-      action,
+      ...(id === 'opencode'
+        ? {}
+        : { action: { kind: 'open-login-terminal', tool: id } }),
     });
   }
 

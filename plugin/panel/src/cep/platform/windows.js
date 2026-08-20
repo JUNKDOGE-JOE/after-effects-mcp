@@ -19,7 +19,11 @@ export function createWindowsAdapter(deps) {
     ...boundary,
     revealFile(filePath) {
       const explorer = paths.join([systemRoot, 'explorer.exe']);
-      return boundary.run({ executable: fixed('ae-mcp', explorer), args: ['/select,', String(filePath)], timeoutMs: 5000 });
+      return boundary.run({
+        executable: fixed('explorer', explorer),
+        args: ['/select,', String(filePath)],
+        timeoutMs: 5000,
+      });
     },
     openLoginTerminal(tool) {
       if (tool !== 'claude' && tool !== 'codex') throw new TypeError('Unsupported login tool');
@@ -27,16 +31,9 @@ export function createWindowsAdapter(deps) {
       const args = tool === 'claude' ? ['start', '', 'claude'] : ['start', '', 'codex', 'login'];
       return boundary.run({ executable: fixed(tool, cmd, ['/d', '/s', '/c']), args, timeoutMs: 5000 });
     },
-    legacyWizardInstallCommands({ panelVersion, repoRoot, repo }) {
-      const src = (sub) => repoRoot
-        ? paths.join([repoRoot, 'packages', sub])
-        : `git+${repo}@v${panelVersion}#subdirectory=packages/${sub}`;
+    legacyWizardInstallCommands() {
       return {
-        uv: { file: 'winget', executableId: 'winget', args: ['install', '--id', 'astral-sh.uv', '-e', '--accept-source-agreements', '--accept-package-agreements'] },
-        uvFallback: { file: 'powershell', executableId: 'powershell', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://astral.sh/uv/install.ps1 | iex'] },
         node: { file: 'winget', executableId: 'winget', args: ['install', '--id', 'OpenJS.NodeJS.LTS', '-e', '--accept-source-agreements', '--accept-package-agreements'] },
-        claude: { file: 'npm', executableId: 'npm', args: ['install', '-g', '@anthropic-ai/claude-code'] },
-        aeMcp: { file: 'uv', executableId: 'uv', args: ['tool', 'install', '--force', '--from', src('core'), 'ae-mcp', '--with', src('bridge'), '--with', src('snapshot-mss')] },
       };
     },
   });

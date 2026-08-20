@@ -163,7 +163,11 @@ function makeBackend(options = {}) {
     getPort: async () => 4567,
     fsImpl,
     tempDirName: () => 'ae-opencode-test',
-    getMcpSpec: async () => ({ command: 'ae-mcp', args: ['--stdio'], env: { A: 'B' } }),
+    getMcpSpec: async () => ({
+      kind: 'http',
+      url: 'http://127.0.0.1:11488/mcp/c/opencode-default-token',
+      name: 'ae',
+    }),
     getToolMeta: async () => TOOL_META,
     getModel: () => 'north-mini-code-free',
     getPermissionMode: () => 'manual',
@@ -209,7 +213,10 @@ test('createOpenCodeBackend sends official file parts and accepts after the mess
   });
   assert.equal(JSON.stringify(events).includes('C:\\tmp'), false);
 
-  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
   await pending;
   assert.deepEqual(backend.getMessages()[0], { role: 'user', text: 'inspect' });
 });
@@ -370,24 +377,25 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   assert.equal(fsImpl.writes.length, 1);
   assert.equal(fsImpl.writes[0].file, 'C:\\tmp\\ae-opencode-test\\opencode\\opencode.json');
   assert.deepEqual(JSON.parse(fsImpl.writes[0].text).mcp.ae, {
-    type: 'local',
-    command: ['ae-mcp', '--stdio'],
+    type: 'remote',
+    url: 'http://127.0.0.1:11488/mcp/c/opencode-default-token',
     enabled: true,
-    timeout: 120000,
-    environment: { A: 'B', AE_MCP_BACKEND: 'ae-mcp' },
   });
 
   await flush();
   const sessionCall = fetched.calls.find((call) => call.path === '/session');
   assert.deepEqual(sessionCall.body.model, { id: 'north-mini-code-free', providerID: 'opencode' });
-  assert.equal(sessionCall.body.permission.type, 'ask');
+  assert.equal(sessionCall.body.permission.type, 'allow');
   assert.equal(fetched.calls.some((call) => call.path === '/session/session_1/message' && call.body.parts[0].text === 'hello'), true);
 
-  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
   await pending;
 });
 
-test('createOpenCodeBackend writes a remote MCP URL for cep-host mode', async () => {
+test('createOpenCodeBackend writes only a per-conversation remote MCP URL', async () => {
   const url = 'http://127.0.0.1:11488/mcp/c/opencode-token';
   const { backend, fetched, fsImpl } = makeBackend({
     getMcpSpec: async () => ({ kind: 'http', url, name: 'ae' }),
@@ -402,6 +410,43 @@ test('createOpenCodeBackend writes a remote MCP URL for cep-host mode', async ()
   });
   assert.match(JSON.parse(fsImpl.writes[0].text).mcp.ae.url, /\/mcp\/c\//);
   fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
+  await pending;
+});
+
+test('createOpenCodeBackend injects panel-managed OpenCode provider definitions', async () => {
+  const { backend, fetched, fsImpl } = makeBackend({
+    getProviders: () => [{
+      id: 'aemcp-relay',
+      name: 'Relay',
+      baseUrl: 'https://relay.example/v1',
+      modelId: 'claude-test',
+      allowInsecureHttp: false,
+      needsApiKey: false,
+    }],
+    getModel: () => 'aemcp-relay/claude-test',
+  });
+  const pending = backend.sendUser('provider config');
+  await flush();
+
+  const config = JSON.parse(fsImpl.writes[0].text);
+  assert.deepEqual(config.permission, { '*': 'allow' });
+  assert.deepEqual(config.provider, {
+    'aemcp-relay': {
+      npm: '@ai-sdk/anthropic',
+      name: 'Relay',
+      options: { baseURL: 'https://relay.example/v1' },
+      models: { 'claude-test': { name: 'claude-test' } },
+    },
+  });
+  assert.deepEqual(fetched.calls.find((call) => call.path === '/session').body.model, {
+    id: 'claude-test',
+    providerID: 'aemcp-relay',
+  });
+
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
   await pending;
 });
 

@@ -18,9 +18,7 @@ const MAX_EVIDENCE_BYTES = 4 * 1024 * 1024;
 
 export const NATIVE_RELEASE_REQUIRED_IMPLEMENTATION = Object.freeze([
   '.github/workflows/build-rc.yml',
-  '.github/workflows/platform-foundation-ci.yml',
   'packaging/product-acceptance-coverage.json',
-  'scripts/package/build-platform-helper.mjs',
   'scripts/package/test/verify-final-native-signatures.test.mjs',
   'scripts/package/verify-final-native-signatures.mjs',
   'scripts/release/artifact-manifest.mjs',
@@ -30,7 +28,6 @@ export const NATIVE_RELEASE_REQUIRED_IMPLEMENTATION = Object.freeze([
 ]);
 
 export const NATIVE_RELEASE_EVIDENCE_PRODUCERS = Object.freeze({
-  'helper-build-reviewed': 'scripts/package/build-platform-helper.mjs',
   'macos-ae25-ae26-hardware-reviewed': 'scripts/release/verify-product-acceptance-coverage.mjs',
   'macos-final-native-signature-coverage-reviewed': 'scripts/package/verify-final-native-signatures.mjs',
   'persistence-upgrade-rollback-permission-acceptance-reviewed': 'scripts/release/verify-product-acceptance-coverage.mjs',
@@ -123,7 +120,7 @@ function validatePolicyEnvelope(policy) {
     }
     throw gateError(
       'NATIVE_COVERAGE_APPROVAL_REQUIRED',
-      'native helper, final per-file signature coverage, and hardware evidence remain blocked',
+      'native signature and hardware evidence remain blocked',
     );
   }
 }

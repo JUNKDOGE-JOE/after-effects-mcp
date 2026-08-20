@@ -10,10 +10,8 @@ import { encodeAttestationComment } from '../comment-marker.mjs';
 
 const WINDOWS_PASS_COMMANDS = [
   'Get-FileHash -Algorithm SHA256 and bind manifest',
-  'Get-AuthenticodeSignature for every packaged executable',
-  'install exact signed ZXP',
-  'AE 25 installed-runtime smoke',
-  'AE 26 installed-runtime smoke',
+  'Get-AuthenticodeSignature for packaged AEX',
+  'verify direct ZXP payload',
 ];
 
 function report(result = 'PASS') {
@@ -24,7 +22,7 @@ function report(result = 'PASS') {
     candidateSha: 'b'.repeat(40),
     workflowRunId: '42',
     artifactId: '101',
-    artifactName: 'ae-mcp-panel-v0.9.2-windows-x64.zxp',
+    artifactName: 'ae-mcp-panel-v0.9.6-windows-x64.zxp',
     artifactSha256: 'c'.repeat(64),
     osVersion: 'Windows 10.0.26100',
     codexVersion: '0.144.0-alpha.4',

@@ -18,11 +18,6 @@ import {
 export const CLAUDE_MINIMUM_VERSION = '2.0.0';
 
 const STDERR_TAIL_LIMIT = 4096;
-const PROVIDER_ENV_KEYS = [
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_BASE_URL',
-  'ANTHROPIC_AUTH_TOKEN',
-];
 const DISALLOWED_TOOLS = [
   'Bash',
   'Edit',
@@ -308,40 +303,10 @@ function agentDefinition(meta, attachments, lang) {
   };
 }
 
-function deleteEnvironmentKey(environment, name) {
-  const normalized = name.toUpperCase();
-  for (const key of Object.keys(environment)) {
-    if (key.toUpperCase() === normalized) delete environment[key];
-  }
-}
-
 function mcpConfigForSpec(spec) {
-  if (spec && spec.kind === 'http') {
-    return {
-      mcpServers: {
-        ae: { type: 'http', url: String(spec.url || '') },
-      },
-    };
-  }
-  const childEnv = isPlainObject(spec?.env) ? { ...spec.env } : {};
-  for (const key of PROVIDER_ENV_KEYS) deleteEnvironmentKey(childEnv, key);
-  for (const key of PROVIDER_ENV_KEYS) childEnv[key] = '';
-  // The panel's four approval tiers are enforced on the claude side through
-  // can_use_tool. The Python server's own verb/tool gate would additionally
-  // raise MCP elicitations that the Claude CLI never answers (the SDK sidecar
-  // used to answer them), leaving manual/auto write calls hung until timeout —
-  // so the stdio server must run ungated.
-  for (const key of ['AE_MCP_APPROVAL_TIER_FILE', 'AE_MCP_TOOL_APPROVAL_TIER_FILE']) {
-    deleteEnvironmentKey(childEnv, key);
-  }
-  childEnv.AE_MCP_BACKEND = 'ae-mcp';
   return {
     mcpServers: {
-      ae: {
-        command: String(spec?.command || 'ae-mcp'),
-        args: Array.isArray(spec?.args) ? spec.args.map(String) : [],
-        env: childEnv,
-      },
+      ae: { type: 'http', url: String(spec?.url || '') },
     },
   };
 }

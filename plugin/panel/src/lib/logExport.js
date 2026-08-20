@@ -154,15 +154,12 @@ export function readDatedLogTail({ fsImpl, pathJoin, dir, prefix, suffix, now = 
 export function buildLogExport({
   panelLogs = [],
   hostInfo = {},
-  sidecarTail = '',
   backendStderrTails = null,
   hostActivity,
   hostLogMemory,
   hostLogDisk,
   diagnostics,
   diagnosticsError,
-  pythonServerLog,
-  pythonLogPath,
   version = '',
   now = new Date(),
   exactSecrets = [],
@@ -173,7 +170,6 @@ export function buildLogExport({
     ['exported-at', now.toISOString()],
     ['panel-version', version || '-'],
     ['host-version', hostInfo.hostVersion || '-'],
-    ['python-version', hostInfo.pythonVersion || '-'],
     ['ae-app', formatObject(hostInfo.aeApp)],
     ['cep', hostInfo.cepVersion || '-'],
     ['os', formatObject(hostInfo.os)],
@@ -205,7 +201,7 @@ export function buildLogExport({
   }, exactSecrets);
   section(lines, '## panel log (' + panelLogs.length + ')', () => panelLogs.map(String), exactSecrets);
   section(lines, '## backend stderr tails', () => {
-    const tails = backendStderrTails || (sidecarTail ? { claude: sidecarTail } : null);
+    const tails = backendStderrTails;
     if (!tails || typeof tails !== 'object' || !Object.keys(tails).length) return unavailable('no backend stderr tail is available');
     const result = [];
     for (const [name, tail] of Object.entries(tails)) {
@@ -214,14 +210,13 @@ export function buildLogExport({
     }
     return result;
   }, exactSecrets);
-  section(lines, '## python server log (tail)', () => {
-    if (pythonServerLog === undefined || pythonServerLog === null) {
-      return pythonLogPath ? '(no file: ' + pythonLogPath + ')' : unavailable('python server log is unavailable');
-    }
-    return pythonServerLog ? String(pythonServerLog) : '(empty)';
-  }, exactSecrets);
   section(lines, '## previewFrame branches', () => {
-    const summary = summarizePreviewFrameBranches(pythonServerLog || '');
+    const previewSource = [hostLogMemory, hostLogDisk]
+      .filter(Array.isArray)
+      .flat()
+      .map(formatHostLog)
+      .join('\n');
+    const summary = summarizePreviewFrameBranches(previewSource);
     const result = ['summary: ' + summary.summary];
     result.push('fallbackReason counts:');
     if (!summary.fallbackReasons.length) result.push('(none)');

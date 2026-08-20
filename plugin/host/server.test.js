@@ -571,9 +571,7 @@ test('ExtendScript transport wrappers preserve localized success and errors', ()
 test('health and activity expose only authenticated operational state', async () => {
     const fixture = await startApp();
     try {
-        const health = await get(fixture.port, '/health', {
-            'x-ae-mcp-python': '3.13.5',
-        });
+        const health = await get(fixture.port, '/health');
         assert.equal(health.status, 200);
         assert.equal(health.body.jsxBridge.state, 'ok');
         assert.equal(health.body.jsxBridge.degradedSinceMs, null);
@@ -586,7 +584,9 @@ test('health and activity expose only authenticated operational state', async ()
         assert.equal(activity.body.events.some(function (event) {
             return event.client === 'stdio-mcp/test' && event.ok === true;
         }), true);
-        assert.equal(fixture.server.getConnectionInfo().pythonVersion, '3.13.5');
+        assert.equal(Object.hasOwn(health.body, 'pythonVersion'), false);
+        assert.equal(Object.hasOwn(health.body, 'pythonLastSeenAt'), false);
+        assert.equal(Object.hasOwn(fixture.server.getConnectionInfo(), 'pythonVersion'), false);
     } finally {
         await closeFixture(fixture);
     }

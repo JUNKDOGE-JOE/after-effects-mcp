@@ -28,7 +28,7 @@ const C = {
   zh: {
     hello: '你好！我可以直接操作当前打开的 AE 工程。试试这些：',
     keyTitle: '在设置的 Provider 管理中选择可用渠道',
-    keyCaption: '凭据由系统凭据 Helper 保管；如不可用，请按设置中的修复提示处理。',
+    keyCaption: '凭据由所选 CLI 的登录态或凭据存储保管。',
     newSession: '新会话',
     placeholder: '描述你想在 AE 里做什么…',
     noticeAction: '新会话',
@@ -55,7 +55,7 @@ const C = {
   en: {
     hello: 'Hi! I can operate the open AE project directly. Try one of these:',
     keyTitle: 'Choose an available channel in Provider Manager',
-    keyCaption: 'Credentials stay in the system credential helper; follow the repair guidance in Settings if it is unavailable.',
+    keyCaption: 'Credentials stay in the selected CLI login or credential store.',
     newSession: 'New session',
     placeholder: 'Describe what to do in AE…',
     noticeAction: 'New session',

@@ -91,14 +91,14 @@ function signatureXml(certificate = CERTIFICATE_DER_BASE64) {
   return `<signatures><Signature><KeyInfo><X509Data>${certificates.map((value) => `<X509Certificate>${value}</X509Certificate>`).join('')}</X509Data></KeyInfo></Signature></signatures>`;
 }
 
-function zxpEntries(payload = 'helper-bytes') {
+function zxpEntries(payload = 'host-bytes') {
   return [
     { name: 'META-INF/' },
     { name: 'META-INF/signatures.xml', data: signatureXml() },
     { name: 'mimetype', data: MIMETYPE },
-    { name: 'bin/' },
-    { name: 'bin/helper', data: payload, mode: 0o100755 },
-    { name: 'bundle-manifest.json', data: '{}\n' },
+    { name: 'host/' },
+    { name: 'host/server.js', data: payload, mode: 0o100666 },
+    { name: 'bundle-manifest.json', data: '{}\n', mode: 0o100666 },
   ];
 }
 
@@ -106,10 +106,11 @@ async function fixture(t, entries = zxpEntries()) {
   const root = await tempDir(t);
   const signingRoot = path.join(root, 'signing');
   const zxpPath = path.join(root, 'panel.zxp');
-  await fs.promises.mkdir(path.join(signingRoot, 'bin'), { recursive: true });
-  await fs.promises.writeFile(path.join(signingRoot, 'bin', 'helper'), 'helper-bytes');
-  await fs.promises.chmod(path.join(signingRoot, 'bin', 'helper'), 0o755);
+  await fs.promises.mkdir(path.join(signingRoot, 'host'), { recursive: true });
+  await fs.promises.writeFile(path.join(signingRoot, 'host', 'server.js'), 'host-bytes');
+  await fs.promises.chmod(path.join(signingRoot, 'host', 'server.js'), 0o666);
   await fs.promises.writeFile(path.join(signingRoot, 'bundle-manifest.json'), '{}\n');
+  await fs.promises.chmod(path.join(signingRoot, 'bundle-manifest.json'), 0o666);
   await fs.promises.writeFile(zxpPath, makeZip(entries));
   return { signingRoot, zxpPath };
 }
@@ -160,12 +161,12 @@ test('accepts one unique ordered leaf-to-CA chain and binds the actual leaf sign
 test('rejects changed, added, missing, or wrong-mode ZXP payload entries', async (t) => {
   for (const [name, mutate] of [
     ['changed', (entries) => entries.map((entry) => (
-      entry.name === 'bin/helper' ? { ...entry, data: 'tampered' } : entry
+      entry.name === 'host/server.js' ? { ...entry, data: 'tampered' } : entry
     ))],
     ['added', (entries) => [...entries, { name: 'extra.txt', data: 'extra' }]],
-    ['missing', (entries) => entries.filter((entry) => entry.name !== 'bin/helper')],
+    ['missing', (entries) => entries.filter((entry) => entry.name !== 'host/server.js')],
     ['mode', (entries) => entries.map((entry) => (
-      entry.name === 'bin/helper' ? { ...entry, mode: 0o100644 } : entry
+      entry.name === 'host/server.js' ? { ...entry, mode: 0o100755 } : entry
     ))],
   ]) {
     const { signingRoot, zxpPath } = await fixture(t, mutate(zxpEntries()));
@@ -184,7 +185,7 @@ test('rejects changed, added, missing, or wrong-mode ZXP payload entries', async
 test('rejects unsafe paths, duplicate portable names, and an unexpected certificate', async (t) => {
   for (const [name, entries, fingerprint] of [
     ['traversal', [...zxpEntries(), { name: '../escape', data: 'x' }], CERTIFICATE_FINGERPRINT],
-    ['case duplicate', [...zxpEntries(), { name: 'BIN/HELPER', data: 'x' }], CERTIFICATE_FINGERPRINT],
+    ['case duplicate', [...zxpEntries(), { name: 'HOST/SERVER.JS', data: 'x' }], CERTIFICATE_FINGERPRINT],
     ['certificate', zxpEntries(), createHash('sha256').update('other').digest('hex')],
   ]) {
     const { signingRoot, zxpPath } = await fixture(t, entries);

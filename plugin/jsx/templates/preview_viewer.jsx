@@ -21,7 +21,7 @@
 
     // Nudge AE's idle queue. scheduleTask returns immediately; it asks AE to
     // run a no-op as soon as it can, which has the side-effect of flushing
-    // pending paint events for the active viewer. The Python caller still
+    // pending paint events for the active viewer. The MCP caller still
     // sleeps a few hundred ms before capture to be safe.
     try { app.scheduleTask("", 0, false); } catch (e) { /* AE < 17 lacks this */ }
 

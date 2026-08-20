@@ -174,7 +174,7 @@ function makeHarness(overrides = {}) {
     resolveClaude: overrides.resolveClaude || (async () => resolvedClaude()),
     getMcpSpec: overrides.getMcpSpec || (async () => ({
       kind: 'http',
-      url: 'http://127.0.0.1:11488/mcp?session=chat-1',
+      url: 'http://127.0.0.1:11488/mcp/c/claude-default-token',
     })),
     getToolMeta: overrides.getToolMeta || (async () => toolMeta()),
     getModel: () => state.model,
@@ -350,48 +350,7 @@ test('spawn argv carries isolation, agents, approvals, effort, and MCP config', 
     mcpServers: {
       ae: {
         type: 'http',
-        url: 'http://127.0.0.1:11488/mcp?session=chat-1',
-      },
-    },
-  });
-  finishTurn(h.processes[0]);
-  await run;
-});
-
-test('stdio MCP config keeps command args, strips credentials and approval tier files', async () => {
-  const h = makeHarness({
-    getMcpSpec: async () => ({
-      kind: 'stdio',
-      command: 'ae-mcp.exe',
-      args: ['--stdio', '--label', 'chat-1'],
-      env: {
-        // The claude-side can_use_tool gate owns the four tiers; a tier file
-        // would make the Python server raise MCP elicitations the Claude CLI
-        // never answers (manual/auto writes then hang until timeout).
-        AE_MCP_APPROVAL_TIER_FILE: 'C:\\Temp\\tier.txt',
-        AE_MCP_TOOL_APPROVAL_TIER_FILE: 'C:\\Temp\\tool-tier.txt',
-        AE_MCP_EXPERT_GUIDANCE: '1',
-        anthropic_api_key: 'must-not-leak',
-      },
-    }),
-  });
-  const run = h.backend.sendUser('hello');
-  await flush();
-  const path = h.spawns[0].args[h.spawns[0].args.indexOf('--mcp-config') + 1];
-  const config = JSON.parse(h.fs.writes.find((item) => item.path === path).text);
-
-  assert.deepEqual(config, {
-    mcpServers: {
-      ae: {
-        command: 'ae-mcp.exe',
-        args: ['--stdio', '--label', 'chat-1'],
-        env: {
-          ANTHROPIC_API_KEY: '',
-          ANTHROPIC_BASE_URL: '',
-          ANTHROPIC_AUTH_TOKEN: '',
-          AE_MCP_EXPERT_GUIDANCE: '1',
-          AE_MCP_BACKEND: 'ae-mcp',
-        },
+        url: 'http://127.0.0.1:11488/mcp/c/claude-default-token',
       },
     },
   });

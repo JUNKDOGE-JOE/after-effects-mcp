@@ -24,25 +24,19 @@ const AE_FIELDS = new Set(['major', 'version', 'result']);
 const COMMAND_FIELDS = new Set(['command', 'exitCode']);
 const PASS_COMMAND_LABELS = new Map([
   ['macos-arm64', new Set([
-    'bind installed runtime manifest to RC bundle',
     'shasum -a 256 artifact and bind manifest',
     'codesign --verify --deep --strict',
     'spctl --assess',
     'xcrun stapler validate',
     'mount exact notarized DMG',
     'verify exact ZXP payload from DMG',
-    'extract exact signed ZXP for launcher binding',
-    'bind installed stable launcher to signed ZXP',
-    'install exact signed ZXP',
-    'AE 25 installed-runtime smoke',
-    'AE 26 installed-runtime smoke',
+    'verify direct ZXP payload',
+    'verify AEGP signature',
   ])],
   ['windows-x64', new Set([
     'Get-FileHash -Algorithm SHA256 and bind manifest',
-    'Get-AuthenticodeSignature for every packaged executable',
-    'install exact signed ZXP',
-    'AE 25 installed-runtime smoke',
-    'AE 26 installed-runtime smoke',
+    'Get-AuthenticodeSignature for packaged AEX',
+    'verify direct ZXP payload',
   ])],
 ]);
 

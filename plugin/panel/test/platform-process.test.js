@@ -111,93 +111,6 @@ test('resolution reports minimum-version and architecture failures for discovere
   assert.equal(archResult.code, 'ARCH_MISMATCH');
 });
 
-test('the untrusted current text pointer is never treated as a runtime directory', async () => {
-  const fakePointerChild = '/Users/a/.ae-mcp/runtime/current/bin/node';
-  const pathNode = '/path/bin/node';
-  const harness = macHarness({
-    files: [fakePointerChild, pathNode],
-    steps: [{ stdout: 'v24.17.0 arm64' }],
-  });
-
-  const result = await harness.adapter.resolveExecutable('node', { minimumVersion: '18.0.0' });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.path, pathNode);
-  assert.equal(result.source, 'path');
-  assert.deepEqual(harness.calls.map((call) => call.file), [pathNode]);
-});
-
-test('the stable ae-mcp launcher is presence-checked without starting its stdio server', async () => {
-  const launcher = '/Users/a/.ae-mcp/bin/ae-mcp';
-  const harness = macHarness({ files: [launcher] });
-  const result = await harness.adapter.resolveExecutable('ae-mcp');
-  assert.equal(result.ok, true);
-  assert.equal(result.path, launcher);
-  assert.equal(result.version, null);
-  assert.deepEqual(harness.calls, []);
-});
-
-test('ae-mcp never falls back to PATH, login shell, or standard package-manager locations', async () => {
-  const harness = macHarness({
-    files: ['/path/bin/ae-mcp', '/usr/local/bin/ae-mcp', '/bin/zsh'],
-  });
-
-  const result = await harness.adapter.resolveExecutable('ae-mcp');
-
-  assert.equal(result.ok, false);
-  assert.equal(result.code, 'NOT_FOUND');
-  assert.deepEqual(harness.calls, []);
-});
-
-test('ae-mcp PATH discovery is available only through the explicit development option', async () => {
-  const executable = '/path/bin/ae-mcp';
-  const harness = macHarness({ files: [executable] });
-
-  const result = await harness.adapter.resolveExecutable('ae-mcp', { allowDevelopmentPath: true });
-
-  assert.equal(result.ok, true);
-  assert.equal(result.path, executable);
-  assert.equal(result.source, 'path');
-  assert.deepEqual(harness.calls, []);
-});
-
-test('Windows ae-mcp discovery retains its existing PATH behavior', async () => {
-  const executable = 'C:\\Tools\\ae-mcp.exe';
-  const calls = [];
-  const adapter = createWindowsAdapter({
-    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp',
-    env: { Path: 'C:\\Tools' }, fs: fakeFs(new Set([executable])),
-    spawnImpl: processFactory([{ stdout: 'ae-mcp 0.9.2 x64' }], calls), now: () => 0,
-  });
-
-  const result = await adapter.resolveExecutable('ae-mcp');
-
-  assert.equal(result.ok, true);
-  assert.equal(result.path, executable);
-  assert.equal(result.source, 'path');
-});
-
-test('macOS executable candidates require execute permission, including the stable launcher', async () => {
-  const launcher = '/Users/a/.ae-mcp/bin/ae-mcp';
-  const modes = [];
-  const calls = [];
-  const adapter = createMacosAdapter({
-    platform: 'darwin', arch: 'arm64', home: '/Users/a', temp: '/tmp', env: {},
-    fs: {
-      constants: { X_OK: 1 },
-      existsSync: (file) => file === launcher,
-      realpathSync: (file) => file,
-      statSync: () => ({ isFile: () => true }),
-      accessSync: (_file, mode) => { modes.push(mode); },
-    },
-    spawnImpl: processFactory([], calls), now: () => 0,
-  });
-
-  const result = await adapter.resolveExecutable('ae-mcp');
-  assert.equal(result.ok, true);
-  assert.deepEqual(modes, [1]);
-});
-
 test('macOS login-shell probe accepts exactly one clean sentinel result', async () => {
   const clean = macHarness({
     files: ['/bin/zsh', '/Applications/Test CLI/codex'],
@@ -258,7 +171,7 @@ test('spawn does not restore inherited variables removed from an explicit enviro
 
   assert.equal(calls[0].options.env.PROVIDER_SECRET, undefined);
   assert.equal(calls[0].options.env.SAFE, 'yes');
-  assert.equal(calls[0].options.env.PATH, '/Users/a/.ae-mcp/bin:/explicit/bin');
+  assert.equal(calls[0].options.env.PATH, '/explicit/bin');
 });
 
 test('resolveExecutable does not restore ambient variables removed from an explicit probe environment', async () => {
@@ -775,20 +688,6 @@ test('Windows spawn rejects a forged command-script resolution', () => {
     ),
     /command scripts must be materialized/i,
   );
-  assert.deepEqual(calls, []);
-});
-
-test('Windows resolution rejects bat wrappers outside the strict npm contract', async () => {
-  const calls = [];
-  const shim = 'C:\\Tools With Space\\uv.bat';
-  const adapter = createWindowsAdapter({
-    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp',
-    env: { Path: 'C:\\Tools With Space' }, fs: fakeFs(new Set([shim])),
-    spawnImpl: processFactory([{ stdout: 'uv 0.8.0 x64' }], calls), now: () => 0,
-  });
-
-  const result = await adapter.resolveExecutable('uv');
-  assert.equal(result.ok, false);
   assert.deepEqual(calls, []);
 });
 

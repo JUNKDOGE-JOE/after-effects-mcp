@@ -1,295 +1,74 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import fs from 'node:fs/promises';
+import test from 'node:test';
 
-const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const VERSION = '0.9.6';
-const PLATFORM_ASSETS = [
-  'ae-mcp-panel-v0.9.6-windows-x64.zxp',
-  'AeMcpNative-v0.9.6-windows-x64.aex',
-  'SHA256SUMS-v0.9.6.txt',
-];
 
-const PYTHON_PROJECTS = [
-  'packages/core/pyproject.toml',
-  'packages/bridge/pyproject.toml',
-  'packages/snapshot-mss/pyproject.toml',
-];
-
-const NODE_PROJECTS = [
-  ['plugin/host/package.json', 'plugin/host/package-lock.json'],
-  ['plugin/panel/package.json', 'plugin/panel/package-lock.json'],
-  ['plugin/sidecar/package.json', 'plugin/sidecar/package-lock.json'],
-];
-
-const USER_DOCS = [
-  'README.md',
-  'README.zh-CN.md',
-  'docs/INSTALL.md',
-  'docs/REFERENCE.md',
-  'docs/WORKFLOW.md',
-];
-
-const INSTALL_PATH_DOCS = [
-  'README.md',
-  'README.zh-CN.md',
-  'docs/INSTALL.md',
-  'docs/RELEASE.md',
-];
-
-async function text(relativePath) {
-  return readFile(join(ROOT, relativePath), 'utf8');
+async function text(relative) {
+  return fs.readFile(relative, 'utf8');
 }
 
-async function json(relativePath) {
-  return JSON.parse(await text(relativePath));
+async function json(relative) {
+  return JSON.parse(await text(relative));
 }
 
-function projectVersion(toml, relativePath) {
-  const project = toml.match(/(?:^|\n)\[project\]\n([\s\S]*?)(?=\n\[|$)/)?.[1] || '';
-  const version = project.match(/^version\s*=\s*"([^"]+)"\s*$/m)?.[1];
-  assert.ok(version, `${relativePath} must declare [project].version`);
-  return version;
-}
-
-function uvWorkspaceVersions(lock) {
-  const entries = new Map();
-  for (const block of lock.split(/(?=^\[\[package\]\]$)/m)) {
-    const name = block.match(/^name\s*=\s*"([^"]+)"\s*$/m)?.[1];
-    const version = block.match(/^version\s*=\s*"([^"]+)"\s*$/m)?.[1];
-    const source = block.match(/^source\s*=\s*\{\s*editable\s*=\s*"([^"]+)"\s*\}\s*$/m)?.[1];
-    if (name && version && source) entries.set(name, { version, source });
-  }
-  return entries;
-}
-
-function panelVersion(source) {
-  return source.match(/PANEL_VERSION\s*=\s*['"]([^'"]+)['"];/)?.[1];
-}
-
-test('all active package and lockfile versions are v0.9.6', async () => {
-  for (const relativePath of PYTHON_PROJECTS) {
-    assert.equal(projectVersion(await text(relativePath), relativePath), VERSION, relativePath);
-  }
-
-  // Source-tree fallback used when package metadata is unavailable; it drifted
-  // to 0.6.2 unnoticed because nothing pinned it.
-  const coreInit = await text('packages/core/ae_mcp/__init__.py');
-  assert.equal(
-    coreInit.match(/^__version__\s*=\s*"([^"]+)"\s*$/m)?.[1],
-    VERSION,
-    'packages/core/ae_mcp/__init__.py __version__',
-  );
-
-  for (const [manifestPath, lockPath] of NODE_PROJECTS) {
-    const manifest = await json(manifestPath);
-    const lock = await json(lockPath);
-    assert.equal(manifest.version, VERSION, manifestPath);
-    assert.equal(lock.version, VERSION, lockPath);
-    assert.equal(lock.packages?.['']?.version, VERSION, `${lockPath} packages[""]`);
-  }
-
-  const workspace = uvWorkspaceVersions(await text('uv.lock'));
-  assert.deepEqual([...workspace.keys()].sort(), [
-    'ae-mcp',
-    'ae-mcp-bridge',
-    'ae-mcp-snapshot-mss',
+test('active Node package versions agree with the release version', async () => {
+  const [host, hostLock, panel] = await Promise.all([
+    json('plugin/host/package.json'),
+    json('plugin/host/package-lock.json'),
+    json('plugin/panel/package.json'),
   ]);
-  for (const [name, entry] of workspace) {
-    assert.equal(entry.version, VERSION, `uv.lock ${name} (${entry.source})`);
-  }
+  assert.equal(host.version, VERSION);
+  assert.equal(hostLock.version, VERSION);
+  assert.equal(hostLock.packages[''].version, VERSION);
+  assert.equal(panel.version, VERSION);
+  assert.equal(host.dependencies.express, '4.22.2');
 });
 
-test('Panel source, generated bundle, and CEP manifest use the release version', async () => {
-  const client = await text('plugin/panel/src/cep/mcpClient.js');
-  assert.equal(panelVersion(client), VERSION, 'plugin/panel/src/cep/mcpClient.js');
-
-  const bundle = await text('plugin/client/dist/app.js');
-  assert.equal(panelVersion(bundle), VERSION, 'plugin/client/dist/app.js');
-
-  const manifest = await text('plugin/CSXS/manifest.xml');
-  assert.equal(manifest.match(/ExtensionBundleVersion="([^"]+)"/)?.[1], VERSION);
-  assert.equal(manifest.match(/<Extension Id="com\.aemcp\.panel" Version="([^"]+)"/)?.[1], VERSION);
-  assert.equal(manifest.match(/<Host Name="AEFT" Version="([^"]+)"/)?.[1], '[23.0,26.9]');
-});
-
-test('Windows native client and Platform Helper use the release version', async () => {
-  const [client, cmake, helper] = await Promise.all([
-    text('plugin/host/native-aegp-client.js'),
-    text('native/platform-helper/windows/CMakeLists.txt'),
-    text('native/platform-helper/windows/src/main.cpp'),
-  ]);
-  assert.ok(client.includes(`version: input.version || '${VERSION}'`));
-  assert.ok(cmake.includes(`VERSION ${VERSION} LANGUAGES CXX`));
-  assert.ok(helper.includes(`helperVersion", StringValue("${VERSION}")`));
-});
-
-test('native product version is injected from the exact repository product manifest', async () => {
-  const [build, entry, infoPlist, installer, verifier] = await Promise.all([
+test('native build scripts keep the release version placeholder contract', async () => {
+  const [build, entry, info] = await Promise.all([
     text('native/ae-plugin/build-macos.mjs'),
     text('native/ae-plugin/src/aegp/plugin_entry.cpp'),
     text('native/ae-plugin/resources/Info.plist'),
-    text('native/ae-plugin/install-dev-macos.mjs'),
-    text('native/ae-plugin/verify-macos.mjs'),
   ]);
-
-  assert.match(build, /PRODUCT_MANIFEST_PATH = 'plugin\/host\/package\.json'/u);
-  assert.match(build, /gitFileBytes\(sourceCommit, PRODUCT_MANIFEST_PATH\)/u);
   assert.match(build, /-DAE_MCP_PRODUCT_VERSION=/u);
   assert.match(entry, /kPluginVersion = AE_MCP_PRODUCT_VERSION/u);
-  assert.equal(infoPlist.match(/__AE_MCP_PRODUCT_VERSION__/gu)?.length, 1);
-  assert.match(build, /expectedProductVersion: productVersion/u);
-  assert.match(verifier, /PIPL_COMPATIBILITY_VERSION = 0x00010000/u);
-  assert.match(build, /productVersion,/u);
-  assert.match(installer, /expectedProductVersion: receipt\.productVersion/u);
-  assert.match(installer, /productVersion: source\.receipt\.productVersion/u);
-
-  for (const [relativePath, source] of [
-    ['native/ae-plugin/build-macos.mjs', build],
-    ['native/ae-plugin/src/aegp/plugin_entry.cpp', entry],
-    ['native/ae-plugin/resources/Info.plist', infoPlist],
-    ['native/ae-plugin/verify-macos.mjs', verifier],
-  ]) {
-    assert.doesNotMatch(source, /0\.1\.0(?:-dev)?/u, relativePath);
-  }
+  assert.equal(info.match(/__AE_MCP_PRODUCT_VERSION__/gu)?.length, 1);
 });
 
-test('user docs describe the v0.9.6 platform assets and optional AI channel CLIs', async () => {
-  for (const relativePath of USER_DOCS) {
-    const body = await text(relativePath);
-    assert.match(body, /v?0\.9\.6/, `${relativePath} release version`);
-    for (const asset of PLATFORM_ASSETS) {
-      assert.ok(body.includes(asset), `${relativePath} must name ${asset}`);
-    }
-    assert.match(body, /Claude Code/i, `${relativePath} Claude Code CLI`);
-    assert.match(body, /Codex(?: CLI)?/i, `${relativePath} Codex CLI`);
-    assert.match(body, /ZCode(?: CLI)?/i, `${relativePath} ZCode CLI`);
-    assert.match(body, /optional|可选/i, `${relativePath} must mark channel CLIs optional`);
-  }
-});
-
-test('normal install docs explain the online tag-pinned runtime wizard', async () => {
-  for (const relativePath of INSTALL_PATH_DOCS) {
-    const body = await text(relativePath);
-    assert.match(body, /uv tool install/i, `${relativePath} must name the runtime command`);
-    assert.match(body, /online|联网|在线/i, `${relativePath} must disclose network installation`);
-    assert.match(body, /tag-pinned[^\n]*v0\.9\.6|pinned to\s+the `?v0\.9\.6`? tag|v0\.9\.6 tag|v0\.9\.6#subdirectory|固定到\s*`?v0\.9\.6`? tag|按 v0\.9\.6 tag 固定/i,
-      `${relativePath} must pin the runtime source to this release`);
-  }
-});
-
-test('release docs define the approved corrective Windows v0.9.6 contract', async () => {
-  const release = await text('docs/RELEASE.md');
-  for (const marker of PLATFORM_ASSETS) {
-    assert.ok(release.includes(marker), `docs/RELEASE.md must name ${marker}`);
-  }
-  assert.match(release, /manual|手动/i);
-  assert.match(release, /Platform Helper/i);
-  assert.match(release, /Credential Manager/i);
-  assert.match(release, /bundled\/offline runtime|内置\/离线 Python/i);
-  assert.match(release, /installer|安装器/i);
-
-  const changelog = await text('CHANGELOG.md');
-  const firstRelease = changelog.match(/^### \[([^\]]+)\].*$/m)?.[1];
-  assert.equal(firstRelease, VERSION);
-  assert.match(changelog, /^### \[0\.9\.5\].*2026-08-12/mi);
-  assert.match(changelog, /^### \[0\.9\.4\].*2026-08-04/mi);
-  assert.match(changelog, /^### \[0\.9\.3\].*2026-08-03/mi);
-});
-
-test('user docs distinguish the corrective Windows v0.9.6 release from deferred work', async () => {
-  const [readme, readmeZh, install, reference, release, workflow] = await Promise.all([
-    readFile('README.md', 'utf8'),
-    readFile('README.zh-CN.md', 'utf8'),
-    readFile('docs/INSTALL.md', 'utf8'),
-    readFile('docs/REFERENCE.md', 'utf8'),
-    readFile('docs/RELEASE.md', 'utf8'),
-    readFile('docs/WORKFLOW.md', 'utf8'),
+test('the public setup text names the two supported connection forms', async () => {
+  const [readme, readmeZh, install] = await Promise.all([
+    text('README.md'),
+    text('README.zh-CN.md'),
+    text('docs/INSTALL.md'),
   ]);
-
-  assert.match(readme, /v0\.9\.6 Target Support Matrix/);
-  assert.match(readmeZh, /v0\.9\.6 目标支持矩阵/);
-  assert.match(readme, /first-run wizard[\s\S]*online `uv`/i);
-  assert.match(readmeZh, /首跑向导[\s\S]*在线安装 `uv`/);
-  assert.match(readme, /install-plugin-dev-macos\.sh/);
-  assert.match(readmeZh, /install-plugin-dev-macos\.sh/);
-
-  for (const value of [install, readme, readmeZh]) {
-    assert.match(value, /Windows[\s\S]{0,500}v0\.9\.6/i);
+  for (const body of [readme, readmeZh, install]) {
+    assert.match(body, /127\.0\.0\.1:11488\/mcp/u);
+    assert.match(body, /host\/stdio-shim\.js/u);
+    assert.doesNotMatch(body, /uv|Python|sidecar|ae-mcp\.exe/iu);
   }
-  assert.doesNotMatch(workflow, /Mac 安装 DMG|install the DMG/i);
-  assert.match(workflow, /受支持的 ZXP installer/);
-  assert.match(workflow, /supported ZXP installer/i);
-  for (const value of [readme, readmeZh, install, reference, release, workflow]) {
-    for (const asset of PLATFORM_ASSETS) assert.ok(value.includes(asset));
-  }
-  assert.match(install, /manual|手动/i);
-  assert.match(install, /uv tool install/i);
-
-  assert.doesNotMatch(reference, /203 passed/);
-  assert.doesNotMatch(reference, /24 passed/);
-  assert.doesNotMatch(reference, /\| Handler count \| 30 verbs/);
-  assert.doesNotMatch(reference, /\| Handler count \| 52 verbs/);
-  assert.match(reference, /\| 公开工具数 \| 16/);
-  assert.match(reference, /\| Public tool count \| 16/);
-  for (const toolName of [
-    'ae_checkpoint',
-    'ae_diagnose',
-    'ae_exec',
-    'ae_nativeExec',
-    'ae_ping',
-    'ae_previewFrame',
-    'ae_revert',
-    'ae_skillList',
-    'ae_skillUse',
-    'ae_snapshot',
-    'ae_status',
-    'ae_toolIndex',
-    'ae_toolInspect',
-    'ae_toolSearch',
-    'ae_toolUse',
-    'ae_validateExpressions',
-  ]) {
-    assert.match(
-      reference,
-      new RegExp(`\\|[^\\n]*\`${toolName}\`[^\\n]*\\|`, 'u'),
-      `docs/REFERENCE.md public table must include ${toolName}`,
-    );
-  }
-  assert.doesNotMatch(reference, /`ae\.[A-Za-z][A-Za-z0-9]*`/u);
-  assert.match(reference, /operating-system temporary directory/i);
-  assert.match(reference, /操作系统临时目录/);
-
-  for (const value of [readme, readmeZh]) {
-    assert.ok(value.includes('C:\\\\Users\\\\<USER>\\\\.local\\\\bin\\\\ae-mcp.exe'));
-    assert.match(value, /RuntimeManager/i);
-    assert.match(value, /uv tool install/i);
-  }
-  assert.match(workflow, /\/Users\/<USER>\/\.ae-mcp\/bin\/ae-mcp/);
-  assert.match(workflow, /RuntimeManager/i);
-  assert.match(workflow, /(?:bare PATH|裸 PATH)/i);
-  assert.match(workflow, /(?:absolute|绝对)/i);
-  assert.match(install, /\/Users\/<USER>\/\.ae-mcp\/bin\/ae-mcp/);
+  assert.match(readme, /claude mcp add --transport http ae http:\/\/127\.0\.0\.1:11488\/mcp/u);
+  assert.match(readmeZh, /claude mcp add --transport http ae http:\/\/127\.0\.0\.1:11488\/mcp/u);
 });
 
-test('Windows ZXP packaging requires and validates the Platform Helper', async () => {
-  const script = await text('scripts/package-zxp.ps1');
-  assert.match(script, /\[Parameter\(Mandatory=\$true\)\]\s*\[string\]\$HelperRoot/u);
-  assert.match(script, /platform\\windows-x64/u);
-  assert.match(script, /verify-windows-zxp-stage\.mjs/u);
-  assert.match(script, /--version \$Version/u);
+test('the direct ZXP package script has no retired payload staging', async () => {
+  const source = await text('scripts/package-zxp.ps1');
+  assert.match(source, /\$payloadRoots = @\('client', 'CSXS', 'host', 'icons', 'jsx', 'shared'\)/u);
+  assert.match(source, /npm ci --omit=dev/u);
+  assert.match(source, /Signing ZXP once/u);
+  assert.doesNotMatch(source, /sidecar|runtime\\|helper|ae-mcp\.exe/iu);
 });
 
-test('Windows handoff gates the outer shell to PowerShell Core 7.3 or newer', async () => {
-  const prompt = await readFile('docs/WINDOWS_CODEX_RC_PROMPT.md', 'utf8');
-  assert.match(prompt, /\$PSVersionTable\.PSEdition\s+-cne\s+'Core'/);
-  assert.match(prompt, /\$PSVersionTable\.PSVersion\s+-lt\s+\[version\]'7\.3'/);
-  const gateIndex = prompt.indexOf('if ($PSVersionTable.PSEdition');
-  const inputIndex = prompt.indexOf("$Repository = '<OWNER/REPOSITORY>'");
-  assert.ok(gateIndex >= 0 && gateIndex < inputIndex,
-    'the shell gate must run before any handoff input is consumed');
-  assert.match(prompt, /two artifact IDs|两个 artifact ID/i);
-  assert.match(prompt, /AE 25[\s\S]{0,180}AE 26[\s\S]{0,180}ZXP installer[\s\S]{0,180}Codex version/i);
+test('CI has no package-server workflow', async () => {
+  const names = await fs.readdir('.github/workflows');
+  for (const name of names) {
+    if (!name.endsWith('.yml') && !name.endsWith('.yaml')) continue;
+    assert.doesNotMatch(await text(`.github/workflows/${name}`), /python/iu, name);
+  }
+});
+
+test('retired package roots and lockfiles are absent', async () => {
+  for (const relative of ['packages', 'plugin/sidecar', 'pyproject.toml', 'uv.lock']) {
+    await assert.rejects(fs.access(relative), undefined, relative);
+  }
 });

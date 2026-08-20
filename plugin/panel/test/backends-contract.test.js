@@ -28,7 +28,7 @@ const ATTACHMENT_CONFORMANCE = {
   byok: {
     factory: createAgentLoop,
     testFile: 'agentLoop.test.js',
-    assertion: /ATTACHMENT_SIDECAR_REQUIRED.*turn-1.*not-started/s,
+    assertion: /ATTACHMENTS_UNSUPPORTED.*turn-1.*not-started/s,
   },
   codex: {
     factory: createCodexBackend,

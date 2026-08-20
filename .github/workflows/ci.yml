@@ -3,8 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-  # Test every PR base so an explicitly reviewed dependency branch remains testable;
-  # this does not authorize per-tool or dependent stacked PRs.
   pull_request: {}
 
 permissions:
@@ -15,36 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  python-tests:
-    name: Fast Python tests (Windows)
-    runs-on: windows-2022
-    timeout-minutes: 30
-    env:
-      UV_LINK_MODE: copy
-    steps:
-      - name: Checkout the candidate
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-
-      - name: Select exact uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
-        with:
-          version: 0.11.7
-          checksum: fe0c7815acf4fc45f8a5eff58ed3cf7ae2e15c3cf1dceadbd10c816ec1690cc1
-          enable-cache: false
-
-      - name: Install exact Python
-        run: uv python install 3.13.13
-
-      - name: Sync the frozen workspace
-        run: uv sync --frozen --group dev --python 3.13.13
-
-      - name: Run Python tests
-        run: uv run --frozen --python 3.13.13 pytest -v
-
   javascript-tests:
-    name: Fast JS and contract tests (Windows)
+    name: Windows JavaScript and contract tests
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
@@ -61,14 +31,13 @@ jobs:
       - name: Verify the native SDK remains developer-supplied
         run: node scripts/package/ae-sdk-input.mjs verify-repository --repo-root .
 
-      - name: Run native SDK input contract tests
-        run: node --test scripts/package/test/ae-sdk-input.test.mjs
-
-      - name: Run native AEGP RPC contract tests
-        run: node --test native/ae-plugin/protocol/protocol.test.mjs
-
-      - name: Build and run the Windows native transport test
-        run: node --test scripts/package/test/windows-native-transport.test.mjs
+      - name: Run native and package contracts
+        run: |
+          node --test scripts/package/test/ae-sdk-input.test.mjs
+          node --test scripts/package/test/verify-windows-zxp-stage.test.mjs
+          node --test scripts/package/test/zxp-payload-audit.test.mjs
+          node --test native/ae-plugin/protocol/protocol.test.mjs
+          node --test scripts/package/test/windows-native-transport.test.mjs
 
       - name: Run host tests
         working-directory: plugin/host
@@ -76,7 +45,7 @@ jobs:
           npm ci
           npm test
 
-      - name: Run CEP Node 15 MCP spike on the development runtime
+      - name: Run CEP Node 15 contract
         working-directory: plugin/host
         run: npm run test:node15
 
@@ -92,12 +61,6 @@ jobs:
           npm run build
           git -C ../.. diff --exit-code --stat -- plugin/client/dist
 
-      - name: Run sidecar tests
-        working-directory: plugin/sidecar
-        run: |
-          npm ci
-          npm test
-
   node15-cep-contract:
     name: CEP 11 peer-engine MCP contract (Node 15)
     runs-on: windows-2022
@@ -108,7 +71,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Select Node 24 to install the lockfile
+      - name: Select Node 24 to install the host lockfile
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24.17.0
@@ -117,8 +80,6 @@ jobs:
         working-directory: plugin/host
         run: npm ci
 
-      # CEP 11 peer-engine gate: npm 7 from Node 15 may not read lockfile v3,
-      # so Node 24 installs first and this step only executes the spike.
       - name: Select exact CEP 11 peer Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -130,3 +91,24 @@ jobs:
 
       - name: Run the real long-call MCP spike
         run: node plugin/host/tests/node15-spike.js
+
+  macos-packaging-contract:
+    name: macOS packaging contract
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - name: Checkout the candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Select exact Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Check direct ZXP staging and signing contracts
+        run: |
+          node --test scripts/package/test/legacy-zxp.test.mjs
+          node --test scripts/package/test/verify-windows-zxp-stage.test.mjs
+          node --test scripts/package/test/zxp-payload-audit.test.mjs

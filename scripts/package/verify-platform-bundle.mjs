@@ -2,31 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { assertBinaryArchitecture, detectBinaryArchitectureFile } from './lib/binary-arch.mjs';
-import {
-  validateLicenseInventory,
-  validateRuntimeSpdx,
-  verifyExtractedLicenseEvidence,
-} from './lib/runtime-evidence.mjs';
-import { validateRuntimeManifest } from './lib/runtime-manifest.mjs';
 import {
   NATIVE_PLUGIN_MANIFEST_PATH,
   PLATFORM_IDS,
-  SHA256_PATTERN,
-  assertPortableRelativePath,
   bundleError,
-  canonicalJson,
   collectManifestEntries,
-  comparePortableUtf8,
   readCanonicalJsonFile,
   readJsonFile,
-  sha256File,
   validateBundleManifest,
 } from './lib/manifest.mjs';
-import {
-  NATIVE_PLUGIN_ROOT,
-  verifyNativePluginStage,
-} from './lib/native-plugin-manifest.mjs';
+import { NATIVE_PLUGIN_ROOT, verifyNativePluginStage } from './lib/native-plugin-manifest.mjs';
 import {
   DEVELOPMENT_IDENTITY_PROFILE,
   normalizeIdentityVerificationProfile,
@@ -34,60 +19,13 @@ import {
 } from './lib/identity-verification-profile.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const ADOBE_SDK_LOCKED_FILE_DIGESTS = new Set([
-  'c6abccd52ae25936b819b78c4fea2858bd161f216f72f75184fe9ec55a49756e',
-  'e02fa2b488c3cceb238866b648eb9a2526d308a260744367915a2f173663c36c',
-  '3d3a39175a09d07f6f9734284636f9eadce968b05161650e3cba097a95905330',
-  '640b513bfdfdab264057f3fce0356ced468cdb6d3bd3e2666e6743ec8be1fdba',
-]);
-
-function validateHelperManifest(value, platform) {
-  const expectedTop = ['entrypoints', 'files', 'helperId', 'platform', 'schemaVersion'];
-  if (!value || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedTop)
-      || value.schemaVersion !== 1 || value.platform !== platform
-      || value.helperId !== 'com.junkdoge.ae-mcp.platform-helper'
-      || !value.entrypoints || typeof value.entrypoints.helper !== 'string'
-      || typeof value.entrypoints.launcher !== 'string'
-      || JSON.stringify(Object.keys(value.entrypoints).sort())
-        !== JSON.stringify(['helper', 'launcher'])
-      || value.entrypoints.helper === value.entrypoints.launcher
-      || !Array.isArray(value.files) || value.files.length < 2) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper manifest identity is invalid');
-  }
-  const paths = new Set();
-  for (const record of value.files) {
-    assertPortableRelativePath(record?.path, 'BUNDLE_HELPER_IDENTITY_INVALID');
-    if (JSON.stringify(Object.keys(record ?? {}).sort())
-          !== JSON.stringify(['architecture', 'path', 'sha256'])
-        || paths.has(record.path)
-        || !['macho-arm64', 'pe-x64', 'script', 'data'].includes(record.architecture)
-        || !SHA256_PATTERN.test(record.sha256 ?? '')) {
-      throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper payload record is invalid');
-    }
-    paths.add(record.path);
-  }
-  if (!paths.has(value.entrypoints.helper) || !paths.has(value.entrypoints.launcher)) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper entrypoints are not declared payload files');
-  }
-  const records = new Map(value.files.map((record) => [record.path, record]));
-  const nativeArchitecture = platform === 'macos-arm64' ? 'macho-arm64' : 'pe-x64';
-  const helperArchitecture = records.get(value.entrypoints.helper)?.architecture;
-  const launcherArchitecture = records.get(value.entrypoints.launcher)?.architecture;
-  if (helperArchitecture !== nativeArchitecture
-      || (platform === 'macos-arm64'
-        ? !['macho-arm64', 'script'].includes(launcherArchitecture)
-        : launcherArchitecture !== nativeArchitecture)) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper entrypoint architecture is invalid');
-  }
-  return value;
-}
+const PAYLOAD_ROOTS = new Set(['CSXS', 'client', 'host', 'icons', 'jsx', 'metadata', 'shared']);
+const FORBIDDEN_ROOTS = new Set(['bin', 'helper', 'panel', 'platform', 'runtime', 'sidecar']);
 
 async function verifyEntry(expected, actual, exactIdentity) {
   if (!actual || expected.type !== actual.type || expected.size !== actual.size
       || expected.mode !== actual.mode
-      || (expected.type === 'symlink'
-        && Object.hasOwn(expected, 'linkTarget')
-        && expected.linkTarget !== actual.linkTarget)) {
+      || (expected.type === 'symlink' && expected.linkTarget !== actual.linkTarget)) {
     throw bundleError('BUNDLE_FILE_METADATA_MISMATCH', `bundle metadata mismatch: ${expected.path}`);
   }
   if (exactIdentity && expected.sha256 !== actual.sha256) {
@@ -95,302 +33,54 @@ async function verifyEntry(expected, actual, exactIdentity) {
   }
 }
 
-async function verifyRuntimeInventory(root, platform, runtimeManifest, exactIdentity) {
-  const runtimeRoot = path.join(root, 'runtime', platform);
-  const actual = await collectManifestEntries(runtimeRoot, { omit: ['runtime-manifest.json'] });
-  const actualByPath = new Map(actual.map((entry) => [entry.path, entry]));
-  const expected = [...runtimeManifest.files].sort((left, right) => (
-    comparePortableUtf8(left.path, right.path)
-  ));
-  const expectedPaths = new Set(expected.map((entry) => entry.path));
-  if (expectedPaths.size !== expected.length
-      || expected.length !== actual.length
-      || expected.some((entry) => !actualByPath.has(entry.path))) {
-    throw bundleError('BUNDLE_RUNTIME_MANIFEST_INVALID', 'runtime manifest file set does not match payload');
-  }
-  for (const entry of expected) {
-    await verifyEntry(entry, actualByPath.get(entry.path), exactIdentity);
-  }
-}
-
-async function verifySupportContract(root, platform) {
-  const support = await readJsonFile(
-    path.join(root, 'metadata', 'support-matrix.json'),
-    'BUNDLE_SUPPORT_MATRIX_INVALID',
-  );
-  const expected = {
-    schemaVersion: 1,
-    platforms: {
-      'macos-arm64': { minOsVersion: '14.0', arch: 'arm64', rosetta: false },
-      'windows-x64': { minOsVersion: '11.0.26100', arch: 'x64' },
-    },
-    afterEffects: { majors: [23, 24, 25, 26], manifestRange: '[23.0,26.9]' },
-  };
-  if (canonicalJson(support) !== canonicalJson(expected) || !support.platforms[platform]) {
-    throw bundleError('BUNDLE_SUPPORT_MATRIX_INVALID', 'support matrix does not match the release contract');
-  }
-  const cep = await fs.promises.readFile(path.join(root, 'CSXS', 'manifest.xml'), 'utf8');
-  const matches = [...cep.matchAll(/<Host\s+Name="AEFT"\s+Version="([^"]+)"\s*\/>/g)];
-  if (matches.length !== 1 || matches[0][1] !== '[23.0,26.9]') {
-    throw bundleError('BUNDLE_CEP_RANGE_INVALID', 'CEP manifest host range must be exactly [23.0,26.9]');
-  }
-}
-
-async function verifyRuntimeEvidence(
-  root,
-  platform,
-  runtimeManifest,
-  bundleManifest,
-  exactIdentity,
-) {
-  const runtimeRoot = path.join(root, 'runtime', platform);
-  const sbomPath = path.join(runtimeRoot, 'sbom.spdx.json');
-  const licenseInventoryPath = path.join(runtimeRoot, 'license-inventory.json');
-  if (exactIdentity && await sha256File(sbomPath) !== bundleManifest.runtime.sbomSha256) {
-    throw bundleError('BUNDLE_HASH_MISMATCH', 'runtime SPDX SBOM SHA-256 mismatch');
-  }
-  if (exactIdentity && await sha256File(licenseInventoryPath)
-      !== bundleManifest.runtime.licenseInventorySha256) {
-    throw bundleError('BUNDLE_HASH_MISMATCH', 'runtime license inventory SHA-256 mismatch');
-  }
-  const licenseInventory = await readJsonFile(
-    licenseInventoryPath,
-    'BUNDLE_LICENSE_INVENTORY_INVALID',
-  );
-  validateLicenseInventory(licenseInventory, {
-    platform,
-    components: runtimeManifest.components,
-    licenseApprovals: runtimeManifest.licenseApprovals,
-    extractedLicenses: licenseInventory.extractedLicenses,
-  });
-  await verifyExtractedLicenseEvidence({
-    runtimeRoot,
-    components: runtimeManifest.components,
-    extractedLicenses: licenseInventory.extractedLicenses,
-    code: 'BUNDLE_LICENSE_INVENTORY_INVALID',
-  });
-  const sbom = await readJsonFile(
-    sbomPath,
-    'BUNDLE_SBOM_INVALID',
-  );
-  validateRuntimeSpdx(sbom, {
-    platform,
-    components: runtimeManifest.components,
-    extractedLicenses: licenseInventory.extractedLicenses,
-  });
-}
-
-async function verifyHostRuntime(root, platform, entries) {
-  const relativeHostRoot = `runtime/${platform}/node/host`;
-  const hostRoot = path.join(root, 'runtime', platform, 'node', 'host');
-  const entriesByPath = new Map(entries.map((entry) => [entry.path, entry]));
-  const requireFile = (relative) => {
-    const entry = entriesByPath.get(`${relativeHostRoot}/${relative}`);
-    if (!entry || entry.type !== 'file') {
+function assertProductionFileSet(entries) {
+  for (const entry of entries) {
+    const root = entry.path.split('/')[0];
+    if (FORBIDDEN_ROOTS.has(root)) {
+      throw bundleError('BUNDLE_RETIRED_PAYLOAD', `retired payload root is forbidden: ${entry.path}`);
+    }
+    if (!PAYLOAD_ROOTS.has(root) && root !== 'artifacts') {
+      throw bundleError('BUNDLE_UNEXPECTED_ROOT', `unexpected staged root: ${entry.path}`);
+    }
+    if (/(?:\.dll|\.dylib|\.node|\.pyd|\.so|\.exe)$/i.test(entry.path)
+        && !entry.path.startsWith(`${NATIVE_PLUGIN_ROOT}/`)) {
       throw bundleError(
-        'BUNDLE_HOST_RUNTIME_INVALID',
-        `required production host runtime file is missing: ${relative}`,
+        'BUNDLE_NATIVE_PAYLOAD_FORBIDDEN',
+        `nested native payload is forbidden: ${entry.path}`,
       );
     }
-  };
-  requireFile('package.json');
-  requireFile('node_modules/express/package.json');
+    if (/(?:^|\/)(?:test|tests|__pycache__|\.cache)(?:\/|$)/.test(entry.path)
+        || /(?:^|\.)test\.[^/]+$/i.test(path.posix.basename(entry.path))) {
+      throw bundleError('BUNDLE_DEVELOPMENT_FILE', `development file is forbidden: ${entry.path}`);
+    }
+  }
+}
 
-  const hostPackage = await readJsonFile(
-    path.join(hostRoot, 'package.json'),
-    'BUNDLE_HOST_RUNTIME_INVALID',
-  );
+async function verifyHostContract(root, entries) {
+  const byPath = new Map(entries.map((entry) => [entry.path, entry]));
+  for (const relative of [
+    'host/package.json',
+    'host/package-lock.json',
+    'host/node_modules/express/package.json',
+    'host/stdio-shim.js',
+  ]) {
+    if (byPath.get(relative)?.type !== 'file') {
+      throw bundleError('BUNDLE_HOST_CONTRACT_INVALID', `required host file is missing: ${relative}`);
+    }
+  }
+  const hostPackage = await readJsonFile(path.join(root, 'host', 'package.json'));
   const expressPackage = await readJsonFile(
-    path.join(hostRoot, 'node_modules', 'express', 'package.json'),
-    'BUNDLE_HOST_RUNTIME_INVALID',
+    path.join(root, 'host', 'node_modules', 'express', 'package.json'),
   );
   if (hostPackage.name !== 'ae-mcp-host'
-      || typeof hostPackage.dependencies?.express !== 'string'
-      || expressPackage.name !== 'express') {
-    throw bundleError('BUNDLE_HOST_RUNTIME_INVALID', 'production host package identity is invalid');
+      || hostPackage.dependencies?.express !== '4.22.2'
+      || expressPackage.name !== 'express'
+      || expressPackage.version !== '4.22.2') {
+    throw bundleError('BUNDLE_HOST_CONTRACT_INVALID', 'host Express contract is not pinned to 4.22.2');
   }
-  const mainEntry = expressPackage.main === undefined ? 'index.js' : expressPackage.main;
-  if (typeof mainEntry !== 'string' || !mainEntry.trim() || mainEntry.includes('\0')) {
-    throw bundleError('BUNDLE_HOST_RUNTIME_INVALID', 'Express package main is invalid');
-  }
-  const expressRoot = path.join(hostRoot, 'node_modules', 'express');
-  const resolvedEntry = path.resolve(expressRoot, mainEntry);
-  const entryRelative = path.relative(expressRoot, resolvedEntry);
-  if (!entryRelative || entryRelative.startsWith('..') || path.isAbsolute(entryRelative)) {
-    throw bundleError('BUNDLE_HOST_RUNTIME_INVALID', 'Express package main escapes its package root');
-  }
-  requireFile(`node_modules/express/${entryRelative.split(path.sep).join('/')}`);
-}
-
-async function verifyHelper(root, platform, manifest, exactIdentity) {
-  const helperRoot = path.join(root, 'platform', platform);
-  const helperManifestPath = path.join(helperRoot, 'helper-manifest.json');
-  if (exactIdentity && await sha256File(helperManifestPath) !== manifest.helper.manifestSha256) {
-    throw bundleError('BUNDLE_HASH_MISMATCH', 'helper manifest SHA-256 mismatch');
-  }
-  const helper = validateHelperManifest(await readJsonFile(helperManifestPath), platform);
-  const helperEntries = await collectManifestEntries(helperRoot);
-  const helperEntriesByPath = new Map(helperEntries.map((entry) => [entry.path, entry]));
-  const declared = new Set(['helper-manifest.json', ...helper.files.map((record) => record.path)]);
-  if (helperEntries.length !== declared.size
-      || helperEntries.some((entry) => !declared.has(entry.path))) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper payload contains undeclared files');
-  }
-  for (const record of helper.files) {
-    if (helperEntriesByPath.get(record.path)?.type !== 'file') {
-      throw bundleError(
-        'BUNDLE_HELPER_IDENTITY_INVALID',
-        `helper payload must be a regular file: ${record.path}`,
-      );
-    }
-    const filePath = path.resolve(helperRoot, ...record.path.split('/'));
-    const relative = path.relative(helperRoot, filePath);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
-      throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper file path escapes helper root');
-    }
-    if (exactIdentity && await sha256File(filePath) !== record.sha256) {
-      throw bundleError('BUNDLE_HASH_MISMATCH', `helper payload SHA-256 mismatch: ${record.path}`);
-    }
-    if (record.architecture === 'script') {
-      const mode = (await fs.promises.stat(filePath)).mode & 0o111;
-      if (!mode) throw bundleError('BUNDLE_EXECUTABLE_MODE_INVALID', `helper script is not executable: ${record.path}`);
-    } else if (record.architecture !== 'data') {
-      const expectedArchitecture = platform === 'macos-arm64' ? 'macho-arm64' : 'pe-x64';
-      if (record.architecture !== expectedArchitecture) {
-        throw bundleError('BUNDLE_ARCH_MISMATCH', `helper manifest architecture mismatch: ${record.path}`);
-      }
-      await assertBinaryArchitecture(filePath, platform, `helper:${record.path}`);
-    }
-  }
-}
-
-async function verifyNativeFiles(root, platform, entries) {
-  const requiredPaths = platform === 'macos-arm64'
-    ? [
-      `runtime/${platform}/node/bin/node`,
-      `runtime/${platform}/python/bin/python3.13`,
-      `runtime/${platform}/node/sidecar/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude`,
-    ]
-    : [
-      `runtime/${platform}/node/node.exe`,
-      `runtime/${platform}/python/python.exe`,
-      `runtime/${platform}/node/sidecar/node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe`,
-    ];
-  const entriesByPath = new Map(entries.map((entry) => [entry.path, entry]));
-  for (const relative of requiredPaths) {
-    const entry = entriesByPath.get(relative);
-    if (!entry || entry.type !== 'file') {
-      throw bundleError('BUNDLE_ARCH_MISMATCH', `required native runtime entrypoint is missing: ${relative}`);
-    }
-    await assertBinaryArchitecture(
-      path.join(root, ...relative.split('/')),
-      platform,
-      relative,
-    );
-    if (platform === 'macos-arm64' && (Number.parseInt(entry.mode, 8) & 0o111) === 0) {
-      throw bundleError('BUNDLE_EXECUTABLE_MODE_INVALID', `macOS executable mode is missing: ${relative}`);
-    }
-  }
-  for (const entry of entries) {
-    if (entry.type !== 'file') continue;
-    const absolute = path.join(root, ...entry.path.split('/'));
-    const detected = await detectBinaryArchitectureFile(absolute);
-    const nativeExtension = /\.(?:node|dylib|so|exe|dll|pyd)$/i.test(entry.path);
-    if (detected) {
-      const expected = platform === 'macos-arm64' ? 'macho-arm64' : 'pe-x64';
-      const compatibleUniversal = platform === 'macos-arm64'
-        && detected === 'macho-universal-arm64';
-      if (detected !== expected && !compatibleUniversal) {
-        throw bundleError(
-          'BUNDLE_ARCH_MISMATCH',
-          `native architecture mismatch for ${entry.path}: expected ${expected}, received ${detected}`,
-        );
-      }
-      if (platform === 'macos-arm64'
-          && /(^|\/)bin\//.test(entry.path)
-          && (Number.parseInt(entry.mode, 8) & 0o111) === 0) {
-        throw bundleError('BUNDLE_EXECUTABLE_MODE_INVALID', `macOS executable mode is missing: ${entry.path}`);
-      }
-    } else if (nativeExtension) {
-      throw bundleError('BUNDLE_ARCH_MISMATCH', `unrecognized native payload: ${entry.path}`);
-    }
-  }
-}
-
-function assertProductionFileSet(entries, platform) {
-  const forbidden = entries.find((entry) => (
-    entry.path === 'panel'
-    || entry.path.startsWith('panel/')
-    || (!entry.path.startsWith('runtime/') && /(^|\/)node_modules(?:\/|$)/.test(entry.path))
-    || /(^|\/)(?:test|tests|__pycache__|\.cache)(?:\/|$)/.test(entry.path)
-    || /(?:^|\.)test\.[^/]+$/i.test(path.posix.basename(entry.path))
-  ));
-  if (forbidden) throw bundleError('BUNDLE_DEVELOPMENT_FILE', `development file is forbidden: ${forbidden.path}`);
-  const foreign = platform === 'macos-arm64'
-    ? /(?:win32|windows-x64|linux-|darwin-x64)/i
-    : /(?:darwin-|macos-|linux-|win32-arm64)/i;
-  const portablePythonSource = (entry) => (
-    /^runtime\/[^/]+\/python\/(?:lib\/python3\.13|Lib)\//.test(entry.path)
-    && /\.(?:py|pyc)$/i.test(entry.path)
-  );
-  const foreignEntry = entries.find((entry) => (
-    foreign.test(entry.path) && !portablePythonSource(entry)
-  ));
-  if (foreignEntry) throw bundleError('BUNDLE_FOREIGN_PLATFORM', `foreign platform payload: ${foreignEntry.path}`);
-  const adobeSdkMaterial = entries.find((entry) => (
-    ADOBE_SDK_LOCKED_FILE_DIGESTS.has(entry.sha256)
-    || /(?:^|\/)(?:AfterEffectsSDK[^/]*|ae[0-9._]+\.AfterEffectsSDK)(?:\/|$)/iu.test(entry.path)
-    || /(?:^|\/)Examples(?:\/|$)/u.test(entry.path)
-    || /(?:^|\/)(?:AE_GeneralPlug(?:Old)?|AE_IO|AEGP_SuiteHandler|SPBasic)\.h$/iu.test(entry.path)
-    || /(?:^|\/)AE_General\.r$/iu.test(entry.path)
-    || /(?:^|\/)(?:PiPLtool|AdobePIPL)(?:\.exe)?$/iu.test(entry.path)
-    || /(?:^|\/)(?:documentation|after.?effects[^/]*sdk[^/]*)\.pdf$/iu.test(entry.path)
-    || /(?:^|\/)ae-sdk-(?:extract|unpack)[^/]*$/iu.test(entry.path)
-  ));
-  if (adobeSdkMaterial) {
-    throw bundleError(
-      'BUNDLE_ADOBE_SDK_MATERIAL_FORBIDDEN',
-      `Adobe SDK material is forbidden in the staged product: ${adobeSdkMaterial.path}`,
-    );
-  }
-}
-
-async function verifyDevelopmentDebugContract(root, candidateRepoRoot, entries) {
-  const entry = entries.find(({ path: relative }) => relative === '.debug');
-  const staged = path.join(root, '.debug');
-  const stagedStats = await fs.promises.lstat(staged).catch(() => null);
-  if (!entry || entry.type !== 'file' || !stagedStats?.isFile()
-      || stagedStats.isSymbolicLink() || stagedStats.nlink !== 1) {
-    throw bundleError(
-      'BUNDLE_DEBUG_CONTRACT_INVALID',
-      'production stage requires one regular root .debug file',
-    );
-  }
-  const stagedDigest = await sha256File(staged);
-  if (entry.sha256 !== stagedDigest) {
-    throw bundleError(
-      'BUNDLE_DEBUG_CONTRACT_INVALID',
-      'staged root .debug bytes do not match the signed bundle manifest',
-    );
-  }
-  // Staging supplies candidateRepoRoot and proves equality to the tracked
-  // source. Later signing/freeze verification may only have the immutable
-  // staged tree; its manifest binding preserves the already-proven bytes.
-  if (candidateRepoRoot === undefined) return;
-  const tracked = path.join(path.resolve(candidateRepoRoot), 'plugin', '.debug');
-  const trackedStats = await fs.promises.lstat(tracked).catch(() => null);
-  if (!trackedStats?.isFile() || trackedStats.isSymbolicLink() || trackedStats.nlink !== 1) {
-    throw bundleError(
-      'BUNDLE_DEBUG_CONTRACT_INVALID',
-      'tracked plugin/.debug input is missing, symbolic, or non-regular',
-    );
-  }
-  const trackedDigest = await sha256File(tracked);
-  if (stagedDigest !== trackedDigest) {
-    throw bundleError(
-      'BUNDLE_DEBUG_CONTRACT_INVALID',
-      'staged root .debug bytes do not match tracked plugin/.debug',
-    );
+  const cep = await fs.promises.readFile(path.join(root, 'CSXS', 'manifest.xml'), 'utf8');
+  if (!/<Host\s+Name="AEFT"\s+Version="\[23\.0,26\.9\]"\s*\/>/.test(cep)) {
+    throw bundleError('BUNDLE_CEP_RANGE_INVALID', 'CEP host range must be exactly [23.0,26.9]');
   }
 }
 
@@ -405,18 +95,20 @@ export async function verifyPlatformBundle({
 } = {}) {
   const profile = normalizeIdentityVerificationProfile(verificationProfile);
   const exactIdentity = requiresExactIdentity(profile);
-  if (!PLATFORM_IDS.has(platform)) throw bundleError('BUNDLE_PLATFORM_INVALID', `unsupported platform: ${platform}`);
+  if (!PLATFORM_IDS.has(platform)) {
+    throw bundleError('BUNDLE_PLATFORM_INVALID', `unsupported platform: ${platform}`);
+  }
   const resolvedRoot = path.resolve(String(root ?? ''));
-  const manifestPath = path.join(resolvedRoot, 'bundle-manifest.json');
-  const manifest = validateBundleManifest(await readCanonicalJsonFile(manifestPath));
+  const manifest = validateBundleManifest(
+    await readCanonicalJsonFile(path.join(resolvedRoot, 'bundle-manifest.json')),
+  );
   if (manifest.platform !== platform) {
     throw bundleError('BUNDLE_PLATFORM_MISMATCH', `expected ${platform}, received ${manifest.platform}`);
   }
   if (manifest.version !== version) {
     throw bundleError('BUNDLE_VERSION_MISMATCH', `expected ${version}, received ${manifest.version}`);
   }
-  if (exactIdentity && sourceCommitSha !== undefined
-      && manifest.sourceCommitSha !== sourceCommitSha) {
+  if (sourceCommitSha !== undefined && manifest.sourceCommitSha !== sourceCommitSha) {
     throw bundleError('BUNDLE_SOURCE_COMMIT_MISMATCH', 'bundle source commit does not match candidate');
   }
   const actual = await collectManifestEntries(resolvedRoot, { omit: ['bundle-manifest.json'] });
@@ -425,40 +117,21 @@ export async function verifyPlatformBundle({
       || manifest.files.some((entry) => !actualByPath.has(entry.path))) {
     throw bundleError('BUNDLE_FILE_SET_MISMATCH', 'bundle file set does not match manifest');
   }
-  for (const entry of manifest.files) {
-    await verifyEntry(entry, actualByPath.get(entry.path), exactIdentity);
-  }
-  const nativeNamespace = path.posix.dirname(NATIVE_PLUGIN_ROOT);
-  const nativeNamespaceEntries = actual.filter((entry) => (
-    entry.path === nativeNamespace
-    || entry.path.startsWith(`${nativeNamespace}/`)
+  for (const entry of manifest.files) await verifyEntry(entry, actualByPath.get(entry.path), exactIdentity);
+  assertProductionFileSet(actual);
+  await verifyHostContract(resolvedRoot, actual);
+
+  const nativeEntries = actual.filter((entry) => (
+    entry.path === NATIVE_PLUGIN_ROOT || entry.path.startsWith(`${NATIVE_PLUGIN_ROOT}/`)
   ));
-  if (!manifest.nativePlugin && nativeNamespaceEntries.length > 0) {
-    throw bundleError(
-      'BUNDLE_NATIVE_PLUGIN_REFERENCE_MISSING',
-      'native plug-in payload exists without a top-level manifest reference',
-    );
+  if (!manifest.nativePlugin && nativeEntries.length > 0) {
+    throw bundleError('BUNDLE_NATIVE_PLUGIN_REFERENCE_MISSING', 'native plug-in lacks a manifest reference');
   }
   if (manifest.nativePlugin) {
-    const unexpectedNativeEntry = nativeNamespaceEntries.find((entry) => (
-      entry.path !== NATIVE_PLUGIN_ROOT
-      && !entry.path.startsWith(`${NATIVE_PLUGIN_ROOT}/`)
-    ));
-    if (unexpectedNativeEntry) {
-      throw bundleError(
-        'BUNDLE_NATIVE_PLUGIN_FILE_SET_MISMATCH',
-        `unexpected native plug-in namespace entry: ${unexpectedNativeEntry.path}`,
-      );
-    }
     const nativeManifestEntry = actualByPath.get(NATIVE_PLUGIN_MANIFEST_PATH);
-    if (!nativeManifestEntry
-        || nativeManifestEntry.type !== 'file'
-        || (exactIdentity
-          && nativeManifestEntry.sha256 !== manifest.nativePlugin.manifestSha256)) {
-      throw bundleError(
-        'BUNDLE_NATIVE_PLUGIN_HASH_MISMATCH',
-        'native plug-in manifest reference does not match the staged file',
-      );
+    if (!nativeManifestEntry || nativeManifestEntry.type !== 'file'
+        || (exactIdentity && nativeManifestEntry.sha256 !== manifest.nativePlugin.manifestSha256)) {
+      throw bundleError('BUNDLE_NATIVE_PLUGIN_HASH_MISMATCH', 'native plug-in manifest hash mismatch');
     }
     await verifyNativePluginStage({
       root: path.join(resolvedRoot, ...NATIVE_PLUGIN_ROOT.split('/')),
@@ -469,27 +142,6 @@ export async function verifyPlatformBundle({
       dependencies,
     });
   }
-
-  const runtimeManifestPath = path.join(resolvedRoot, 'runtime', platform, 'runtime-manifest.json');
-  if (exactIdentity
-      && await sha256File(runtimeManifestPath) !== manifest.runtime.manifestSha256) {
-    throw bundleError('BUNDLE_HASH_MISMATCH', 'runtime manifest SHA-256 mismatch');
-  }
-  const runtimeManifest = validateRuntimeManifest(await readJsonFile(runtimeManifestPath), platform);
-  await verifyRuntimeInventory(resolvedRoot, platform, runtimeManifest, exactIdentity);
-  await verifyRuntimeEvidence(
-    resolvedRoot,
-    platform,
-    runtimeManifest,
-    manifest,
-    exactIdentity,
-  );
-  await verifyHostRuntime(resolvedRoot, platform, actual);
-  await verifySupportContract(resolvedRoot, platform);
-  await verifyHelper(resolvedRoot, platform, manifest, exactIdentity);
-  await verifyDevelopmentDebugContract(resolvedRoot, candidateRepoRoot, actual);
-  assertProductionFileSet(actual, platform);
-  await verifyNativeFiles(resolvedRoot, platform, actual);
   return manifest;
 }
 
@@ -507,13 +159,11 @@ function parseArgs(argv) {
   for (const key of ['--root', '--platform', '--version']) {
     if (!values.has(key)) throw new Error(`${key} is required`);
   }
-  const verificationProfile = values.get('--profile') ?? DEVELOPMENT_IDENTITY_PROFILE;
-  normalizeIdentityVerificationProfile(verificationProfile);
   return {
     root: values.get('--root'),
     platform: values.get('--platform'),
     version: values.get('--version'),
-    verificationProfile,
+    verificationProfile: values.get('--profile') ?? DEVELOPMENT_IDENTITY_PROFILE,
   };
 }
 

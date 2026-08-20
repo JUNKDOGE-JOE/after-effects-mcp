@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { buildLogExport, exportFileName, keepLogLine, redactSecrets } from '../src/lib/logExport.js';
 import { revealLogExport, writeLogExport } from '../src/cep/logExportFs.js';
 
-test('buildLogExport aggregates panel logs, host info, and sidecar tail', () => {
+test('buildLogExport aggregates panel logs, host info, and backend stderr', () => {
   const text = buildLogExport({
     panelLogs: ['[10:00:00] Host ready on 127.0.0.1:11488', '[10:00:05] Error: boom'],
-    hostInfo: { hostVersion: '0.9.0', pythonVersion: '0.9.0' },
-    sidecarTail: 'sidecar stderr line',
+    hostInfo: { hostVersion: '0.9.0' },
+    backendStderrTails: { claude: 'backend stderr line' },
     version: '0.9.0',
     now: new Date('2026-07-03T10:00:00Z'),
   });
@@ -18,7 +18,7 @@ test('buildLogExport aggregates panel logs, host info, and sidecar tail', () => 
   assert.match(text, /## panel log \(2\)/);
   assert.match(text, /Error: boom/);
   assert.match(text, /## backend stderr tails/);
-  assert.match(text, /sidecar stderr line/);
+  assert.match(text, /backend stderr line/);
 });
 
 test('exportFileName is timestamped and filesystem-safe', () => {
@@ -84,10 +84,10 @@ test('redactSecrets hides opaque provider references completely', () => {
   );
 });
 
-test('buildLogExport applies redaction to panel logs and sidecar tail', () => {
+test('buildLogExport applies redaction to panel logs and backend stderr', () => {
   const text = buildLogExport({
     panelLogs: ['[t] using key sk-abcdef1234567890'],
-    sidecarTail: 'env ANTHROPIC_API_KEY=sk-zyxwvu9876543210',
+    backendStderrTails: { claude: 'env ANTHROPIC_API_KEY=sk-zyxwvu9876543210' },
     version: '0.9.0',
   });
   assert.ok(!text.includes('sk-abcdef1234567890'));
@@ -114,7 +114,7 @@ test('buildLogExport applies exact active-secret redaction without retaining a p
   const secret = 'opaque-active-provider-value';
   const text = buildLogExport({
     panelLogs: [`upstream echoed ${secret}`],
-    sidecarTail: `failure body ${secret}`,
+    backendStderrTails: { claude: `failure body ${secret}` },
     exactSecrets: [secret],
   });
   assert.equal(text.includes(secret), false);
@@ -127,7 +127,7 @@ test('buildLogExport removes JSON-escaped exact secrets from values and object k
     const escaped = JSON.stringify(secret).slice(1, -1);
     const text = buildLogExport({
       panelLogs: [`[t] ${payload}`],
-      sidecarTail: payload,
+      backendStderrTails: { claude: payload },
       exactSecrets: [secret],
     });
     assert.equal(text.includes(secret), false);

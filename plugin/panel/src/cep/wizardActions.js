@@ -1,37 +1,44 @@
-// Legacy wizard orchestration. Task 11 replaces the online install catalog;
-// this module only keeps business code behind the shared platform boundary.
-import { findProjectRoot, resolveMcpCommand } from './mcpClient.js';
 import { createPlatformAdapter } from './platform/index.js';
 
 const OUTPUT_TAIL = 8192;
-const REPO = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';
-const TOOL_IDS = { aeMcp: 'ae-mcp', uv: 'uv', node: 'node', claude: 'claude' };
+const TOOL_IDS = {
+  node: 'node',
+  claude: 'claude',
+  codex: 'codex',
+  opencode: 'opencode',
+};
 
-export async function detectTool(id, { platform, extRoot, runtimeManager } = {}) {
-  const adapter = platform || createPlatformAdapter();
+async function detectHost({ port = 11488, fetchImpl } = {}) {
+  const fetcher = fetchImpl || globalThis.fetch;
+  if (typeof fetcher !== 'function') return { ok: false, detail: 'fetch unavailable' };
+  try {
+    const response = await fetcher('http://127.0.0.1:' + port + '/health');
+    const body = response && typeof response.json === 'function'
+      ? await response.json()
+      : {};
+    const ok = response && response.ok !== false && body.ok === true;
+    return {
+      ok,
+      version: ok ? 'Host ' + (body.pluginVersion || 'ready') : '',
+      detail: ok ? '127.0.0.1:' + (body.port || port) : 'Host did not return ok',
+    };
+  } catch (error) {
+    return { ok: false, detail: error.message || String(error) };
+  }
+}
+
+export async function detectTool(id, options = {}) {
+  if (id === 'host') return detectHost(options);
+  const adapter = options.platform || createPlatformAdapter();
   const executableId = TOOL_IDS[id];
   if (!executableId) return { ok: false, detail: 'unsupported tool id' };
-  if (id === 'node' && adapter.id === 'macos-arm64' && runtimeManager) {
-    try {
-      const resolved = await runtimeManager.resolveNode();
-      return { ok: true, version: resolved.version, path: resolved.nodePath, source: 'runtime-manager', runtime: resolved.runtime };
-    } catch (error) {
-      return { ok: false, detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED' };
-    }
-  }
-  if (id === 'aeMcp' && adapter.id === 'macos-arm64' && (runtimeManager || extRoot)) {
-    try {
-      const resolved = await resolveMcpCommand({ platform: adapter, extRoot, runtimeManager });
-      return { ok: true, version: resolved.command, path: resolved.command, source: resolved.source, runtime: resolved.runtime };
-    } catch (error) {
-      return { ok: false, detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED' };
-    }
-  }
-  const options = executableId === 'node'
+  const resolveOptions = id === 'node'
     ? { minimumVersion: '18.0.0' }
-    : (executableId === 'claude' ? { minimumVersion: '2.0.0' } : {});
-  const resolved = await adapter.resolveExecutable(executableId, options);
-  if (!resolved.ok) return { ok: false, detail: resolved.code, resolution: resolved };
+    : (id === 'claude' ? { minimumVersion: '2.0.0' } : {});
+  const resolved = await adapter.resolveExecutable(executableId, resolveOptions);
+  if (!resolved.ok) {
+    return { ok: false, detail: resolved.code, resolution: resolved };
+  }
   return {
     ok: true,
     version: resolved.version || resolved.path,
@@ -40,21 +47,44 @@ export async function detectTool(id, { platform, extRoot, runtimeManager } = {})
   };
 }
 
-export function buildInstallCommands({ panelVersion, repoRoot, platform } = {}) {
+export function buildInstallCommands({ platform } = {}) {
   const adapter = platform || createPlatformAdapter();
-  if (typeof adapter.legacyWizardInstallCommands !== 'function') {
-    throw new Error('Legacy wizard command catalog is unavailable on this platform');
-  }
-  return adapter.legacyWizardInstallCommands({ panelVersion, repoRoot, repo: REPO });
+  if (typeof adapter.legacyWizardInstallCommands !== 'function') return {};
+  const commands = adapter.legacyWizardInstallCommands({
+    panelVersion: '',
+    repoRoot: '',
+    repo: '',
+  });
+  return commands && commands.node ? { node: commands.node } : {};
 }
 
-export async function runAction({ file, executableId, args, platform, env, onChunk }) {
+export async function runAction({
+  file,
+  executableId,
+  args,
+  platform,
+  env,
+  onChunk,
+}) {
   const adapter = platform || createPlatformAdapter();
   if (!executableId || typeof executableId !== 'string') {
-    return { ok: false, code: -1, output: 'Installer command is missing a platform executable id: ' + String(file || '') };
+    return {
+      ok: false,
+      code: -1,
+      output: 'Installer command is missing a platform executable id: ' + String(file || ''),
+    };
   }
-  const executable = await adapter.resolveExecutable(executableId, env === undefined ? {} : { env });
-  if (!executable.ok) return { ok: false, code: -1, output: executableId + ' resolution failed: ' + executable.code };
+  const executable = await adapter.resolveExecutable(
+    executableId,
+    env === undefined ? {} : { env },
+  );
+  if (!executable.ok) {
+    return {
+      ok: false,
+      code: -1,
+      output: executableId + ' resolution failed: ' + executable.code,
+    };
+  }
   return new Promise((resolve) => {
     let output = '';
     let spawnError = null;
@@ -78,21 +108,19 @@ export async function runAction({ file, executableId, args, platform, env, onChu
       spawnError = error;
       push(String(error && error.message || error));
     });
-    child.on?.('close', (code) => resolve({ ok: !spawnError && code === 0, code: spawnError ? -1 : code, output }));
+    child.on?.('close', (code) => {
+      resolve({
+        ok: !spawnError && code === 0,
+        code: spawnError ? -1 : code,
+        output,
+      });
+    });
   });
 }
 
-export function commandPreview({ file, args }) {
-  return [file, ...(args || []).map((value) => (/\s/.test(value) ? `"${value}"` : value))].join(' ');
-}
-
-export function detectRepoRoot({ extRoot, fsImpl, platform }) {
-  const adapter = platform || createPlatformAdapter();
-  return findProjectRoot({ extRoot, repoRoot: '', fsImpl: fsImpl || adapter.fs, platform: adapter });
-}
-
-export async function openLoginTerminal({ tool, platform } = {}) {
-  const adapter = platform || createPlatformAdapter();
-  await adapter.openLoginTerminal(tool === 'codex' ? 'codex' : 'claude');
-  return true;
+export function commandPreview({ file, args } = {}) {
+  if (!file) return '';
+  return [file, ...(args || []).map((value) => (
+    /\s/.test(value) ? `"${value}"` : value
+  ))].join(' ');
 }

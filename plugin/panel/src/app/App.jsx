@@ -14,41 +14,33 @@ import { ToolApprovalDialog } from '../components/tools/ToolApprovalDialog';
 import { QuestionFormDialog } from '../components/tools/QuestionFormDialog';
 import { questionsFromElicitationSchema } from '../lib/questionForm';
 import { createPanelFileDropGuard } from '../lib/panelFileDrop';
-import { createAgentLoop } from '../lib/agentLoop';
 import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
 import { installBeforeUnloadReset } from '../lib/backendLifecycle.js';
-import { containsExactSecret, redactText } from '../lib/exactSecretRedaction.js';
-import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
-import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTierFile';
+import { containsExactSecret } from '../lib/exactSecretRedaction.js';
+import { createMcpClient } from '../cep/mcpClient';
 import { createToolsApi } from '../cep/toolsApi';
-import { createLegacyApiKeyStore } from '../cep/apiKey';
-import { createZcodeCredentialManager } from '../cep/zcodeCredential.js';
 import { probeClaudeLogin } from '../cep/claudeAuth';
 import { createClaudeAgentBackend } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
 import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
-import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref } from '../lib/channels.js';
-import { createProviderStore } from '../cep/providerStore';
-import { createProviderSecretService, resolveProviderRequestProfile } from '../cep/providerSecrets';
 import {
-  countMentionedPanelAttachments,
-  createProviderAcceptanceBridge,
-  normalizePanelAcceptanceTurns,
-} from '../cep/providerAcceptanceBridge.js';
-import { createUniversalProviderRoute } from '../cep/universalProviderRoute.js';
-import { migrateProviderStoreSecrets } from '../cep/providerMigration';
-import { migrateProviderStoreV2ToV3 } from '../cep/providerSchemaMigration';
-import { createSecretMigrationRunner } from '../cep/platform/secret-migration';
-import { deleteProviderProfile, drainPendingProviderSecretDeletes, importProviderDraft, saveProviderDraft } from './providerProfileFlow';
-import { runProviderManagerProbe } from './providerProbeFlow.js';
-import { assertProviderStateCredentialFree, providerInitFailure, providerRepairFailure } from './providerInitState';
+  claudeChannels,
+  codexChannels,
+  openCodeChannels,
+  zcodeChannels,
+  migrateBackendPref,
+} from '../lib/channels.js';
+import { createProviderStore } from '../cep/providerStore';
+import { createOpenCodeProviderStore } from '../cep/openCodeProviderStore.js';
 import { ProviderManagerSection } from '../components/settings/ProviderManagerSection';
 import { probeProviderModels } from '../cep/modelProbe';
-import { detectCcSwitch, readCcSwitchProviderDrafts } from '../cep/ccSwitch';
-import { inspectClaudeSettingsEnv, readClaudeSettingsProviderDraft } from '../cep/claudeSettingsImport';
-import { codexCliCredentialAvailable, readCodexCliConfig, resolveCodexCliCredential } from '../cep/codexConfig';
+import {
+  codexCliCredentialAvailable,
+  readCodexCliConfig,
+  resolveCodexCliCredential,
+} from '../cep/codexConfig';
 import { reduceEvent, userTurnEntry } from '../lib/chatEntries';
 import {
   createAttachmentDraftState,
@@ -61,33 +53,25 @@ import { selectDescriptor, reconcileModelPref } from '../lib/descriptorSelect';
 import { ZCODE_PROBED_MODELS_CACHE_KEY } from '../lib/zcodeModelCache';
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { costBadge } from '../lib/composerOptions';
-import { codexRuntimeProviderProfile } from '../lib/providerProfile.js';
-import { selectProviderRoute } from '../lib/providerRouteSelection.js';
 import { useActivity } from '../cep/useActivity';
 import { isWizardDone, markWizardDone, clearWizardDone } from '../cep/firstRun';
 import { useWizardWiring } from './wizardWiring';
 import { runDiagnostics } from '../cep/diagnostics';
 import { copyText } from '../lib/clipboard';
 import { copyWizardConfig } from '../lib/wizardCopy.js';
-import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
+import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, isValidPort } from '../cep/hostBridge';
 import { httpConfigFor } from '../cep/externalClients.js';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
 import pkg from '../../package.json';
-import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine, readDatedLogTail } from '../lib/logExport.js';
+import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
 import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
 import { readCepSystemPath } from '../cep/platform/paths.js';
-import { createRuntimeManager, hasDevelopmentRuntimeOverride } from '../cep/runtimeManager.js';
 import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
 import { createHostConversation } from '../lib/hostConversation.js';
 import { createHostApprovalBridge } from '../lib/hostApprovalBridge.js';
-import {
-  MCP_ENGINE_CEP_HOST,
-  getMcpSpec as resolveChatMcpSpec,
-  loadMcpEngine,
-  saveMcpEngine,
-} from '../lib/mcpEngine.js';
+import { getMcpSpec as resolveChatMcpSpec } from '../lib/mcpEngine.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
@@ -156,13 +140,6 @@ function writePref(key, value) {
 
 const CODEX_MODELS_CACHE_KEY = 'ae_mcp_codex_models';
 
-const CLIENT_NAMES = {
-  builtin: { zh: '面板内置对话', en: 'Built-in chat' },
-  'claude-desktop': { zh: 'Claude Desktop', en: 'Claude Desktop' },
-  'claude-code': { zh: 'Claude Code', en: 'Claude Code' },
-  cursor: { zh: 'Cursor', en: 'Cursor' },
-};
-
 function cepRequire(mod) {
   if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
   if (window.require) return window.require(mod);
@@ -173,131 +150,6 @@ function randomProviderCredentialId() {
   const cryptoImpl = cepRequire('crypto');
   if (!cryptoImpl || typeof cryptoImpl.randomUUID !== 'function') throw new Error('Secure UUID generation is unavailable');
   return cryptoImpl.randomUUID();
-}
-
-function createProviderMigrationJournalStore(platform) {
-  const fs = platform.fs;
-  const root = platform.paths.migrationRoot;
-  const file = platform.paths.join([root, 'provider-store-v1-to-v2.json']);
-  return {
-    async read(migrationId) {
-      if (migrationId !== 'provider-store-v1-to-v2') {
-        const error = new Error('Invalid provider migration id');
-        error.code = 'INVALID_MIGRATION_JOURNAL';
-        throw error;
-      }
-      try { return JSON.parse(String(fs.readFileSync(file, 'utf8'))); } catch (error) {
-        if (error?.code === 'ENOENT' || !fs.existsSync(file)) return null;
-        const invalid = new Error('Provider migration journal is invalid');
-        invalid.code = 'INVALID_MIGRATION_JOURNAL';
-        throw invalid;
-      }
-    },
-    async writeAtomic(journal) {
-      if (!fs.existsSync(root)) fs.mkdirSync(root, { recursive: true });
-      const tmp = platform.paths.join([root, `provider-store-v1-to-v2.${Date.now()}.tmp`]);
-      try {
-        fs.writeFileSync(tmp, `${JSON.stringify(journal, null, 2)}\n`, 'utf8');
-        try { fs.chmodSync(tmp, 0o600); } catch { /* best effort on Windows */ }
-        fs.renameSync(tmp, file);
-      } catch (error) {
-        try { fs.unlinkSync(tmp); } catch { /* best effort */ }
-        const unavailable = new Error('Provider migration journal is unavailable');
-        unavailable.code = 'INVALID_MIGRATION_JOURNAL';
-        throw unavailable;
-      }
-    },
-  };
-}
-
-function createHostSecretStore(host) {
-  if (!host || typeof host.secretGet !== 'function' || typeof host.secretSet !== 'function' || typeof host.secretDelete !== 'function') {
-    const error = new Error('Provider secret store is unavailable');
-    error.code = 'SECRET_STORE_UNAVAILABLE';
-    throw error;
-  }
-  return {
-    get: (reference) => host.secretGet(reference),
-    set: (input) => host.secretSet(input),
-    delete: (input) => host.secretDelete(input),
-  };
-}
-
-const PLATFORM_HELPER_METHODS = Object.freeze([
-  'capabilities',
-  'secret.get',
-  'secret.set',
-  'secret.delete',
-  'window.find',
-  'window.describe',
-  'window.capture',
-]);
-const PLATFORM_CAPABILITY_KEYS = Object.freeze([
-  'authenticatedCaller',
-  'captureBackend',
-  'helperVersion',
-  'maxMessageBytes',
-  'methods',
-  'platform',
-  'protocolVersion',
-  'secretBackend',
-]);
-
-function requireProviderHelperCapabilities(value, platformId) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw providerRuntimeUnavailableError();
-  const keys = Object.keys(value).sort();
-  if (keys.length !== PLATFORM_CAPABILITY_KEYS.length || !keys.every((key, index) => key === PLATFORM_CAPABILITY_KEYS[index])) {
-    throw providerRuntimeUnavailableError();
-  }
-  const methods = Array.isArray(value.methods) ? value.methods : [];
-  const methodSet = new Set(methods);
-  if (
-    value.protocolVersion !== 1
-    || value.authenticatedCaller !== true
-    || value.platform !== platformId
-    || typeof value.helperVersion !== 'string'
-    || !value.helperVersion.trim()
-    || !['keychain', 'credential-manager'].includes(value.secretBackend)
-    || !['screen-capture-kit', 'windows-graphics-capture'].includes(value.captureBackend)
-    || value.maxMessageBytes !== 65536
-    || methods.length !== PLATFORM_HELPER_METHODS.length
-    || methodSet.size !== PLATFORM_HELPER_METHODS.length
-    || !PLATFORM_HELPER_METHODS.every((method) => methodSet.has(method))
-  ) {
-    throw providerRuntimeUnavailableError();
-  }
-  return value;
-}
-
-function activeProviderSecretRefs(providers) {
-  const byReference = new Map();
-  const add = (ref) => {
-    if (ref?.kind !== 'secret') return;
-    const existing = byReference.get(ref.reference);
-    if (existing !== undefined && existing !== ref.revision) {
-      const error = new Error('Provider secret reference revisions conflict.');
-      error.code = 'SECRET_CONFLICT';
-      throw error;
-    }
-    byReference.set(ref.reference, ref.revision);
-  };
-  for (const provider of providers) {
-    if (provider.credential) {
-      add(provider.credential.valueRef);
-      add(provider.probeAuthOverride?.valueRef);
-    } else {
-      add(provider.auth?.model?.valueRef);
-      add(provider.auth?.probe?.valueRef);
-    }
-    for (const header of provider.headers || []) add(header.valueRef);
-  }
-  return Array.from(byReference, ([reference, revision]) => ({ kind: 'secret', reference, revision }));
-}
-
-function providerRuntimeUnavailableError() {
-  const error = new Error('Repair the platform Helper and re-check provider credentials.');
-  error.code = 'PLATFORM_HELPER_REPAIR_REQUIRED';
-  return error;
 }
 
 function modelMetadataContainsCredential(models, credentials = []) {
@@ -355,9 +207,6 @@ function Shell({ cs }) {
   const pendingTurnRef = React.useRef(null);
   const acceptedTurnRef = React.useRef(null);
   React.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-  const legacyKeyStore = React.useMemo(() => {
-    try { return createLegacyApiKeyStore(); } catch (e) { return null; }
-  }, []);
   const [customModel, setCustomModel] = React.useState(() => readPref('ae_mcp_custom_model', ''));
   const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
   const [logLevel, setLogLevel] = React.useState(() => readPref('ae_mcp_log_level', 'info'));
@@ -366,18 +215,9 @@ function Shell({ cs }) {
   const [sessionModel, setSessionModel] = React.useState(null);
   const [sessionEffort, setSessionEffort] = React.useState(null);
   const [sessionFast, setSessionFast] = React.useState(null);
-  const [mcpEngine, setMcpEngine] = React.useState(() => loadMcpEngine(window.localStorage));
-  const mcpEngineRef = React.useRef(mcpEngine);
-  mcpEngineRef.current = mcpEngine;
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
   const permissionModeRef = React.useRef(permissionMode);
   permissionModeRef.current = permissionMode;
-  const approvalTierFile = React.useMemo(() => createApprovalTierFile({
-    fs: platform.fs,
-    paths: platform.paths,
-    platformId: platform.id,
-    pid: (window.cep_node && window.cep_node.process && window.cep_node.process.pid) || 0,
-  }), [platform]);
   const elicitationCoordinator = React.useMemo(() => createElicitationCoordinator({
     resolveApproval: (_request, { plan }) => decideToolPlan({
       tier: permissionModeRef.current,
@@ -402,15 +242,11 @@ function Shell({ cs }) {
   const [toolApproval, setToolApproval] = React.useState(() => elicitationCoordinator.snapshot());
   React.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
   React.useEffect(() => {
-    approvalTierFile.write(permissionMode);
-    if (mcpEngine === MCP_ENGINE_CEP_HOST) {
-      hostConversation.updatePolicy({ approvalTier: permissionMode });
-    }
-  }, [approvalTierFile, hostConversation, mcpEngine, permissionMode]);
+    hostConversation.updatePolicy({ approvalTier: permissionMode });
+  }, [hostConversation, permissionMode]);
   React.useEffect(() => () => {
     elicitationCoordinator.dispose();
-    try { approvalTierFile.dispose(); } catch (error) { /* best effort on shutdown */ }
-  }, [approvalTierFile, elicitationCoordinator]);
+  }, [elicitationCoordinator]);
   // Panel-lifetime navigation guard (#208): file drops must never navigate the
   // CEP WebView, on any tab. Attaching is handled by the Composer's own guard
   // while the chat screen is mounted; this one only blocks navigation, and
@@ -424,46 +260,28 @@ function Shell({ cs }) {
   // #229: channels are user-enabled per backend; routing follows the choice
   // exactly (no auto-pick, no lock, no pinning by provider selection).
   const [channelChoices, setChannelChoices] = React.useState(() => backendMigration.channelChoices);
-  const providerStore = React.useMemo(() => {
+  const legacyProviderStore = React.useMemo(() => {
     try { return createProviderStore(); } catch (e) { return null; }
   }, []);
-  const providerSecretService = React.useMemo(() => createProviderSecretService({
-    getHost,
-    randomBytes: (size) => cepRequire('crypto').randomBytes(size),
-  }), [getHost]);
-  const zcodeCredentialManager = React.useMemo(() => createZcodeCredentialManager({
-    storage: window.localStorage,
-    secretService: providerSecretService,
-    legacyKeyStore,
-  }), [legacyKeyStore, providerSecretService]);
-  const zcodeStoredKeyRef = React.useRef('');
-  const [zcodeCredentialEpoch, setZcodeCredentialEpoch] = React.useState(0);
+  const openCodeProviderStore = React.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
   const [providerInit, setProviderInit] = React.useState({ state: 'checking', error: '' });
-  const [providerRepairing, setProviderRepairing] = React.useState(false);
-  const [providerInitEpoch, setProviderInitEpoch] = React.useState(0);
   const [providers, setProviders] = React.useState([]);
-  const [claudeProviderId, setClaudeProviderId] = React.useState(() => readPref('ae_mcp_claude_provider', ''));
-  const [codexProviderId, setCodexProviderId] = React.useState(() => readPref('ae_mcp_codex_provider', ''));
+  const providersRef = React.useRef(providers);
+  providersRef.current = providers;
   const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
   const expertGuidanceRef = React.useRef(expertGuidance);
   expertGuidanceRef.current = expertGuidance;
   React.useEffect(() => {
-    if (mcpEngine === MCP_ENGINE_CEP_HOST) {
-      hostConversation.updatePolicy({ expertGuidance });
-    }
-  }, [expertGuidance, hostConversation, mcpEngine]);
+    hostConversation.updatePolicy({ expertGuidance });
+  }, [expertGuidance, hostConversation]);
   React.useEffect(() => {
-    if (mcpEngine !== MCP_ENGINE_CEP_HOST) {
-      hostConversation.closeConversation();
-      return;
-    }
     if (status.state !== 'ok') return;
     hostConversation.ensureConversation({
       label: chatSessionIdRef.current,
       approvalTier: permissionModeRef.current,
       expertGuidance: expertGuidanceRef.current,
     });
-  }, [hostConversation, mcpEngine, status.state]);
+  }, [hostConversation, status.state]);
   const resolveHostConversationContext = React.useCallback((conversationId) => {
     const current = hostConversation.currentConversation();
     if (!current || current.id !== conversationId) return null;
@@ -473,7 +291,7 @@ function Shell({ cs }) {
     };
   }, [hostConversation]);
   React.useEffect(() => {
-    if (mcpEngine !== MCP_ENGINE_CEP_HOST || status.state !== 'ok') {
+    if (status.state !== 'ok') {
       hostApprovalBridge.detach();
       return undefined;
     }
@@ -485,10 +303,11 @@ function Shell({ cs }) {
       resolveConversationContext: resolveHostConversationContext,
     });
     return () => hostApprovalBridge.detach();
-  }, [elicitationCoordinator, getHost, hostApprovalBridge, mcpEngine, resolveHostConversationContext, status.state]);
+  }, [elicitationCoordinator, getHost, hostApprovalBridge, resolveHostConversationContext, status.state]);
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(null);
+  const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
   const [zcodeProbe, setZcodeProbe] = React.useState(null);
   const [zcodeSessionModels, setZcodeSessionModels] = React.useState(null);
   const [zcodeProbedModels, setZcodeProbedModels] = React.useState(null);
@@ -519,128 +338,46 @@ function Shell({ cs }) {
     defaultEffort: descriptor.defaultEffort,
   });
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-  const claudeApiProvider = React.useMemo(() => {
-    return providers.find((provider) => provider.id === claudeProviderId) || null;
-  }, [providers, claudeProviderId]);
-  const codexCustomProvider = React.useMemo(() => {
-    return providers.find((provider) => provider.id === codexProviderId) || null;
-  }, [providers, codexProviderId]);
-
-  const [providerProbing, setProviderProbing] = React.useState('');
-  const [providerProbeErrors, setProviderProbeErrors] = React.useState({});
-  const ccSwitchFound = React.useMemo(() => {
-    try { return detectCcSwitch({ platform, fsImpl: platform.fs }); } catch (e) { return null; }
-  }, [platform]);
   const providerManager = (
     <ProviderManagerSection
       lang={lang}
       providers={providers}
-      activeProviderId={codexProviderId}
-      activeModelId={effectiveModel}
-      probing={providerProbing}
-      probeErrors={providerProbeErrors}
       disabled={providerInit.state !== 'ready'}
-      ccSwitch={ccSwitchFound}
-      onImportCcSwitch={async () => {
-        if (!ccSwitchFound || !providerStore) return;
-        if (providerInit.state !== 'ready') throw providerRuntimeUnavailableError();
-        let drafts = null;
-        try {
-          drafts = readCcSwitchProviderDrafts({
-            file: ccSwitchFound.file,
-            expectedSourceRevision: ccSwitchFound.sourceRevision,
-            fsImpl: platform.fs,
-          });
-          for (let index = 0; index < drafts.length; index += 1) {
-            let draft = drafts[index];
-            try {
-              await importProviderDraft({ candidate: draft, store: providerStore, secretService: providerSecretService, randomUUID: randomProviderCredentialId });
-            } finally {
-              drafts[index] = null;
-              draft = null;
-            }
-          }
-          setProviders(providerStore.list());
-        } finally {
-          drafts = null;
-        }
-      }}
+      opencodeMode
       onUpsert={async (event, draft) => {
-        if (!providerStore) return;
-        if (providerInit.state !== 'ready') throw providerRuntimeUnavailableError();
         const formElement = event.currentTarget;
         const form = new FormData(event.currentTarget);
-        let ephemeralDraft = {
-          ...draft,
-          modelAuthSecret: String(form.get('modelAuthSecret') || ''),
-          probeAuthSecret: String(form.get('probeAuthSecret') || ''),
-          headers: (draft.headers || []).map((header) => header.valueKind === 'secret'
-            ? { ...header, secret: String(form.get(`headerSecret:${header.id}`) || '') }
-            : { ...header }),
-        };
+        const apiKey = String(form.get('modelAuthSecret') || '');
         form.delete('modelAuthSecret');
-        form.delete('probeAuthSecret');
-        for (const header of draft.headers || []) form.delete(`headerSecret:${header.id}`);
         formElement?.reset?.();
         try {
-          const existing = providerStore.get(draft.id);
-          await saveProviderDraft({
-            draft: ephemeralDraft,
-            current: existing,
-            store: providerStore,
-            secretService: providerSecretService,
-            confirmInsecureHttp: async ({ baseUrl }) => window.confirm(`Allow provider requests over insecure HTTP?\n${baseUrl}`),
-            randomUUID: randomProviderCredentialId,
-          });
-          setProviders(providerStore.list());
+          if (String(draft.baseUrl || '').startsWith('http:') && draft.allowInsecureHttp === true) {
+            if (!window.confirm(`Allow provider requests over insecure HTTP?\n${draft.baseUrl}`)) return;
+          }
+          openCodeProviderStore.save(draft, { apiKey, currentId: draft.id });
+          setProviders(openCodeProviderStore.list());
+          openCodeBackend.reset();
+          runOpenCodeProbe();
         } finally {
-          ephemeralDraft.modelAuthSecret = '';
-          ephemeralDraft.probeAuthSecret = '';
-          ephemeralDraft.headers.forEach((header) => { if (header.secret) header.secret = ''; });
-          ephemeralDraft = null;
+          form.delete('modelAuthSecret');
         }
       }}
       onRemove={async (provider) => {
-        if (!providerStore) return;
-        if (providerInit.state !== 'ready') throw providerRuntimeUnavailableError();
-        await deleteProviderProfile({ provider, store: providerStore, secretService: providerSecretService });
-        setProviders(providerStore.list());
-        if (claudeProviderId === provider.id) { setClaudeProviderId(''); writePref('ae_mcp_claude_provider', ''); }
-        if (codexProviderId === provider.id) {
-          setCodexProviderId('');
-          writePref('ae_mcp_codex_provider', '');
-        }
-      }}
-      onProbe={async (provider, options = {}) => {
-        if (providerInit.state !== 'ready') throw providerRuntimeUnavailableError();
-        setProviderProbing(provider.id);
-        try {
-          const result = await runProviderManagerProbe(provider, {
-            store: providerStore,
-            resolveRequestProfile: (entry, { scope }) => resolveProviderRequestProfile(entry, {
-              scope,
-              secretService: providerSecretService,
-            }),
-            forceDetect: options.forceDetect === true,
-            modelId: options.modelId,
-          });
-          if (result.ok && providerStore) {
-            setProviders(providerStore.list());
-            setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: '' }));
-          } else {
-            setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: result.detail || 'Provider probe failed' }));
-          }
-        } catch (error) {
-          setProviderProbeErrors((errors) => ({ ...errors, [provider.id]: error?.message || 'Provider probe failed' }));
-        } finally {
-          setProviderProbing('');
-        }
+        openCodeProviderStore.remove(provider.id);
+        setProviders(openCodeProviderStore.list());
+        openCodeBackend.reset();
+        runOpenCodeProbe();
       }}
     />
   );
   const zcodeConfigSummary = React.useMemo(() => {
-    try { return summarizeZcodeConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}, storedKey: zcodeStoredKeyRef.current }); } catch (e) { return null; }
-  }, [zcodeCredentialEpoch, zcodeProbe]);
+    try {
+      const env = (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {};
+      return summarizeZcodeConfig({ env });
+    } catch (e) {
+      return null;
+    }
+  }, [zcodeProbe]);
   const codexCliConfigStableRef = React.useRef(null);
   // Keep a Codex CLI model_provider available when the panel has no explicit
   // provider configuration of its own.
@@ -656,110 +393,53 @@ function Shell({ cs }) {
     const env = (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {};
     return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
   }, [codexCliConfig]);
-  const codexProviderCredentialResolverReady = providerInit.state === 'ready';
   const channels = React.useMemo(() => ({
-    claude: claudeChannels({ probe, apiProvider: claudeApiProvider, apiProviderSelected: Boolean(claudeProviderId), providerAvailable: providerInit.state === 'ready' && Boolean(claudeApiProvider), providerCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === 'checking' }),
-    codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === 'ready' && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === 'checking', cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
+    claude: claudeChannels({ probe }),
+    codex: codexChannels({
+      codexProbe,
+      cliConfig: codexCliConfig,
+      cliCredentialAvailable: codexCliCredentialReady,
+    }),
+    opencode: openCodeChannels({ probe: openCodeProbe, providers }),
     zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
-  }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
+  }), [
+    probe,
+    codexProbe,
+    codexCliConfig,
+    codexCliCredentialReady,
+    openCodeProbe,
+    providers,
+    zcodeProbe,
+    zcodeConfigSummary,
+  ]);
   const effective = pickBackend({ pref: backendPref, channels, channelChoices });
-  const claudeSettingsHint = React.useMemo(() => {
-    try { return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs }); } catch (e) { return null; }
-  }, [platform]);
-  const providerProfile = React.useMemo(() => codexRuntimeProviderProfile({
-    effectiveChannel: effective.channel,
-    customProvider: codexCustomProvider,
-    customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
-    modelId: effectiveModel,
-  }), [effective.channel, codexCustomProvider, codexProviderCredentialResolverReady, effectiveModel]);
-  const runtimeRef = React.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
-  const previousCodexProviderProfileRef = React.useRef(providerProfile);
+  const runtimeRef = React.useRef({
+    model: effectiveModel,
+    permissionMode,
+    effort: effectiveEffort,
+    thinking: null,
+    fast: effectiveFast,
+  });
   const extRoot = React.useMemo(() => readCepSystemPath({ cs, platform }), [cs, platform]);
-  const developmentRuntimeFallback = React.useMemo(() => {
-    if (platform.id !== 'macos-arm64') return false;
-    const debugMarker = platform.paths.join([extRoot, '.debug']);
-    const bundleManifest = platform.paths.join([extRoot, 'bundle-manifest.json']);
-    return platform.fs.existsSync(debugMarker)
-      && !platform.fs.existsSync(bundleManifest);
-  }, [extRoot, platform]);
-  const developmentRuntimeOverride = React.useMemo(
-    () => hasDevelopmentRuntimeOverride(platform.env),
-    [platform],
-  );
-  const runtimeManager = React.useMemo(() => (
-    platform.id === 'macos-arm64' && (!developmentRuntimeFallback || developmentRuntimeOverride)
-      ? createRuntimeManager({ platform, extensionRoot: extRoot })
-      : null
-  ), [developmentRuntimeFallback, developmentRuntimeOverride, extRoot, platform]);
-  const [runtimeActivation, setRuntimeActivation] = React.useState(() => ({
-    state: runtimeManager ? 'starting' : 'ready',
-    result: null,
-    error: null,
-  }));
-  const markRuntimeReady = React.useCallback((result) => {
-    setRuntimeActivation({ state: 'ready', result: result || null, error: null });
-  }, []);
-  React.useEffect(() => {
-    if (!runtimeManager) {
-      setRuntimeActivation({ state: 'ready', result: null, error: null });
-      return undefined;
-    }
-    let alive = true;
-    setRuntimeActivation({ state: 'starting', result: null, error: null });
-    let retryTimer = null;
-    const activate = () => {
-      runtimeManager.ensureReady().then((result) => {
-        if (alive) markRuntimeReady(result);
-      }).catch((error) => {
-        if (!alive) return;
-        setRuntimeActivation({ state: 'error', result: null, error });
-        // A second panel can hold the short-lived install lock during boot.
-        // Keep configuration hidden, then retry without requiring a reload.
-        if (error && error.code === 'RUNTIME_MANAGER_LOCKED') {
-          retryTimer = setTimeout(activate, 1000);
-        }
-      });
-    };
-    activate();
-    return () => {
-      alive = false;
-      if (retryTimer) clearTimeout(retryTimer);
-    };
-  }, [markRuntimeReady, runtimeManager]);
-  const runtimeReady = runtimeActivation.state === 'ready';
-  const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
-  const getPythonMcpSpec = React.useCallback(async () => {
-    try {
-      const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
-      if (runtimeManager && spec.runtime) markRuntimeReady(spec.runtime);
-      return withToolApprovalTier(spec, approvalTierFile);
-    } catch (error) {
-      if (runtimeManager) setRuntimeActivation({ state: 'error', result: null, error });
-      throw error;
-    }
-  }, [approvalTierFile, extRoot, markRuntimeReady, platform, runtimeManager]);
   const hostPortRef = React.useRef(status.port);
   hostPortRef.current = status.port;
   const getMcpSpec = React.useCallback(() => resolveChatMcpSpec({
-    engine: mcpEngineRef.current,
     port: hostPortRef.current,
     label: chatSessionIdRef.current,
     approvalTier: permissionModeRef.current,
     expertGuidance: expertGuidanceRef.current,
     hostConversation,
-    resolvePythonSpec: getPythonMcpSpec,
-  }), [getPythonMcpSpec, hostConversation]);
+  }), [hostConversation]);
   const mcp = React.useMemo(() => createMcpClient({
-    platform,
     extRoot,
-    // Tool Library and the panel's own Tools UI stay on Python stdio until
-    // their server-side implementation moves into the CEP host.
-    resolveCommand: getPythonMcpSpec,
-    env: approvalTierFile.env(),
-    onElicitation: elicitationCoordinator.handle,
-    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
-    randomBytes: (size) => cepRequire('crypto').randomBytes(size),
-  }), [approvalTierFile, elicitationCoordinator, extRoot, getPythonMcpSpec, platform]);
+    getHost,
+    getPort: () => hostPortRef.current,
+    getConversation: () => hostConversation.ensureConversation({
+      label: chatSessionIdRef.current,
+      approvalTier: permissionModeRef.current,
+      expertGuidance: expertGuidanceRef.current,
+    }),
+  }), [extRoot, getHost, hostConversation]);
   const toolsApi = React.useMemo(() => createToolsApi(mcp), [mcp]);
   React.useEffect(() => () => mcp.stop(), [mcp]);
   const releaseTurnAttachments = React.useCallback((turn) => {
@@ -817,16 +497,7 @@ function Shell({ cs }) {
   const retryAttachment = React.useCallback((item) => {
     addAttachment({ pondId: item.pondId, file: item.file });
   }, [addAttachment]);
-  const providerAcceptanceEventsRef = React.useRef([]);
   const handleChatEvent = React.useCallback((evt) => {
-    if (evt && typeof evt.type === 'string') {
-      providerAcceptanceEventsRef.current.push({
-        type: evt.type,
-        ...(typeof evt.kind === 'string' ? { kind: evt.kind } : {}),
-        ...(typeof evt.code === 'string' ? { code: evt.code } : {}),
-      });
-      if (providerAcceptanceEventsRef.current.length > 256) providerAcceptanceEventsRef.current.shift();
-    }
     const pending = pendingTurnRef.current;
     if (evt.type === 'turn-accepted') {
       if (!pending || evt.turnId !== pending.turnId) return;
@@ -870,58 +541,6 @@ function Shell({ cs }) {
     setChatEntries((entries) => reduceEvent(entries, evt));
   }, [releaseTurnAttachments]);
 
-  const recoverRuntimeProvider = React.useCallback(async (provider, _failureFacts, requestedModelId) => {
-    if (!providerStore) return null;
-    const modelId = String(requestedModelId || '').trim();
-    if (!modelId) return null;
-    const result = await runProviderManagerProbe(provider, {
-      store: providerStore,
-      resolveRequestProfile: (entry, details) => resolveProviderRequestProfile(entry, {
-        ...details,
-        secretService: providerSecretService,
-      }),
-      forceDetect: true,
-      modelId,
-    });
-    if (!result.ok) {
-      // #222: this detail reaches chat error events verbatim, so exact-secret
-      // redaction must happen here, the shared choke point for both backends.
-      const detail = redactText(String(result.detail || ''), providerSecretService.getRedactionValues());
-      const error = new Error(detail || `Provider did not expose a verified API for model ${modelId}`);
-      error.kind = 'model';
-      error.code = 'provider_preflight_failed';
-      throw error;
-    }
-    return { provider: result.entry, modelId };
-  }, [providerSecretService, providerStore]);
-
-  const refreshRuntimeProviders = React.useCallback(() => {
-    if (providerStore) setProviders(providerStore.list());
-  }, [providerStore]);
-
-  const byokLoop = React.useMemo(() => {
-    return createAgentLoop({
-      resolveRequestProfile: () => {
-        const provider = runtimeRef.current.claudeApiProvider;
-        if (!provider) throw new Error('Anthropic provider is unavailable');
-        return resolveProviderRequestProfile(provider, { scope: 'model', secretService: providerSecretService });
-      },
-      getModel: () => runtimeRef.current.model,
-      getPermissionMode: () => runtimeRef.current.permissionMode,
-      getEffort: () => runtimeRef.current.effort,
-      getFast: () => runtimeRef.current.fast,
-      mcp,
-      lang,
-      onEvent: handleChatEvent,
-    });
-    // lang only affects the system prompt of FUTURE turns; recreating the loop
-    // on language switch would drop the conversation, so we intentionally bind
-    // the initial value.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mcp, handleChatEvent, providerSecretService]);
-
-  // Same as the BYOK loop: lang only affects future system prompts, so avoid
-  // recreating the backend and silently dropping its conversation on language switch.
   const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
     platform,
     getMcpSpec,
@@ -930,19 +549,7 @@ function Shell({ cs }) {
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
     getThinking: () => runtimeRef.current.thinking,
-    getChannel: () => runtimeRef.current.claudeChannel || 'subscription',
-    getProviderSensitiveValues: () => providerSecretService.getRedactionValues(),
-    resolveApiProvider: () => {
-      const provider = runtimeRef.current.claudeApiProvider;
-      if (!provider) throw new Error('Custom Provider is unavailable');
-      return provider;
-    },
-    resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
-      ...details,
-      secretService: providerSecretService,
-    }),
-    recoverProviderProfile: recoverRuntimeProvider,
-    onProviderProfileRecovered: refreshRuntimeProviders,
+    getChannel: () => 'subscription',
     lang,
     onEvent: handleChatEvent,
   }), [
@@ -950,9 +557,6 @@ function Shell({ cs }) {
     mcp,
     handleChatEvent,
     platform,
-    providerSecretService,
-    recoverRuntimeProvider,
-    refreshRuntimeProviders,
   ]);
 
   const codexBackend = React.useMemo(() => createCodexBackend({
@@ -965,146 +569,16 @@ function Shell({ cs }) {
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
-    getProviderProfile: () => runtimeRef.current.providerProfile,
-    getProviderCandidate: () => runtimeRef.current.providerCandidate,
-    getProviderSensitiveValues: () => providerSecretService.getRedactionValues(),
-    resolveRequestProfile: (provider, details) => resolveProviderRequestProfile(provider, {
-      ...details,
-      secretService: providerSecretService,
-    }),
-    recoverProviderProfile: recoverRuntimeProvider,
-    onProviderProfileRecovered: refreshRuntimeProviders,
     getCliConfigProvider: () => null,
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
-
-  React.useEffect(() => {
-    if (providerInit.state !== 'ready' || !providerStore) return undefined;
-    let debugMarker = false;
-    try {
-      debugMarker = platform.fs.existsSync(platform.paths.join([extRoot, '.debug']));
-    } catch {}
-    if (!debugMarker) return undefined;
-    const key = '__AE_MCP_PROVIDER_ACCEPTANCE__';
-    const previous = window[key];
-    if (previous?.dispose) Promise.resolve(previous.dispose()).catch(() => {});
-    const bridge = createProviderAcceptanceBridge({
-      store: providerStore,
-      secretService: providerSecretService,
-      runProviderManagerProbe,
-      createUniversalProviderRoute,
-      selectProviderRoute,
-      resolveProviderRequestProfile,
-      onProvidersChanged: refreshRuntimeProviders,
-    });
-    let panelQueue = Promise.resolve();
-    const panelTurns = (input = {}) => {
-      const run = async () => {
-        const client = input.client === 'claude' ? 'claude' : input.client === 'codex' ? 'codex' : '';
-        const providerId = typeof input.providerId === 'string' ? input.providerId.trim() : '';
-        const modelId = typeof input.modelId === 'string' ? input.modelId.trim() : '';
-        let plannedTurns;
-        try {
-          plannedTurns = normalizePanelAcceptanceTurns(input);
-        } catch {
-          return { ok: false, errorCode: 'PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN', turns: [] };
-        }
-        const graceMs = Number.isInteger(input.graceMs) && input.graceMs >= 0 && input.graceMs <= 10000
-          ? input.graceMs
-          : 3000;
-        if (!client || !providerId || !modelId) {
-          return { ok: false, errorCode: 'PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN', turns: [] };
-        }
-        let provider = null;
-        try { provider = providerStore.get(providerId); } catch {}
-        if (!provider) return { ok: false, errorCode: 'PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND', turns: [] };
-        const backend = client === 'codex' ? codexBackend : claudeBackend;
-        const savedRuntime = runtimeRef.current;
-        const turns = [];
-        providerAcceptanceEventsRef.current = [];
-        runtimeRef.current = {
-          ...savedRuntime,
-          providerProfile: { provider, modelId },
-          providerCandidate: { provider, modelId },
-          model: modelId,
-          permissionMode: 'none',
-          effort: 'low',
-          thinking: input.thinking === 'adaptive' ? 'adaptive' : null,
-          fast: false,
-          claudeChannel: 'api',
-          claudeApiProvider: provider,
-        };
-        backend.reset();
-        try {
-          for (const plannedTurn of plannedTurns) {
-            const eventStart = providerAcceptanceEventsRef.current.length;
-            const startedAt = Date.now();
-            await backend.sendUser(plannedTurn);
-            await new Promise((resolve) => setTimeout(resolve, graceMs));
-            const events = providerAcceptanceEventsRef.current.slice(eventStart);
-            const error = events.find((event) => event.type === 'error');
-            const accepted = events.some((event) => event.type === 'turn-accepted');
-            const terminal = events.some((event) => event.type === 'turn-end');
-            const transcript = backend.getMessages();
-            const hasAssistant = transcript.some((message) => message?.role === 'assistant'
-              && typeof message.text === 'string' && message.text.trim());
-            turns.push({
-              ok: !error && terminal && hasAssistant,
-              terminal: terminal ? 'turn-end' : null,
-              durationMs: Date.now() - startedAt,
-              errorCode: error?.code || error?.kind || null,
-              attachmentCount: plannedTurn.attachments.length,
-              mentionedAttachmentCount: countMentionedPanelAttachments(
-                transcript,
-                plannedTurn.attachments,
-              ),
-              accepted,
-            });
-            if (!turns.at(-1).ok) break;
-          }
-          return {
-            ok: turns.length === plannedTurns.length && turns.every((turn) => turn.ok),
-            client,
-            modelId,
-            turns,
-          };
-        } catch (error) {
-          return {
-            ok: false,
-            client,
-            modelId,
-            turns,
-            errorCode: typeof error?.code === 'string' ? error.code : 'PROVIDER_ACCEPTANCE_PANEL_TURN_FAILED',
-          };
-        } finally {
-          backend.reset();
-          runtimeRef.current = savedRuntime;
-        }
-      };
-      const pending = panelQueue.then(run, run);
-      panelQueue = pending.then(() => undefined, () => undefined);
-      return pending;
-    };
-    const acceptance = Object.freeze({ ...bridge, panelTurns });
-    window[key] = acceptance;
-    return () => {
-      if (window[key] === acceptance) delete window[key];
-      Promise.resolve(bridge.dispose()).catch(() => {});
-    };
-  }, [claudeBackend, codexBackend, extRoot, platform, providerInit.state, providerSecretService, providerStore, refreshRuntimeProviders]);
+  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
 
   React.useEffect(
     () => installBeforeUnloadReset(window, codexBackend),
     [codexBackend],
   );
-
-  React.useEffect(() => {
-    if (previousCodexProviderProfileRef.current === providerProfile) return;
-    previousCodexProviderProfileRef.current = providerProfile;
-    codexBackend.reset();
-  }, [codexBackend, providerProfile]);
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
     platform,
@@ -1112,6 +586,7 @@ function Shell({ cs }) {
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
+    getProviders: () => providersRef.current,
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
@@ -1126,36 +601,27 @@ function Shell({ cs }) {
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
-    readStoredZcodeKey: () => zcodeStoredKeyRef.current,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
   }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
 
-  React.useEffect(() => () => {
-    zcodeStoredKeyRef.current = '';
-    zcodeBackend.reset();
-  }, [zcodeBackend]);
-
   runtimeRef.current = {
-    providerProfile,
-    providerCandidate: effective.channel === 'custom' && codexCustomProvider
-      ? { provider: codexCustomProvider, modelId: effectiveModel }
-      : null,
     model: effectiveModel,
     permissionMode,
     effort: effectiveEffort,
     thinking: modelMeta.adaptive === true ? 'adaptive' : null,
     fast: effectiveFast,
-    claudeChannel: effective.backend === 'claude-api' ? 'api' : 'subscription',
-    claudeApiProvider,
   };
   // Map real-backend id -> instance.
-  const backendInstances = { subscription: claudeBackend, 'claude-api': claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
-  const activeBackend = backendInstances[effective.backend] || byokLoop;
+  const backendInstances = {
+    subscription: claudeBackend,
+    codex: codexBackend,
+    opencode: openCodeBackend,
+    zcode: zcodeBackend,
+  };
+  const activeBackend = backendInstances[effective.backend] || null;
 
-  // Descriptor selection is keyed on the EFFECTIVE backend from pickBackend,
-  // not backendPref. `byok` remains only for legacy state compatibility;
-  // live custom Claude Provider selection resolves to `claude-api`.
+  // Descriptor selection is keyed on the effective backend from pickBackend.
   React.useEffect(() => {
     const facts = {
       effectiveBackend: effective.backend,
@@ -1163,11 +629,8 @@ function Shell({ cs }) {
       backendPref,
       baseDescriptor,
       customModel,
-      claudeApiProvider,
-      codexCustomProvider,
-      customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
-      byokApiModels: null,
       codexCachedModels: codexModels,
+      openCodeProviders: providers,
       zcodeSessionModels,
       zcodeProbedModels,
     };
@@ -1178,18 +641,24 @@ function Shell({ cs }) {
     // exempt the codex custom-model path (customModel is intentionally not
     // in the curated list there).
     const isCustomModelPath = backendPref === 'codex' && customModelForBackend && model === customModelForBackend;
-    const providerFactsPending = backendPref === 'codex'
-      && Boolean(codexProviderId)
-      && providerInit.state === 'checking';
     const reconciled = reconcileModelPref(model, nextDescriptor, {
       isCustom: isCustomModelPath,
-      providerFactsPending,
     });
     if (reconciled !== model) {
       setModel(reconciled);
       writePref('ae_mcp_model', reconciled);
     }
-  }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady, codexProviderId, providerInit.state]);
+  }, [
+    effective.backend,
+    effective.channel,
+    backendPref,
+    baseDescriptor,
+    customModel,
+    codexModels,
+    providers,
+    zcodeSessionModels,
+    zcodeProbedModels,
+  ]);
   const activeBackendRef = React.useRef(null);
 
   // Custom ZCode providers can omit model.available, so use their authenticated
@@ -1206,7 +675,7 @@ function Shell({ cs }) {
     const providerId = cli.providerId || '';
     probeProviderModels({
       baseUrl: cli.baseUrl,
-      ['apiKey']: zcodeStoredKeyRef.current,
+      ['apiKey']: '',
       protocol: cli.protocol,
       allowInsecureHttp: false,
     }).then((result) => {
@@ -1217,7 +686,7 @@ function Shell({ cs }) {
       }
     }).catch(() => {});
     return () => { alive = false; };
-  }, [backendPref, zcodeCredentialEpoch, zcodeSessionModels, zcodeConfigSummary]);
+  }, [backendPref, zcodeSessionModels, zcodeConfigSummary]);
 
   const runClaudeProbe = React.useCallback(() => {
     let alive = true;
@@ -1249,33 +718,47 @@ function Shell({ cs }) {
     setCodexProbe(null);
     codexBackend.probeAccount().then((result) => {
       if (!alive) return;
-      const redactionValues = providerSecretService.getRedactionValues();
-      if (containsExactSecret(result, ['aemcp-secret://', ...redactionValues])) {
+      if (containsExactSecret(result, ['aemcp-secret://'])) {
         setCodexProbe({ loggedIn: false, runtimeOk: false, detail: 'Codex probe metadata was rejected' });
         setCodexModels(null);
         return;
       }
       setCodexProbe(result);
-      if (result && Array.isArray(result.models) && !modelMetadataContainsCredential(result.models, redactionValues)) {
+      if (result && Array.isArray(result.models) && !modelMetadataContainsCredential(result.models)) {
         setCodexModels(result.models);
       }
     }).catch((e) => {
       if (alive) setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
     });
     return () => { alive = false; };
-  }, [codexBackend, providerSecretService]);
+  }, [codexBackend]);
 
   React.useEffect(() => {
     if (backendPref !== 'codex') return undefined;
     return runCodexProbe();
   }, [backendPref, runCodexProbe]);
 
+  const runOpenCodeProbe = React.useCallback(() => {
+    let alive = true;
+    setOpenCodeProbe(null);
+    openCodeBackend.probeAccount().then((result) => {
+      if (alive) setOpenCodeProbe(result);
+    }).catch((error) => {
+      if (alive) setOpenCodeProbe({ loggedIn: false, detail: error?.message || String(error) });
+    });
+    return () => { alive = false; };
+  }, [openCodeBackend]);
+
+  React.useEffect(() => {
+    if (backendPref !== 'opencode') return undefined;
+    return runOpenCodeProbe();
+  }, [backendPref, runOpenCodeProbe]);
+
   // CLI-configured providers need a direct /models fallback when Codex does
   // not enumerate their models through the app-server.
   React.useEffect(() => {
     if (backendPref !== 'codex') return undefined;
     if (!codexCliConfig || !codexCliConfig.provider || !codexCliCredentialReady) return undefined;
-    if (effective.channel === 'custom' && codexCustomProvider && codexCustomProvider.baseUrl) return undefined;
     if (codexModels && codexModels.length > 1) return undefined;
     let alive = true;
     (async () => {
@@ -1285,7 +768,6 @@ function Shell({ cs }) {
           provider: codexCliConfig.provider,
           env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {},
           storedValueRef: null,
-          secretService: providerSecretService,
         });
         const result = await probeProviderModels({
           baseUrl: codexCliConfig.provider.baseUrl,
@@ -1302,7 +784,7 @@ function Shell({ cs }) {
       }
     })();
     return () => { alive = false; };
-  }, [backendPref, effective.channel, codexCliConfig, codexCliCredentialReady, codexCustomProvider, codexModels, providerSecretService]);
+  }, [backendPref, codexCliConfig, codexCliCredentialReady, codexModels]);
 
   const runZcodeProbe = React.useCallback(() => {
     let alive = true;
@@ -1331,7 +813,6 @@ function Shell({ cs }) {
     const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
     activeBackendRef.current = decision.nextReal;
     if (!decision.reset) return;
-    byokLoop.reset();
     claudeBackend.reset();
     codexBackend.reset();
     openCodeBackend.reset();
@@ -1343,7 +824,14 @@ function Shell({ cs }) {
     setSessionEffort(null);
     setSessionFast(null);
     if (decision.nextReal !== 'zcode') setZcodeSessionModels(null);
-  }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, resetAttachmentDraftSession, zcodeBackend]);
+  }, [
+    effective.backend,
+    claudeBackend,
+    codexBackend,
+    openCodeBackend,
+    resetAttachmentDraftSession,
+    zcodeBackend,
+  ]);
 
   const sendChat = (input) => {
     if (pendingTurnRef.current) return;
@@ -1361,6 +849,17 @@ function Shell({ cs }) {
     }
     pendingTurnRef.current = turn;
     acceptedTurnRef.current = null;
+    if (!activeBackend) {
+      handleChatEvent({
+        type: 'error',
+        kind: 'backend',
+        code: 'BACKEND_UNAVAILABLE',
+        message: effective.fixHint?.en || 'Configure an available chat backend first.',
+        turnId: turn.turnId,
+        dispatchState: 'not-started',
+      });
+      return;
+    }
     try {
       const result = activeBackend.sendUser(turn);
       Promise.resolve(result).catch((error) => {
@@ -1388,9 +887,9 @@ function Shell({ cs }) {
 
   const newChatSession = () => {
     hostConversation.closeConversation();
-    activeBackend.reset();
+    if (activeBackend) activeBackend.reset();
     resetAttachmentDraftSession();
-    if (mcpEngineRef.current === MCP_ENGINE_CEP_HOST && status.state === 'ok') {
+    if (status.state === 'ok') {
       hostConversation.ensureConversation({
         label: chatSessionIdRef.current,
         approvalTier: permissionModeRef.current,
@@ -1420,32 +919,9 @@ function Shell({ cs }) {
     setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, [getHost]);
 
-  const repairPlatformHelper = React.useCallback(async () => {
-    if (providerRepairing) return;
-    setProviderRepairing(true);
-    try {
-      const controller = ctrl.current;
-      if (!controller || typeof controller.repairPlatformHelper !== 'function') {
-        throw providerRuntimeUnavailableError();
-      }
-      await controller.repairPlatformHelper();
-      pushLog('Platform Helper repaired; rechecking protected provider state');
-      setProviderInitEpoch((current) => current + 1);
-    } catch (error) {
-      setProviderInit(providerRepairFailure(error));
-      pushLog('Platform Helper repair failed: ' + (
-        typeof error?.code === 'string' ? error.code : 'HELPER_UNAVAILABLE'
-      ));
-    } finally {
-      setProviderRepairing(false);
-    }
-  }, [providerRepairing, pushLog]);
-
   const exportLogs = React.useCallback(async () => {
     try {
-      let exactSecrets = [];
-      try { exactSecrets = providerSecretService.getRedactionValues() || []; } catch (error) { exactSecrets = []; }
-      if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
+      const exactSecrets = [];
       const attachmentSecrets = attachmentPathSecrets({
         draft: attachmentDraft,
         pendingTurn: pendingTurnRef.current,
@@ -1461,8 +937,6 @@ function Shell({ cs }) {
           fs: cepRequire('fs'),
           fetchImpl: window.fetch.bind(window),
           platform,
-          runtimeManager,
-          allowDevelopmentPath: developmentRuntimeFallback,
         });
       } catch (error) {
         diagnosticsError = error?.message || String(error);
@@ -1498,30 +972,6 @@ function Shell({ cs }) {
       // the Chromium UA line in the same header carries the OS release.
       const osInfo = { platform: platform.id || '-' };
       const versions = processApi.versions || {};
-      const today = new Date();
-      const dateKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-      const pythonLogPath = platform.paths.join([logsDir, 'server-' + dateKey + '.log']);
-      let pythonServerLog;
-      try {
-        const hasFile = [0, 1].some((offset) => {
-          const date = new Date(today);
-          date.setDate(date.getDate() - offset);
-          const key = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
-          return platform.fs.existsSync(platform.paths.join([logsDir, 'server-' + key + '.log']));
-        });
-        pythonServerLog = hasFile ? readDatedLogTail({
-          fsImpl: platform.fs,
-          pathJoin: platform.paths.join,
-          dir: logsDir,
-          prefix: 'server-',
-          suffix: '.log',
-          now: today,
-          days: 2,
-          lines: 300,
-        }) : undefined;
-      } catch (error) {
-        pythonServerLog = undefined;
-      }
       const backendStderrTails = {};
       for (const [name, backend] of [
         ['claude', claudeBackend],
@@ -1540,7 +990,6 @@ function Shell({ cs }) {
         panelLogs: logs,
         hostInfo: {
           hostVersion: connection.hostVersion || '-',
-          pythonVersion: connection.pythonVersion || '-',
           aeApp,
           cepVersion,
           os: osInfo,
@@ -1562,8 +1011,6 @@ function Shell({ cs }) {
         diagnostics: diagnosticItems,
         diagnosticsError,
         backendStderrTails,
-        pythonServerLog,
-        pythonLogPath,
         version: pkgVersion,
         exactSecrets,
       });
@@ -1573,7 +1020,20 @@ function Shell({ cs }) {
     } catch (e) {
       pushLog('Log export failed: ' + (e && e.message ? e.message : String(e)));
     }
-  }, [logs, connInfo, claudeBackend, codexBackend, openCodeBackend, zcodeBackend, providerSecretService, pushLog, attachmentDraft, getHost, platform, runtimeManager, developmentRuntimeFallback, status.port, cs]);
+  }, [
+    logs,
+    connInfo,
+    claudeBackend,
+    codexBackend,
+    openCodeBackend,
+    zcodeBackend,
+    pushLog,
+    attachmentDraft,
+    getHost,
+    platform,
+    status.port,
+    cs,
+  ]);
 
   const undoToPreviousCheckpoint = React.useCallback(async () => {
     try {
@@ -1609,80 +1069,22 @@ function Shell({ cs }) {
     setProviderInit({ state: 'checking', error: '' });
     (async () => {
       try {
-        const host = getHost();
-        if (!host || typeof host.capabilities !== 'function') throw providerRuntimeUnavailableError();
-        const capabilities = await host.capabilities();
-        requireProviderHelperCapabilities(capabilities, platform.id);
-        try {
-          const value = await zcodeCredentialManager.loadOrMigrate();
-          if (alive) {
-            zcodeStoredKeyRef.current = value;
-            setZcodeCredentialEpoch((current) => current + 1);
-          }
-        } catch {
-          if (alive) {
-            zcodeStoredKeyRef.current = '';
-            setZcodeCredentialEpoch((current) => current + 1);
-          }
-          pushLog('ZCode credential unavailable: protected credential migration is required');
-        }
-        if (!providerStore) {
-          const error = new Error('Provider store is unavailable');
-          error.code = 'PROVIDER_STORE_UNAVAILABLE';
-          throw error;
-        }
-        if (providerStore.needsSecretMigration() || providerStore.needsSchemaMigration()) {
-          const secretStore = createHostSecretStore(host);
-          const runner = createSecretMigrationRunner({
-            journalStore: createProviderMigrationJournalStore(platform),
-            secretStore,
-          });
-          await migrateProviderStoreSecrets({
-            store: providerStore,
-            legacyKeyStore: {
-              readKey: (name) => { try { return legacyKeyStore ? legacyKeyStore.readKey(name) : ''; } catch { return ''; } },
-              async cleanupCommittedProviderSecrets() {
-                if (!legacyKeyStore) return;
-                legacyKeyStore.clearKey('anthropic');
-                legacyKeyStore.clearKey('codex');
-              },
-            },
-            runner,
-            secretStore: host,
-          });
-        }
-        if (providerStore.needsSchemaMigration()) {
-          await migrateProviderStoreV2ToV3({ store: providerStore });
-        }
-        await drainPendingProviderSecretDeletes({ store: providerStore, secretService: providerSecretService });
-        const providerState = providerStore.readState();
-        for (const ref of activeProviderSecretRefs(providerState.providers)) {
-          let resolved = null;
-          try {
-            resolved = await providerSecretService.resolve(ref);
-            if (typeof resolved !== 'string') {
-              const error = new Error('Provider secret resolution returned an invalid value.');
-              error.code = 'SECRET_CONFLICT';
-              throw error;
-            }
-          } finally {
-            resolved = null;
-          }
-        }
-        assertProviderStateCredentialFree(
-          providerState,
-          providerSecretService.getRedactionValues(),
-        );
+        let legacyProviders = [];
+        try { legacyProviders = legacyProviderStore ? legacyProviderStore.list() : []; } catch {}
+        openCodeProviderStore.importLegacyProviders(legacyProviders);
         if (!alive) return;
-        setProviders(providerState.providers);
+        setProviders(openCodeProviderStore.list());
         setProviderInit({ state: 'ready', error: '' });
       } catch (error) {
         if (!alive) return;
-        setProviderInit(providerInitFailure(error));
+        setProviderInit({
+          state: 'unavailable',
+          error: error?.code || 'OPENCODE_PROVIDER_STORE_UNAVAILABLE',
+        });
       }
     })();
     return () => { alive = false; };
-  }, [status.state, providerStore, providerSecretService, getHost, legacyKeyStore, platform, pushLog, providerInitEpoch, zcodeCredentialManager]);
+  }, [legacyProviderStore, openCodeProviderStore, status.state]);
 
   // Keep connection info fresh while the drawer is open.
   React.useEffect(() => {
@@ -1719,16 +1121,12 @@ function Shell({ cs }) {
         fs: cepRequire('fs'),
         fetchImpl: window.fetch.bind(window),
         platform,
-        runtimeManager,
-        allowDevelopmentPath: developmentRuntimeFallback,
       });
-      const verifiedRuntime = items.find((item) => item.id === 'node' && item.ok && item.runtime)?.runtime;
-      if (verifiedRuntime) markRuntimeReady(verifiedRuntime);
       setDiagnostics(items);
     } catch (e) {
       setDiagnostics([{ id: 'host-listening', ok: false, detail: String(e && e.message), fixHint: { zh: '诊断执行失败，重启面板后重试。', en: 'Diagnostics failed to run; reload the panel and retry.' } }]);
     }
-  }, [developmentRuntimeFallback, getHost, markRuntimeReady, platform, runtimeManager, status.port]);
+  }, [getHost, platform, status.port]);
 
   const togglePause = () => {
     const host = getHost();
@@ -1758,29 +1156,15 @@ function Shell({ cs }) {
     setWizardDone(true);
   };
 
-  const externalMcpReady = mcpEngine === MCP_ENGINE_CEP_HOST
-    ? status.state === 'ok'
-    : runtimeReady;
-  const mcpConfigStr = externalMcpReady ? JSON.stringify(
-    mcpEngine === MCP_ENGINE_CEP_HOST
-      ? httpConfigFor('claude-desktop', status.port, extRoot)
-      : buildMcpConfig(status.port, expertGuidance, mcpCommand),
-    null,
-    2,
-  ) : '';
-  const claudeStatus = probe === null ? { state: 'checking' }
-    : probe.reason === 'cli-too-old' ? { state: 'cli-too-old', detail: probe.detail }
-    : probe.cliOk === false ? { state: 'no-cli', detail: probe.detail }
-    : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
-    : { state: 'ready', cliVersion: probe.cliVersion };
+  const externalMcpReady = status.state === 'ok';
+  const mcpConfigStr = externalMcpReady
+    ? JSON.stringify(httpConfigFor('claude-desktop', status.port, extRoot), null, 2)
+    : '';
   const wizard = useWizardWiring({
-    extRoot,
     lang,
-    claudeStatus,
-    recheckLogin: runClaudeProbe,
     platform,
-    runtimeManager,
-    onRuntimeReady: markRuntimeReady,
+    port: status.port,
+    fetchImpl: window.fetch.bind(window),
   });
 
   if (!wizardDone) {
@@ -1791,15 +1175,9 @@ function Shell({ cs }) {
         onLangChange={setLang}
         client={wizClient}
         onClient={setWizClient}
-        clientName={(CLIENT_NAMES[wizClient] || CLIENT_NAMES['claude-desktop'])[lang]}
-        mcpConfig={mcpConfigStr}
-        mcpCommand={mcpCommand}
+        extensionRoot={extRoot}
         mcpReady={externalMcpReady}
-        mcpEngine={mcpEngine}
         port={status.port}
-        expertGuidance={expertGuidance}
-        channels={channels}
-        activeChannel={effective.channel || ''}
         onNext={() => setWizStep((s) => Math.min(3, s + 1))}
         onBack={() => setWizStep((s) => Math.max(1, s - 1))}
         onCopy={(text) => copyWizardConfig(copyText, mcpConfigStr, text)}
@@ -1848,9 +1226,9 @@ function Shell({ cs }) {
             noticeActionLabel={paused ? t.resume : t.goSettings}
             onNoticeAction={() => (paused ? togglePause() : setTab('settings'))}
             onSend={sendChat}
-            onStop={() => activeBackend.stop()}
-            onApprove={(id, decision) => activeBackend.approve(id, decision)}
-            onAnswerQuestion={(id, result) => activeBackend.answerQuestion
+            onStop={() => activeBackend?.stop()}
+            onApprove={(id, decision) => activeBackend?.approve(id, decision)}
+            onAnswerQuestion={(id, result) => activeBackend?.answerQuestion
               && activeBackend.answerQuestion(id, result)}
             onNewSession={newChatSession}
             chipState={{
@@ -1886,8 +1264,6 @@ function Shell({ cs }) {
           <ToolsScreen
             api={toolsApi}
             lang={lang}
-            cepFs={window.cep && window.cep.fs}
-            initialPath={extRoot}
           />
         ) : null}
         {tab === 'settings' ? (
@@ -1898,12 +1274,7 @@ function Shell({ cs }) {
             port={status.port}
             onApplyPort={applyPort}
             mcpConfig={mcpConfigStr}
-            mcpCommand={mcpCommand}
             mcpReady={externalMcpReady}
-            mcpEngine={mcpEngine}
-            onMcpEngineChange={(value) => {
-              setMcpEngine(saveMcpEngine(window.localStorage, value));
-            }}
             logs={logs}
             clients={clients}
             mcpSessions={mcpSessions}
@@ -1926,82 +1297,41 @@ function Shell({ cs }) {
             }}
             onRegenToken={() => setConfirmRegen(true)}
             hostVersion={(connInfo && connInfo.hostVersion) || '-'}
-            pythonVersion={(connInfo && connInfo.pythonVersion) || '-'}
             channels={channels}
             activeChannel={effective.channel || ''}
-            selectedChannel={channelChoices[backendPref === 'codex' ? 'codex' : 'claude'] || ''}
+            selectedChannel={channelChoices[
+              backendPref === 'codex' ? 'codex' : backendPref === 'opencode' ? 'opencode' : 'claude'
+            ] || ''}
             onSelectChannel={(channel) => {
               // #229: enabling a channel is the routing decision and actively
               // triggers that backend's detection.
-              const group = backendPref === 'codex' ? 'codex' : 'claude';
+              const group = backendPref === 'codex'
+                ? 'codex' : backendPref === 'opencode' ? 'opencode' : 'claude';
               setChannelChoices((current) => ({ ...current, [group]: channel }));
               writePref('ae_mcp_channel_' + group, channel);
               if (group === 'codex') {
                 codexBackend.reset();
                 runCodexProbe();
+              } else if (group === 'opencode') {
+                openCodeBackend.reset();
+                runOpenCodeProbe();
               } else {
                 runClaudeProbe();
               }
             }}
             onRecheckBackend={() => {
               if (backendPref === 'codex') runCodexProbe();
+              else if (backendPref === 'opencode') runOpenCodeProbe();
               else if (backendPref === 'zcode') runZcodeProbe();
               else runClaudeProbe();
             }}
-            recheckDisabled={backendPref === 'codex' ? codexProbe === null : backendPref === 'zcode' ? zcodeProbe === null : probe === null}
+            recheckDisabled={backendPref === 'codex'
+              ? codexProbe === null : backendPref === 'opencode'
+                ? openCodeProbe === null : backendPref === 'zcode'
+                  ? zcodeProbe === null : probe === null}
             providers={providers}
             providerManager={providerManager}
             providerInit={providerInit}
-            providerRepairing={providerRepairing}
-            onRepairPlatformHelper={repairPlatformHelper}
-            claudeProviderId={claudeProviderId}
-            onClaudeProviderChange={(id) => { setClaudeProviderId(id); writePref('ae_mcp_claude_provider', id); }}
-            codexProviderId={codexProviderId}
-            onCodexProviderChange={(id) => {
-              // #229: picking a provider only configures the custom channel;
-              // routing still follows the user's explicit channel choice.
-              setCodexProviderId(id);
-              writePref('ae_mcp_codex_provider', id);
-              setCodexProbe(null);
-              codexBackend.reset();
-            }}
-            claudeSettingsImportAvailable={Boolean(claudeSettingsHint)}
-            onImportClaudeSettings={async () => {
-              if (!claudeSettingsHint || !providerStore) return;
-              if (providerInit.state !== 'ready') throw providerRuntimeUnavailableError();
-              let draft = null;
-              try {
-                draft = readClaudeSettingsProviderDraft({
-                  platform,
-                  expectedSourceRevision: claudeSettingsHint.sourceRevision,
-                  fsImpl: platform.fs,
-                });
-                if (!draft) return;
-                const entry = await importProviderDraft({ candidate: draft, store: providerStore, secretService: providerSecretService, randomUUID: randomProviderCredentialId });
-                setProviders(providerStore.list());
-                setClaudeProviderId(entry.id);
-                writePref('ae_mcp_claude_provider', entry.id);
-              } finally {
-                draft = null;
-              }
-            }}
-            onSaveZcodeKey={async (k) => {
-              try {
-                const value = await zcodeCredentialManager.save(k);
-                zcodeStoredKeyRef.current = value;
-                setZcodeCredentialEpoch((current) => current + 1);
-                setZcodeProbe(null);
-                zcodeBackend.reset();
-                runZcodeProbe();
-                return true;
-              } catch {
-                pushLog('ZCode credential save failed: protected credential store is unavailable');
-                return false;
-              }
-            }}
-            zcodeKeyStored={Boolean(zcodeStoredKeyRef.current)}
-            onSaveCodexKey={undefined}
-            codexKeyStored={false}
             codexCliConfig={codexCliConfig}
             model={effectiveModel}
             modelOptions={modelOptions}
@@ -2038,7 +1368,7 @@ function Shell({ cs }) {
         lang={lang}
         info={connInfo || {}}
         diagnostics={Array.isArray(diagnostics) ? diagnostics : []}
-        copyReady={runtimeReady}
+        copyReady={externalMcpReady}
         onDiagnose={runDiag}
         onCopyConfig={() => copyText(mcpConfigStr)}
         onRestart={() => applyPort(status.port)}

@@ -4,152 +4,245 @@ import { Button } from '../components/core/Button';
 import { IconButton } from '../components/core/IconButton';
 import { Segmented } from '../components/core/Segmented';
 import { Spinner } from '../components/core/Spinner';
-import { AIAvatar } from '../components/chat/AIAvatar';
-import { ChannelCard } from '../components/settings/ChannelCard';
 import { EXTERNAL_CLIENTS, externalClientConfigText } from '../cep/externalClients';
-import { initialStepStates, LOCAL_STEPS, SUBSCRIPTION_STEPS } from '../lib/wizardSteps';
+import {
+  CLI_STEPS,
+  HOST_STEPS,
+  OPTIONAL_CLIENT_STEPS,
+  initialStepStates,
+} from '../lib/wizardSteps';
 
 const W = {
   zh: {
     stepOf: (n) => `第 ${n} 步 / 共 3 步`,
-    back: '上一步', next: '下一步', start: '开始使用', skip: '跳过向导',
-    t1: '欢迎使用 ae-mcp',
-    b1: '让 AI 助手安全地操作你的 After Effects 工程 — 每一步可见、可批准、可撤销。',
+    back: '上一步',
+    next: '下一步',
+    start: '开始使用',
+    skip: '跳过向导',
+    t1: '检查面板宿主',
+    b1: '面板内的 CEP 宿主直接提供 MCP 与 After Effects 执行能力。',
     langLabel: '界面语言 · Language',
-    t2: '安装本地服务',
-    b2: '面板可以替你完成安装——逐项检测，缺什么装什么：',
-    copy: '复制', copied: '已复制', install: '一键安装', recheck: '复检',
-    openLogin: '打开登录窗口', loginHint: '登录完成后回来点复检', copyLog: '复制日志',
-    uacNote: 'Node 安装会弹一次系统授权（UAC）',
-    t3: '连接 AI 客户端',
-    b3: '选择你的客户端，把配置粘贴进它的 MCP 设置：',
-    builtin: '面板内置对话', builtinNote: '无需配置，开箱即用',
-    docClient: '查看接入文档',
-    docOnly: '按文档接入',
-    mcpHttp: 'MCP HTTP',
+    t2: '检查 AI CLI',
+    b2: '内置对话可使用 Claude、Codex 或 opencode；按需安装其中任意一个。',
+    t3: '连接外部客户端',
+    b3: 'Claude Code 与 Cursor 直接使用宿主 URL；Claude Desktop 使用随插件提供的 shim。',
+    copy: '复制',
+    recheck: '复检',
+    install: '安装',
+    copyLog: '复制日志',
+    optionalNode: '系统 Node（仅 Claude Desktop shim，可选）',
+    optionalNodeHint: 'Claude Code、Cursor 和面板内置对话不需要此 Node 步骤。',
     panelOpenNote: '面板开着才能连接；关闭或重载面板后客户端需要重连。',
+    http: 'MCP HTTP',
+    shim: 'Node shim',
   },
   en: {
     stepOf: (n) => `Step ${n} of 3`,
-    back: 'Back', next: 'Next', start: 'Start using', skip: 'Skip setup',
-    t1: 'Welcome to ae-mcp',
-    b1: 'Let AI assistants operate your After Effects project safely — every step visible, approvable, undoable.',
+    back: 'Back',
+    next: 'Next',
+    start: 'Start using',
+    skip: 'Skip setup',
+    t1: 'Check the panel host',
+    b1: 'The CEP host serves MCP and After Effects execution directly.',
     langLabel: '界面语言 · Language',
-    t2: 'Install the local service',
-    b2: "The panel installs these for you — detect each item, install what's missing:",
-    copy: 'Copy', copied: 'Copied', install: 'Install', recheck: 'Re-check',
-    openLogin: 'Open login window', loginHint: 'After login, return here and re-check', copyLog: 'Copy log',
-    uacNote: 'Node install triggers one UAC prompt',
-    t3: 'Connect an AI client',
-    b3: 'Pick your client and paste the config into its MCP settings:',
-    builtin: 'Built-in chat', builtinNote: 'No config needed — works out of the box',
-    docClient: 'Open integration docs',
-    docOnly: 'Use docs',
-    mcpHttp: 'MCP HTTP',
-    panelOpenNote: 'The panel must stay open. Clients reconnect after the panel closes or reloads.',
+    t2: 'Check AI CLIs',
+    b2: 'Built-in chat can use Claude, Codex, or opencode. Install any CLI you need.',
+    t3: 'Connect an external client',
+    b3: 'Claude Code and Cursor use the host URL; Claude Desktop uses the bundled shim.',
+    copy: 'Copy',
+    recheck: 'Re-check',
+    install: 'Install',
+    copyLog: 'Copy log',
+    optionalNode: 'System Node (optional, Claude Desktop shim only)',
+    optionalNodeHint: 'Claude Code, Cursor, and built-in chat do not need this Node step.',
+    panelOpenNote: 'The panel must stay open. Clients reconnect after it closes or reloads.',
+    http: 'MCP HTTP',
+    shim: 'Node shim',
   },
 };
 
 const EMPTY_STEPS = initialStepStates();
 
 const STEP_LABELS = {
-  uv: 'uv',
-  aeMcp: 'ae-mcp',
-  node: 'Node.js LTS',
+  host: 'CEP host /health',
+  node: 'Node.js 18+',
   claude: 'Claude Code CLI 2.x+',
-  login: 'Claude login',
+  codex: 'Codex CLI',
+  opencode: 'opencode CLI',
 };
 
 function copyText(text) {
-  if (globalThis.navigator && globalThis.navigator.clipboard && globalThis.navigator.clipboard.writeText) {
-    globalThis.navigator.clipboard.writeText(text || '').catch(() => {});
-  }
+  const clipboard = globalThis.navigator && globalThis.navigator.clipboard;
+  if (clipboard && clipboard.writeText) clipboard.writeText(text || '').catch(() => {});
 }
 
-function CodeBlock({ code, copyLabel, onCopy, maxHeight }) {
+function CodeBlock({ code, copyLabel, onCopy }) {
   return (
-    <div style={{ position: 'relative', background: 'var(--gray-0)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
-      <pre style={{ margin: 0, padding: '10px 36px 10px 12px', font: '400 11px/1.7 var(--font-mono)', color: 'var(--text-primary)', overflow: 'auto', maxHeight: maxHeight || 180, whiteSpace: 'pre' }}>{code}</pre>
-      <IconButton icon="copy" title={copyLabel} variant="secondary" onClick={onCopy} style={{ position: 'absolute', top: 6, right: 6, background: 'var(--bg-panel)' }} />
+    <div
+      style={{
+        position: 'relative',
+        background: 'var(--gray-0)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-md)',
+      }}
+    >
+      <pre
+        style={{
+          margin: 0,
+          padding: '10px 36px 10px 12px',
+          font: '400 11px/1.7 var(--font-mono)',
+          color: 'var(--text-primary)',
+          overflow: 'auto',
+          maxHeight: 150,
+          whiteSpace: 'pre',
+        }}
+      >
+        {code}
+      </pre>
+      <IconButton
+        icon="copy"
+        title={copyLabel}
+        variant="secondary"
+        onClick={onCopy}
+        style={{ position: 'absolute', top: 6, right: 6, background: 'var(--bg-panel)' }}
+      />
     </div>
   );
 }
 
-function ClientRow({ name, note, selected, onSelect }) {
-  const [hover, setHover] = React.useState(false);
+function ClientRow({ client, selected, label, onSelect }) {
   return (
     <button
       type="button"
       className="ds-focusable"
       onClick={onSelect}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 8, width: '100%', minHeight: 32, padding: '0 10px', textAlign: 'left',
-        background: selected ? 'var(--bg-selected)' : hover ? 'var(--bg-hover)' : 'transparent',
-        border: `1px solid ${selected ? 'var(--border-strong)' : 'var(--border-default)'}`,
-        borderRadius: 'var(--radius-md)', cursor: 'pointer',
-        transition: 'background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        width: '100%',
+        minHeight: 40,
+        padding: '5px 10px',
+        textAlign: 'left',
+        background: selected ? 'var(--bg-selected)' : 'transparent',
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--radius-md)',
+        cursor: 'pointer',
       }}
     >
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{name}</span>
-        {note ? <span style={{ display: 'block', font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{note}</span> : null}
+        <span
+          style={{
+            display: 'block',
+            font: '500 12px/1.35 var(--font-ui)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          {client.name}
+        </span>
+        <span
+          style={{
+            display: 'block',
+            font: '400 10px/1.35 var(--font-ui)',
+            color: 'var(--text-tertiary)',
+          }}
+        >
+          {label}
+        </span>
       </span>
-      {selected ? <Icon name="check" size={13} strokeWidth={2.5} color="var(--text-primary)" /> : null}
+      {selected ? <Icon name="check" size={13} strokeWidth={2.5} /> : null}
     </button>
   );
 }
 
-function InstallStepRow({ label, state, commandPreview, t, onDetect, onInstall, login = false, hint }) {
+function CheckRow({ label, state, t, onDetect, onInstall, commandPreview, hint }) {
   const status = state && state.status ? state.status : 'idle';
-  const isBusy = status === 'checking' || status === 'running';
-  const isProblem = status === 'missing' || status === 'fail';
-  const icon = status === 'ok' ? 'check' : isProblem ? 'triangle-alert' : status === 'idle' ? 'circle' : null;
-  const tail = String((state && state.logTail) || '').split(/\r?\n/).slice(-6).join('\n');
+  const busy = status === 'checking' || status === 'running';
+  const problem = status === 'missing' || status === 'fail';
+  const icon = status === 'ok' ? 'check' : problem ? 'triangle-alert' : 'circle';
   return (
-    <div style={{ display: 'flex', gap: 8, padding: '9px 10px', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-panel)' }}>
-      <span style={{ width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flex: 'none', color: status === 'ok' ? 'var(--ok)' : isProblem ? 'var(--warn)' : 'var(--text-tertiary)' }}>
-        {isBusy ? <Spinner size={14} /> : <Icon name={icon} size={15} strokeWidth={2} />}
+    <div
+      style={{
+        display: 'flex',
+        gap: 8,
+        padding: '9px 10px',
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--radius-md)',
+        background: 'var(--bg-panel)',
+      }}
+    >
+      <span
+        style={{
+          width: 18,
+          height: 18,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: status === 'ok' ? 'var(--ok)' : problem ? 'var(--warn)' : 'var(--text-tertiary)',
+        }}
+      >
+        {busy ? <Spinner size={14} /> : <Icon name={icon} size={15} strokeWidth={2} />}
       </span>
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 18 }}>
-          <span style={{ font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{label}</span>
-          {status === 'ok' && state.version ? <span style={{ font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{state.version}</span> : null}
-          <span style={{ flex: 1 }}></span>
-          <IconButton icon="rotate-cw" title={t.recheck} variant="secondary" size="sm" disabled={isBusy} onClick={onDetect} />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>
+            {label}
+          </span>
+          {status === 'ok' && state.version ? (
+            <span style={{ font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-tertiary)' }}>
+              {state.version}
+            </span>
+          ) : null}
+          <span style={{ flex: 1 }} />
+          <IconButton
+            icon="rotate-cw"
+            title={t.recheck}
+            variant="secondary"
+            size="sm"
+            disabled={busy}
+            onClick={onDetect}
+          />
         </div>
-        {hint ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{hint}</div> : null}
-        {isProblem ? (
-          <React.Fragment>
-            <code style={{ display: 'block', padding: '6px 8px', background: 'var(--gray-0)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', font: '400 10px/1.55 var(--font-mono)', color: 'var(--text-primary)', overflow: 'auto', whiteSpace: 'pre' }}>{commandPreview}</code>
-            {login ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{t.loginHint}</div> : null}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <Button variant="secondary" size="sm" onClick={onInstall}>{login ? t.openLogin : t.install}</Button>
-              {status === 'fail' ? <Button variant="ghost" size="sm" onClick={() => copyText(state.logTail)}>{t.copyLog}</Button> : null}
-            </div>
-          </React.Fragment>
+        {hint ? (
+          <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>
+            {hint}
+          </div>
         ) : null}
-        {status === 'running' ? <pre style={{ margin: 0, maxHeight: 96, overflow: 'auto', padding: 8, background: 'var(--gray-0)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', font: '400 10px/1.45 var(--font-mono)', color: 'var(--text-secondary)', whiteSpace: 'pre-wrap' }}>{tail}</pre> : null}
+        {problem && state.logTail ? (
+          <div style={{ font: '400 10px/1.45 var(--font-mono)', color: 'var(--text-tertiary)' }}>
+            {state.logTail}
+          </div>
+        ) : null}
+        {problem && onInstall && commandPreview ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <code
+              style={{
+                padding: '6px 8px',
+                background: 'var(--gray-0)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-sm)',
+                font: '400 10px/1.55 var(--font-mono)',
+              }}
+            >
+              {commandPreview}
+            </code>
+            <Button variant="secondary" size="sm" onClick={onInstall}>{t.install}</Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-/* Full-screen 3-step first-run wizard, rendered without the app shell chrome. */
 export function WizardScreen({
   step = 1,
   lang = 'zh',
   onLangChange,
   client = 'claude-desktop',
   onClient,
-  clientName = 'Claude Desktop',
-  mcpConfig = '',
-  mcpCommand = 'ae-mcp',
+  extensionRoot = '<extension root>',
   mcpReady = true,
-  mcpEngine = 'python',
   port = 11488,
-  expertGuidance = true,
   onNext,
   onBack,
   onCopy,
@@ -158,128 +251,162 @@ export function WizardScreen({
   stepStates = EMPTY_STEPS,
   onDetect,
   onInstall,
-  onOpenLogin,
   commandPreviews = {},
-  localSteps = LOCAL_STEPS,
-  channels = { claude: [], codex: [], zcode: [] },
-  activeChannel = '',
 }) {
   const t = W[lang] || W.zh;
-  const clientOptions = [{ id: 'builtin', name: 'builtin' }, ...EXTERNAL_CLIENTS];
-  const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
-  // Prefer the per-client config (so ZCode shows its mcp.servers format, etc.);
-  // fall back to the generic connection config passed from App.
-  const selectedMcpConfig = mcpReady && selectedExternalClient
-    && (mcpEngine === 'cep-host' || selectedExternalClient.kind === 'mcp-stdio')
-    ? externalClientConfigText({
-      client: selectedExternalClient,
-      engine: mcpEngine,
-      port,
-      expertGuidance,
-      command: mcpCommand,
-    })
-    : '';
+  const selectedClient = EXTERNAL_CLIENTS.find((item) => item.id === client)
+    || EXTERNAL_CLIENTS[0];
+  const config = mcpReady ? externalClientConfigText({
+    client: selectedClient,
+    port,
+    extensionRoot,
+  }) : '';
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-6) var(--space-5) var(--space-5)' }}>
+    <div
+      style={{
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        padding: 'var(--space-6) var(--space-5) var(--space-5)',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ display: 'flex', gap: 5 }}>
-          {[1, 2, 3].map((n) => (
-            <span key={n} style={{ width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? 'var(--gray-11)' : n < step ? 'var(--gray-9)' : 'var(--gray-6)', transition: 'width var(--dur-base) var(--ease-out)' }}></span>
+          {[1, 2, 3].map((number) => (
+            <span
+              key={number}
+              style={{
+                width: number === step ? 14 : 5,
+                height: 5,
+                borderRadius: 3,
+                background: number === step
+                  ? 'var(--gray-11)'
+                  : number < step ? 'var(--gray-9)' : 'var(--gray-6)',
+              }}
+            />
           ))}
         </div>
-        <span style={{ font: '400 10px/1 var(--font-mono)', color: 'var(--text-tertiary)' }}>{t.stepOf(step)}</span>
-        <span style={{ flex: 1 }}></span>
+        <span style={{ font: '400 10px/1 var(--font-mono)', color: 'var(--text-tertiary)' }}>
+          {t.stepOf(step)}
+        </span>
+        <span style={{ flex: 1 }} />
         {onSkip && step < 3 ? (
-          <Button variant="ghost" size="sm" onClick={onSkip} style={{ color: 'var(--text-tertiary)' }}>{t.skip}</Button>
+          <Button variant="ghost" size="sm" onClick={onSkip}>{t.skip}</Button>
         ) : null}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', paddingTop: 'var(--space-6)' }}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-3)',
+          paddingTop: 'var(--space-6)',
+        }}
+      >
         {step === 1 ? (
           <React.Fragment>
-            <AIAvatar size={44} />
-            <div style={{ font: '600 20px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{t.t1}</div>
-            <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>{t.b1}</div>
-            <div style={{ marginTop: 'var(--space-2)' }}>
-              <div style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)', marginBottom: 6 }}>{t.langLabel}</div>
-              <Segmented full value={lang} onChange={onLangChange} options={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }]} />
+            <div style={{ font: '600 20px/1.35 var(--font-ui)' }}>{t.t1}</div>
+            <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>
+              {t.b1}
+            </div>
+            {HOST_STEPS.map((id) => (
+              <CheckRow
+                key={id}
+                label={STEP_LABELS[id]}
+                state={stepStates[id] || EMPTY_STEPS[id]}
+                t={t}
+                onDetect={() => onDetect && onDetect(id)}
+              />
+            ))}
+            <div>
+              <div
+                style={{
+                  font: '500 11px/1.35 var(--font-ui)',
+                  color: 'var(--text-secondary)',
+                  marginBottom: 6,
+                }}
+              >
+                {t.langLabel}
+              </div>
+              <Segmented
+                full
+                value={lang}
+                onChange={onLangChange}
+                options={[
+                  { value: 'zh', label: '中文' },
+                  { value: 'en', label: 'English' },
+                ]}
+              />
             </div>
           </React.Fragment>
         ) : null}
 
         {step === 2 ? (
           <React.Fragment>
-            <div style={{ font: '600 20px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{t.t2}</div>
-            <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>{t.b2}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {localSteps.map((id) => (
-                <InstallStepRow
-                  key={id}
-                  label={STEP_LABELS[id]}
-                  state={stepStates[id] || EMPTY_STEPS[id]}
-                  commandPreview={commandPreviews[id] || ''}
-                  t={t}
-                  onDetect={() => onDetect && onDetect(id)}
-                  onInstall={() => onInstall && onInstall(id)}
-                />
-              ))}
+            <div style={{ font: '600 20px/1.35 var(--font-ui)' }}>{t.t2}</div>
+            <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>
+              {t.b2}
             </div>
+            {CLI_STEPS.map((id) => (
+              <CheckRow
+                key={id}
+                label={STEP_LABELS[id]}
+                state={stepStates[id] || EMPTY_STEPS[id]}
+                t={t}
+                onDetect={() => onDetect && onDetect(id)}
+              />
+            ))}
           </React.Fragment>
         ) : null}
 
         {step === 3 ? (
           <React.Fragment>
-            <div style={{ font: '600 20px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{t.t3}</div>
-            <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>{t.b3}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {clientOptions.map((c) => (
-                <ClientRow
-                  key={c.id}
-                  name={c.id === 'builtin' ? t.builtin : c.name}
-                  note={c.id === 'builtin' ? t.builtinNote : mcpEngine === 'cep-host' ? t.mcpHttp : c.kind === 'mcp-doc' ? t.docOnly : null}
-                  selected={client === c.id}
-                  onSelect={() => onClient && onClient(c.id)}
-                />
-              ))}
+            <div style={{ font: '600 20px/1.35 var(--font-ui)' }}>{t.t3}</div>
+            <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>
+              {t.b3}
             </div>
-            {selectedExternalClient && selectedMcpConfig ? (
-              <React.Fragment>
-                <CodeBlock code={selectedMcpConfig} copyLabel={t.copy} onCopy={() => (onCopy ? onCopy(selectedMcpConfig) : copyText(selectedMcpConfig))} maxHeight={150} />
-                {mcpEngine === 'cep-host' ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{t.panelOpenNote}</div> : null}
-              </React.Fragment>
+            {EXTERNAL_CLIENTS.map((item) => (
+              <ClientRow
+                key={item.id}
+                client={item}
+                selected={selectedClient.id === item.id}
+                label={item.kind === 'mcp-shim' ? t.shim : t.http}
+                onSelect={() => onClient && onClient(item.id)}
+              />
+            ))}
+            {config ? (
+              <CodeBlock
+                code={config}
+                copyLabel={t.copy}
+                onCopy={() => (onCopy ? onCopy(config) : copyText(config))}
+              />
             ) : null}
-            {selectedExternalClient && selectedExternalClient.kind === 'mcp-doc' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-panel)' }}>
-                <a href={selectedExternalClient.docsUrl} target="_blank" rel="noreferrer" style={{ font: '500 12px/1.35 var(--font-ui)', color: 'var(--accent)' }}>{t.docClient}</a>
-                {selectedExternalClient.networkNote ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{selectedExternalClient.networkNote}</div> : null}
-              </div>
-            ) : null}
-            {client === 'builtin' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {SUBSCRIPTION_STEPS.map((id) => (
-                  <InstallStepRow
-                    key={id}
-                    label={STEP_LABELS[id]}
-                    state={stepStates[id] || EMPTY_STEPS[id]}
-                    commandPreview={commandPreviews[id] || (id === 'login' ? 'claude' : '')}
-                    t={t}
-                    login={id === 'login'}
-                    hint={id === 'node' ? t.uacNote : null}
-                    onDetect={() => onDetect && onDetect(id)}
-                    onInstall={() => (id === 'login' ? onOpenLogin && onOpenLogin() : onInstall && onInstall(id))}
-                  />
-                ))}
-                <ChannelCard lang={lang} channels={channels.claude} activeChannel={activeChannel} readOnly />
-              </div>
-            ) : null}
+            <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>
+              {t.panelOpenNote}
+            </div>
+            {selectedClient.id === 'claude-desktop' ? OPTIONAL_CLIENT_STEPS.map((id) => (
+              <CheckRow
+                key={id}
+                label={t.optionalNode}
+                state={stepStates[id] || EMPTY_STEPS[id]}
+                t={t}
+                hint={t.optionalNodeHint}
+                commandPreview={commandPreviews[id] || ''}
+                onDetect={() => onDetect && onDetect(id)}
+                onInstall={() => onInstall && onInstall(id)}
+              />
+            )) : null}
           </React.Fragment>
         ) : null}
-
       </div>
 
       <div style={{ display: 'flex', gap: 'var(--space-15)', paddingTop: 'var(--space-3)' }}>
         {step > 1 ? <Button variant="ghost" size="lg" onClick={onBack}>{t.back}</Button> : null}
-        <span style={{ flex: 1 }}></span>
+        <span style={{ flex: 1 }} />
         {step < 3 ? (
           <Button variant="primary" size="lg" onClick={onNext}>{t.next}</Button>
         ) : (

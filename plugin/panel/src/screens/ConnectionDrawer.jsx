@@ -23,7 +23,7 @@ const D = {
     checks: {
       'host-listening': 'Host 监听',
       'token-file': 'Token 文件',
-      'python-seen': 'Python 握手',
+      'mcp-session': 'MCP 会话',
       'ae-project': 'AE 工程',
       'extendscript-ping': 'ExtendScript Ping',
     },
@@ -42,7 +42,7 @@ const D = {
     checks: {
       'host-listening': 'Host listening',
       'token-file': 'Token file',
-      'python-seen': 'Python handshake',
+      'mcp-session': 'MCP session',
       'ae-project': 'AE project',
       'extendscript-ping': 'ExtendScript ping',
     },
@@ -76,10 +76,9 @@ function callCopy(handler) {
 /* Body for the connection drawer (opened from the status bar). */
 export function ConnectionDrawerBody({ lang = 'zh', info = {}, panelVersion = pkg.version, statusLabel, copyReady = true, onCopyConfig, onRestart, onDiagnose }) {
   const t = D[lang] || D.zh;
-  const connected = !!info.lastClientSeenAt || !!info.lastHealthAt;
-  const pythonVersion = info.pythonVersion || '-';
+  const connected = !!info.lastClientSeenAt;
   const hostVersion = info.hostVersion || '-';
-  const mismatch = info.pythonVersion && info.pythonVersion !== panelVersion;
+  const mismatch = info.hostVersion && info.hostVersion !== panelVersion;
   const recent = info.lastClientSeenAt ? [{ time: formatTime(info.lastClientSeenAt), text: lang === 'zh' ? '外部 MCP 客户端' : 'External MCP client' }] : [];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
@@ -90,7 +89,7 @@ export function ConnectionDrawerBody({ lang = 'zh', info = {}, panelVersion = pk
       <KV k={t.port}>{info.port || '-'} <IconButton icon="copy" title={t.copyConfig} disabled={!copyReady} onClick={() => callCopy(onCopyConfig)} style={{ width: 20, height: 20 }} /></KV>
       <KV k={t.token}>{info.tokenLabel || t.tokenLocal}</KV>
       <KV k={t.ver}>
-        v{panelVersion} · host {hostVersion} · py {pythonVersion}
+        v{panelVersion} · host {hostVersion}
         {mismatch ? <Badge status="warn">{t.mismatch}</Badge> : null}
       </KV>
       <div style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)', marginTop: 4 }}>{t.recent}</div>
