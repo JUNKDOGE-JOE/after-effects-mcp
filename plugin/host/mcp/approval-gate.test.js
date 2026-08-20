@@ -17,18 +17,6 @@ const MATRIX = [
     ['none', 'allow', 'allow', 'allow'],
 ];
 
-test('approval gate decision record is copied verbatim from the Python module docstring', () => {
-    const pythonSource = fs.readFileSync(
-        path.resolve(__dirname, '../../../packages/core/ae_mcp/approval_gate.py'),
-        'utf8',
-    );
-    const jsSource = fs.readFileSync(path.join(__dirname, 'approval-gate.js'), 'utf8');
-    const pythonDoc = pythonSource.match(/^"""([\s\S]*?)"""/);
-    const jsDoc = jsSource.match(/\/\*([\s\S]*?)\*\//);
-    assert.ok(pythonDoc && jsDoc);
-    assert.equal(jsDoc[1].trim(), pythonDoc[1].trim());
-});
-
 test('gateDecision covers four tiers by read, write, and destructive risk', () => {
     MATRIX.forEach(function (row) {
         assert.equal(gateDecision(row[0], 'ae_status'), row[1], row[0] + ' read');

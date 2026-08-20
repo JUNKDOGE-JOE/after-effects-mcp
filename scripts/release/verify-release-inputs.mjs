@@ -6,7 +6,7 @@ const SHA = /^[a-f0-9]{40}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const DECIMAL_ID = /^\d+$/;
 const POSITIVE_DECIMAL_ID = /^[1-9]\d*$/;
-const VERSION = '0.9.2';
+const VERSION = '0.9.6';
 
 function recordIdentity(record, field) {
   return record?.[field] ?? record?.report?.[field];
@@ -67,17 +67,17 @@ export function verifyReleaseInputs({
 
   for (const platform of PLATFORMS) {
     const artifacts = Array.isArray(manifest?.artifacts)
-      ? manifest.artifacts.filter((item) => item?.platform === platform && item?.role === 'install')
+      ? manifest.artifacts.filter((item) => item?.platform === platform && item?.role === 'zxp')
       : [];
     if (artifacts.length !== 1) {
-      errors.push(`${platform} requires exactly one install artifact`);
+      errors.push(`${platform} requires exactly one ZXP artifact`);
       continue;
     }
     const artifact = artifacts[0];
     if (!DECIMAL_ID.test(String(artifact?.artifactId ?? ''))
         || typeof artifact?.name !== 'string'
         || !DIGEST.test(String(artifact?.sha256 ?? ''))) {
-      errors.push(`${platform} install artifact identity is invalid`);
+      errors.push(`${platform} ZXP artifact identity is invalid`);
       continue;
     }
 

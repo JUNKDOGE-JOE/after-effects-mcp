@@ -29,13 +29,13 @@ test('getMcpSpec always returns the per-conversation host HTTP URL', async () =>
   });
 });
 
-test('getMcpSpec ignores retired engine and Python resolver inputs', async () => {
-  let pythonCalls = 0;
+test('getMcpSpec ignores retired engine and resolver inputs', async () => {
+  let resolverCalls = 0;
   const result = await getMcpSpec({
-    engine: 'python',
+    engine: 'legacy',
     port: 12000,
-    resolvePythonSpec() {
-      pythonCalls += 1;
+    resolveLegacySpec() {
+      resolverCalls += 1;
       return { command: 'retired' };
     },
     hostConversation: {
@@ -43,7 +43,7 @@ test('getMcpSpec ignores retired engine and Python resolver inputs', async () =>
     },
   });
 
-  assert.equal(pythonCalls, 0);
+  assert.equal(resolverCalls, 0);
   assert.equal(result.url, 'http://127.0.0.1:12000/mcp/c/host-only');
 });
 

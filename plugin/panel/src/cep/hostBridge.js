@@ -89,20 +89,9 @@ export function loadBundledHostDependencies({ cepRequire, adapter, extensionRoot
   const samePath = (left, right) => nativePath.same(left, right);
 
   try {
-    // This path is inside the immutable extension payload. It intentionally
-    // does not consult ~/.ae-mcp/runtime/current, which remains RuntimeManager-owned.
-    const runtimePackageAnchor = adapter.paths.join([
-      extensionRoot, 'runtime', adapter.id, 'node', 'host', 'package.json',
-    ]);
-    const developmentMarker = adapter.paths.join([extensionRoot, '.debug']);
-    const developmentPackageAnchor = adapter.paths.join([extensionRoot, 'host', 'package.json']);
-    let packageAnchor = '';
-    if (ordinaryAnchor(runtimePackageAnchor)) {
-      packageAnchor = runtimePackageAnchor;
-    } else if (fs.existsSync(developmentMarker) && ordinaryAnchor(developmentPackageAnchor)) {
-      packageAnchor = developmentPackageAnchor;
-    }
-    if (!packageAnchor) throw new Error('no selected host package anchor');
+    // The host and its Express dependency are shipped directly in the extension.
+    const packageAnchor = adapter.paths.join([extensionRoot, 'host', 'package.json']);
+    if (!ordinaryAnchor(packageAnchor)) throw new Error('bundled host package anchor is missing');
 
     const hostRoot = nativePath.dirname(packageAnchor);
     const lexicalExtensionRoot = nativePath.resolve([extensionRoot]);
@@ -211,7 +200,6 @@ export function createHostController({
 }) {
   const adapter = platform || createPlatformAdapter();
   let host = null;
-  let platformRoots = null;
   let beforeUnloadInstalled = false;
   let lifecycleGeneration = 0;
 
@@ -224,14 +212,11 @@ export function createHostController({
     onStatus('starting', port);
     const priorHost = host;
     host = null;
-    platformRoots = null;
     if (priorHost) disposeLifecycle(priorHost);
     try {
       const cepRequire = requireImpl || getCepRequire();
       const extRoot = normalizeCepPath(extensionRoot || cs.getSystemPath('extension'), adapter);
       const hostPath = adapter.paths.join([extRoot, 'host', 'server.js']);
-      const roots = { extensionRoot: extRoot, runtimeRoot: adapter.paths.runtimeRoot };
-      platformRoots = roots;
       onLog('host: ' + hostPath);
       const runtimeDependencies = loadBundledHostDependencies({
         cepRequire,
@@ -247,7 +232,6 @@ export function createHostController({
         nextHost.setNativeAegpRuntime(nativeAegpRuntime(adapter.id));
       }
       nextHost.setCSInterface(cs);
-      if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
       host = nextHost;
       // Release the port when this JS context goes away (panel close or a
       // devtools reload) — otherwise the orphaned listener keeps the port and
@@ -259,7 +243,6 @@ export function createHostController({
           lifecycleGeneration += 1;
           const closingHost = host;
           host = null;
-          platformRoots = null;
           disposeLifecycle(closingHost);
         });
         beforeUnloadInstalled = true;
@@ -268,11 +251,10 @@ export function createHostController({
         if (generation !== lifecycleGeneration || host !== nextHost) return;
         if (err) onStatus('error', port, err.message);
         else onStatus('ok', port);
-      }, roots);
+      });
     } catch (e) {
       const failedHost = host;
       host = null;
-      platformRoots = null;
       disposeLifecycle(failedHost);
       if (generation === lifecycleGeneration) onStatus('error', port, e.message);
     }
@@ -286,7 +268,7 @@ export function createHostController({
         if (generation !== lifecycleGeneration || host !== restartingHost) return;
         if (err) onStatus('error', port, err.message);
         else onStatus('ok', port);
-      }, platformRoots);
+      });
     }
   }
   return { start, restart, getHost: () => host };

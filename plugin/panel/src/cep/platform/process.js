@@ -2,7 +2,9 @@ const DEFAULT_TIMEOUT_MS = 2500;
 const DEFAULT_OUTPUT_LIMIT = 8192;
 const TERMINATE_GRACE_MS = 50;
 const FORCE_CLOSE_GRACE_MS = 250;
-const EXECUTABLE_IDS = new Set(['ae-mcp', 'node', 'claude', 'codex', 'zcode', 'uv', 'npm', 'opencode', 'brew', 'winget', 'powershell']);
+const EXECUTABLE_IDS = new Set([
+  'node', 'claude', 'codex', 'zcode', 'npm', 'opencode', 'brew', 'winget', 'powershell',
+]);
 const WINDOWS_COMMAND_SCRIPT = /\.(?:cmd|bat)$/i;
 
 function environmentKey(environment, name, caseInsensitive) {
@@ -132,13 +134,10 @@ export function createProcessBoundary({ deps, paths, platform }) {
       setEnvironmentDefault(result, 'TEMP', paths.tempRoot, true);
       setEnvironmentDefault(result, 'TMP', paths.tempRoot, true);
       const pathKey = environmentKey(result, 'PATH', true) || 'Path';
-      const inherited = String(result[pathKey] || '').split(separator)
-        .filter((entry) => entry && entry.toLowerCase() !== paths.binRoot.toLowerCase());
-      result[pathKey] = [paths.binRoot, ...inherited].join(separator);
+      if (result[pathKey] === undefined) result[pathKey] = '';
     } else {
       setEnvironmentDefault(result, 'HOME', paths.home, false);
-      const inherited = String(result.PATH || '').split(separator).filter((entry) => entry && entry !== paths.binRoot);
-      result.PATH = [paths.binRoot, ...inherited].join(separator);
+      if (result.PATH === undefined) result.PATH = '';
     }
     return result;
   }
@@ -315,10 +314,6 @@ export function createProcessBoundary({ deps, paths, platform }) {
   }
 
   function runtimeCandidates(id) {
-    if (id === 'ae-mcp') return [paths.launcher];
-    // `current` is an authenticated RuntimeManager text pointer, not a
-    // directory or symlink.  Until the helper-gated manager supplies a
-    // verified active root, process discovery must not derive paths from it.
     return [];
   }
 
@@ -545,7 +540,6 @@ export function createProcessBoundary({ deps, paths, platform }) {
       attempts.push({ path: candidate.displayPath, source: candidate.source, detail: 'architecture ' + verifiedArch + ' does not match ' + options.requiredArch });
       return { failure: 'ARCH_MISMATCH' };
     }
-    if (id === 'ae-mcp') return { success: executable };
     const args = id === 'node'
       ? ['-p', 'process.version + " " + process.arch']
       : (id === 'powershell' ? ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.ToString()'] : ['--version']);
@@ -573,7 +567,7 @@ export function createProcessBoundary({ deps, paths, platform }) {
   }
 
   async function loginShellCandidate(id, env, attempts) {
-    if (windows || !['claude', 'codex', 'zcode', 'uv', 'npm', 'opencode', 'node', 'ae-mcp'].includes(id)) return null;
+    if (windows || !['claude', 'codex', 'zcode', 'npm', 'opencode', 'node'].includes(id)) return null;
     const shell = fileCandidate('/bin/zsh', 'standard', env);
     if (!shell) return null;
     const begin = '__AE_MCP_PATH_BEGIN__';
@@ -603,13 +597,12 @@ export function createProcessBoundary({ deps, paths, platform }) {
       : completeSpawnEnv();
     const envKey = 'AE_MCP_' + id.toUpperCase().replace('-', '_') + '_CLI';
     const override = String(options.overridePath || environmentValue(env, envKey, windows) || '').trim();
-    const stableLauncherOnly = !windows && id === 'ae-mcp' && options.allowDevelopmentPath !== true;
     const attempts = [];
     let strongestFailure = 'NOT_FOUND';
     const groups = [
       { source: 'override', values: override ? [override] : [] },
       { source: 'runtime', values: runtimeCandidates(id) },
-      ...(stableLauncherOnly ? [] : [{ source: 'path', values: pathCandidates(id, env) }]),
+      { source: 'path', values: pathCandidates(id, env) },
     ];
     for (const group of groups) {
       for (const path of group.values) {
@@ -628,13 +621,13 @@ export function createProcessBoundary({ deps, paths, platform }) {
           : (strongestFailure === 'NOT_FOUND' || (strongestFailure === 'PROBE_FAILED' && result.failure === 'VERSION_TOO_OLD') ? result.failure : strongestFailure);
       }
     }
-    const shellCandidate = stableLauncherOnly ? null : await loginShellCandidate(id, env, attempts);
+    const shellCandidate = await loginShellCandidate(id, env, attempts);
     if (shellCandidate) {
       const result = await probe(shellCandidate, id, { ...options, env }, attempts);
       if (result.success) return result.success;
       strongestFailure = result.failure;
     }
-    for (const path of stableLauncherOnly ? [] : standardCandidates(id, env)) {
+    for (const path of standardCandidates(id, env)) {
       const rawCandidate = fileCandidate(path, 'standard', env, id !== 'node');
       if (!rawCandidate) continue;
       const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);

@@ -154,7 +154,6 @@ export function readDatedLogTail({ fsImpl, pathJoin, dir, prefix, suffix, now = 
 export function buildLogExport({
   panelLogs = [],
   hostInfo = {},
-  sidecarTail = '',
   backendStderrTails = null,
   hostActivity,
   hostLogMemory,
@@ -202,7 +201,7 @@ export function buildLogExport({
   }, exactSecrets);
   section(lines, '## panel log (' + panelLogs.length + ')', () => panelLogs.map(String), exactSecrets);
   section(lines, '## backend stderr tails', () => {
-    const tails = backendStderrTails || (sidecarTail ? { claude: sidecarTail } : null);
+    const tails = backendStderrTails;
     if (!tails || typeof tails !== 'object' || !Object.keys(tails).length) return unavailable('no backend stderr tail is available');
     const result = [];
     for (const [name, tail] of Object.entries(tails)) {

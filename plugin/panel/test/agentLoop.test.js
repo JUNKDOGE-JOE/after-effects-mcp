@@ -128,7 +128,7 @@ test('createAgentLoop streams a pure text turn into history', async () => {
   ]);
 });
 
-test('createAgentLoop rejects attachment turns before legacy BYOK dispatch', async () => {
+test('createAgentLoop rejects attachment turns before legacy dispatch', async () => {
   const events = [];
   const calls = [];
   const loop = makeLoop({ anthropic: anthropicFromSse([textTurn('unreachable')], calls), events });
@@ -149,8 +149,8 @@ test('createAgentLoop rejects attachment turns before legacy BYOK dispatch', asy
   assert.deepEqual(events, [{
     type: 'error',
     kind: 'attachment',
-    code: 'ATTACHMENT_SIDECAR_REQUIRED',
-    message: 'Restore the Claude Agent SDK sidecar to send local files.',
+    code: 'ATTACHMENTS_UNSUPPORTED',
+    message: 'This legacy backend cannot send local file attachments.',
     turnId: 'turn-1',
     dispatchState: 'not-started',
   }]);

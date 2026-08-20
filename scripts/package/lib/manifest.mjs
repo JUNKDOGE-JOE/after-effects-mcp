@@ -295,7 +295,7 @@ export function validateBundleManifest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle manifest must be an object');
   }
-  const exactTop = ['files', 'platform', 'runtime', 'schemaVersion', 'sourceCommitSha', 'version'];
+  const exactTop = ['files', 'platform', 'schemaVersion', 'sourceCommitSha', 'version'];
   const observedTop = Object.keys(value).sort();
   const expectedTop = Object.hasOwn(value, 'nativePlugin')
     ? [...exactTop, 'nativePlugin'].sort() : exactTop;
@@ -307,22 +307,6 @@ export function validateBundleManifest(value) {
       || !SEMVER_PATTERN.test(value.version ?? '')
       || !SOURCE_SHA_PATTERN.test(value.sourceCommitSha ?? '')) {
     throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle manifest identity is invalid');
-  }
-  if (!value.runtime
-      || JSON.stringify(Object.keys(value.runtime).sort())
-        !== JSON.stringify([
-          'licenseInventorySha256',
-          'manifestSha256',
-          'nodeVersion',
-          'pythonVersion',
-          'sbomSha256',
-        ])
-      || value.runtime.nodeVersion !== '24.17.0'
-      || value.runtime.pythonVersion !== '3.13.14'
-      || !SHA256_PATTERN.test(value.runtime.manifestSha256 ?? '')
-      || !SHA256_PATTERN.test(value.runtime.sbomSha256 ?? '')
-      || !SHA256_PATTERN.test(value.runtime.licenseInventorySha256 ?? '')) {
-    throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle runtime identity is invalid');
   }
   if (Object.hasOwn(value, 'nativePlugin')) {
     if (value.platform !== 'macos-arm64'

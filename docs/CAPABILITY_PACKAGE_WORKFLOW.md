@@ -121,7 +121,7 @@ tiers, and replay HDEV. It never becomes release evidence.
 
 At target-release freeze, aggregate all changed-capability matrices since the
 previous release and build one packaged candidate. This boundary retains exact
-source/artifact identity, full payload hashes, RuntimeManager manifest
+source/artifact identity, full payload hashes, and the signed bundle manifest
 alignment, complete cross-component SHA checks, and all existing strict
 protocol/product/platform/architecture/entrypoint/load, signing, and scan-root
 gates. T5 starts only after the frozen artifact passes its required regression

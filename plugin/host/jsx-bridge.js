@@ -4,7 +4,7 @@
 // Adobe constant). CEP returns it VERBATIM on uncaught ExtendScript errors -
 // no detail suffix - so exact equality is the correct check (a bare prefix
 // match false-positives legitimate strings like "EvalScript errors found: 0").
-// Python backstop with the same constant: packages/core/ae_mcp/jsx_result.py.
+// The host and client use the same transport sentinel.
 const EVALSCRIPT_ERR_SENTINEL = 'EvalScript error.';
 
 const SENTINEL_TIMEOUT_MS = 60000;

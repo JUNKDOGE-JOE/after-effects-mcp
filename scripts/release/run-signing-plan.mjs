@@ -23,7 +23,7 @@ import { freezeSignedManifests as foundationFreezeSignedManifests } from '../pac
 import { sha256Directory as foundationSha256Directory } from '../package/lib/files.mjs';
 import { collectManifestEntries, copyTree } from '../package/lib/manifest.mjs';
 
-const RELEASE_VERSION = '0.9.2';
+const RELEASE_VERSION = '0.9.6';
 const CANDIDATE_SHA = /^[a-f0-9]{40}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
 const PLATFORMS = new Set(['macos-arm64', 'windows-x64']);
@@ -669,45 +669,10 @@ export async function runReleaseSigning(input, dependencies = {}) {
   const environment = dependencies.environment || process.env;
   const stepEvidence = [];
   const identity = Object.create(null);
-  const nestedCommand = commands[0];
-  const beforeNestedEntries = await collectEntries(validated.signingRoot);
-  const beforeNestedSha256 = await sha256Directory(validated.signingRoot);
-  await executeCommand(nestedCommand, execFileImpl, environment);
-  let nestedEnvelope;
-  try {
-    nestedEnvelope = await readEvidence(nestedCommand.evidencePath);
-    await validateSigningSliceEvidence({
-      evidence: nestedEnvelope,
-      platform: validated.platform,
-      expectedStepIds: nestedCommand.expectedStepIds,
-      expectedInputSha256: beforeNestedSha256,
-      expectedStageSha256: sourceStageSha256,
-    });
-    mergeIdentity(identity, validateReleaseEvidenceEnvelope(nestedEnvelope, {
-      platform: validated.platform,
-      sourceStageSha256,
-    }));
-  } catch {
-    throw new Error(`signing step ${nestedCommand.label} produced invalid evidence`);
-  }
-  const afterNestedEntries = await collectEntries(validated.signingRoot);
-  assertReviewedMutations(
-    beforeNestedEntries,
-    afterNestedEntries,
-    plan.steps
-      .filter((step) => nestedCommand.expectedStepIds.includes(step.id))
-      .flatMap((step) => step.mutates),
-    nestedCommand.label,
-  );
-  const afterNestedSha256 = await sha256Directory(validated.signingRoot);
-  if (lastOutputSha256(nestedEnvelope) !== afterNestedSha256) {
-    throw new Error(`signing step ${nestedCommand.label} produced invalid evidence`);
-  }
-  stepEvidence.push(...nestedEnvelope.steps);
-
   const freezePlanStep = plan.steps.find((step) => step.id === 'freeze-signed-manifests');
   if (!freezePlanStep) throw new Error('foundation signing plan is missing the freeze step');
-  const beforeFreezeEntries = afterNestedEntries;
+  const beforeFreezeEntries = await collectEntries(validated.signingRoot);
+  const beforeFreezeSha256 = await sha256Directory(validated.signingRoot);
   let frozen;
   try {
     frozen = await freezeSignedManifests({
@@ -744,13 +709,13 @@ export async function runReleaseSigning(input, dependencies = {}) {
   }
   stepEvidence.push({
     id: freezePlanStep.id,
-    inputSha256: afterNestedSha256,
+    inputSha256: beforeFreezeSha256,
     outputSha256: finalRootSha256,
     exitCode: 0,
   });
 
   let expectedCommandInputSha256 = finalRootSha256;
-  for (const commandValue of commands.slice(1)) {
+  for (const commandValue of commands) {
     const beforeRootEntries = await collectEntries(validated.signingRoot);
     const beforeRootSha256 = await sha256Directory(validated.signingRoot);
     if (beforeRootSha256 !== finalRootSha256) {

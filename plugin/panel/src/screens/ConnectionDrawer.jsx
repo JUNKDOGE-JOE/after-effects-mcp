@@ -76,7 +76,7 @@ function callCopy(handler) {
 /* Body for the connection drawer (opened from the status bar). */
 export function ConnectionDrawerBody({ lang = 'zh', info = {}, panelVersion = pkg.version, statusLabel, copyReady = true, onCopyConfig, onRestart, onDiagnose }) {
   const t = D[lang] || D.zh;
-  const connected = !!info.lastClientSeenAt || !!info.lastHealthAt;
+  const connected = !!info.lastClientSeenAt;
   const hostVersion = info.hostVersion || '-';
   const mismatch = info.hostVersion && info.hostVersion !== panelVersion;
   const recent = info.lastClientSeenAt ? [{ time: formatTime(info.lastClientSeenAt), text: lang === 'zh' ? '外部 MCP 客户端' : 'External MCP client' }] : [];

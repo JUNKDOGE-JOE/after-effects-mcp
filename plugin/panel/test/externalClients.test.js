@@ -50,7 +50,7 @@ test('externalClientConfigText no longer accepts an engine or stdio command bran
   const client = EXTERNAL_CLIENTS.find((item) => item.id === 'claude-desktop');
   const text = externalClientConfigText({
     client,
-    engine: 'python',
+    engine: 'legacy',
     command: 'retired-ae-mcp',
     port: 11488,
     extensionRoot: '/opt/ae-mcp',

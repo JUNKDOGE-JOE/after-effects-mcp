@@ -9,13 +9,17 @@ These rules apply to human developers and coding agents working in this reposito
 Three standing decisions constrain new work until the direction document says otherwise:
 
 - **The native AEGP plane is frozen.** Keep the `.aex` and its 23 primitives; add none. Do not open a new native capability package, do not extend `native-primitives.json`, and do not run the capability-package codegen pipeline. The two properties that justify the plane — exact rational time and generation-bound locators — are already built.
-- **The Python server plane is being retired this quarter.** Do not add handlers, backends, schemas, or entry points under `packages/`. Fixes to keep it working are fine; new surface there is not. The MCP server is moving into the CEP Node context (`plugin/host/`).
+- **The former package server plane has been removed.** Do not add handlers,
+  backends, schemas, or entry points under `packages/`; the MCP server lives in
+  the CEP Node context (`plugin/host/`).
 - **The provider layer is collapsing to three channels** — claude CLI, codex CLI, opencode. Do not add a fourth backend adapter or extend `universalProviderRoute` / `providerCapabilityProbe` / `codexResponsesRoute`; those are scheduled for deletion.
 
 Two things are known-broken and already assigned; do not re-diagnose them from scratch:
 
 - `plugin/host/jsx-bridge.js` releases the serialization queue on timeout without cancelling the ExtendScript, opening the overlap window the queue exists to prevent. `plugin/host/jsx-bridge.test.js:59-83` currently enshrines that behavior as intended.
-- The first-run wizard detects Node but never installs it, so the built-in Claude chat cannot start on a clean Windows machine. The Python server itself installs fine there via `uv`.
+- Claude Desktop uses the installed extension's dependency-free
+  `host/stdio-shim.js` with the user's system Node. Claude Code uses the panel
+  URL directly; no package-server installation flow is supported.
 
 ## 0. User authorization is the scope boundary
 
@@ -69,7 +73,15 @@ public MCP tool
 
 ## 4. Layer hardware validation by native novelty and capability package
 
-- **Local development trust model:** on the maintainer's single-user development Mac, files just built, copied, or atomically installed by the active agent-owned workflow are trusted by default. Routine development, AE restart, T4, and HDEV must not rehash the complete runtime tree or require Core, CEP, native, protocol, runner, and evidence to share one full repository SHA. Use the install receipt, canonical path, component version, file size, and modification time as inexpensive change signals; escalate to content hashing only after an observed inconsistency. Packaged release-candidate T5/T6 use the strict release-audit identity boundary, including exact source/artifact identity, complete payload verification, RuntimeManager manifest alignment, and the existing release gates. Hash verification for external downloads such as the Adobe SDK archive remains allowed.
+- **Local development trust model:** on the maintainer's single-user development Mac,
+  files just built, copied, or atomically installed by the active agent-owned workflow
+  are trusted by default. Routine development, AE restart, T4, and HDEV use the install
+  receipt, canonical path, component version, file size, and modification time as
+  inexpensive change signals; escalate to content hashing only after an observed
+  inconsistency. Packaged release-candidate T5/T6 use the strict release-audit identity
+  boundary, including exact source/artifact identity, complete payload verification,
+  signed bundle manifest alignment, and the existing release gates. Hash verification
+  for external downloads such as the Adobe SDK archive remains allowed.
 - **Product trust boundary:** ae-mcp supports one trusted interactive OS user operating After Effects and selected MCP/model clients on the same host. The only runtime confidentiality commitment is preventing Provider/API secrets from leaking into source, configuration exports, logs, diagnostics, evidence, unrelated processes, or unselected routes. Do not create gates or hardening work for second-user isolation, hostile same-UID processes, endpoint attacks, remote/multi-user authentication, pairing, or power-loss/cross-restart continuation. Existing loopback, token, same-UID, endpoint, and AE-ancestry checks may remain as non-guaranteed implementation details until they measurably obstruct the product. Preserve correctness and data-integrity controls—typed validation, bounded paths, audit, Undo, uncertain-write reconciliation, atomic ordinary updates—and preserve release signing, notarization, artifact identity, and protocol compatibility. See `docs/THREAT_MODEL.md`.
 - When a package introduces a new AEGP SDK suite, object-lifecycle rule, main-thread mechanism, or other unverified native primitive, run one narrow intermediate hardware smoke as soon as that primitive is testable. Once the mechanism is proven, do not redeploy for each simple tool built on it.
 - Complete the package with one prepared HDEV run through the public MCP surface that exercises every new native primitive and one justified representative per shared adapter, locator, and Undo family in the same disposable AE fixture. Batch the structured response, AE state, native provenance, audit, recovery, and representative write-tool Undo evidence.

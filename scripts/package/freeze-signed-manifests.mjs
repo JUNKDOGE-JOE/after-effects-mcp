@@ -36,18 +36,8 @@ export async function freezeSignedManifests({
     throw new Error('unsigned bundle manifest identity mismatch');
   }
 
-  const runtimeRoot = path.join(resolvedRoot, 'runtime', platform);
-  const runtimeManifestPath = path.join(runtimeRoot, 'runtime-manifest.json');
-  const sbomPath = path.join(runtimeRoot, 'sbom.spdx.json');
-  const licenseInventoryPath = path.join(runtimeRoot, 'license-inventory.json');
   const finalManifest = validateBundleManifest({
     ...sourceManifest,
-    runtime: {
-      ...sourceManifest.runtime,
-      manifestSha256: await sha256File(runtimeManifestPath),
-      sbomSha256: await sha256File(sbomPath),
-      licenseInventorySha256: await sha256File(licenseInventoryPath),
-    },
     files: await collectManifestEntries(resolvedRoot, { omit: ['bundle-manifest.json'] }),
   });
   await writeCanonicalJson(bundleManifestPath, finalManifest);

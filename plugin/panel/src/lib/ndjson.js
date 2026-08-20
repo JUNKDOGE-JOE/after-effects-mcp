@@ -1,5 +1,5 @@
-// Newline-delimited JSON framing shared by stdio transports (MCP client,
-// claude-agent sidecar). Pure functions; no CEP or Node dependencies.
+// Newline-delimited JSON framing shared by CLI streams and the MCP client.
+// Pure functions; no CEP or Node dependencies.
 
 // Accumulates stream chunks and invokes onLine(line) for every complete,
 // trimmed, non-empty line. Handles lines torn across chunks and CRLF.

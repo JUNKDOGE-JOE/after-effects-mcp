@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs';
+import path from 'node:path';
 import {
   GOVERNANCE_PATH,
   FINAL_WORKTREES,
@@ -102,6 +103,13 @@ test('worktree porcelain parsing and path normalization are deterministic', () =
   ].join('\n'));
   assert.equal(parsed.length, 2);
   assert.equal(parsed[1].detached, true);
-  assert.equal(normalizeWorktreePath('/repo/.worktrees/issue-1', '/repo'), '<repo-root>/.worktrees/issue-1');
-  assert.equal(normalizeWorktreePath('/private/tmp/verify', '/repo'), '<tmp>/verify');
+  const repoRoot = path.resolve('repo');
+  assert.equal(
+    normalizeWorktreePath(path.join(repoRoot, '.worktrees', 'issue-1'), repoRoot),
+    '<repo-root>/.worktrees/issue-1',
+  );
+  assert.equal(
+    normalizeWorktreePath(path.resolve('outside', 'verify'), repoRoot),
+    '<external>/verify',
+  );
 });
