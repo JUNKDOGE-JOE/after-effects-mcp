@@ -56,6 +56,12 @@ function loadServer() {
     return server;
 }
 
+function evaluateTransportEnvelope(server, code) {
+    const wrapped = server.wrapForEvalScriptTransport(code);
+    const encoded = Function('return ' + wrapped)();
+    return { wrapped, encoded, payload: JSON.parse(encoded) };
+}
+
 function fakeNativeClient(overrides) {
     let state = 'disconnected';
     let closed = 0;
@@ -157,7 +163,7 @@ async function startApp(options) {
     server._setNativeAegpClientForTest(nativeClient);
     server.setCSInterface({
         evalScript: input.evalScript || function (_jsx, callback) {
-            callback('{"ok":true,"result":"stub-result"}');
+            callback('{"ok":true,"resultType":"string","result":"stub-result"}');
         },
     });
     const app = server.buildApp();
@@ -473,7 +479,7 @@ test('/exec requires auth and invalidates a connected native graph before JSX', 
         nativeClient,
         evalScript: function (_jsx, callback) {
             order.push(['eval']);
-            callback('{"ok":true,"result":"jsx-result"}');
+            callback('{"ok":true,"resultType":"string","result":"jsx-result"}');
         },
     });
     try {
@@ -491,7 +497,11 @@ test('/exec requires auth and invalidates a connected native graph before JSX', 
             { code: '1 + 1' },
         );
         assert.equal(response.status, 200);
-        assert.deepEqual(response.body, { ok: true, result: 'jsx-result' });
+        assert.deepEqual(response.body, {
+            ok: true,
+            resultType: 'string',
+            result: 'jsx-result',
+        });
         assert.equal(order[0][0], 'invalidate');
         assert.equal(order[1][0], 'eval');
     } finally {
@@ -550,22 +560,138 @@ test('/exec fails closed when connected graph invalidation fails', async () => {
     }
 });
 
-test('ExtendScript transport wrappers preserve localized success and errors', () => {
+test('ExtendScript transport serializes typed primitive and structured results as ASCII', () => {
     const server = loadServer();
-    const wrapped = server.wrapForEvalScriptTransport('"你好"');
-    assert.doesNotMatch(wrapped, /你好/);
-    assert.equal(
-        server.decodeEvalScriptTransportResult('{"ok":true,"result":"你好"}'),
-        '你好',
+    const cases = [
+        ['string', '"hello"', 'string', 'hello'],
+        ['plain object', '({ok:true,n:42})', 'json', '{"ok":true,"n":42}'],
+        ['nested object', '({a:{b:[1,{c:true}]}})', 'json', '{"a":{"b":[1,{"c":true}]}}'],
+        ['array', '[1,2,3]', 'json', '[1,2,3]'],
+        ['mixed array', '[1,"two",{three:3}]', 'json', '[1,"two",{"three":3}]'],
+        ['number', '6*7', 'json', '42'],
+        ['boolean', 'true', 'json', 'true'],
+        ['null', 'null', 'json', 'null'],
+        ['undefined', 'var x=1;', 'string', 'undefined'],
+    ];
+    cases.forEach(function (entry) {
+        const evaluated = evaluateTransportEnvelope(server, entry[1]);
+        assert.doesNotMatch(evaluated.wrapped, /[^\x00-\x7f]/, entry[0] + ' wrapper');
+        assert.doesNotMatch(evaluated.encoded, /[^\x00-\x7f]/, entry[0] + ' envelope');
+        assert.deepEqual(
+            server.decodeEvalScriptTransportResult(evaluated.encoded),
+            { resultType: entry[2], result: entry[3] },
+            entry[0],
+        );
+    });
+});
+
+test('ExtendScript transport applies JSON semantics and guards property access', () => {
+    const server = loadServer();
+    const objectResult = evaluateTransportEnvelope(
+        server,
+        '(function(){var o={safe:1,skip:undefined,fn:function(){},nan:NaN,infinity:Infinity};'
+            + 'Object.defineProperty(o,"throwing",{enumerable:true,get:function(){throw new Error("getter");}});'
+            + 'return o;})()',
+    );
+    assert.equal(objectResult.payload.resultType, 'json');
+    assert.deepEqual(JSON.parse(objectResult.payload.result), {
+        safe: 1,
+        nan: null,
+        infinity: null,
+    });
+
+    const arrayResult = evaluateTransportEnvelope(
+        server,
+        '(function(){var a=[1,undefined,function(){},NaN];'
+            + 'Object.defineProperty(a,"4",{enumerable:true,get:function(){throw new Error("getter");}});'
+            + 'return a;})()',
+    );
+    assert.deepEqual(JSON.parse(arrayResult.payload.result), [1, null, null, null, null]);
+});
+
+test('ExtendScript transport escapes non-ASCII JSON values and treats host-like objects as leaves', () => {
+    const server = loadServer();
+    const localized = evaluateTransportEnvelope(server, '({message:"你好",nested:["é"]})');
+    assert.doesNotMatch(localized.wrapped, /[^\x00-\x7f]/);
+    assert.doesNotMatch(localized.encoded, /[^\x00-\x7f]/);
+    assert.deepEqual(JSON.parse(localized.payload.result), { message: '你好', nested: ['é'] });
+
+    const hostLike = evaluateTransportEnvelope(
+        server,
+        '(function(){function CompItem(){}'
+            + 'CompItem.prototype.toString=function(){return "[object CompItem]";};'
+            + 'var item=new CompItem();'
+            + 'Object.defineProperty(item,"throwing",{enumerable:true,get:function(){throw new Error("must not walk");}});'
+            + 'return item;})()',
+    );
+    assert.equal(hostLike.payload.resultType, 'json');
+    assert.equal(JSON.parse(hostLike.payload.result), '[object CompItem]');
+});
+
+test('ExtendScript transport fails deterministically for cycles and serialization caps', () => {
+    const server = loadServer();
+    const cases = [
+        [
+            '(function(){var value={};value.self=value;return value;})()',
+            /cyclic plain Object or Array/,
+        ],
+        [
+            '(function(){var root={},cursor=root;for(var i=0;i<13;i++){cursor.next={};cursor=cursor.next;}return root;})()',
+            /maximum serialization depth of 12/,
+        ],
+        [
+            '({value:Array(1000002).join("x")})',
+            /1000000 character serialization limit/,
+        ],
+    ];
+    cases.forEach(function (entry) {
+        const evaluated = evaluateTransportEnvelope(server, entry[0]);
+        assert.equal(evaluated.payload.ok, false);
+        assert.match(evaluated.payload.error, entry[1]);
+        assert.match(evaluated.payload.error, /return a smaller projection/);
+        assert.throws(
+            function () { server.decodeEvalScriptTransportResult(evaluated.encoded); },
+            entry[1],
+        );
+    });
+});
+
+test('evalScript transport decoder requires typed successes and preserves error envelopes', () => {
+    const server = loadServer();
+    assert.deepEqual(
+        server.decodeEvalScriptTransportResult(
+            '{"ok":true,"resultType":"string","result":"你好"}',
+        ),
+        { resultType: 'string', result: '你好' },
+    );
+    assert.deepEqual(
+        server.decodeEvalScriptTransportResult(
+            '{"ok":true,"resultType":"json","result":"{\\"n\\":42}"}',
+        ),
+        { resultType: 'json', result: '{"n":42}' },
+    );
+    assert.throws(
+        function () {
+            server.decodeEvalScriptTransportResult('{"ok":true,"result":"legacy"}');
+        },
+        /resultType/,
     );
     assert.throws(
         function () {
             server.decodeEvalScriptTransportResult(
-                '{"ok":false,"error":"boom"}',
+                '{"ok":true,"resultType":"binary","result":"legacy"}',
             );
         },
-        /boom/,
+        /resultType/,
     );
+    let legacyError;
+    try {
+        server.decodeEvalScriptTransportResult('{"ok":false,"error":"boom"}');
+    } catch (error) {
+        legacyError = error;
+    }
+    assert.match(legacyError.message, /boom/);
+    assert.equal(legacyError.disposition, 'failed');
 });
 
 test('health and activity expose only authenticated operational state', async () => {

@@ -377,6 +377,7 @@ function quoteAsciiJsString(value) {
 function wrapForEvalScriptTransport(code) {
     return (
         '(function(){' +
+        'var __aemcp_max_depth=12,__aemcp_max_length=1000000;' +
         'function __aemcp_quote(v){' +
         'var s=String(v),out="\\"";' +
         'for(var i=0;i<s.length;i++){' +
@@ -393,9 +394,81 @@ function wrapForEvalScriptTransport(code) {
         '}' +
         'return out+"\\"";' +
         '}' +
+        'function __aemcp_projection_error(reason){' +
+        'throw new Error("ae_exec result "+reason+"; return a smaller projection (for example, map to the fields you need)");' +
+        '}' +
+        'function __aemcp_piece(state,piece){' +
+        'state.length+=piece.length;' +
+        'if(state.length>__aemcp_max_length){__aemcp_projection_error("exceeds the 1000000 character serialization limit");}' +
+        'return piece;' +
+        '}' +
+        'function __aemcp_seen(stack,value){' +
+        'for(var i=0;i<stack.length;i++){if(stack[i]===value){return true;}}' +
+        'return false;' +
+        '}' +
+        'function __aemcp_kind(value){' +
+        'var tag;' +
+        'try{tag=Object.prototype.toString.call(value);}catch(ignore){return "leaf";}' +
+        'if(tag==="[object Array]"){return "array";}' +
+        'if(tag!=="[object Object]"){return "leaf";}' +
+        'var constructorValue;' +
+        'try{constructorValue=value.constructor;}catch(ignoreConstructor){return "leaf";}' +
+        'return constructorValue===Object?"object":"leaf";' +
+        '}' +
+        'function __aemcp_json(value,depth,seen,state){' +
+        'if(value===null){return __aemcp_piece(state,"null");}' +
+        'var valueType=typeof value;' +
+        'if(valueType==="string"){return __aemcp_piece(state,__aemcp_quote(value));}' +
+        'if(valueType==="number"){return __aemcp_piece(state,isFinite(value)?String(value):"null");}' +
+        'if(valueType==="boolean"){return __aemcp_piece(state,value?"true":"false");}' +
+        'if(valueType==="undefined"||valueType==="function"){return null;}' +
+        'if(valueType!=="object"){return __aemcp_piece(state,__aemcp_quote(String(value)));}' +
+        'var kind=__aemcp_kind(value);' +
+        'if(kind==="leaf"){return __aemcp_piece(state,__aemcp_quote(String(value)));}' +
+        'if(depth>=__aemcp_max_depth){__aemcp_projection_error("exceeds the maximum serialization depth of 12");}' +
+        'if(__aemcp_seen(seen,value)){__aemcp_projection_error("contains a cyclic plain Object or Array");}' +
+        'seen.push(value);' +
+        'try{' +
+        'var out,child,childValue,readable,i,key,own,first=true;' +
+        'if(kind==="array"){' +
+        'out=__aemcp_piece(state,"[");' +
+        'var arrayLength=0;' +
+        'try{arrayLength=value.length;}catch(ignoreLength){arrayLength=0;}' +
+        'for(i=0;i<arrayLength;i++){' +
+        'if(i>0){out+=__aemcp_piece(state,",");}' +
+        'readable=true;' +
+        'try{childValue=value[i];}catch(ignoreArrayProperty){readable=false;}' +
+        'child=readable?__aemcp_json(childValue,depth+1,seen,state):null;' +
+        'if(child===null){child=__aemcp_piece(state,"null");}' +
+        'out+=child;' +
+        '}' +
+        'return out+__aemcp_piece(state,"]");' +
+        '}' +
+        'out=__aemcp_piece(state,"{");' +
+        'for(key in value){' +
+        'own=false;' +
+        'try{own=Object.prototype.hasOwnProperty.call(value,key);}catch(ignoreOwn){own=false;}' +
+        'if(!own){continue;}' +
+        'readable=true;' +
+        'try{childValue=value[key];}catch(ignoreObjectProperty){readable=false;}' +
+        'if(!readable){continue;}' +
+        'child=__aemcp_json(childValue,depth+1,seen,state);' +
+        'if(child===null){continue;}' +
+        'if(!first){out+=__aemcp_piece(state,",");}' +
+        'first=false;' +
+        'out+=__aemcp_piece(state,__aemcp_quote(key))+__aemcp_piece(state,":")+child;' +
+        '}' +
+        'return out+__aemcp_piece(state,"}");' +
+        '}finally{seen.pop();}' +
+        '}' +
         'try{' +
         'var __aemcp_value=eval(' + quoteAsciiJsString(code) + ');' +
-        'return "{\\"ok\\":true,\\"result\\":"+__aemcp_quote(__aemcp_value)+"}";' +
+        'var __aemcp_type=typeof __aemcp_value;' +
+        'if(__aemcp_type==="string"||__aemcp_type==="undefined"||__aemcp_type==="function"){' +
+        'return "{\\"ok\\":true,\\"resultType\\":\\"string\\",\\"result\\":"+__aemcp_quote(__aemcp_value)+"}";' +
+        '}' +
+        'var __aemcp_result=__aemcp_json(__aemcp_value,0,[],{length:0});' +
+        'return "{\\"ok\\":true,\\"resultType\\":\\"json\\",\\"result\\":"+__aemcp_quote(__aemcp_result)+"}";' +
         '}catch(e){' +
         'var __aemcp_detail=String(e);' +
         'if(e&&e.line){__aemcp_detail+=" (line "+e.line+")";}' +
@@ -427,11 +500,14 @@ function decodeEvalScriptTransportResult(text) {
     if (!payload || payload.ok !== true || typeof payload.result !== 'string') {
         throw new Error('invalid evalScript transport envelope shape');
     }
-    return payload.result;
+    if (payload.resultType !== 'string' && payload.resultType !== 'json') {
+        throw new Error('invalid evalScript transport envelope resultType');
+    }
+    return { resultType: payload.resultType, result: payload.result };
 }
 
-// Shared /exec and MCP ae_exec execution path. The HTTP route keeps its
-// existing response shape; MCP maps this internal result into a tool result.
+// Shared /exec and MCP ae_exec execution path. Both surfaces receive the
+// explicit transport resultType; MCP maps it into contentType.
 async function executeJsx(request) {
     const input = request || {};
     const code = input.code;
@@ -474,15 +550,22 @@ async function executeJsx(request) {
         }
         dispatched = true;
         const encoded = await jsxBridge.evalScript(transported, t);
-        const result = decodeEvalScriptTransportResult(encoded);
+        const decoded = decodeEvalScriptTransportResult(encoded);
         activity.record({
             client,
             undoGroup: undoGroup || null,
             ok: true,
             durationMs: Date.now() - startedAt,
-            ...(result === '' ? { emptyResult: true } : {}),
+            ...(decoded.result === '' ? { emptyResult: true } : {}),
         });
-        return { status: 200, payload: { ok: true, result: result || '' } };
+        return {
+            status: 200,
+            payload: {
+                ok: true,
+                resultType: decoded.resultType,
+                result: decoded.result || '',
+            },
+        };
     } catch (e) {
         // Closed three-value disposition (#260): the bridge tags its own
         // rejections; anything untagged is classified by whether the script

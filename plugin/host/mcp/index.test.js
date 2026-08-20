@@ -13,7 +13,10 @@ function start(options) {
         version: '0.9.6-test',
         getStatus: function (port) { return { ok: true, pluginVersion: '0.9.6-test', port }; },
         executeJsx: options && options.executeJsx || async function () {
-            return { status: 200, payload: { ok: true, result: 'ok' } };
+            return {
+                status: 200,
+                payload: { ok: true, resultType: 'string', result: 'ok' },
+            };
         },
         progressIntervalMs: options && options.progressIntervalMs,
         sseOptions: options && options.sseOptions,

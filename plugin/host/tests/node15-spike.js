@@ -70,10 +70,12 @@ async function main() {
     server.setCSInterface({
         evalScript: function (jsx, callback) {
             if (jsx.indexOf('NODE15_LONG_CALL') !== -1) {
-                setTimeout(function () { callback('{"ok":true,"result":"long-result"}'); }, 31000);
+                setTimeout(function () {
+                    callback('{"ok":true,"resultType":"string","result":"long-result"}');
+                }, 31000);
                 return;
             }
-            callback('{"ok":true,"result":"bridge-result"}');
+            callback('{"ok":true,"resultType":"string","result":"bridge-result"}');
         },
     });
     const app = server.buildApp();

@@ -83,12 +83,18 @@ test('conversation tiers isolate calls, external calls bypass, updates are live,
         executeJsx: async function (requestValue) {
             calls.push(requestValue);
             if (requestValue.code === 'plain') {
-                return { payload: { ok: true, result: 'hi' } };
+                return { payload: { ok: true, resultType: 'string', result: 'hi' } };
             }
             if (requestValue.code === 'empty') {
-                return { payload: { ok: true, result: '' } };
+                return { payload: { ok: true, resultType: 'string', result: '' } };
             }
-            return { payload: { ok: true, result: JSON.stringify({ ok: true, n: 1 }) } };
+            return {
+                payload: {
+                    ok: true,
+                    resultType: 'json',
+                    result: JSON.stringify({ ok: true, n: 1 }),
+                },
+            };
         },
     });
     try {
@@ -103,7 +109,11 @@ test('conversation tiers isolate calls, external calls bypass, updates are live,
         const allowed = await request(fixture.port, 'POST', none.path, {
             'Mcp-Session-Id': noneSession.session,
         }, toolCall(2, 'json'));
-        assert.deepEqual(allowed.body.result.structuredContent, { ok: true, n: 1 });
+        assert.deepEqual(allowed.body.result.structuredContent, {
+            ok: true,
+            content: '{"ok":true,"n":1}',
+            contentType: 'json',
+        });
         assert.equal(calls[0].client, 'claude@chat-none');
 
         const blocked = await request(fixture.port, 'POST', readonly.path, {
@@ -117,7 +127,11 @@ test('conversation tiers isolate calls, external calls bypass, updates are live,
         const externalResult = await request(fixture.port, 'POST', '/mcp', {
             'Mcp-Session-Id': external.session,
         }, toolCall(4, 'plain'));
-        assert.deepEqual(externalResult.body.result.structuredContent, { ok: true, content: 'hi' });
+        assert.deepEqual(externalResult.body.result.structuredContent, {
+            ok: true,
+            content: 'hi',
+            contentType: 'text',
+        });
         assert.equal(calls[1].client, 'cursor');
 
         const empty = await request(fixture.port, 'POST', '/mcp', {
@@ -154,7 +168,13 @@ test('manual conversation approval accepts with progress and declines without ex
     const fixture = await start({
         executeJsx: async function (requestValue) {
             calls.push(requestValue);
-            return { payload: { ok: true, result: '{"ok":true,"approved":true}' } };
+            return {
+                payload: {
+                    ok: true,
+                    resultType: 'json',
+                    result: '{"ok":true,"approved":true}',
+                },
+            };
         },
         progressIntervalMs: 5,
     });
@@ -184,7 +204,11 @@ test('manual conversation approval accepts with progress and declines without ex
                 && frame.params.progressToken === 'approval-progress';
         }));
         const terminal = frames.find(function (frame) { return frame.id === 2; });
-        assert.deepEqual(terminal.result.structuredContent, { ok: true, approved: true });
+        assert.deepEqual(terminal.result.structuredContent, {
+            ok: true,
+            content: '{"ok":true,"approved":true}',
+            contentType: 'json',
+        });
         assert.equal(calls.length, 1);
 
         fixture.mounted.approvals.once('request', function (item) {
@@ -215,7 +239,13 @@ test('checkpoint success probes, snapshots, persists metadata, then executes use
         executeJsx: async function (requestValue) {
             calls.push(requestValue);
             if (calls.length === 1) {
-                return { payload: { ok: true, result: JSON.stringify({ ok: true, path: source }) } };
+                return {
+                    payload: {
+                        ok: true,
+                        resultType: 'string',
+                        result: JSON.stringify({ ok: true, path: source }),
+                    },
+                };
             }
             if (calls.length === 2) {
                 const match = requestValue.code.match(/var dstPath = (".*");/);
@@ -226,13 +256,20 @@ test('checkpoint success probes, snapshots, persists metadata, then executes use
                 return {
                     payload: {
                         ok: true,
+                        resultType: 'string',
                         result: JSON.stringify({
                             ok: true, sizeBytes: 10, activeCompId: '7', currentTime: 1.25,
                         }),
                     },
                 };
             }
-            return { payload: { ok: true, result: '{"ok":true,"edited":true}' } };
+            return {
+                payload: {
+                    ok: true,
+                    resultType: 'json',
+                    result: '{"ok":true,"edited":true}',
+                },
+            };
         },
     });
     try {
@@ -242,7 +279,11 @@ test('checkpoint success probes, snapshots, persists metadata, then executes use
         }, toolCall(2, 'user-edit-code', {
             checkpoint_label: 'Before edit', undo_group_name: 'Edit', timeout_sec: 45,
         }));
-        assert.deepEqual(response.body.result.structuredContent, { ok: true, edited: true });
+        assert.deepEqual(response.body.result.structuredContent, {
+            ok: true,
+            content: '{"ok":true,"edited":true}',
+            contentType: 'json',
+        });
         assert.equal(calls.length, 3);
         assert.match(calls[0].code, /app\.project\.file/);
         assert.ok(calls[1].code.indexOf('${dst_path}') === -1);
@@ -266,10 +307,22 @@ test('untitled and failed checkpoints annotate the result but never block user J
             executeJsx: async function (requestValue) {
                 calls.push(requestValue);
                 if (calls.length === 1) {
-                    return { payload: { ok: true, result: JSON.stringify({ ok: true, path: pathResult }) } };
+                    return {
+                        payload: {
+                            ok: true,
+                            resultType: 'string',
+                            result: JSON.stringify({ ok: true, path: pathResult }),
+                        },
+                    };
                 }
                 if (checkpointFailure && calls.length === 2) throw new Error('snapshot boom');
-                return { payload: { ok: true, result: '{"ok":true,"edited":true}' } };
+                return {
+                    payload: {
+                        ok: true,
+                        resultType: 'json',
+                        result: '{"ok":true,"edited":true}',
+                    },
+                };
             },
         });
         try {
@@ -286,7 +339,10 @@ test('untitled and failed checkpoints annotate the result but never block user J
 
     const untitled = await runCase(null, false);
     assert.deepEqual(untitled.result, {
-        ok: true, edited: true, checkpointSkipped: 'untitled-project',
+        ok: true,
+        content: '{"ok":true,"edited":true}',
+        contentType: 'json',
+        checkpointSkipped: 'untitled-project',
     });
     assert.equal(untitled.calls.length, 2);
     assert.equal(untitled.calls[1].code, 'user-edit');

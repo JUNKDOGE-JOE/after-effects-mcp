@@ -7,12 +7,12 @@
 const { textResult } = require('../tool-result');
 const { VERB_ANNOTATIONS } = require('../annotations');
 const { enforce } = require('../approval-gate');
-const { parseJsxResult } = require('../jsx-result');
+const { parseExecResult } = require('../jsx-result');
 const { autoCheckpoint, executionFailure, record } = require('../checkpoint-ops');
 
 const definition = {
     name: 'ae_exec',
-    description: 'Run ExtendScript in After Effects through the host JSX bridge.',
+    description: 'Run ExtendScript in After Effects through the host JSX bridge. Successful structuredContent is {ok:true,content,contentType}; contentType is "json" for numbers, booleans, null, plain Objects, and Arrays serialized in ExtendScript, or "text" for string results. The content field always remains a string.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -23,6 +23,18 @@ const definition = {
         },
         required: ['code'],
         additionalProperties: false,
+    },
+    outputSchema: {
+        type: 'object',
+        properties: {
+            ok: { type: 'boolean' },
+            content: { type: 'string' },
+            contentType: { type: 'string', enum: ['text', 'json'] },
+            error: { type: 'string' },
+            disposition: { type: 'string' },
+        },
+        required: ['ok'],
+        additionalProperties: true,
     },
     annotations: Object.assign({}, VERB_ANNOTATIONS.ae_exec, { openWorldHint: false }),
 };
@@ -64,7 +76,7 @@ async function call(args, context, deps) {
             const failure = executionFailure(execution);
             return { result: textResult(failure, true) };
         }
-        const parsed = parseJsxResult(execution.payload.result);
+        const parsed = parseExecResult(execution.payload.resultType, execution.payload.result);
         if (record(parsed) && checkpointSkipped
             && !Object.prototype.hasOwnProperty.call(parsed, 'checkpointSkipped')) {
             parsed.checkpointSkipped = checkpointSkipped;

@@ -3,6 +3,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { isDeepStrictEqual } from 'util';
 
 const sections = [
     'status',
@@ -42,6 +43,11 @@ let compId;
 let savedPath;
 function value(reply) {
     return reply && reply.structuredContent;
+}
+function parsedExecContent(reply) {
+    const envelope = value(reply);
+    if (!envelope || envelope.ok !== true || typeof envelope.content !== 'string') return null;
+    return JSON.parse(envelope.content);
 }
 function check(name, passed, detail) {
     results.push({ name, passed });
@@ -151,10 +157,10 @@ async function call(name, args) {
     return client.callTool({ name, arguments: args || {} });
 }
 async function prepareComp() {
-    const made = value(
+    const made = parsedExecContent(
         await call('ae_exec', {
             undo_group_name: 'live-build',
-            code: 'app.newProject(); var c=app.project.items.addComp("live-mcp",640,360,1,4,24); var l=c.layers.addSolid([1,0,0],"Red",100,100,1); var p=l.property("ADBE Transform Group").property("ADBE Position"); p.setValueAtTime(0,[50,50]); p.setValueAtTime(2,[400,200]); var t=c.layers.addText("live"); c.openInViewer(); JSON.stringify({ok:true,compId:String(c.id),layers:c.numLayers,keys:p.numKeys})',
+            code: 'app.newProject(); var c=app.project.items.addComp("live-mcp",640,360,1,4,24); var l=c.layers.addSolid([1,0,0],"Red",100,100,1); var p=l.property("ADBE Transform Group").property("ADBE Position"); p.setValueAtTime(0,[50,50]); p.setValueAtTime(2,[400,200]); var t=c.layers.addText("live"); c.openInViewer(); ({ok:true,compId:String(c.id),layers:c.numLayers,keys:p.numKeys})',
         }),
     );
     compId = made && made.compId;
@@ -172,7 +178,37 @@ async function main() {
     });
     await section('exec', async function () {
         const bare = value(await call('ae_exec', { code: '"hi-"+app.version' }));
-        check('exec bare result', bare && bare.ok && /^hi-/.test(bare.content), bare);
+        check(
+            'exec bare result',
+            bare && bare.ok && bare.contentType === 'text' && /^hi-/.test(bare.content),
+            bare,
+        );
+        const objectResult = value(
+            await call('ae_exec', { code: '({ok:true,n:42})' }),
+        );
+        const parsedObject = objectResult && objectResult.contentType === 'json'
+            ? JSON.parse(objectResult.content) : null;
+        check(
+            'exec preserves object result',
+            objectResult
+                && objectResult.ok
+                && objectResult.contentType === 'json'
+                && isDeepStrictEqual(parsedObject, { ok: true, n: 42 }),
+            objectResult,
+        );
+        const arrayResult = value(
+            await call('ae_exec', { code: '[1, "two", {three: 3}]' }),
+        );
+        const parsedArray = arrayResult && arrayResult.contentType === 'json'
+            ? JSON.parse(arrayResult.content) : null;
+        check(
+            'exec preserves mixed array result',
+            arrayResult
+                && arrayResult.ok
+                && arrayResult.contentType === 'json'
+                && isDeepStrictEqual(parsedArray, [1, 'two', { three: 3 }]),
+            arrayResult,
+        );
         const empty = await call('ae_exec', { code: 'var x=1;' });
         check('exec undefined is tool error', empty.isError && value(empty).ok === false, value(empty));
         const thrown = await call('ae_exec', { code: 'throw new Error("live-boom")' });
@@ -282,12 +318,12 @@ async function main() {
         );
         savedPath = path.join(os.tmpdir(), 'ae-mcp-live', 'live-' + Date.now() + '.aep');
         fs.mkdirSync(path.dirname(savedPath), { recursive: true });
-        const saved = value(
+        const saved = parsedExecContent(
             await call('ae_exec', {
                 code:
                     'app.project.save(new File(' +
                     JSON.stringify(savedPath) +
-                    ')); JSON.stringify({ok:true,file:app.project.file.fsName})',
+                    ')); ({ok:true,file:app.project.file.fsName})',
             }),
         );
         check('save disposable project', saved && saved.ok && saved.file, saved);
@@ -316,9 +352,9 @@ async function main() {
         );
     });
     await section('validateExpressions', async function () {
-        const setup = value(
+        const setup = parsedExecContent(
             await call('ae_exec', {
-                code: 'var c=AEMCP.compById(' + JSON.stringify(Number(compId)) + '); var bad=c.layers.addSolid([1,1,1],"bad",10,10,1); bad.property("ADBE Transform Group").property("ADBE Opacity").expression="thisIsNotDefined"; var good=c.layers.addSolid([1,1,1],"good",10,10,1); good.property("ADBE Transform Group").property("ADBE Opacity").expression="time*0+100"; JSON.stringify({ok:true})',
+                code: 'var c=AEMCP.compById(' + JSON.stringify(Number(compId)) + '); var bad=c.layers.addSolid([1,1,1],"bad",10,10,1); bad.property("ADBE Transform Group").property("ADBE Opacity").expression="thisIsNotDefined"; var good=c.layers.addSolid([1,1,1],"good",10,10,1); good.property("ADBE Transform Group").property("ADBE Opacity").expression="time*0+100"; ({ok:true})',
             }),
         );
         const checked = value(
@@ -513,7 +549,7 @@ async function main() {
         }
     await section('perf', async function () {
         const script = fs.readFileSync(new URL('../../mcp/tools/read.perf.jsx', import.meta.url), 'utf8');
-        const perf = value(await call('ae_exec', { code: script, timeout_sec: 300 }));
+        const perf = parsedExecContent(await call('ae_exec', { code: script, timeout_sec: 300 }));
         check('perf fixture', perf && perf.ok, perf);
         const perfComps = value(await call('ae_read', { target: 'comps', filter: { nameContains: 'ae_read_perf' } }));
         const perfComp = perfComps && perfComps.items && perfComps.items[0] ? perfComps.items[0].itemId : null;
