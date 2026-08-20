@@ -38,6 +38,13 @@ function hostAdapter(fsImpl = fs, platformId = 'macos-arm64') {
   return { id: platformId, fs: fsImpl, paths: testPathCatalog(platformId) };
 }
 
+// Tests that hit the real filesystem need the path catalog of the machine
+// they run on — a posix catalog against real Windows temp paths reports
+// every containment check as an escape.
+function nativeHostAdapter(fsImpl = fs) {
+  return hostAdapter(fsImpl, process.platform === 'win32' ? 'windows-x64' : 'macos-arm64');
+}
+
 function createSymlinkOrSkip(t, target, destination, type) {
   try {
     fs.symlinkSync(target, destination, type);
@@ -162,7 +169,7 @@ test('host Express resolves from the extension host without NODE_PATH mutation',
     path.join(hostRoot, 'node_modules', 'express', 'index.js'),
     'module.exports = function bundledExpress() {};\n',
   );
-  const adapter = hostAdapter();
+  const adapter = nativeHostAdapter();
   const cepRequire = createRequire(import.meta.url);
   const nodePathBefore = process.env.NODE_PATH;
   const resolverBefore = Module._resolveFilename;
@@ -184,7 +191,7 @@ test('host dependency loading rejects a missing direct host anchor', (t) => {
   );
   expectUnavailable(() => loadBundledHostDependencies({
     cepRequire: createRequire(import.meta.url),
-    adapter: hostAdapter(),
+    adapter: nativeHostAdapter(),
     extensionRoot,
   }));
 });
@@ -204,7 +211,7 @@ test('host dependency loading rejects a symlinked host anchor', (t) => {
   )) return;
   writeCommonJsPackage(path.join(hostRoot, 'node_modules', 'express'), 'module.exports = function x() {};\n');
   expectUnavailable(() => loadBundledHostDependencies({
-    cepRequire: createRequire(import.meta.url), adapter: hostAdapter(), extensionRoot,
+    cepRequire: createRequire(import.meta.url), adapter: nativeHostAdapter(), extensionRoot,
   }));
 });
 
@@ -214,7 +221,7 @@ test('host dependency loading rejects an Express package that escapes its host r
   t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
   t.after(() => fs.rmSync(outsideRoot, { recursive: true, force: true }));
   const hostRoot = path.join(extensionRoot, 'host');
-  fs.mkdirSync(hostRoot, { recursive: true });
+  fs.mkdirSync(path.join(hostRoot, 'node_modules'), { recursive: true });
   fs.writeFileSync(path.join(hostRoot, 'package.json'), '{"private":true}\n');
   writeCommonJsPackage(outsideRoot, 'module.exports = function escapedExpress() {};\n');
   if (!createSymlinkOrSkip(
@@ -224,7 +231,7 @@ test('host dependency loading rejects an Express package that escapes its host r
     'junction',
   )) return;
   expectUnavailable(() => loadBundledHostDependencies({
-    cepRequire: createRequire(import.meta.url), adapter: hostAdapter(), extensionRoot,
+    cepRequire: createRequire(import.meta.url), adapter: nativeHostAdapter(), extensionRoot,
   }));
 });
 
@@ -238,7 +245,7 @@ test('host dependency loading rejects a package main entry outside its package r
   fs.writeFileSync(path.join(expressRoot, 'package.json'), '{"name":"express","main":"../../other.js"}\n');
   fs.writeFileSync(path.join(hostRoot, 'other.js'), 'module.exports = function escapedMain() {};\n');
   expectUnavailable(() => loadBundledHostDependencies({
-    cepRequire: createRequire(import.meta.url), adapter: hostAdapter(), extensionRoot,
+    cepRequire: createRequire(import.meta.url), adapter: nativeHostAdapter(), extensionRoot,
   }));
 });
 
@@ -285,5 +292,5 @@ test('host controller loads the direct host bundle and restarts without root pay
 
 test('host bridge has no retired helper wiring', () => {
   const source = fs.readFileSync(new URL('../src/cep/hostBridge.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /platform-helper|runtimeRoot|runtime\\//i);
+  assert.doesNotMatch(source, /platform-helper|runtimeRoot|runtime[\\/]/i);
 });
