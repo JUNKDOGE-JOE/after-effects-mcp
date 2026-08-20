@@ -326,6 +326,14 @@ function mcpConfigForSpec(spec) {
   const childEnv = isPlainObject(spec?.env) ? { ...spec.env } : {};
   for (const key of PROVIDER_ENV_KEYS) deleteEnvironmentKey(childEnv, key);
   for (const key of PROVIDER_ENV_KEYS) childEnv[key] = '';
+  // The panel's four approval tiers are enforced on the claude side through
+  // can_use_tool. The Python server's own verb/tool gate would additionally
+  // raise MCP elicitations that the Claude CLI never answers (the SDK sidecar
+  // used to answer them), leaving manual/auto write calls hung until timeout —
+  // so the stdio server must run ungated.
+  for (const key of ['AE_MCP_APPROVAL_TIER_FILE', 'AE_MCP_TOOL_APPROVAL_TIER_FILE']) {
+    deleteEnvironmentKey(childEnv, key);
+  }
   childEnv.AE_MCP_BACKEND = 'ae-mcp';
   return {
     mcpServers: {

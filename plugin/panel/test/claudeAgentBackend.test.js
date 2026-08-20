@@ -358,14 +358,19 @@ test('spawn argv carries isolation, agents, approvals, effort, and MCP config', 
   await run;
 });
 
-test('stdio MCP config preserves command args and strips provider credentials', async () => {
+test('stdio MCP config keeps command args, strips credentials and approval tier files', async () => {
   const h = makeHarness({
     getMcpSpec: async () => ({
       kind: 'stdio',
       command: 'ae-mcp.exe',
       args: ['--stdio', '--label', 'chat-1'],
       env: {
+        // The claude-side can_use_tool gate owns the four tiers; a tier file
+        // would make the Python server raise MCP elicitations the Claude CLI
+        // never answers (manual/auto writes then hang until timeout).
         AE_MCP_APPROVAL_TIER_FILE: 'C:\\Temp\\tier.txt',
+        AE_MCP_TOOL_APPROVAL_TIER_FILE: 'C:\\Temp\\tool-tier.txt',
+        AE_MCP_EXPERT_GUIDANCE: '1',
         anthropic_api_key: 'must-not-leak',
       },
     }),
@@ -384,7 +389,7 @@ test('stdio MCP config preserves command args and strips provider credentials', 
           ANTHROPIC_API_KEY: '',
           ANTHROPIC_BASE_URL: '',
           ANTHROPIC_AUTH_TOKEN: '',
-          AE_MCP_APPROVAL_TIER_FILE: 'C:\\Temp\\tier.txt',
+          AE_MCP_EXPERT_GUIDANCE: '1',
           AE_MCP_BACKEND: 'ae-mcp',
         },
       },

@@ -40477,6 +40477,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const childEnv = isPlainObject2(spec == null ? void 0 : spec.env) ? { ...spec.env } : {};
     for (const key of PROVIDER_ENV_KEYS) deleteEnvironmentKey2(childEnv, key);
     for (const key of PROVIDER_ENV_KEYS) childEnv[key] = "";
+    for (const key of ["AE_MCP_APPROVAL_TIER_FILE", "AE_MCP_TOOL_APPROVAL_TIER_FILE"]) {
+      deleteEnvironmentKey2(childEnv, key);
+    }
     childEnv.AE_MCP_BACKEND = "ae-mcp";
     return {
       mcpServers: {
