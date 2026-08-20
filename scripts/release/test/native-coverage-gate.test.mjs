@@ -10,41 +10,22 @@ import {
   canonicalJson,
   sha256Bytes,
 } from '../../package/lib/manifest.mjs';
-import { assertNativeReleaseCoverageGate } from '../native-coverage-gate.mjs';
+import {
+  assertNativeReleaseCoverageGate,
+  NATIVE_RELEASE_EVIDENCE_PATHS,
+  NATIVE_RELEASE_EVIDENCE_PRODUCERS,
+  NATIVE_RELEASE_REQUIRED_IMPLEMENTATION,
+} from '../native-coverage-gate.mjs';
 
 const execFileAsync = promisify(execFile);
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const GATE_SCRIPT = path.join(REPOSITORY_ROOT, 'scripts', 'release', 'native-coverage-gate.mjs');
 
-const requiredImplementationPaths = [
-  '.github/workflows/build-rc.yml',
-  '.github/workflows/platform-foundation-ci.yml',
-  'packaging/product-acceptance-coverage.json',
-  'scripts/package/build-platform-helper.mjs',
-  'scripts/package/test/verify-final-native-signatures.test.mjs',
-  'scripts/package/verify-final-native-signatures.mjs',
-  'scripts/release/artifact-manifest.mjs',
-  'scripts/release/native-coverage-gate.mjs',
-  'scripts/release/test/verify-product-acceptance-coverage.test.mjs',
-  'scripts/release/verify-product-acceptance-coverage.mjs',
-];
-
-const producerByGate = Object.freeze({
-  'helper-build-reviewed': 'scripts/package/build-platform-helper.mjs',
-  'macos-ae25-ae26-hardware-reviewed': 'scripts/release/verify-product-acceptance-coverage.mjs',
-  'macos-final-native-signature-coverage-reviewed': 'scripts/package/verify-final-native-signatures.mjs',
-  'persistence-upgrade-rollback-permission-acceptance-reviewed': 'scripts/release/verify-product-acceptance-coverage.mjs',
-  'provider-header-routing-acceptance-reviewed': 'scripts/release/verify-product-acceptance-coverage.mjs',
-  'tool-library-acceptance-reviewed': 'scripts/release/verify-product-acceptance-coverage.mjs',
-  'windows-ae25-ae26-hardware-reviewed': 'scripts/release/verify-product-acceptance-coverage.mjs',
-  'windows-final-native-signature-coverage-reviewed': 'scripts/package/verify-final-native-signatures.mjs',
-});
+const requiredImplementationPaths = [...NATIVE_RELEASE_REQUIRED_IMPLEMENTATION];
+const producerByGate = Object.freeze({ ...NATIVE_RELEASE_EVIDENCE_PRODUCERS });
 
 const requiredGates = Object.keys(producerByGate).sort(portableCompare);
-const evidencePathByGate = Object.fromEntries(requiredGates.map((gate) => [
-  gate,
-  `packaging/evidence/native-coverage/${gate}.json`,
-]));
+const evidencePathByGate = Object.freeze({ ...NATIVE_RELEASE_EVIDENCE_PATHS });
 
 function portableCompare(left, right) {
   return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
@@ -319,6 +300,10 @@ test('changing only blocked status to approved fails closed on missing implement
 });
 
 test('CLI rejects symlinked reviewed implementation instead of following it', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('symlink creation requires a privileged Windows test runner');
+    return;
+  }
   const root = await makeRoot(t);
   const fixture = approvedFixture();
   const symlinkedPath = requiredImplementationPaths[0];
@@ -340,6 +325,10 @@ test('CLI rejects symlinked reviewed implementation instead of following it', as
 });
 
 test('CLI rejects symlinked evidence instead of following it', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('symlink creation requires a privileged Windows test runner');
+    return;
+  }
   const root = await makeRoot(t);
   const fixture = approvedFixture();
   for (const [relative, bytes] of fixture.implementationFiles) {
@@ -395,22 +384,13 @@ test('CLI refuses a policy selector outside the supplied root', async (t) => {
   assert.match(result.stderr, /^NATIVE_COVERAGE_ARGUMENT_INVALID:/);
 });
 
-test('RC workflow executes candidate-bound product and final native verifiers before consuming evidence', async () => {
+test('RC workflow runs the direct candidate packaging contracts', async () => {
   const workflow = await fs.promises.readFile(
     path.join(REPOSITORY_ROOT, '.github', 'workflows', 'build-rc.yml'),
     'utf8',
   );
-  const productVerifier = workflow.indexOf('scripts/release/verify-product-acceptance-coverage.mjs');
-  const lockJob = workflow.indexOf('\n  lock:');
-  assert.ok(productVerifier >= 0 && productVerifier < lockJob);
-  assert.match(workflow, /verify-product-acceptance-coverage\.mjs[\s\S]*?--candidate-sha[\s\S]*?CANDIDATE_SHA[\s\S]*?--out/);
-
-  assert.equal(
-    (workflow.match(/scripts\/package\/verify-final-native-signatures\.mjs/g) || []).length,
-    2,
-  );
-  assert.match(workflow, /--platform macos-arm64[\s\S]*?--candidate-sha[\s\S]*?--out/);
-  assert.match(workflow, /--platform windows-x64[\s\S]*?--candidate-sha[\s\S]*?--out/);
-  assert.equal((workflow.match(/nativeSignatureEvidencePath/g) || []).length, 2);
-  assert.match(workflow, /productAcceptanceEvidencePath/);
+  assert.match(workflow, /actions\/setup-node/);
+  assert.match(workflow, /verify-windows-zxp-stage\.test\.mjs/);
+  assert.match(workflow, /zxp-payload-audit\.test\.mjs/);
+  assert.doesNotMatch(workflow, /python|uv|sidecar|runtime|helper/iu);
 });

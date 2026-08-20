@@ -1,4 +1,4 @@
-// ae-mcp runtime helpers loaded by the panel at startup.
+// ae-mcp ExtendScript helpers loaded by the panel at startup.
 // Provides a JSON polyfill for AE's classic ExtendScript engine, which
 // doesn't have native JSON. AE 2026's modern engine does, but CEP panels
 // may run script in classic mode in some contexts.
@@ -206,7 +206,7 @@ if (!Object.entries) {
     };
 }
 
-// AEMCP-HELPERS-BEGIN — verbatim copy lives in packages/core/ae_mcp/jsx_templates/_aemcp_prelude.jsx; keep both in sync (enforced by test_jsx_prelude.py)
+// AEMCP-HELPERS-BEGIN — keep this prelude aligned with the host JSX contract.
 // ---------------------------------------------------------------------------
 // AEMCP helper namespace.
 //

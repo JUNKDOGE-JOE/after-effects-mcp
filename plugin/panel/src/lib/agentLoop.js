@@ -163,8 +163,8 @@ export function createAgentLoop({
       emit({
         type: 'error',
         kind: 'attachment',
-        code: 'ATTACHMENT_SIDECAR_REQUIRED',
-        message: 'Restore the Claude Agent SDK sidecar to send local files.',
+        code: 'ATTACHMENTS_UNSUPPORTED',
+        message: 'This legacy backend cannot send local file attachments.',
         turnId: turn.turnId,
         dispatchState: 'not-started',
       });

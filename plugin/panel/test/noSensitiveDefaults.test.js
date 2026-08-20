@@ -69,7 +69,7 @@ test('attachment paths stay out of transcript, events, diagnostics, and exported
   });
   const exported = buildLogExport({
     panelLogs: ['diagnostic selected ' + secret],
-    sidecarTail: 'sidecar failed to read ' + secret,
+    backendStderrTails: { claude: 'backend failed to read ' + secret },
     exactSecrets,
   });
 

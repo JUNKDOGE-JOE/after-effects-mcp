@@ -120,7 +120,7 @@ function validatePolicyEnvelope(policy) {
     }
     throw gateError(
       'NATIVE_COVERAGE_APPROVAL_REQUIRED',
-      'native helper, final per-file signature coverage, and hardware evidence remain blocked',
+      'native signature and hardware evidence remain blocked',
     );
   }
 }

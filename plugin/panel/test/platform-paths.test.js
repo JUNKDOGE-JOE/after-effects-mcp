@@ -15,22 +15,16 @@ function inertDeps(overrides = {}) {
   };
 }
 
-test('path catalog uses native separators and stable runtime locations', () => {
+test('path catalog uses native separators and stable user locations', () => {
   const mac = createMacosAdapter(inertDeps({ platform: 'darwin', arch: 'arm64', home: '/Users/a', temp: '/private/tmp' }));
   const win = createWindowsAdapter(inertDeps({ platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp' }));
 
-  assert.equal(mac.paths.runtimeRoot, '/Users/a/.ae-mcp/runtime');
   assert.equal(mac.paths.toolsRoot, '/Users/a/.ae-mcp/tools');
   assert.equal(mac.paths.legacySkillsRoot, '/Users/a/.ae-mcp/skills');
-  assert.equal(mac.paths.launcher, '/Users/a/.ae-mcp/bin/ae-mcp');
-  assert.equal(mac.paths.currentPointer, '/Users/a/.ae-mcp/runtime/current');
   assert.equal(mac.paths.captureSpool, '/Users/a/.ae-mcp/capture-spool');
 
-  assert.equal(win.paths.runtimeRoot, 'C:\\Users\\a\\.ae-mcp\\runtime');
   assert.equal(win.paths.toolsRoot, 'C:\\Users\\a\\.ae-mcp\\tools');
   assert.equal(win.paths.legacySkillsRoot, 'C:\\Users\\a\\.ae-mcp\\skills');
-  assert.equal(win.paths.launcher, 'C:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe');
-  assert.equal(win.paths.currentPointer, 'C:\\Users\\a\\.ae-mcp\\runtime\\current');
   assert.equal(win.paths.captureSpool, 'C:\\Users\\a\\.ae-mcp\\capture-spool');
 });
 
@@ -106,7 +100,7 @@ test('adapter selection rejects unsupported or incomplete platform identities', 
   );
 });
 
-test('environment completion supplies a stable home and prepends the private bin directory', () => {
+test('environment completion supplies a stable home without private launchers', () => {
   const mac = createMacosAdapter(inertDeps({
     platform: 'darwin', arch: 'arm64', home: '/Users/a', temp: '/tmp', env: { LANG: 'en_US.UTF-8' },
   }));
@@ -115,19 +109,19 @@ test('environment completion supplies a stable home and prepends the private bin
   }));
 
   assert.deepEqual(mac.completeSpawnEnv({ PATH: '/usr/bin' }, { EXTRA: 'yes' }), {
-    LANG: 'en_US.UTF-8', HOME: '/Users/a', PATH: '/Users/a/.ae-mcp/bin:/usr/bin', EXTRA: 'yes',
+    LANG: 'en_US.UTF-8', HOME: '/Users/a', PATH: '/usr/bin', EXTRA: 'yes',
   });
   const completed = win.completeSpawnEnv({ Path: 'C:\\Windows\\System32' }, { EXTRA: 'yes' });
   assert.equal(completed.SystemRoot, 'C:\\Windows');
   assert.equal(completed.USERPROFILE, 'C:\\Users\\a');
   assert.equal(completed.HOME, 'C:\\Users\\a');
-  assert.equal(completed.Path, 'C:\\Users\\a\\.ae-mcp\\bin;C:\\Windows\\System32');
+  assert.equal(completed.Path, 'C:\\Windows\\System32');
   assert.equal(completed.APPDATA, 'C:\\Users\\a\\AppData\\Roaming');
   assert.equal(completed.LOCALAPPDATA, 'C:\\Users\\a\\AppData\\Local');
   assert.equal(completed.EXTRA, 'yes');
 
   const completedAgain = win.completeSpawnEnv(completed);
-  assert.equal(completedAgain.Path.split(';').filter((entry) => entry === win.paths.binRoot).length, 1);
+  assert.equal(completedAgain.Path, completed.Path);
 });
 
 test('Windows environment completion merges and reads keys case-insensitively', () => {
@@ -144,7 +138,7 @@ test('Windows environment completion merges and reads keys case-insensitively', 
   const value = (name) => entries.find(([key]) => key.toLowerCase() === name.toLowerCase())?.[1];
 
   assert.equal(entries.filter(([key]) => key.toLowerCase() === 'path').length, 1);
-  assert.equal(value('PATH'), 'D:\\Users\\caller\\.ae-mcp\\bin;E:\\Final');
+  assert.equal(value('PATH'), 'E:\\Final');
   assert.equal(entries.filter(([key]) => key.toLowerCase() === 'userprofile').length, 1);
   assert.equal(value('USERPROFILE'), 'D:\\Users\\caller');
   assert.equal(value('HOME'), 'D:\\Users\\caller');

@@ -3,7 +3,6 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createRequire } from 'module';
 
 const sections = [
     'status',
@@ -88,12 +87,64 @@ async function cdp(expression) {
     return reply.result.result.value;
 }
 async function connect(url, name) {
-    const require = createRequire(new URL('../../../sidecar/package.json', import.meta.url));
-    const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
-    const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
-    const nextTransport = new StreamableHTTPClientTransport(new URL(url));
-    const nextClient = new Client({ name, version: '1' }, { capabilities: {} });
-    await nextClient.connect(nextTransport);
+    let sessionId = null;
+    let requestId = 1;
+    let closed = false;
+    async function post(message) {
+        if (closed) throw new Error('MCP transport is closed');
+        const headers = {
+            Accept: 'application/json, text/event-stream',
+            'Content-Type': 'application/json',
+            'MCP-Protocol-Version': '2025-03-26',
+        };
+        if (sessionId) headers['Mcp-Session-Id'] = sessionId;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(message),
+        });
+        if (!response.ok) throw new Error('MCP HTTP ' + response.status);
+        sessionId = response.headers.get('mcp-session-id') || sessionId;
+        const text = await response.text();
+        if (!text.trim()) return null;
+        const dataLines = text.split(/\r?\n/)
+            .filter((line) => line.startsWith('data: '))
+            .map((line) => line.slice(6));
+        const payload = dataLines.length ? dataLines.at(-1) : text;
+        return JSON.parse(payload);
+    }
+    const initialize = await post({
+        jsonrpc: '2.0',
+        id: requestId++,
+        method: 'initialize',
+        params: {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: { name, version: '1' },
+        },
+    });
+    if (initialize?.error) throw new Error(initialize.error.message || 'MCP initialize failed');
+    await post({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
+    const nextClient = {
+        async callTool({ name: toolName, arguments: args }) {
+            const reply = await post({
+                jsonrpc: '2.0',
+                id: requestId++,
+                method: 'tools/call',
+                params: { name: toolName, arguments: args || {} },
+            });
+            if (reply?.error) {
+                return {
+                  isError: true,
+                  content: [{ type: 'text', text: reply.error.message || 'MCP error' }],
+                };
+            }
+            return reply?.result || {};
+        },
+    };
+    const nextTransport = {
+        async close() { closed = true; },
+    };
     return { client: nextClient, transport: nextTransport };
 }
 async function call(name, args) {

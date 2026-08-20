@@ -93,7 +93,7 @@ test('runDiagnostics checks host, MCP session, AE, and the three optional CLIs',
   assert.match(items[0].detail, /0\.9\.6/);
   assert.match(items[3].detail, /unsaved/);
   assert.equal(deps.calls[1].options.headers['x-ae-mcp-token'], TOKEN);
-  assert.doesNotMatch(JSON.stringify(items), /python|offline runtime|repair-runtime/i);
+  assert.doesNotMatch(JSON.stringify(items), /offline service|repair-service/i);
 });
 
 test('runDiagnostics reports missing token and stale MCP activity independently', async () => {

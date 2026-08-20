@@ -15,14 +15,11 @@ const PKG_VERSION = require('./package.json').version;
 let app = null;
 let httpServer = null;
 let currentPort = null;
-let platformRoots = null;
 let runtimeDependencies = null;
 // The shared secret /exec requires. Populated in start() so the file is read
 // (and generated if missing) exactly once per host lifetime.
 let execToken = null;
 let paused = false;
-let lastHealthAt = null;
-let lastPythonVersion = null;
 let nativeAegpClient = null;
 let nativeAegpClientFactory = null;
 let nativeAegpRuntime = null;
@@ -49,21 +46,6 @@ function expressFactory() {
     const error = new Error('host runtime dependencies were not bound');
     error.code = 'HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE';
     throw error;
-}
-
-function normalizePlatformRoots(roots) {
-    if (!roots || typeof roots !== 'object' || Array.isArray(roots)) {
-        throw new TypeError('platform roots must be an object');
-    }
-    const extensionRoot = String(roots.extensionRoot || '').trim();
-    const runtimeRoot = String(roots.runtimeRoot || '').trim();
-    if (!extensionRoot || !runtimeRoot) {
-        throw new TypeError('platform roots require extensionRoot and runtimeRoot');
-    }
-    return Object.freeze({
-        extensionRoot: path.resolve(extensionRoot),
-        runtimeRoot: path.resolve(runtimeRoot),
-    });
 }
 
 function setPaused(v) {
@@ -131,8 +113,6 @@ function getConnectionInfo() {
     return {
         port: currentPort,
         hostVersion: PKG_VERSION,
-        pythonVersion: lastPythonVersion,
-        lastHealthAt: lastHealthAt,
         lastClientSeenAt: lastClientSeenAt,
     };
 }
@@ -305,8 +285,6 @@ function nativeRequestGate(req, res) {
         return null;
     }
     const client = req.get('x-ae-mcp-client') || 'unknown';
-    const pythonVersion = req.get('x-ae-mcp-python');
-    if (pythonVersion) lastPythonVersion = pythonVersion;
     if (client !== INTERNAL_CLIENT) touchClient(client);
     if (blocked.has(client)) {
         activity.record({ client, engine: 'native-aegp', ok: false, denied: 'blocked' });
@@ -564,8 +542,6 @@ function buildApp() {
             pluginVersion: PKG_VERSION,
             port: currentPort || requestPort || null,
             jsxBridge: typeof jsxBridge.getState === 'function' ? jsxBridge.getState() : null,
-            pythonVersion: lastPythonVersion || null,
-            pythonLastSeenAt: lastHealthAt || null,
             paused: isPaused(),
             clients: getClients(),
             nativeExecutionPlane: (function () {
@@ -601,22 +577,12 @@ function buildApp() {
     });
 
     a.get('/health', (req, res) => {
-        const pythonVersion = req.get('x-ae-mcp-python');
-        if (pythonVersion) {
-            lastHealthAt = Date.now();
-            lastPythonVersion = pythonVersion;
-        }
         // Presence of CSInterface (set up by the panel at startup) is the
         // readiness proxy. /exec is what actually probes AE.
-        // Echo the last-seen Python handshake state so external MCP clients
-        // (e.g. ae_diagnose) can verify the bridge is wired up without needing
-        // an /exec round-trip. Fields are null until the Python bridge pings.
         res.json({
             ok: true,
             pluginVersion: PKG_VERSION,
             port: currentPort,
-            pythonVersion: lastPythonVersion || null,
-            pythonLastSeenAt: lastHealthAt || null,
             jsxBridge: jsxBridge.getState(),
         });
     });
@@ -844,8 +810,6 @@ function buildApp() {
             nativeProjectGraphEffect = 'invalidate',
         } = req.body || {};
         const client = req.get('x-ae-mcp-client') || 'unknown';
-        const pythonVersion = req.get('x-ae-mcp-python');
-        if (pythonVersion) lastPythonVersion = pythonVersion;
         // checkpointLabel remains accepted but deliberately unused until the
         // Phase 1 checkpoint store arrives.
         const output = await executeJsx({
@@ -862,27 +826,20 @@ function buildApp() {
     return a;
 }
 
-function start(port, callback, roots) {
+function start(port, callback) {
     if (httpServer) {
         return callback(new Error('already started; call restart() to change port'));
     }
     hostLog.init();
     restoreHostConsole = hostLog.captureConsole(console);
     unsubscribeHostActivity = hostLog.subscribeActivity(activity);
-    let nextRoots = platformRoots;
-    try {
-        if (roots !== undefined) nextRoots = normalizePlatformRoots(roots);
-    } catch (e) {
-        return callback(new Error('invalid platform roots: ' + e.message));
-    }
     // Ensure the shared-secret token exists (generate on first run) before we
-    // accept any /exec request. The Python bridge reads the same file.
+    // accept any /exec request. Panel and host-side clients share this file.
     try {
         execToken = authToken.ensureToken();
     } catch (e) {
         return callback(new Error('failed to initialize auth token: ' + e.message));
     }
-    platformRoots = nextRoots;
     app = buildApp();
     httpServer = app.listen(port, '127.0.0.1', (err) => {
         if (err) return callback(err);
@@ -912,17 +869,9 @@ function stop(callback) {
     });
 }
 
-function restart(port, callback, roots) {
-    let nextRoots = platformRoots;
-    try {
-        if (roots !== undefined) nextRoots = normalizePlatformRoots(roots);
-    } catch (e) {
-        callback(new Error('invalid platform roots: ' + e.message));
-        return;
-    }
+function restart(port, callback) {
     stop(() => {
-        if (nextRoots === null) start(port, callback);
-        else start(port, callback, nextRoots);
+        start(port, callback);
     });
 }
 
@@ -967,6 +916,4 @@ module.exports = {
         closeNativeAegpClient();
         nativeAegpClientFactory = factory;
     },
-    // Test-only state inspection. Platform roots are never exposed over HTTP.
-    _getPlatformRootsForTest: function () { return platformRoots; },
 };

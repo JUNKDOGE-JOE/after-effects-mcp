@@ -8,15 +8,15 @@ export function createMacosAdapter(deps) {
   const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: 'standard', version: null, arch: 'arm64' });
   return Object.freeze({
     id: 'macos-arm64',
-    // RuntimeManager needs the CEP process environment for its explicit,
-    // development-only direct-checkout override.  Keep it on the adapter so
-    // callers do not need to reach around the platform boundary.
-    env: deps.env,
     paths,
     fs: deps.fs,
     ...boundary,
     revealFile(filePath) {
-      return boundary.run({ executable: fixed('ae-mcp', '/usr/bin/open'), args: ['-R', String(filePath)], timeoutMs: 5000 });
+      return boundary.run({
+        executable: fixed('system-open', '/usr/bin/open'),
+        args: ['-R', String(filePath)],
+        timeoutMs: 5000,
+      });
     },
     openLoginTerminal(tool) {
       if (tool !== 'claude' && tool !== 'codex') throw new TypeError('Unsupported login tool');
@@ -24,16 +24,9 @@ export function createMacosAdapter(deps) {
       const script = 'tell application "Terminal" to do script ' + JSON.stringify(command) + '\ntell application "Terminal" to activate';
       return boundary.run({ executable: fixed(tool, '/usr/bin/osascript'), args: ['-e', script], timeoutMs: 5000 });
     },
-    legacyWizardInstallCommands({ panelVersion, repoRoot, repo }) {
-      const src = (sub) => repoRoot
-        ? paths.join([repoRoot, 'packages', sub])
-        : `git+${repo}@v${panelVersion}#subdirectory=packages/${sub}`;
+    legacyWizardInstallCommands() {
       return {
-        uv: { file: 'brew', executableId: 'brew', args: ['install', 'uv'] },
-        uvFallback: { file: 'brew', executableId: 'brew', args: ['install', 'uv'] },
         node: { file: 'brew', executableId: 'brew', args: ['install', 'node@24'] },
-        claude: { file: 'npm', executableId: 'npm', args: ['install', '-g', '@anthropic-ai/claude-code'] },
-        aeMcp: { file: 'uv', executableId: 'uv', args: ['tool', 'install', '--force', '--from', src('core'), 'ae-mcp', '--with', src('bridge'), '--with', src('snapshot-mss')] },
       };
     },
   });

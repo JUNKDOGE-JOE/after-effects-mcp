@@ -1,13 +1,13 @@
 // Shared-secret auth for /exec. The token lives at a per-user, cross-platform
-// path (~/.ae-mcp/auth-token) so the Node host (panel) and the Python bridge
-// agree without any handshake. Loopback binding limits reach to local
+// path (~/.ae-mcp/auth-token) so the panel and host-side clients agree
+// without any handshake. Loopback binding limits reach to local
 // processes; the token defeats the "any local process can call /exec" threat.
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-// ~/.ae-mcp/auth-token — must match the path used by the Python bridge.
+// ~/.ae-mcp/auth-token — shared by the panel and host-side clients.
 function tokenDir() {
     return path.join(os.homedir(), '.ae-mcp');
 }

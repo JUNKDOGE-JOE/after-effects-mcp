@@ -190,43 +190,6 @@ function sameJson(left, right) {
   return JSON.stringify(sort(left)) === JSON.stringify(sort(right));
 }
 
-export function validateWindowsAuthenticodeObjects({ records, expectedThumbprint }) {
-  const roles = ['helper', 'addon', 'launcher'];
-  const recordKeys = [
-    'role',
-    'signerThumbprint',
-    'status',
-    'timestampCertificateThumbprint',
-    'timestampVerified',
-  ];
-  if (typeof expectedThumbprint !== 'string'
-      || !/^[0-9A-F]{40}$/.test(expectedThumbprint)
-      || !Array.isArray(records)
-      || records.length !== roles.length) {
-    throw signingError(
-      'SIGNING_IDENTITY_INVALID',
-      'every Windows signing object must have a protected Authenticode identity',
-    );
-  }
-  for (const [index, record] of records.entries()) {
-    if (!exactKeys(record, recordKeys)
-        || record.role !== roles[index]
-        || record.status !== 'Valid'
-        || record.signerThumbprint !== expectedThumbprint
-        || !/^[0-9A-F]{40}$/.test(record.timestampCertificateThumbprint || '')
-        || record.timestampVerified !== true) {
-      throw signingError(
-        'SIGNING_IDENTITY_INVALID',
-        'every Windows signing object must have a protected Authenticode identity',
-      );
-    }
-  }
-  return {
-    authenticodeSignerThumbprint: expectedThumbprint,
-    timestampVerified: true,
-  };
-}
-
 function assertSha256(value, code, field) {
   if (typeof value !== 'string' || !SHA256_PATTERN.test(value)) {
     throw signingError(code, `${field} must be a lowercase SHA-256 digest`);

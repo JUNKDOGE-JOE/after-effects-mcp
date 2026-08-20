@@ -4,11 +4,30 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const FORBIDDEN_RUNTIME_PATHS = Object.freeze([
-  'runtime/windows-x64/node/node.exe',
-  'runtime/windows-x64/python',
-  'runtime/windows-x64/runtime-manifest.json',
-  'runtime/windows-x64/bundle-manifest.json',
+const REQUIRED_FILES = Object.freeze([
+  'client/dist/app.js',
+  'CSXS/manifest.xml',
+  'host/server.js',
+  'host/package.json',
+  'host/package-lock.json',
+  'host/node_modules/express/package.json',
+  'host/stdio-shim.js',
+  'host/mcp/generated/native_exec.generated.json',
+  'host/mcp/generated/aegp-rpc.schema.json',
+  'host/mcp/skills_bundled/manifest.json',
+  'jsx/runtime.jsx',
+  'shared/chat-attachments.mjs',
+  'shared/tool-approval.mjs',
+]);
+
+const FORBIDDEN_TOP_LEVEL = new Set([
+  '.debug',
+  'bin',
+  'helper',
+  'panel',
+  'platform',
+  'runtime',
+  'sidecar',
 ]);
 
 function contractError(message) {
@@ -45,43 +64,34 @@ function relativeFiles(root) {
   return result.sort();
 }
 
-function validateRuntimeBoundary(stageRoot) {
-  for (const relativePath of FORBIDDEN_RUNTIME_PATHS) {
-    if (fs.existsSync(path.join(stageRoot, ...relativePath.split('/')))) {
-      throw contractError(`forbidden bundled runtime path is present: ${relativePath}`);
+function validatePayloadBoundary(stageRoot, files) {
+  for (const relativePath of files) {
+    const topLevel = relativePath.split('/')[0];
+    if (FORBIDDEN_TOP_LEVEL.has(topLevel)) {
+      throw contractError(`retired ZXP payload root is present: ${topLevel}`);
+    }
+    if (/\.(?:dll|dylib|node|so|exe)$/i.test(relativePath)) {
+      throw contractError(`nested native binary is not allowed in ZXP: ${relativePath}`);
     }
   }
-  const aex = relativeFiles(stageRoot).find((relativePath) => relativePath.toLowerCase().endsWith('.aex'));
-  if (aex) throw contractError(`native AEX must remain a separate release asset: ${aex}`);
-  regularFile(path.join(stageRoot, 'runtime', 'windows-x64', 'node', 'host', 'package.json'));
-  regularFile(path.join(
-    stageRoot,
-    'runtime',
-    'windows-x64',
-    'node',
-    'host',
-    'node_modules',
-    'express',
-    'package.json',
-  ));
+  for (const required of REQUIRED_FILES) regularFile(path.join(stageRoot, ...required.split('/')));
+  const manifest = JSON.parse(fs.readFileSync(path.join(stageRoot, 'host/package.json'), 'utf8'));
+  if (manifest.dependencies?.express !== '4.22.2') {
+    throw contractError('host Express dependency is not pinned to 4.22.2');
+  }
 }
 
 function validatePanelContracts(stageRoot, version) {
-  const bundle = fs.readFileSync(regularFile(path.join(stageRoot, 'client', 'dist', 'app.js')), 'utf8');
-  if (!new RegExp(`PANEL_VERSION\\s*=\\s*["']${version.replaceAll('.', '\\.') }["']`).test(bundle)) {
+  const bundle = fs.readFileSync(regularFile(path.join(stageRoot, 'client/dist/app.js')), 'utf8');
+  const escaped = String(version).replaceAll('.', '\\.');
+  if (!new RegExp(`PANEL_VERSION\\s*=\\s*["']${escaped}["']`).test(bundle)) {
     throw contractError(`compiled Panel contract is missing release version ${version}`);
   }
-  for (const marker of [
-    'astral.sh/uv/install.ps1',
-    '#subdirectory=packages/${sub}',
-    'src("core")',
-    'src("bridge")',
-    'src("snapshot-mss")',
-  ]) {
-    if (!bundle.includes(marker)) throw contractError(`compiled Panel contract is missing: ${marker}`);
+  if (!bundle.includes('/host/stdio-shim.js')) {
+    throw contractError('compiled Panel contract is missing the Claude Desktop shim path');
   }
-  if (!/["']tool["']\s*,\s*["']install["']\s*,\s*["']--force["']\s*,\s*["']--from["']/.test(bundle)) {
-    throw contractError('compiled Panel contract is missing the uv tool install command');
+  if (!bundle.includes('claude mcp add --transport http')) {
+    throw contractError('compiled Panel contract is missing the Claude Code HTTP command');
   }
 }
 
@@ -91,9 +101,10 @@ export function verifyWindowsZxpStage({ stageRoot, version }) {
   if (!fs.existsSync(resolved) || !fs.lstatSync(resolved).isDirectory()) {
     throw contractError('Windows ZXP stage root is missing');
   }
-  validateRuntimeBoundary(resolved);
+  const files = relativeFiles(resolved);
+  validatePayloadBoundary(resolved, files);
   validatePanelContracts(resolved, version);
-  return Object.freeze({ platform: 'windows-x64', version });
+  return Object.freeze({ platform: 'windows-x64', version, fileCount: files.length });
 }
 
 function parseArgs(argv) {
@@ -115,7 +126,7 @@ function parseArgs(argv) {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
     const result = verifyWindowsZxpStage(parseArgs(process.argv.slice(2)));
-    process.stdout.write(`Windows ZXP stage verified: v${result.version}\n`);
+    process.stdout.write(`Windows ZXP stage verified: v${result.version} (${result.fileCount} files)\n`);
   } catch (error) {
     process.stderr.write(`${error?.code ?? 'WINDOWS_ZXP_CONTRACT_INVALID'}: ${error.message}\n`);
     process.exitCode = 1;

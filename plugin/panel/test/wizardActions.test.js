@@ -45,8 +45,6 @@ function platform(resolutions = {}) {
       return child;
     },
     legacyWizardInstallCommands: () => ({
-      uv: { file: 'winget', executableId: 'winget', args: ['install', 'uv'] },
-      aeMcp: { file: 'uv', executableId: 'uv', args: ['tool', 'install', 'ae-mcp'] },
       node: {
         file: 'winget',
         executableId: 'winget',

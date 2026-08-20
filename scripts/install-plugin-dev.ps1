@@ -80,13 +80,10 @@ $requiredFiles = @(
     'client\dist\app.js',
     'host\server.js',
     # The dev-payload host service refuses to start without its vendored
-    # Express (hostBridge HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE), and the
-    # claude sidecar refuses without its vendored Agent SDK. Both live in
-    # gitignored node_modules, so a gutted checkout must fail the deploy, not
-    # the panel (2026-08-12 incident: both directories shipped empty — the
-    # panel came up dead and the claude channel probe failed).
+    # Express (hostBridge HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE). It lives in
+    # gitignored node_modules, so a gutted checkout must fail the deploy rather
+    # than leave a panel that cannot start its host.
     'host\node_modules\express\package.json',
-    'sidecar\node_modules\@anthropic-ai\claude-agent-sdk\package.json',
     'jsx\runtime.jsx',
     '.debug'
 )

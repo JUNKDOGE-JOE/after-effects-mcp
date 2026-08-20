@@ -10,11 +10,9 @@ const CEP_ROOT = path.join(PANEL_SRC_ROOT, 'cep');
 const PLATFORM_ROOT = path.join(CEP_ROOT, 'platform') + path.sep;
 
 // Exact counts keep the remaining filesystem compatibility boundaries narrow.
-// apiKey.js only reads and removes legacy plaintext during verified migration;
 // Provider storage and Codex environment shaping still need their current CEP
 // primitives until those interfaces move behind the platform adapter.
 const GATED_PLATFORM_ALLOWLIST = new Map([
-  ['plugin/panel/src/cep/apiKey.js::native-path-home-module', 2],
   ['plugin/panel/src/cep/providerStore.js::native-path-home-module', 2],
   // Provider env shaping is part of the same gated provider-facade migration.
   ['plugin/panel/src/lib/providerProfile.js::windows-user-root-env', 4],

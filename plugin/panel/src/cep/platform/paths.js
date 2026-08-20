@@ -167,8 +167,6 @@ export function createPathCatalog({ home, temp, platform }) {
   const same = (left, right) => canonical(left) === canonical(right);
 
   const configRoot = join([normalizedHome, '.ae-mcp']);
-  const runtimeRoot = join([configRoot, 'runtime']);
-  const binRoot = join([configRoot, 'bin']);
   return Object.freeze({
     home: normalizedHome,
     tempRoot: normalizedTemp,
@@ -178,11 +176,6 @@ export function createPathCatalog({ home, temp, platform }) {
     migrationRoot: join([configRoot, 'migrations']),
     logsRoot: join([configRoot, 'logs']),
     captureSpool: join([configRoot, 'capture-spool']),
-    runtimeRoot,
-    currentPointer: join([runtimeRoot, 'current']),
-    previousPointer: join([runtimeRoot, 'previous']),
-    binRoot,
-    launcher: join([binRoot, windows ? 'ae-mcp.exe' : 'ae-mcp']),
     join,
     dirname,
     basename,
