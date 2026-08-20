@@ -95,11 +95,10 @@ export function answersForCodexUserInput(questions, values) {
   return answers;
 }
 
-// Claude Agent SDK AskUserQuestion input (#228): the canUseTool callback
-//   receives { questions: [{ question, header, options: [{label, description,
-//   preview?}], multiSelect }] } and must reply with updatedInput carrying the
-//   ORIGINAL questions array plus an answers map keyed by each question's
-//   `question` text. See code.claude.com/docs/en/agent-sdk/user-input.
+// Claude AskUserQuestion can_use_tool input (#228): the control request carries
+//   { questions: [{ question, header, options: [{label, description, preview?}],
+//   multiSelect }] }. Its control response must carry updatedInput with the
+//   ORIGINAL questions array plus an answers map keyed by `question` text.
 export function questionsFromAskUserQuestion(params) {
   const list = Array.isArray(params && params.questions) ? params.questions : [];
   return list.map((q, index) => {

@@ -27,8 +27,8 @@ export function pickBackend({ pref, channels = {}, channelChoices = {} }) {
   }
   if (group === 'claude') {
     if (chosen.channel === 'api') {
-      // The Claude Agent backend exposes only a loopback route token to the
-      // sidecar; upstream Provider credentials stay in the panel-owned route.
+      // The Claude CLI receives only a loopback route token; upstream Provider
+      // credentials stay in the panel-owned route.
       return { backend: 'claude-api', reason: 'ok', channel: 'api', fixHint: null };
     }
     return { backend: 'subscription', reason: 'ok', channel: 'subscription', fixHint: null };

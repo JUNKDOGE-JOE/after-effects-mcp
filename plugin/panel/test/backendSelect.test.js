@@ -23,7 +23,7 @@ test('pickBackend: the claude choice defaults to subscription and never auto-swi
   assert.equal(brokenChoice.fixHint.zh, '去登录');
 });
 
-test('pickBackend routes the enabled custom Claude API channel through the Claude Agent SDK transport', () => {
+test('pickBackend routes the enabled custom Claude API channel through the Claude CLI transport', () => {
   const channels = { claude: [ch('subscription', false), ch('api', true)] };
   const selected = pickBackend({ pref: 'subscription', channels, channelChoices: { claude: 'api' } });
   assert.deepEqual(selected, {
@@ -32,10 +32,10 @@ test('pickBackend routes the enabled custom Claude API channel through the Claud
     channel: 'api',
     fixHint: null,
   });
-  assert.equal(BACKENDS[selected.backend].attachmentTransport, 'agent-sdk');
+  assert.equal(BACKENDS[selected.backend].attachmentTransport, 'manifest+read-rule');
 });
 
-test('pickBackend keeps non-official Anthropic-compatible providers on the Claude Agent SDK local route', () => {
+test('pickBackend keeps non-official Anthropic-compatible providers on the Claude CLI local route', () => {
   const direct = { ...ch('api', true), directHttp: true };
   const selected = pickBackend({
     pref: 'subscription',
@@ -43,7 +43,7 @@ test('pickBackend keeps non-official Anthropic-compatible providers on the Claud
     channelChoices: { claude: 'api' },
   });
   assert.equal(selected.backend, 'claude-api');
-  assert.equal(BACKENDS[selected.backend].attachmentTransport, 'agent-sdk');
+  assert.equal(BACKENDS[selected.backend].attachmentTransport, 'manifest+read-rule');
 });
 
 test('pickBackend: probing and no-channel states carry reason + fixHint', () => {
@@ -145,7 +145,7 @@ test('pickBackend integrates with real channel builders end to end', () => {
   assert.equal(zc.backend, 'none', 'keyless start-plan never becomes the default');
 });
 
-test('deriveToolMeta maps AE tools for Claude Agent SDK metadata', () => {
+test('deriveToolMeta maps AE tools for Claude CLI approval metadata', () => {
   const meta = deriveToolMeta([
     { name: 'overview', annotations: { readOnlyHint: true } },
     { name: 'deleteLayer', annotations: { destructiveHint: true } },

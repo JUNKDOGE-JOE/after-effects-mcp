@@ -260,12 +260,43 @@ test('resolveSidecarSelection keeps Windows and debug paths independent of Runti
   });
 });
 
-test('probeClaudeLogin resolves logged in probe-result', async () => {
+function authPlatform(proc, calls = []) {
+  return {
+    id: 'windows-x64',
+    completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+    spawn: (resolved, args, options) => {
+      calls.push({ resolved, args, options });
+      return proc;
+    },
+  };
+}
+
+function resolvedClaude() {
+  const executable = {
+    ok: true,
+    id: 'claude',
+    path: 'C:\\npm\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe',
+    displayPath: 'C:\\npm\\claude.cmd',
+    argsPrefix: [],
+    source: 'path',
+    version: '2.1.227',
+    arch: 'x64',
+  };
+  return {
+    ok: true,
+    cliPath: executable.path,
+    displayPath: executable.displayPath,
+    version: executable.version,
+    executable,
+  };
+}
+
+test('probeClaudeLogin uses claude auth status and strips provider env', async () => {
   const proc = makeProc();
   let spawnArgs;
   const resultPromise = probeClaudeLogin({
-    resolveNode: async () => ({ ok: true, nodePath: 'node.exe', version: '20.0.0' }),
-    sidecarPath: 'sidecar.mjs',
+    platform: authPlatform(proc),
+    resolveClaude: async () => resolvedClaude(),
     env: { ANTHROPIC_API_KEY: 'secret', KEEP: 'yes' },
     spawnImpl: (cmd, args, opts) => {
       spawnArgs = { cmd, args, opts };
@@ -273,85 +304,97 @@ test('probeClaudeLogin resolves logged in probe-result', async () => {
     },
   });
   await nextTick();
-  proc.stdout.emit('data', '{"t":"probe-result","ok":true,"loggedIn":true,"detail":"ready"}\n');
+  proc.stdout.emit('data', '{\n  "loggedIn": true,\n  "email": "private@example.test"\n}\n');
+  proc.emit('exit', 0);
 
-  assert.deepEqual(await resultPromise, { loggedIn: true, nodeOk: true, nodeVersion: '20.0.0', detail: 'ready' });
-  assert.equal(spawnArgs.cmd, 'node.exe');
-  assert.deepEqual(spawnArgs.args, ['sidecar.mjs', '--probe']);
+  assert.deepEqual(await resultPromise, {
+    loggedIn: true,
+    cliOk: true,
+    cliVersion: '2.1.227',
+    cliPath: 'C:\\npm\\claude.cmd',
+    reason: null,
+    detail: '2.1.227 · C:\\npm\\claude.cmd',
+  });
+  assert.equal(spawnArgs.cmd, resolvedClaude().cliPath);
+  assert.deepEqual(spawnArgs.args, ['auth', 'status', '--json']);
   assert.equal(spawnArgs.opts.stdio, 'pipe');
   assert.equal(spawnArgs.opts.windowsHide, true);
   assert.equal(spawnArgs.opts.env.ANTHROPIC_API_KEY, undefined);
   assert.equal(spawnArgs.opts.env.KEEP, 'yes');
 });
 
-test('probeClaudeLogin spawns the resolved Node through the platform adapter', async () => {
-  const proc = makeProc();
-  const executable = { ok: true, id: 'node', path: '/Users/a/.ae-mcp/runtime/current/bin/node', argsPrefix: [], source: 'runtime', version: '24.17.0', arch: 'arm64' };
-  const calls = [];
-  const platform = {
-    resolveExecutable: async () => executable,
-    completeSpawnEnv: (base, additions) => ({ ...base, ...additions }),
-    spawn: (resolved, args, options) => { calls.push({ resolved, args, options }); return proc; },
-  };
-  const resultPromise = probeClaudeLogin({ platform, sidecarPath: '/ext/sidecar/agent-sidecar.mjs', env: { KEEP: 'yes' } });
-  await nextTick();
-  proc.stdout.emit('data', '{"t":"probe-result","loggedIn":true}\n');
-  assert.equal((await resultPromise).loggedIn, true);
-  assert.equal(calls[0].resolved, executable);
-  assert.equal(calls[0].options.shell, undefined);
-});
-
-test('probeClaudeLogin resolves not logged in probe-result', async () => {
+test('probeClaudeLogin reports a valid CLI that is not logged in', async () => {
   const proc = makeProc();
   const resultPromise = probeClaudeLogin({
-    resolveNode: async () => ({ ok: true, nodePath: 'node.exe', version: '18.19.0' }),
-    sidecarPath: 'sidecar.mjs',
+    platform: authPlatform(proc),
+    resolveClaude: async () => resolvedClaude(),
     spawnImpl: () => proc,
   });
   await nextTick();
-  proc.stdout.emit('data', '{"t":"probe-result","ok":false,"loggedIn":false,"reason":"login required"}\n');
+  proc.stdout.emit('data', '{"loggedIn":false}\n');
+  proc.emit('exit', 1);
 
-  assert.deepEqual(await resultPromise, { loggedIn: false, nodeOk: true, nodeVersion: '18.19.0', detail: 'login required' });
+  assert.deepEqual(await resultPromise, {
+    loggedIn: false,
+    cliOk: true,
+    cliVersion: '2.1.227',
+    cliPath: 'C:\\npm\\claude.cmd',
+    reason: 'not-logged-in',
+    detail: 'Claude CLI is not logged in.',
+  });
 });
 
-test('probeClaudeLogin kills process on timeout', async () => {
+test('probeClaudeLogin spawns the resolved native executable through the adapter', async () => {
+  const proc = makeProc();
+  const calls = [];
+  const platform = authPlatform(proc, calls);
+  const resultPromise = probeClaudeLogin({
+    platform,
+    resolveClaude: async () => resolvedClaude(),
+  });
+  await nextTick();
+  proc.stdout.emit('data', '{"loggedIn":true}\n');
+  proc.emit('exit', 0);
+
+  assert.equal((await resultPromise).loggedIn, true);
+  assert.deepEqual(calls[0].resolved, resolvedClaude().executable);
+  assert.deepEqual(calls[0].args, ['auth', 'status', '--json']);
+});
+
+test('probeClaudeLogin exposes missing and too-old CLI states without spawning', async () => {
+  for (const value of [
+    { code: 'NOT_FOUND', reason: 'cli-missing', detail: 'install Claude CLI' },
+    { code: 'VERSION_TOO_OLD', reason: 'cli-too-old', detail: 'upgrade Claude CLI' },
+  ]) {
+    let spawned = false;
+    const result = await probeClaudeLogin({
+      platform: authPlatform(makeProc()),
+      resolveClaude: async () => ({ ok: false, code: value.code, detail: value.detail }),
+      spawnImpl: () => { spawned = true; },
+    });
+    assert.equal(spawned, false);
+    assert.deepEqual(result, {
+      loggedIn: false,
+      cliOk: false,
+      reason: value.reason,
+      detail: value.detail,
+    });
+  }
+});
+
+test('probeClaudeLogin kills the short-lived auth probe on timeout', async () => {
   const proc = makeProc();
   const result = await probeClaudeLogin({
-    resolveNode: async () => ({ ok: true, nodePath: 'node.exe', version: '20.0.0' }),
-    sidecarPath: 'sidecar.mjs',
+    platform: authPlatform(proc),
+    resolveClaude: async () => resolvedClaude(),
     spawnImpl: () => proc,
     timeoutMs: 1,
   });
 
   assert.equal(proc.killed, true);
-  assert.deepEqual(result, { loggedIn: false, nodeOk: true, nodeVersion: '20.0.0', detail: 'probe timeout' });
-});
-
-test('probeClaudeLogin reports stderr tail when process exits without result', async () => {
-  const proc = makeProc();
-  const resultPromise = probeClaudeLogin({
-    resolveNode: async () => ({ ok: true, nodePath: 'node.exe', version: '20.0.0' }),
-    sidecarPath: 'sidecar.mjs',
-    spawnImpl: () => proc,
-  });
-  await nextTick();
-  proc.stderr.emit('data', 'first\n');
-  proc.stderr.emit('data', 'last error\n');
-  proc.emit('exit', 1);
-
-  assert.deepEqual(await resultPromise, { loggedIn: false, nodeOk: true, nodeVersion: '20.0.0', detail: 'first\nlast error' });
-});
-
-test('probeClaudeLogin reports resolveNode failure and does not spawn', async () => {
-  let spawned = false;
-  const result = await probeClaudeLogin({
-    resolveNode: async () => ({ ok: false, detail: 'node missing' }),
-    sidecarPath: 'sidecar.mjs',
-    spawnImpl: () => { spawned = true; },
-  });
-
-  assert.equal(spawned, false);
-  assert.deepEqual(result, { loggedIn: false, nodeOk: false, detail: 'node missing' });
+  assert.equal(result.loggedIn, false);
+  assert.equal(result.cliOk, true);
+  assert.equal(result.reason, 'probe-timeout');
 });
 
 test('resolveNodeForSidecarSelection rejects a Node receipt from another selected runtime generation', async () => {
@@ -381,71 +424,4 @@ test('resolveNodeForSidecarSelection rejects a Node receipt from another selecte
     (error) => error.code === 'RUNTIME_SIDECAR_NODE_SELECTION_MISMATCH',
   );
   assert.equal(resolutions, 1);
-});
-
-test('probeClaudeLogin does not spawn a generation-B Node for a generation-A Sidecar selection', async () => {
-  const selectionA = selectedRuntime('/Users/test/.ae-mcp/runtime/layers/a/generation-a/macos-arm64');
-  const resolvedNodeB = {
-    ok: true,
-    nodePath: '/Users/test/.ae-mcp/runtime/layers/a/generation-b/macos-arm64/node/bin/node',
-    version: '24.17.0',
-    runtime: {
-      componentReceipt: {
-        ...selectionA.componentReceipt,
-        canonicalPath: '/Users/test/.ae-mcp/runtime/layers/a/generation-b/macos-arm64',
-      },
-    },
-  };
-  let spawns = 0;
-  const resolveSelectedNode = ({ platform }) => resolveNodeForSidecarSelection({
-    resolveNode: async () => resolvedNodeB,
-    runtimeSelection: selectionA,
-    platform,
-  });
-  const result = await probeClaudeLogin({
-    platform: macPlatform(),
-    resolveNode: async (options) => {
-      try {
-        return await resolveSelectedNode(options);
-      } catch (error) {
-        return { ok: false, detail: error.message };
-      }
-    },
-    sidecarPath: '/Users/test/.ae-mcp/runtime/layers/a/generation-a/macos-arm64/node/sidecar/agent-sidecar.mjs',
-    spawnImpl: () => {
-      spawns += 1;
-      return makeProc();
-    },
-  });
-
-  assert.deepEqual(result, {
-    loggedIn: false,
-    nodeOk: false,
-    detail: 'Selected Sidecar and Node runtime receipts do not match',
-  });
-  assert.equal(spawns, 0);
-});
-
-test('probeClaudeLogin does not resolve Node or spawn while Sidecar selection is pending', async () => {
-  let nodeResolutions = 0;
-  let spawns = 0;
-  const result = await probeClaudeLogin({
-    sidecarPath: null,
-    resolveNode: async () => {
-      nodeResolutions += 1;
-      return { ok: true, nodePath: 'node', version: '20.0.0' };
-    },
-    spawnImpl: () => {
-      spawns += 1;
-      return makeProc();
-    },
-  });
-
-  assert.deepEqual(result, {
-    loggedIn: false,
-    nodeOk: false,
-    detail: 'verified runtime sidecar is not ready',
-  });
-  assert.equal(nodeResolutions, 0);
-  assert.equal(spawns, 0);
 });

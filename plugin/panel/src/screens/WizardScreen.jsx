@@ -56,7 +56,7 @@ const STEP_LABELS = {
   uv: 'uv',
   aeMcp: 'ae-mcp',
   node: 'Node.js LTS',
-  claude: 'Claude Code',
+  claude: 'Claude Code CLI 2.x+',
   login: 'Claude login',
 };
 
