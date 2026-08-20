@@ -8,7 +8,7 @@ import {
   resolveClaudeCli,
 } from '../src/cep/claudeAgentBackend.js';
 
-const SPIKE_ROOT = new URL('../../../.codex/spike/', import.meta.url);
+const SPIKE_ROOT = new URL('./fixtures/claude-cli-spike/', import.meta.url);
 
 function transcript(name) {
   return readFileSync(new URL(`transcript-${name}.ndjson`, SPIKE_ROOT), 'utf8')
