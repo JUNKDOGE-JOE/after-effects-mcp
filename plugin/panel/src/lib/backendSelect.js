@@ -1,21 +1,18 @@
 import { REAL_BACKENDS } from '../cep/backends/index.js';
 
-const DEFAULT_CHANNEL = { claude: 'subscription', codex: 'cli', zcode: 'cli-config' };
+const DEFAULT_CHANNEL = { claude: 'subscription', codex: 'cli', opencode: 'provider', zcode: 'cli-config' };
 
 // Channels are chosen by the user, never auto-picked (#229): the effective
 // channel is exactly the enabled one. A broken choice surfaces its own
 // fixHint instead of silently falling back to a sibling channel, and only
 // the enabled channel's probe state gates sending.
 export function pickBackend({ pref, channels = {}, channelChoices = {} }) {
-  const group = pref === 'codex' || pref === 'zcode' ? pref : 'claude';
+  const group = ['codex', 'opencode', 'zcode'].includes(pref) ? pref : 'claude';
   const list = channels[group] || [];
   const wanted = channelChoices[group] || DEFAULT_CHANNEL[group];
   const chosen = list.find((c) => c && c.channel === wanted) || list[0] || null;
   if (chosen && chosen.checking) {
     return { backend: 'none', reason: group + '-probing', channel: null, fixHint: null };
-  }
-  if (group === 'codex' && chosen?.channel === 'custom' && chosen.canPreflight === true && !chosen.ok) {
-    return { backend: 'codex', reason: 'provider-preflight', channel: 'custom', fixHint: null };
   }
   if (!chosen || !chosen.ok) {
     return {
@@ -26,11 +23,6 @@ export function pickBackend({ pref, channels = {}, channelChoices = {} }) {
     };
   }
   if (group === 'claude') {
-    if (chosen.channel === 'api') {
-      // The Claude CLI receives only a loopback route token; upstream Provider
-      // credentials stay in the panel-owned route.
-      return { backend: 'claude-api', reason: 'ok', channel: 'api', fixHint: null };
-    }
     return { backend: 'subscription', reason: 'ok', channel: 'subscription', fixHint: null };
   }
   return { backend: group, reason: 'ok', channel: chosen.channel, fixHint: null };

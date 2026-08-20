@@ -1,25 +1,8 @@
 // Credential channels share one shape so backend selection can compare them.
 // ChannelProbe: { channel, source:{zh,en}, checking, ok, detail, fixHint:{zh,en} }
-// Order in each array IS the priority order (channel (1) first).
-
-function providerHasCredentialPolicy(provider) {
-  const credential = provider?.credential;
-  if (credential?.preferredAuth) {
-    const scheme = credential.preferredAuth.scheme;
-    if (scheme === 'auto' || scheme === 'none') return true;
-    return Boolean(credential.valueRef?.kind === 'secret');
-  }
-  const policy = provider?.auth?.model;
-  return Boolean(policy && (policy.kind === 'none' || policy.valueRef?.kind === 'secret'));
-}
 
 export function claudeChannels({
   probe,
-  apiProvider,
-  apiProviderSelected,
-  providerAvailable,
-  providerCredentialResolverReady,
-  providerChecking = false,
 } = {}) {
   const sub = {
     channel: 'subscription',
@@ -40,52 +23,16 @@ export function claudeChannels({
             + 'panel PATH, set AE_MCP_CLAUDE_CLI and restart AE.',
         }
         : {
-          zh: '订阅未登录：在终端运行 claude /login 完成登录后重新检测；或改用下方「自定义 Provider」通道。',
-          en: 'Not logged in: run claude /login in a terminal and re-check, or switch to the '
-            + 'custom Provider channel below.',
+          zh: '订阅未登录：在终端运行 claude /login 完成登录后重新检测；或改用 OpenCode Provider 通道。',
+          en: 'Not logged in: run claude /login in a terminal and re-check, or use the '
+            + 'OpenCode Provider channel.',
         },
   };
-  const selected = apiProviderSelected === undefined ? Boolean(apiProvider) : Boolean(apiProviderSelected);
-  const resolverReady = providerCredentialResolverReady === undefined
-    ? (providerAvailable === undefined ? providerHasCredentialPolicy(apiProvider) : providerAvailable)
-    : providerCredentialResolverReady;
-  const runtimeReady = !(probe && probe.cliOk === false);
-  const canPreflight = Boolean(
-    !providerChecking
-    && selected
-    && apiProvider?.baseUrl
-    && resolverReady
-    && runtimeReady
-  );
-  const api = {
-    channel: 'api',
-    source: { zh: '面板配置 · 通用 Provider', en: 'Panel config · Universal Provider' },
-    selected,
-    canPreflight,
-    checking: Boolean(providerChecking),
-    ok: canPreflight,
-    detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : '',
-    fixHint: !runtimeReady
-      ? {
-        zh: 'Claude 自定义 Provider 也通过 Claude CLI 运行：请安装或升级到 Claude CLI 2.x。',
-        en: 'Claude custom Providers also run through Claude CLI. Install or upgrade to '
-          + 'Claude CLI 2.x.',
-      }
-      : apiProvider && resolverReady !== true && !providerChecking
-      ? { zh: '系统凭据库不可用：Helper 会随 AE 自动启动，请先重新打开面板或重启 AE；仍失败时再修复当前安装。不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled.' }
-      : { zh: '在「Provider 管理」新增或选择一个通用 Provider（Base URL + API Key）。系统会按模型自动选择 Messages、Responses 或 Chat 路由。', en: 'Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model.' },
-  };
-  api.directHttp = false;
-  return [sub, api];
+  return [sub];
 }
 
 export function codexChannels({
   codexProbe,
-  customProvider,
-  customProviderSelected,
-  customProviderAvailable,
-  customProviderCredentialResolverReady = false,
-  providerChecking = false,
   cliConfig,
   cliCredentialAvailable,
 } = {}) {
@@ -110,36 +57,37 @@ export function codexChannels({
     fixHint: !hasProvider
       ? { zh: '未找到 ~/.codex/config.toml 的可用 provider：先在 Codex CLI 里配置 model_provider。', en: 'No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first.' }
       : !hasKey
-        ? { zh: '检测到 Codex CLI provider「' + cliConfig.providerId + '」，但没有可用凭据。请设置其环境变量或在 Provider 管理中配置。', en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable or configure it in Provider Manager.' }
+        ? {
+          zh: '检测到 Codex CLI provider「' + cliConfig.providerId + '」，但没有可用凭据。请在 Codex CLI 中设置其环境变量。',
+          en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is '
+            + 'available. Set its environment variable in the Codex CLI environment.',
+        }
         : { zh: 'Codex 运行时不可用：请检查 Codex CLI 安装后重新检测。', en: 'Codex runtime unavailable: check the Codex CLI install and re-check.' },
-  };
-  const customCanPreflight = Boolean(
-    !providerChecking
-    && (customProviderSelected === undefined ? customProvider : customProviderSelected)
-    && customProvider?.baseUrl
-    && (customProviderAvailable === undefined ? providerHasCredentialPolicy(customProvider) : customProviderAvailable)
-    && customProviderCredentialResolverReady === true
-    && (!codexProbe || codexProbe.runtimeOk !== false),
-  );
-  const custom = {
-    channel: 'custom',
-    source: { zh: '自定义 provider', en: 'Custom provider' },
-    selected: customProviderSelected === undefined ? Boolean(customProvider) : Boolean(customProviderSelected),
-    canPreflight: customCanPreflight,
-    checking: Boolean(providerChecking),
-    ok: Boolean(
-      customCanPreflight
-    ),
-    detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : '',
-    fixHint: customProvider && customProviderAvailable === false && !providerChecking
-      ? { zh: '系统凭据库不可用：Helper 会随 AE 自动启动，请先重新打开面板或重启 AE；仍失败时再修复当前安装。不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled.' }
-      : customProvider && customProviderCredentialResolverReady !== true
-        ? { zh: '系统凭据库尚未就绪；Helper 会随 AE 自动启动，请重新打开面板或重启 AE 后检测，持续失败时再修复安装。', en: 'The system credential store is not ready. Helper starts with AE; reopen the panel or restart AE, and repair the install only if the failure persists.' }
-        : { zh: '在「Provider 管理」新增或选择一个通用 Provider（Base URL + API Key）。协议路由会在发送前按当前模型预检。', en: 'Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending.' },
   };
   // Display order is fixed (#229): routing never derives from row order —
   // the user's explicit channel choice decides — so rows stay put in the UI.
-  return [cli, cliConfigChannel, custom];
+  return [cli, cliConfigChannel];
+}
+
+export function openCodeChannels({ probe, providers = [] } = {}) {
+  const configured = providers.some((provider) => provider && provider.needsApiKey !== true);
+  return [{
+    channel: 'provider',
+    source: { zh: 'Provider 管理 · OpenCode', en: 'Provider Manager · OpenCode' },
+    checking: probe === null,
+    ok: configured && Boolean(probe?.loggedIn),
+    detail: probe?.detail || '',
+    fixHint: configured
+      ? {
+        zh: 'OpenCode 未能启动：安装或更新 OpenCode CLI 后重新检测。',
+        en: 'OpenCode could not start. Install or update the OpenCode CLI, then re-check.',
+      }
+      : {
+        zh: '在 Provider 管理中填写 Base URL、API Key 和模型；旧 Provider 需要重新填写 key。',
+        en: 'Add a Base URL, API key, and model in Provider Manager. '
+          + 'Older providers require their key again.',
+      },
+  }];
 }
 
 export function zcodeChannels({ zcodeProbe, configSummary } = {}) {
@@ -177,8 +125,8 @@ export function zcodeChannels({ zcodeProbe, configSummary } = {}) {
   return [cli, desktop, startPlan];
 }
 
-const CLAUDE_CHANNEL_IDS = ['subscription', 'api'];
-const CODEX_CHANNEL_IDS = ['cli', 'cli-config', 'custom'];
+const CLAUDE_CHANNEL_IDS = ['subscription'];
+const CODEX_CHANNEL_IDS = ['cli', 'cli-config'];
 
 // Legacy pref migration (#229): `byok` collapses into Claude's API channel;
 // OpenCode and ZCode remain internal adapters, not choices in the built-in
@@ -187,30 +135,27 @@ const CODEX_CHANNEL_IDS = ['cli', 'cli-config', 'custom'];
 // provider migrate onto the new explicit per-backend choice keys once.
 export function migrateBackendPref(storage) {
   let pref = 'subscription';
-  const channelChoices = { claude: 'subscription', codex: 'cli' };
+  const channelChoices = { claude: 'subscription', codex: 'cli', opencode: 'provider' };
   try {
     const raw = storage.getItem('ae_mcp_backend') || 'subscription';
     const legacyLock = storage.getItem('ae_mcp_channel_lock') || '';
     const storedClaude = storage.getItem('ae_mcp_channel_claude') || '';
     const storedCodex = storage.getItem('ae_mcp_channel_codex') || '';
-    if (raw === 'byok') {
-      pref = 'subscription';
-      channelChoices.claude = 'api';
-      storage.setItem('ae_mcp_backend', pref);
-    } else if (raw === 'opencode' || raw === 'zcode') {
+    if (raw === 'opencode') {
+      pref = 'opencode';
+    } else if (raw === 'byok' || raw === 'zcode') {
       pref = 'subscription';
       storage.setItem('ae_mcp_backend', pref);
     } else if (raw === 'codex' || raw === 'subscription') {
       pref = raw;
     }
     if (CLAUDE_CHANNEL_IDS.includes(storedClaude)) channelChoices.claude = storedClaude;
-    else if (legacyLock === 'api') channelChoices.claude = 'api';
+    else if (legacyLock === 'api') channelChoices.claude = 'subscription';
     if (CODEX_CHANNEL_IDS.includes(storedCodex)) channelChoices.codex = storedCodex;
-    else if (legacyLock === 'custom' || String(storage.getItem('ae_mcp_codex_provider') || '').trim()) {
-      channelChoices.codex = 'custom';
-    }
+    else if (legacyLock === 'custom') channelChoices.codex = 'cli';
     storage.setItem('ae_mcp_channel_claude', channelChoices.claude);
     storage.setItem('ae_mcp_channel_codex', channelChoices.codex);
+    storage.setItem('ae_mcp_channel_opencode', channelChoices.opencode);
     storage.removeItem('ae_mcp_channel_lock');
   } catch (e) { /* storage unavailable -> defaults */ }
   return { pref, channelChoices };

@@ -9,6 +9,7 @@ import {
   mergeCodexOfficialLoginModels,
   descriptorWithCustomModel,
   descriptorFromProbedModels,
+  openCodeDescriptorFromModels,
   zcodeDescriptorFromModels,
   zcodeDescriptorFromProbedModels,
 } from './backendCapabilities.js';
@@ -37,6 +38,7 @@ export function selectDescriptor({
   customProviderCredentialResolverReady = false,
   byokApiModels = null,
   codexCachedModels = null,
+  openCodeProviders = [],
   zcodeSessionModels = null,
   zcodeProbedModels = null,
 }) {
@@ -70,6 +72,18 @@ export function selectDescriptor({
     return effectiveChannel === 'cli'
       ? descriptorWithCustomModel(mergeCodexOfficialLoginModels(baseDescriptor), customId)
       : baseDescriptor;
+  }
+  if (backendPref === 'opencode' || effectiveBackend === 'opencode') {
+    const providerResult = {};
+    for (const provider of openCodeProviders || []) {
+      if (!provider || provider.needsApiKey === true) continue;
+      const models = {};
+      for (const modelId of provider.modelIds || []) {
+        models[modelId] = { name: modelId };
+      }
+      providerResult[provider.id] = { id: provider.id, name: provider.name, models };
+    }
+    return Object.keys(providerResult).length ? openCodeDescriptorFromModels(providerResult) : baseDescriptor;
   }
   // ZCode: the live model list only becomes known after session/create
   // returns settings.model.available (see zcodeBackend.js's

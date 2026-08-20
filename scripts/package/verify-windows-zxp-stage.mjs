@@ -1,15 +1,9 @@
 #!/usr/bin/env node
 
-import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const HELPER_FILES = Object.freeze([
-  'bin/ae-mcp-platform-helper.exe',
-  'bin/ae-mcp.exe',
-  'lib/ae-mcp-platform-helper-transport.node',
-]);
 const FORBIDDEN_RUNTIME_PATHS = Object.freeze([
   'runtime/windows-x64/node/node.exe',
   'runtime/windows-x64/python',
@@ -36,10 +30,6 @@ function regularFile(filePath) {
   return filePath;
 }
 
-function sha256File(filePath) {
-  return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
-}
-
 function relativeFiles(root) {
   const result = [];
   const visit = (directory) => {
@@ -53,44 +43,6 @@ function relativeFiles(root) {
   };
   visit(root);
   return result.sort();
-}
-
-function exactSet(actual, expected, message) {
-  const left = [...actual].sort();
-  const right = [...expected].sort();
-  if (JSON.stringify(left) !== JSON.stringify(right)) throw contractError(message);
-}
-
-function validateHelper(stageRoot) {
-  const helperRoot = path.join(stageRoot, 'platform', 'windows-x64');
-  const manifestPath = regularFile(path.join(helperRoot, 'helper-manifest.json'));
-  let manifest;
-  try {
-    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  } catch {
-    throw contractError('Windows Platform Helper manifest is invalid JSON');
-  }
-  const records = Array.isArray(manifest.files) ? manifest.files : [];
-  if (manifest.schemaVersion !== 1
-      || manifest.platform !== 'windows-x64'
-      || manifest.helperId !== 'com.junkdoge.ae-mcp.platform-helper'
-      || manifest.entrypoints?.helper !== HELPER_FILES[0]
-      || manifest.entrypoints?.launcher !== HELPER_FILES[1]) {
-    throw contractError('Windows Platform Helper manifest identity is invalid');
-  }
-  exactSet(records.map((record) => record?.path), HELPER_FILES,
-    'Windows Platform Helper manifest inventory is invalid');
-  exactSet(relativeFiles(helperRoot), ['helper-manifest.json', ...HELPER_FILES],
-    'Windows Platform Helper directory contains missing or unexpected files');
-  for (const record of records) {
-    if (!record || typeof record.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.sha256)) {
-      throw contractError('Windows Platform Helper manifest hash is invalid');
-    }
-    const filePath = regularFile(path.join(helperRoot, ...record.path.split('/')));
-    if (sha256File(filePath) !== record.sha256) {
-      throw contractError(`Windows Platform Helper hash mismatch: ${record.path}`);
-    }
-  }
 }
 
 function validateRuntimeBoundary(stageRoot) {
@@ -131,13 +83,6 @@ function validatePanelContracts(stageRoot, version) {
   if (!/["']tool["']\s*,\s*["']install["']\s*,\s*["']--force["']\s*,\s*["']--from["']/.test(bundle)) {
     throw contractError('compiled Panel contract is missing the uv tool install command');
   }
-  const transport = fs.readFileSync(
-    regularFile(path.join(stageRoot, 'host', 'platform-helper-transport.js')),
-    'utf8',
-  );
-  for (const marker of HELPER_FILES) {
-    if (!transport.includes(marker)) throw contractError(`Host Helper contract is missing: ${marker}`);
-  }
 }
 
 export function verifyWindowsZxpStage({ stageRoot, version }) {
@@ -146,10 +91,9 @@ export function verifyWindowsZxpStage({ stageRoot, version }) {
   if (!fs.existsSync(resolved) || !fs.lstatSync(resolved).isDirectory()) {
     throw contractError('Windows ZXP stage root is missing');
   }
-  validateHelper(resolved);
   validateRuntimeBoundary(resolved);
   validatePanelContracts(resolved, version);
-  return Object.freeze({ platform: 'windows-x64', version, helperFiles: [...HELPER_FILES] });
+  return Object.freeze({ platform: 'windows-x64', version });
 }
 
 function parseArgs(argv) {

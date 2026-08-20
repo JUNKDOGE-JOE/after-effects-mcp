@@ -743,7 +743,7 @@ test('App and Settings wiring expose no long-lived raw-provider-key state or cal
   assert.doesNotMatch(appSource, /useState\([^\n]*(?:codexApiKey|apiKey)/);
   assert.doesNotMatch(appSource, /runtimeRef\.current\s*=\s*\{[^}]*apiKey/s);
   assert.doesNotMatch(appSource, /onSaveCodexKey=\{\s*\([^)]*\)\s*=>/);
-  assert.match(settingsSource, /onSaveCodexKey\s*\?\s*<ZcodeKeyFallback/);
+  assert.doesNotMatch(settingsSource, /onSaveCodexKey\s*\?\s*<ZcodeKeyFallback/);
   const appStateSnapshot = { providers: [providerEntry()], codexCliCredentialReady: true };
   const callbackEvents = [{ type: 'provider-saved', providerId: 'provider-1' }];
   assert.equal(JSON.stringify({ appStateSnapshot, callbackEvents }).includes('resolved-only-for-request'), false);

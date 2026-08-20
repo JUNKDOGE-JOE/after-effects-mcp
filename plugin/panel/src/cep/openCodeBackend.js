@@ -1,6 +1,7 @@
 import { createSseParser } from '../lib/sse.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
+import { openCodeProviderDefinitions } from './openCodeProviderStore.js';
 import { attachmentFileUrl, normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
 const READY_TIMEOUT_MS = 30000;
@@ -123,9 +124,10 @@ function parseModel(value) {
   return { id: raw, providerID: DEFAULT_PROVIDER_ID };
 }
 
-function permissionRuleset(mode) {
-  if (mode === 'none') return { type: 'allow' };
-  return { type: 'ask' };
+function permissionRuleset() {
+  // The CEP host owns write approval for the embedded path via /mcp/c/<token>.
+  // Do not add a second OpenCode permission gate in front of that conversation.
+  return { type: 'allow' };
 }
 
 function permissionReplyBody(decision) {
@@ -147,6 +149,8 @@ export function createOpenCodeBackend({
   getPermissionMode,
   getMcpSpec,
   getToolMeta,
+  getProviders = () => [],
+  getExpertGuidance = () => true,
   onEvent,
   env,
 } = {}) {
@@ -307,6 +311,10 @@ export function createOpenCodeBackend({
     const mcpEntry = { type: 'remote', url: mcpSpec.url, enabled: true };
     const config = {
       $schema: 'https://opencode.ai/config.json',
+      // OpenCode is only the CLI transport here. Host conversation approval
+      // remains authoritative for writes through the tokenized MCP endpoint.
+      permission: { '*': 'allow' },
+      provider: openCodeProviderDefinitions(getProviders()),
       mcp: {
         ae: mcpEntry,
       },
@@ -442,7 +450,7 @@ export function createOpenCodeBackend({
       const result = await postJson('/session', {
         title: 'After Effects MCP',
         model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID),
-        permission: permissionRuleset(getPermissionMode ? getPermissionMode() : 'manual'),
+        permission: permissionRuleset(),
       });
       sessionId = String((result && (result.id || result.sessionID || result.sessionId)) || '');
       if (!sessionId) throw new Error('OpenCode did not return a session id.');

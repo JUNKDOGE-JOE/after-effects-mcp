@@ -295,7 +295,7 @@ export function validateBundleManifest(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle manifest must be an object');
   }
-  const exactTop = ['files', 'helper', 'platform', 'runtime', 'schemaVersion', 'sourceCommitSha', 'version'];
+  const exactTop = ['files', 'platform', 'runtime', 'schemaVersion', 'sourceCommitSha', 'version'];
   const observedTop = Object.keys(value).sort();
   const expectedTop = Object.hasOwn(value, 'nativePlugin')
     ? [...exactTop, 'nativePlugin'].sort() : exactTop;
@@ -323,13 +323,6 @@ export function validateBundleManifest(value) {
       || !SHA256_PATTERN.test(value.runtime.sbomSha256 ?? '')
       || !SHA256_PATTERN.test(value.runtime.licenseInventorySha256 ?? '')) {
     throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle runtime identity is invalid');
-  }
-  if (!value.helper
-      || JSON.stringify(Object.keys(value.helper).sort())
-        !== JSON.stringify(['helperId', 'manifestSha256'])
-      || value.helper.helperId !== 'com.junkdoge.ae-mcp.platform-helper'
-      || !SHA256_PATTERN.test(value.helper.manifestSha256 ?? '')) {
-    throw bundleError('BUNDLE_MANIFEST_INVALID', 'bundle helper identity is invalid');
   }
   if (Object.hasOwn(value, 'nativePlugin')) {
     if (value.platform !== 'macos-arm64'

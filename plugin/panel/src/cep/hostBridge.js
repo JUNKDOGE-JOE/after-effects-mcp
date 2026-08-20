@@ -89,9 +89,8 @@ export function loadBundledHostDependencies({ cepRequire, adapter, extensionRoot
   const samePath = (left, right) => nativePath.same(left, right);
 
   try {
-    // This path is inside the immutable extension payload.  It intentionally
-    // does not consult ~/.ae-mcp/runtime/current; that pointer remains owned by
-    // the helper-gated RuntimeManager.
+    // This path is inside the immutable extension payload. It intentionally
+    // does not consult ~/.ae-mcp/runtime/current, which remains RuntimeManager-owned.
     const runtimePackageAnchor = adapter.paths.join([
       extensionRoot, 'runtime', adapter.id, 'node', 'host', 'package.json',
     ]);
@@ -195,27 +194,7 @@ export function loadBundledHostDependencies({ cepRequire, adapter, extensionRoot
   }
 }
 
-// ---- CEP side-effects (exercised in AE manual checklist) ----
-function helperUnavailableError() {
-  const error = new Error('Platform helper is unavailable');
-  error.code = 'HELPER_UNAVAILABLE';
-  error.retryable = true;
-  return error;
-}
-
-function sanitizeHelperError(error) {
-  const code = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/.test(error.code)
-    ? error.code
-    : 'HELPER_UNAVAILABLE';
-  const sanitized = new Error(code === 'HELPER_UNAVAILABLE'
-    ? 'Platform helper is unavailable'
-    : `Platform helper request failed with ${code}`);
-  sanitized.code = code;
-  sanitized.retryable = error?.retryable === true || code === 'HELPER_UNAVAILABLE';
-  return sanitized;
-}
-
-function helperRuntime(platformId) {
+function nativeAegpRuntime(platformId) {
   return platformId === 'macos-arm64'
     ? { platform: 'darwin', arch: 'arm64' }
     : { platform: 'win32', arch: 'x64' };
@@ -229,98 +208,24 @@ export function createHostController({
   requireImpl,
   addBeforeUnload,
   extensionRoot,
-  createPlatformHelperTransportImpl,
-  createPlatformHelperClientImpl,
 }) {
   const adapter = platform || createPlatformAdapter();
   let host = null;
-  let helperClient = null;
-  let helperBindingContext = null;
   let platformRoots = null;
   let beforeUnloadInstalled = false;
   let lifecycleGeneration = 0;
 
-  function closeHelperClient(client, fallbackTransport = null) {
-    const closable = client && typeof client.close === 'function' ? client : fallbackTransport;
-    if (!closable || typeof closable.close !== 'function') return;
-    try { Promise.resolve(closable.close()).catch(() => {}); } catch { /* best effort */ }
-  }
-
-  function disposeLifecycle(client, hostInstance, { closeClient = true } = {}) {
-    if (closeClient) closeHelperClient(client);
+  function disposeLifecycle(hostInstance) {
     try { if (hostInstance && typeof hostInstance.stop === 'function') hostInstance.stop(); } catch { /* best effort */ }
-  }
-
-  function bindPlatformHelperFacade({
-    cepRequire,
-    extRoot,
-    hostInstance,
-    repairRegistration = false,
-  }) {
-    let transport = null;
-    let nextClient = null;
-    let bindingError = null;
-    try {
-      const transportFactory = createPlatformHelperTransportImpl || (() => {
-        const modulePath = adapter.paths.join([extRoot, 'host', 'platform-helper-transport.js']);
-        const loaded = cepRequire(modulePath);
-        if (typeof loaded?.createPlatformHelperTransport !== 'function') throw helperUnavailableError();
-        return loaded.createPlatformHelperTransport;
-      })();
-      const clientFactory = createPlatformHelperClientImpl || (() => {
-        const modulePath = adapter.paths.join([extRoot, 'host', 'platform-helper-client.js']);
-        const loaded = cepRequire(modulePath);
-        if (typeof loaded?.createPlatformHelperClient !== 'function') throw helperUnavailableError();
-        return loaded.createPlatformHelperClient;
-      })();
-      transport = transportFactory({
-        platformId: adapter.id,
-        runtime: helperRuntime(adapter.id),
-        repairRegistration,
-      });
-      if (!transport || typeof transport.request !== 'function' || typeof transport.close !== 'function') {
-        throw helperUnavailableError();
-      }
-      nextClient = clientFactory({ transport });
-      for (const method of ['capabilities', 'secretGet', 'secretSet', 'secretDelete', 'close']) {
-        if (typeof nextClient?.[method] !== 'function') throw helperUnavailableError();
-      }
-    } catch (error) {
-      bindingError = sanitizeHelperError(error);
-      closeHelperClient(nextClient, transport);
-      nextClient = null;
-    }
-    helperClient = nextClient;
-    const facadeClient = nextClient;
-
-    const invoke = (method, value, hasValue) => {
-      const client = facadeClient;
-      if (!client) return Promise.reject(bindingError || helperUnavailableError());
-      let request;
-      try {
-        request = hasValue ? client[method](value) : client[method]();
-      } catch (error) {
-        return Promise.reject(sanitizeHelperError(error));
-      }
-      return Promise.resolve(request)
-        .catch((error) => { throw sanitizeHelperError(error); });
-    };
-    hostInstance.capabilities = () => invoke('capabilities', undefined, false);
-    hostInstance.secretGet = (reference) => invoke('secretGet', reference, true);
-    hostInstance.secretSet = (value) => invoke('secretSet', value, true);
-    hostInstance.secretDelete = (value) => invoke('secretDelete', value, true);
   }
 
   function start(port) {
     const generation = lifecycleGeneration += 1;
     onStatus('starting', port);
     const priorHost = host;
-    const priorClient = helperClient;
     host = null;
-    helperClient = null;
-    helperBindingContext = null;
     platformRoots = null;
-    if (priorHost || priorClient) disposeLifecycle(priorClient, priorHost);
+    if (priorHost) disposeLifecycle(priorHost);
     try {
       const cepRequire = requireImpl || getCepRequire();
       const extRoot = normalizeCepPath(extensionRoot || cs.getSystemPath('extension'), adapter);
@@ -339,13 +244,11 @@ export function createHostController({
       }
       nextHost.setRuntimeDependencies(runtimeDependencies);
       if (nextHost.setNativeAegpRuntime) {
-        nextHost.setNativeAegpRuntime(helperRuntime(adapter.id));
+        nextHost.setNativeAegpRuntime(nativeAegpRuntime(adapter.id));
       }
       nextHost.setCSInterface(cs);
       if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
       host = nextHost;
-      helperBindingContext = { cepRequire, extRoot, hostInstance: nextHost };
-      bindPlatformHelperFacade({ cepRequire, extRoot, hostInstance: nextHost });
       // Release the port when this JS context goes away (panel close or a
       // devtools reload) — otherwise the orphaned listener keeps the port and
       // the next context fails with EADDRINUSE while requests hang on the
@@ -354,13 +257,10 @@ export function createHostController({
         const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener('beforeunload', handler));
         installBeforeUnload(() => {
           lifecycleGeneration += 1;
-          const closingClient = helperClient;
           const closingHost = host;
-          helperClient = null;
-          helperBindingContext = null;
           host = null;
           platformRoots = null;
-          disposeLifecycle(closingClient, closingHost, { closeClient: false });
+          disposeLifecycle(closingHost);
         });
         beforeUnloadInstalled = true;
       }
@@ -371,12 +271,9 @@ export function createHostController({
       }, roots);
     } catch (e) {
       const failedHost = host;
-      const failedClient = helperClient;
       host = null;
-      helperClient = null;
-      helperBindingContext = null;
       platformRoots = null;
-      disposeLifecycle(failedClient, failedHost);
+      disposeLifecycle(failedHost);
       if (generation === lifecycleGeneration) onStatus('error', port, e.message);
     }
   }
@@ -392,35 +289,5 @@ export function createHostController({
       }, platformRoots);
     }
   }
-  async function repairPlatformHelper() {
-    const context = helperBindingContext;
-    const currentHost = host;
-    // Rebinds the facade on a fresh transport: payload re-verification plus
-    // reconnect/spawn of the CURRENT endpoint generation (#216). macOS also
-    // re-runs helper registration via repairRegistration.
-    if (!['macos-arm64', 'windows-x64'].includes(adapter.id)
-        || !context
-        || !currentHost
-        || context.hostInstance !== currentHost) {
-      throw helperUnavailableError();
-    }
-
-    const priorClient = helperClient;
-    helperClient = null;
-    closeHelperClient(priorClient);
-    bindPlatformHelperFacade({
-      ...context,
-      repairRegistration: adapter.id === 'macos-arm64',
-    });
-
-    if (host !== currentHost) {
-      throw helperUnavailableError();
-    }
-    try {
-      return await currentHost.capabilities();
-    } catch (error) {
-      throw sanitizeHelperError(error);
-    }
-  }
-  return { start, restart, repairPlatformHelper, getHost: () => host };
+  return { start, restart, getHost: () => host };
 }

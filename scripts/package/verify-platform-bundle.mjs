@@ -12,8 +12,6 @@ import { validateRuntimeManifest } from './lib/runtime-manifest.mjs';
 import {
   NATIVE_PLUGIN_MANIFEST_PATH,
   PLATFORM_IDS,
-  SHA256_PATTERN,
-  assertPortableRelativePath,
   bundleError,
   canonicalJson,
   collectManifestEntries,
@@ -40,47 +38,6 @@ const ADOBE_SDK_LOCKED_FILE_DIGESTS = new Set([
   '3d3a39175a09d07f6f9734284636f9eadce968b05161650e3cba097a95905330',
   '640b513bfdfdab264057f3fce0356ced468cdb6d3bd3e2666e6743ec8be1fdba',
 ]);
-
-function validateHelperManifest(value, platform) {
-  const expectedTop = ['entrypoints', 'files', 'helperId', 'platform', 'schemaVersion'];
-  if (!value || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedTop)
-      || value.schemaVersion !== 1 || value.platform !== platform
-      || value.helperId !== 'com.junkdoge.ae-mcp.platform-helper'
-      || !value.entrypoints || typeof value.entrypoints.helper !== 'string'
-      || typeof value.entrypoints.launcher !== 'string'
-      || JSON.stringify(Object.keys(value.entrypoints).sort())
-        !== JSON.stringify(['helper', 'launcher'])
-      || value.entrypoints.helper === value.entrypoints.launcher
-      || !Array.isArray(value.files) || value.files.length < 2) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper manifest identity is invalid');
-  }
-  const paths = new Set();
-  for (const record of value.files) {
-    assertPortableRelativePath(record?.path, 'BUNDLE_HELPER_IDENTITY_INVALID');
-    if (JSON.stringify(Object.keys(record ?? {}).sort())
-          !== JSON.stringify(['architecture', 'path', 'sha256'])
-        || paths.has(record.path)
-        || !['macho-arm64', 'pe-x64', 'script', 'data'].includes(record.architecture)
-        || !SHA256_PATTERN.test(record.sha256 ?? '')) {
-      throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper payload record is invalid');
-    }
-    paths.add(record.path);
-  }
-  if (!paths.has(value.entrypoints.helper) || !paths.has(value.entrypoints.launcher)) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper entrypoints are not declared payload files');
-  }
-  const records = new Map(value.files.map((record) => [record.path, record]));
-  const nativeArchitecture = platform === 'macos-arm64' ? 'macho-arm64' : 'pe-x64';
-  const helperArchitecture = records.get(value.entrypoints.helper)?.architecture;
-  const launcherArchitecture = records.get(value.entrypoints.launcher)?.architecture;
-  if (helperArchitecture !== nativeArchitecture
-      || (platform === 'macos-arm64'
-        ? !['macho-arm64', 'script'].includes(launcherArchitecture)
-        : launcherArchitecture !== nativeArchitecture)) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper entrypoint architecture is invalid');
-  }
-  return value;
-}
 
 async function verifyEntry(expected, actual, exactIdentity) {
   if (!actual || expected.type !== actual.type || expected.size !== actual.size
@@ -220,48 +177,6 @@ async function verifyHostRuntime(root, platform, entries) {
     throw bundleError('BUNDLE_HOST_RUNTIME_INVALID', 'Express package main escapes its package root');
   }
   requireFile(`node_modules/express/${entryRelative.split(path.sep).join('/')}`);
-}
-
-async function verifyHelper(root, platform, manifest, exactIdentity) {
-  const helperRoot = path.join(root, 'platform', platform);
-  const helperManifestPath = path.join(helperRoot, 'helper-manifest.json');
-  if (exactIdentity && await sha256File(helperManifestPath) !== manifest.helper.manifestSha256) {
-    throw bundleError('BUNDLE_HASH_MISMATCH', 'helper manifest SHA-256 mismatch');
-  }
-  const helper = validateHelperManifest(await readJsonFile(helperManifestPath), platform);
-  const helperEntries = await collectManifestEntries(helperRoot);
-  const helperEntriesByPath = new Map(helperEntries.map((entry) => [entry.path, entry]));
-  const declared = new Set(['helper-manifest.json', ...helper.files.map((record) => record.path)]);
-  if (helperEntries.length !== declared.size
-      || helperEntries.some((entry) => !declared.has(entry.path))) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper payload contains undeclared files');
-  }
-  for (const record of helper.files) {
-    if (helperEntriesByPath.get(record.path)?.type !== 'file') {
-      throw bundleError(
-        'BUNDLE_HELPER_IDENTITY_INVALID',
-        `helper payload must be a regular file: ${record.path}`,
-      );
-    }
-    const filePath = path.resolve(helperRoot, ...record.path.split('/'));
-    const relative = path.relative(helperRoot, filePath);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
-      throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper file path escapes helper root');
-    }
-    if (exactIdentity && await sha256File(filePath) !== record.sha256) {
-      throw bundleError('BUNDLE_HASH_MISMATCH', `helper payload SHA-256 mismatch: ${record.path}`);
-    }
-    if (record.architecture === 'script') {
-      const mode = (await fs.promises.stat(filePath)).mode & 0o111;
-      if (!mode) throw bundleError('BUNDLE_EXECUTABLE_MODE_INVALID', `helper script is not executable: ${record.path}`);
-    } else if (record.architecture !== 'data') {
-      const expectedArchitecture = platform === 'macos-arm64' ? 'macho-arm64' : 'pe-x64';
-      if (record.architecture !== expectedArchitecture) {
-        throw bundleError('BUNDLE_ARCH_MISMATCH', `helper manifest architecture mismatch: ${record.path}`);
-      }
-      await assertBinaryArchitecture(filePath, platform, `helper:${record.path}`);
-    }
-  }
 }
 
 async function verifyNativeFiles(root, platform, entries) {
@@ -486,7 +401,6 @@ export async function verifyPlatformBundle({
   );
   await verifyHostRuntime(resolvedRoot, platform, actual);
   await verifySupportContract(resolvedRoot, platform);
-  await verifyHelper(resolvedRoot, platform, manifest, exactIdentity);
   await verifyDevelopmentDebugContract(resolvedRoot, candidateRepoRoot, actual);
   assertProductionFileSet(actual, platform);
   await verifyNativeFiles(resolvedRoot, platform, actual);

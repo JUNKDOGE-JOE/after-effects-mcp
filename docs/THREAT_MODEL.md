@@ -14,7 +14,6 @@ same-user process safe.
 The supported shape is one user operating After Effects and ae-mcp on the same local machine.
 Panel agents and configured external clients spawn Core over MCP stdio. Core calls the CEP host over
 loopback HTTP; CEP reaches After Effects through maintained JSX or the local native AEGP transport.
-The Platform Helper supplies OS credential-store and window-capture adapters.
 
 Non-loopback or forwarded MCP/HTTP, remote AE hosts, shared daemons, second-user access,
 multi-user/multi-tenant operation, and service accounts are unsupported. A configurable local URL
@@ -29,12 +28,15 @@ Provider/API secrets must not enter:
 - logs, diagnostics, audit summaries, acceptance evidence, crash reports, or user-facing errors;
 - command lines or process environments other than the selected provider process that requires
   the value; or
-- an unselected backend, fallback route, or unrelated helper operation.
+- an unselected backend or fallback route.
 
-Runtime secrets remain behind the OS credential-store interface. Product state carries opaque
-secret references, not secret values. Secret writes are verified, deletion is explicit, diagnostics
-are redacted, and an unavailable secret store fails closed rather than falling back to plaintext.
-Release and signing credentials remain confined to protected release environments.
+Provider credentials are held by the selected CLI: Claude and Codex use their own login state, and
+OpenCode uses its own `auth.json`. The panel writes a custom OpenCode key only to that CLI-owned
+store, with a merge-and-atomic update; it does not retain a second ae-mcp secret reference or copy.
+This is an intentional security-level adjustment from the former system-credential-store boundary:
+an OpenCode API key is plaintext in OpenCode's user data store and is protected by the supported
+single-user host boundary, not by an ae-mcp-owned credential vault. Release and signing credentials
+remain confined to protected release environments.
 
 This promise covers accidental disclosure by ae-mcp. It is not a promise to resist an administrator,
 OS compromise, memory inspection, or hostile code already running as the trusted host user.
@@ -88,6 +90,5 @@ Supporting remote access, a second user, shared-service operation, intentionally
 untrusted same-user processes requires an explicit product decision and a new threat model before
 implementation. Until then, such work is out of scope rather than deferred security debt.
 
-See `docs/platform/PLATFORM_HELPER_SECURITY.md` for credential and signing details,
-`docs/RELEASE.md` for release integrity, and `docs/CAPABILITY_PACKAGE_WORKFLOW.md` for correctness
-and real-AE evidence.
+See `docs/RELEASE.md` for release integrity and `docs/CAPABILITY_PACKAGE_WORKFLOW.md` for
+correctness and real-AE evidence.

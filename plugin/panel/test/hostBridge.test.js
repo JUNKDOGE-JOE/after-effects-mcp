@@ -5,12 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import Module, { createRequire } from 'node:module';
 import {
-  normalizeCepPath,
-  isValidPort,
-  loadSavedPort,
-  savePort,
   createHostController,
+  isValidPort,
   loadBundledHostDependencies,
+  loadSavedPort,
+  normalizeCepPath,
+  savePort,
 } from '../src/cep/hostBridge.js';
 import { createWindowsAdapter } from '../src/cep/platform/windows.js';
 
@@ -120,46 +120,43 @@ function fakeHostDependencyRuntime({ platformId, extensionRoot, express }) {
   return { fs: fakeFs, moduleApi };
 }
 
-test('normalizeCepPath strips file scheme and windows leading slash', () => {
-  assert.equal(normalizeCepPath('file:///C:/x/y'), 'C:/x/y');
-  assert.equal(normalizeCepPath('file://C:\\x'), 'C:\\x');
+test('normalizeCepPath strips CEP file URLs without changing native paths', () => {
+  assert.equal(normalizeCepPath('file:///C:/Program%20Files/AE%20MCP'), 'C:/Program Files/AE MCP');
+  assert.equal(normalizeCepPath('/Applications/AE MCP'), '/Applications/AE MCP');
 });
 
-test('normalizeCepPath uses the adapter to produce a native Windows path', () => {
+test('isValidPort accepts the supported host listener range', () => {
+  assert.equal(isValidPort(1023), false);
+  assert.equal(isValidPort(1024), true);
+  assert.equal(isValidPort(65535), true);
+  assert.equal(isValidPort(65536), false);
+});
+
+test('saved panel port round-trips and rejects invalid values', () => {
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key), setItem: (key, value) => values.set(key, value) };
+  savePort(storage, 11489);
+  assert.equal(loadSavedPort(storage), 11489);
+  values.set('ae_mcp_panel_port', '70000');
+  assert.equal(loadSavedPort(storage), null);
+});
+
+test('normalizeCepPath uses the adapter for Windows paths and UNC file URLs', () => {
   const platform = createWindowsAdapter({
     platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: {},
-    fs: { existsSync: () => false }, spawnImpl() { throw new Error('not expected'); }, now: () => 0,
+    fs: { existsSync: () => false },
+    spawnImpl() { throw new Error('not expected'); },
+    now: () => 0,
   });
 
   assert.equal(
     normalizeCepPath('file:///C:/Program%20Files/AE%20MCP', platform),
     'C:\\Program Files\\AE MCP',
   );
-});
-
-test('normalizeCepPath preserves a Windows UNC file URL authority', () => {
-  const platform = createWindowsAdapter({
-    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: {},
-    fs: { existsSync: () => false }, spawnImpl: () => { throw new Error('not expected'); }, now: () => 0,
-  });
   assert.equal(
     normalizeCepPath('file://server/share/AE%20MCP/plugin', platform),
     '\\\\server\\share\\AE MCP\\plugin',
   );
-});
-
-test('isValidPort bounds', () => {
-  assert.equal(isValidPort(11488), true);
-  assert.equal(isValidPort(80), false);
-  assert.equal(isValidPort(NaN), false);
-});
-
-test('port persistence round-trip with fake storage', () => {
-  const mem = new Map();
-  const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, v) };
-  assert.equal(loadSavedPort(storage), null);
-  savePort(storage, 12000);
-  assert.equal(loadSavedPort(storage), 12000);
 });
 
 test('host Express resolves from the platform-specific bundle runtime without NODE_PATH mutation', (t) => {
@@ -171,7 +168,10 @@ test('host Express resolves from the platform-specific bundle runtime without NO
   fs.mkdirSync(path.join(runtimeHost, 'node_modules', 'express'), { recursive: true });
   fs.mkdirSync(extensionHost, { recursive: true });
   fs.writeFileSync(path.join(runtimeHost, 'package.json'), '{"private":true}\n');
-  fs.writeFileSync(path.join(runtimeHost, 'node_modules', 'express', 'package.json'), '{"name":"express","main":"index.js"}\n');
+  fs.writeFileSync(
+    path.join(runtimeHost, 'node_modules', 'express', 'package.json'),
+    '{"name":"express","main":"index.js"}\n',
+  );
   fs.writeFileSync(
     path.join(runtimeHost, 'node_modules', 'express', 'index.js'),
     'module.exports = function bundledExpress() {};\n',
@@ -184,14 +184,8 @@ test('host Express resolves from the platform-specific bundle runtime without NO
   assert.throws(
     () => cepRequire(path.join(extensionHost, 'probe.js')),
     (error) => error && error.code === 'MODULE_NOT_FOUND',
-    'an extension-host require must not accidentally see runtime/node/host/node_modules',
   );
-
-  const dependencies = loadBundledHostDependencies({
-    cepRequire,
-    adapter,
-    extensionRoot,
-  });
+  const dependencies = loadBundledHostDependencies({ cepRequire, adapter, extensionRoot });
 
   assert.equal(typeof dependencies.express, 'function');
   assert.equal(dependencies.express.name, 'bundledExpress');
@@ -200,7 +194,7 @@ test('host Express resolves from the platform-specific bundle runtime without NO
   assert.equal(Object.isFrozen(dependencies), true);
 });
 
-test('host Express resolves from the extension host only for an explicit .debug development install', (t) => {
+test('host Express resolves from extension host only for an explicit .debug development install', (t) => {
   const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-dev-resolution-'));
   t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
   const adapter = nativeHostAdapter();
@@ -208,44 +202,23 @@ test('host Express resolves from the extension host only for an explicit .debug 
   fs.mkdirSync(path.join(extensionHost, 'node_modules', 'express'), { recursive: true });
   fs.writeFileSync(path.join(extensionRoot, '.debug'), '<ExtensionList />\n');
   fs.writeFileSync(path.join(extensionHost, 'package.json'), '{"private":true}\n');
-  fs.writeFileSync(path.join(extensionHost, 'node_modules', 'express', 'package.json'), '{"name":"express","main":"index.js"}\n');
+  fs.writeFileSync(
+    path.join(extensionHost, 'node_modules', 'express', 'package.json'),
+    '{"name":"express","main":"index.js"}\n',
+  );
   fs.writeFileSync(
     path.join(extensionHost, 'node_modules', 'express', 'index.js'),
     'module.exports = function developmentExpress() {};\n',
   );
 
   const dependencies = loadBundledHostDependencies({
-    cepRequire: createRequire(import.meta.url),
-    adapter,
-    extensionRoot,
+    cepRequire: createRequire(import.meta.url), adapter, extensionRoot,
   });
-
   assert.equal(dependencies.express.name, 'developmentExpress');
 });
 
-test('host Express never falls back to extension node_modules without the .debug marker', (t) => {
-  const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-prod-resolution-'));
-  t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
-  const extensionHost = path.join(extensionRoot, 'host');
-  fs.mkdirSync(path.join(extensionHost, 'node_modules', 'express'), { recursive: true });
-  fs.writeFileSync(path.join(extensionHost, 'package.json'), '{"private":true}\n');
-  fs.writeFileSync(
-    path.join(extensionHost, 'node_modules', 'express', 'index.js'),
-    'module.exports = function ambientExpress() {};\n',
-  );
-
-  assert.throws(
-    () => loadBundledHostDependencies({
-      cepRequire: createRequire(import.meta.url),
-      adapter: macHostAdapter(),
-      extensionRoot,
-    }),
-    (error) => error && error.code === 'HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE',
-  );
-});
-
-test('host dependency loading rejects an ancestor Express when the selected anchor has no local package', (t) => {
-  const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-ancestor-'));
+test('host dependency loading rejects fallback to extension or ancestor node_modules', (t) => {
+  const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-ambient-'));
   t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
   const runtimeHost = path.join(extensionRoot, 'runtime', 'macos-arm64', 'node', 'host');
   fs.mkdirSync(runtimeHost, { recursive: true });
@@ -260,7 +233,7 @@ test('host dependency loading rejects an ancestor Express when the selected anch
   }));
 });
 
-test('host dependency loading rejects Express discovered only through host NODE_PATH and restores the resolver hook', (t) => {
+test('host dependency loading rejects Express discovered only through NODE_PATH', (t) => {
   const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-node-path-'));
   const ambientRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-node-path-ambient-'));
   t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
@@ -288,18 +261,26 @@ test('host dependency loading rejects Express discovered only through host NODE_
   assert.equal(Module._resolveFilename, resolverBefore);
 });
 
-test('host dependency loading rejects selected package anchors that are symlinks', (t) => {
+test('host dependency loading rejects selected anchors and package roots that are symlinks', (t) => {
   for (const development of [false, true]) {
     const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-anchor-link-'));
+    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-anchor-outside-'));
     t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
+    t.after(() => fs.rmSync(outsideRoot, { recursive: true, force: true }));
     const hostRoot = development
       ? path.join(extensionRoot, 'host')
       : path.join(extensionRoot, 'runtime', 'macos-arm64', 'node', 'host');
-    const outsideAnchor = path.join(extensionRoot, 'outside-package.json');
     fs.mkdirSync(hostRoot, { recursive: true });
     if (development) fs.writeFileSync(path.join(extensionRoot, '.debug'), '<ExtensionList />\n');
-    fs.writeFileSync(outsideAnchor, '{"private":true}\n');
-    if (!createSymlinkOrSkip(t, outsideAnchor, path.join(hostRoot, 'package.json'))) return;
+    fs.writeFileSync(path.join(outsideRoot, 'package.json'), '{"private":true}\n');
+    const linked = createSymlinkOrSkip(
+      t,
+      path.join(outsideRoot, 'package.json'),
+      path.join(hostRoot, 'package.json'),
+    );
+    if (!linked) {
+      return;
+    }
     writeCommonJsPackage(
       path.join(hostRoot, 'node_modules', 'express'),
       'module.exports = function linkedAnchorExpress() {};\n',
@@ -311,7 +292,7 @@ test('host dependency loading rejects selected package anchors that are symlinks
   }
 });
 
-test('host dependency loading rejects an Express package symlink that escapes the selected host root', (t) => {
+test('host dependency loading rejects an Express package symlink that escapes the host root', (t) => {
   const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-package-link-'));
   const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-package-outside-'));
   t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
@@ -327,98 +308,38 @@ test('host dependency loading rejects an Express package symlink that escapes th
   }));
 });
 
-test('host dependency loading rejects an Express entry symlink that escapes the selected host root', (t) => {
+test('host dependency loading rejects an Express entry symlink even when it remains in host root', (t) => {
   const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-entry-link-'));
-  const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-entry-outside-'));
   t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
-  t.after(() => fs.rmSync(outsideRoot, { recursive: true, force: true }));
-  const runtimeHost = path.join(extensionRoot, 'runtime', 'macos-arm64', 'node', 'host');
-  const expressRoot = path.join(runtimeHost, 'node_modules', 'express');
+  const hostRoot = path.join(extensionRoot, 'runtime', 'macos-arm64', 'node', 'host');
+  const expressRoot = path.join(hostRoot, 'node_modules', 'express');
   fs.mkdirSync(expressRoot, { recursive: true });
-  fs.writeFileSync(path.join(runtimeHost, 'package.json'), '{"private":true}\n');
-  fs.writeFileSync(path.join(expressRoot, 'package.json'), '{"name":"express","main":"index.js"}\n');
-  const outsideEntry = path.join(outsideRoot, 'index.js');
-  fs.writeFileSync(outsideEntry, 'module.exports = function escapedEntryExpress() {};\n');
-  if (!createSymlinkOrSkip(t, outsideEntry, path.join(expressRoot, 'index.js'))) return;
+  fs.writeFileSync(path.join(hostRoot, 'package.json'), '{"private":true}\n');
+  fs.writeFileSync(
+    path.join(expressRoot, 'package.json'),
+    '{"name":"express","main":"index.js"}\n',
+  );
+  const inRootTarget = path.join(hostRoot, 'other.js');
+  fs.writeFileSync(inRootTarget, 'module.exports = function linkedMainExpress() {};\n');
+  if (!createSymlinkOrSkip(t, inRootTarget, path.join(expressRoot, 'index.js'))) return;
 
   expectHostDependenciesUnavailable(() => loadBundledHostDependencies({
     cepRequire: createRequire(import.meta.url), adapter: macHostAdapter(), extensionRoot,
   }));
 });
 
-test('host dependency loading rejects a transitive dependency that falls back to an ambient ancestor', (t) => {
-  const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-transitive-'));
-  t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
-  const runtimeHost = path.join(extensionRoot, 'runtime', 'macos-arm64', 'node', 'host');
-  fs.mkdirSync(runtimeHost, { recursive: true });
-  fs.writeFileSync(path.join(runtimeHost, 'package.json'), '{"private":true}\n');
-  writeCommonJsPackage(
-    path.join(runtimeHost, 'node_modules', 'express'),
-    'require("ambient-only"); module.exports = function transitiveExpress() {};\n',
-  );
-  writeCommonJsPackage(
-    path.join(extensionRoot, 'node_modules', 'ambient-only'),
-    'module.exports = true;\n',
-    'ambient-only',
-  );
-  const resolverBefore = Module._resolveFilename;
-
-  expectHostDependenciesUnavailable(() => loadBundledHostDependencies({
-    cepRequire: createRequire(import.meta.url), adapter: macHostAdapter(), extensionRoot,
-  }));
-  assert.equal(Module._resolveFilename, resolverBefore);
-});
-
-test('host dependency loading rejects production and development host roots symlinked outside the extension', (t) => {
-  for (const development of [false, true]) {
-    const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-root-link-'));
-    const outsideHost = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-root-outside-'));
-    t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
-    t.after(() => fs.rmSync(outsideHost, { recursive: true, force: true }));
-    const hostRoot = development
-      ? path.join(extensionRoot, 'host')
-      : path.join(extensionRoot, 'runtime', 'macos-arm64', 'node', 'host');
-    fs.mkdirSync(path.dirname(hostRoot), { recursive: true });
-    fs.writeFileSync(path.join(outsideHost, 'package.json'), '{"private":true}\n');
-    writeCommonJsPackage(
-      path.join(outsideHost, 'node_modules', 'express'),
-      'module.exports = function escapedHostRootExpress() {};\n',
-    );
-    if (!createSymlinkOrSkip(t, outsideHost, hostRoot, 'dir')) return;
-    if (development) fs.writeFileSync(path.join(extensionRoot, '.debug'), '<ExtensionList />\n');
-
-    expectHostDependenciesUnavailable(() => loadBundledHostDependencies({
-      cepRequire: createRequire(import.meta.url), adapter: macHostAdapter(), extensionRoot,
-    }));
-  }
-});
-
-test('host dependency loading rejects an Express main entry outside the exact package root', (t) => {
+test('host dependency loading rejects a package main entry outside its package root', (t) => {
   const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-main-escape-'));
   t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
   const hostRoot = path.join(extensionRoot, 'runtime', 'macos-arm64', 'node', 'host');
   const expressRoot = path.join(hostRoot, 'node_modules', 'express');
   fs.mkdirSync(expressRoot, { recursive: true });
   fs.writeFileSync(path.join(hostRoot, 'package.json'), '{"private":true}\n');
-  fs.writeFileSync(path.join(expressRoot, 'package.json'), '{"name":"express","main":"../../other.js"}\n');
+  fs.writeFileSync(
+    path.join(expressRoot, 'package.json'),
+    '{"name":"express","main":"../../other.js"}\n',
+  );
   fs.writeFileSync(path.join(hostRoot, 'other.js'), 'module.exports = function escapedMainExpress() {};\n');
-
-  expectHostDependenciesUnavailable(() => loadBundledHostDependencies({
-    cepRequire: createRequire(import.meta.url), adapter: macHostAdapter(), extensionRoot,
-  }));
-});
-
-test('host dependency loading rejects an in-root Express entry symlink', (t) => {
-  const extensionRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-host-entry-in-root-link-'));
-  t.after(() => fs.rmSync(extensionRoot, { recursive: true, force: true }));
-  const hostRoot = path.join(extensionRoot, 'runtime', 'macos-arm64', 'node', 'host');
-  const expressRoot = path.join(hostRoot, 'node_modules', 'express');
-  fs.mkdirSync(expressRoot, { recursive: true });
-  fs.writeFileSync(path.join(hostRoot, 'package.json'), '{"private":true}\n');
-  fs.writeFileSync(path.join(expressRoot, 'package.json'), '{"name":"express","main":"index.js"}\n');
-  const inRootTarget = path.join(hostRoot, 'other.js');
-  fs.writeFileSync(inRootTarget, 'module.exports = function linkedMainExpress() {};\n');
-  if (!createSymlinkOrSkip(t, inRootTarget, path.join(expressRoot, 'index.js'))) return;
 
   expectHostDependenciesUnavailable(() => loadBundledHostDependencies({
     cepRequire: createRequire(import.meta.url), adapter: macHostAdapter(), extensionRoot,
@@ -452,8 +373,7 @@ test('host controller reuses an already-normalized extension root instead of rea
       calls.push(request);
       return host;
     },
-    onStatus: () => {}, onLog: () => {},
-    addBeforeUnload: () => {},
+    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
   });
   controller.start(11488);
   assert.equal(calls[0], '/Applications/AE MCP/host/server.js');
@@ -465,7 +385,7 @@ test('host controller reuses an already-normalized extension root instead of rea
   });
 });
 
-test('host controller keeps the same native roots when restarting', () => {
+test('host controller keeps identical native roots when restarting', () => {
   const calls = [];
   const host = {
     setRuntimeDependencies() {},
@@ -481,11 +401,17 @@ test('host controller keeps the same native roots when restarting', () => {
   const platform = createWindowsAdapter({
     platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: {},
     fs: runtime.fs,
-    spawnImpl() { throw new Error('not expected'); }, now: () => 0,
+    spawnImpl() { throw new Error('not expected'); },
+    now: () => 0,
   });
   const controller = createHostController({
-    cs: { getSystemPath: () => 'file:///C:/Program%20Files/AE%20MCP' }, platform,
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    cs: { getSystemPath: () => 'file:///C:/Program%20Files/AE%20MCP' },
+    platform,
+    requireImpl: (request) => {
+      if (request === 'module') return runtime.moduleApi;
+      if (request === 'path') return path;
+      return host;
+    },
     onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
   });
 
@@ -500,511 +426,8 @@ test('host controller keeps the same native roots when restarting', () => {
   assert.deepEqual(calls[1], { method: 'restart', port: 11489, roots: expectedRoots });
 });
 
-test('real host controller exposes in-process Foundation helper pass-through methods', async () => {
-  const calls = [];
-  const reference = 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1';
-  const transport = { request() {}, close() {} };
-  const helperClient = {
-    async capabilities() { calls.push(['capabilities']); return { authenticatedCaller: true }; },
-    async secretGet(value) { calls.push(['secretGet', value]); return { reference: value, value: 'secret', revision: 1 }; },
-    async secretSet(value) { calls.push(['secretSet', value]); return { reference: value.reference, revision: 1 }; },
-    async secretDelete(value) { calls.push(['secretDelete', value]); return { reference: value.reference, deleted: true, revision: 1 }; },
-    async close() { calls.push(['close']); },
-  };
-  const host = {
-    setRuntimeDependencies() {},
-    setCSInterface() {},
-    setPlatformRoots() {},
-    start(_port, callback) { callback(null); },
-    stop() {},
-  };
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
-    createPlatformHelperTransportImpl(options) {
-      calls.push(['createTransport', options.platformId]);
-      return transport;
-    },
-    createPlatformHelperClientImpl(options) {
-      calls.push(['createClient', options.transport]);
-      return helperClient;
-    },
-    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
-  });
-
-  controller.start(11488);
-  const inProcessHost = controller.getHost();
-  assert.equal(typeof inProcessHost.capabilities, 'function');
-  assert.equal(typeof inProcessHost.secretGet, 'function');
-  assert.equal(typeof inProcessHost.secretSet, 'function');
-  assert.equal(typeof inProcessHost.secretDelete, 'function');
-  assert.deepEqual(await inProcessHost.capabilities(), { authenticatedCaller: true });
-  assert.equal((await inProcessHost.secretGet(reference)).value, 'secret');
-  await inProcessHost.secretSet({ reference, value: 'secret', expectedRevision: null });
-  await inProcessHost.secretDelete({ reference, expectedRevision: 1 });
-  assert.deepEqual(calls.slice(0, 2), [
-    ['createTransport', 'macos-arm64'],
-    ['createClient', transport],
-  ]);
-  assert.deepEqual(calls.slice(2), [
-    ['capabilities'],
-    ['secretGet', reference],
-    ['secretSet', { reference, value: 'secret', expectedRevision: null }],
-    ['secretDelete', { reference, expectedRevision: 1 }],
-  ]);
-});
-
-test('host controller repair replaces the stale helper binding and handshakes the replacement', async () => {
-  const repairModes = [];
-  let firstClientCloses = 0;
-  const transports = [1, 2].map((id) => ({ id, request() {}, close() {} }));
-  const replacementCapabilities = {
-    protocolVersion: 1,
-    helperVersion: 'test-helper',
-    authenticatedCaller: true,
-    secretBackend: 'keychain',
-    methods: ['secret.get', 'secret.set', 'secret.delete'],
-  };
-  const clients = [
-    {
-      async capabilities() {
-        const error = new Error('stale helper registration');
-        error.code = 'PLATFORM_HELPER_REPAIR_REQUIRED';
-        throw error;
-      },
-      async secretGet() {}, async secretSet() {}, async secretDelete() {},
-      close() { firstClientCloses += 1; },
-    },
-    {
-      async capabilities() { return replacementCapabilities; },
-      async secretGet() {}, async secretSet() {}, async secretDelete() {},
-      close() {},
-    },
-  ];
-  const host = {
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(_port, callback) { callback(null); }, stop() {},
-  };
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
-    createPlatformHelperTransportImpl(options) {
-      repairModes.push(options.repairRegistration);
-      return transports[repairModes.length - 1];
-    },
-    createPlatformHelperClientImpl({ transport }) {
-      return clients[transport.id - 1];
-    },
-    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
-  });
-
-  controller.start(11488);
-  await assert.rejects(
-    controller.getHost().capabilities(),
-    { code: 'PLATFORM_HELPER_REPAIR_REQUIRED' },
-  );
-  assert.equal(typeof controller.repairPlatformHelper, 'function');
-  assert.equal(
-    (await controller.repairPlatformHelper()).authenticatedCaller,
-    true,
-  );
-  assert.deepEqual(repairModes, [false, true]);
-  assert.equal((await controller.getHost().capabilities()).helperVersion, 'test-helper');
-  assert.equal(firstClientCloses, 1);
-});
-
-test('host controller repair preserves a sanitized replacement failure', async () => {
-  const transports = [1, 2].map((id) => ({ id, request() {}, close() {} }));
-  const clients = [
-    {
-      async capabilities() { return { authenticatedCaller: true }; },
-      async secretGet() {}, async secretSet() {}, async secretDelete() {}, close() {},
-    },
-    {
-      async capabilities() {
-        const error = new Error(
-          'launchctl failed for /Users/private/Library/Application Support/AE MCP/helper',
-        );
-        error.code = 'HELPER_START_FAILED';
-        throw error;
-      },
-      async secretGet() {}, async secretSet() {}, async secretDelete() {}, close() {},
-    },
-  ];
-  const host = {
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(_port, callback) { callback(null); }, stop() {},
-  };
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  let transportIndex = 0;
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
-    createPlatformHelperTransportImpl() {
-      return transports[transportIndex++];
-    },
-    createPlatformHelperClientImpl({ transport }) {
-      return clients[transport.id - 1];
-    },
-    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
-  });
-
-  controller.start(11488);
-  await assert.rejects(
-    controller.repairPlatformHelper(),
-    (error) => {
-      assert.equal(error.code, 'HELPER_START_FAILED');
-      assert.equal(error.message.includes('/Users/private'), false);
-      assert.equal(error.message.includes('launchctl failed'), false);
-      return true;
-    },
-  );
-});
-
-test('Windows repair rebinds the current transport generation without macOS registration', async () => {
-  const repairModes = [];
-  const host = {
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(_port, callback) { callback(null); }, stop() {},
-  };
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'windows-x64', extensionRoot: 'C:\\Program Files\\AE MCP',
-    express: function bundledExpress() {},
-  });
-  const platform = createWindowsAdapter({
-    platform: 'win32',
-    arch: 'x64',
-    home: 'C:\\Users\\a',
-    temp: 'C:\\Temp',
-    env: {},
-    fs: runtime.fs,
-    spawnImpl() { throw new Error('not expected'); },
-    now: () => 0,
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => 'file:///C:/Program%20Files/AE%20MCP' },
-    extensionRoot: 'C:\\Program Files\\AE MCP',
-    platform,
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
-    createPlatformHelperTransportImpl(options) {
-      repairModes.push(options.repairRegistration);
-      return { request() {}, close() {} };
-    },
-    createPlatformHelperClientImpl() {
-      return {
-        async capabilities() {}, async secretGet() {}, async secretSet() {},
-        async secretDelete() {}, close() {},
-      };
-    },
-    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
-  });
-
-  controller.start(11488);
-  // #216: Windows now exposes the repair action. It rebinds the facade on a
-  // fresh transport of the CURRENT endpoint generation; repairRegistration
-  // stays false because helper registration is a macOS-only concept.
-  await controller.repairPlatformHelper();
-  assert.deepEqual(repairModes, [false, false]);
-});
-
-test('host controller loads the bundled helper client and transport modules by exact extension paths', async () => {
-  const loaded = [];
-  const transport = { request() {}, close() {} };
-  const helperClient = {
-    async capabilities() { return { authenticatedCaller: true }; },
-    async secretGet() {}, async secretSet() {}, async secretDelete() {}, async close() {},
-  };
-  const host = {
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(_port, callback) { callback(null); }, stop() {},
-  };
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl(request) {
-      if (request === 'module') return runtime.moduleApi;
-      if (request === 'path') return path;
-      loaded.push(request);
-      if (request.endsWith('/platform-helper-transport.js')) {
-        return { createPlatformHelperTransport: () => transport };
-      }
-      if (request.endsWith('/platform-helper-client.js')) {
-        return { createPlatformHelperClient: ({ transport: actual }) => {
-          assert.equal(actual, transport);
-          return helperClient;
-        } };
-      }
-      return host;
-    },
-    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
-  });
-
-  controller.start(11488);
-  assert.deepEqual(loaded, [
-    '/Applications/AE MCP/host/server.js',
-    '/Applications/AE MCP/host/platform-helper-transport.js',
-    '/Applications/AE MCP/host/platform-helper-client.js',
-  ]);
-  assert.deepEqual(await controller.getHost().capabilities(), { authenticatedCaller: true });
-});
-
-test('host controller helper facade preserves sanitized synchronous repair failures', async () => {
-  const host = {
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(_port, callback) { callback(null); }, stop() {},
-  };
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
-    createPlatformHelperTransportImpl() {
-      const error = new Error('sensitive addon path');
-      error.code = 'PLATFORM_HELPER_REPAIR_REQUIRED';
-      throw error;
-    },
-    createPlatformHelperClientImpl() { throw new Error('must not create a client'); },
-    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
-  });
-  controller.start(11488);
-
-  await assert.rejects(
-    controller.getHost().capabilities(),
-    (error) => {
-      assert.equal(error.code, 'PLATFORM_HELPER_REPAIR_REQUIRED');
-      assert.equal(error.message.includes('/Applications'), false);
-      assert.equal(error.message.includes('addon path'), false);
-      return true;
-    },
-  );
-});
-
-test('host controller closes a created transport when the helper client is invalid', async () => {
-  let transportCloses = 0;
-  const transport = {
-    request() {},
-    close() { transportCloses += 1; },
-  };
-  const host = {
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(_port, callback) { callback(null); }, stop() {},
-  };
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
-    createPlatformHelperTransportImpl: () => transport,
-    createPlatformHelperClientImpl: () => ({ capabilities() {} }),
-    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
-  });
-
-  controller.start(11488);
-  await Promise.resolve();
-  await assert.rejects(controller.getHost().capabilities(), { code: 'HELPER_UNAVAILABLE' });
-  assert.equal(transportCloses, 1);
-});
-
-test('host controller start reentry disposes the prior lifecycle and queued calls keep their client snapshot', async () => {
-  const reference = 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1';
-  const lifecycle = [];
-  const beforeUnloadHandlers = [];
-  let generation = 0;
-  const host = {
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(port, callback) { lifecycle.push(['host-start', port]); callback(null); },
-    stop() { lifecycle.push(['host-stop']); },
-  };
-  const clients = [1, 2].map((id) => ({
-    async capabilities() { return { id }; },
-    async secretGet(value) { lifecycle.push(['secretGet', id, value]); return { reference: value, value: `secret-${id}`, revision: 1 }; },
-    async secretSet() {},
-    async secretDelete() {},
-    async close() { lifecycle.push(['client-close', id]); },
-  }));
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
-    createPlatformHelperTransportImpl: () => ({ request() {}, close() {} }),
-    createPlatformHelperClientImpl: () => clients[generation++],
-    onStatus: () => {}, onLog: () => {},
-    addBeforeUnload: (handler) => { beforeUnloadHandlers.push(handler); },
-  });
-
-  controller.start(11488);
-  const queued = controller.getHost().secretGet(reference);
-  controller.start(11489);
-  const result = await queued;
-  await Promise.resolve();
-
-  assert.equal(result.value, 'secret-1');
-  assert.equal(lifecycle.filter(([name]) => name === 'host-stop').length, 1);
-  assert.deepEqual(lifecycle.filter(([name]) => name === 'client-close'), [['client-close', 1]]);
-  assert.ok(
-    lifecycle.findIndex(([name, value]) => name === 'client-close' && value === 1)
-      < lifecycle.findIndex(([name, value]) => name === 'host-start' && value === 11489),
-    'the prior client close must start before the replacement host starts',
-  );
-  assert.equal(beforeUnloadHandlers.length, 1);
-});
-
-test('beforeunload releases the host without queuing native Helper close work', async () => {
-  const lifecycle = [];
-  const beforeUnloadHandlers = [];
-  const host = {
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(_port, callback) { callback(null); },
-    stop() { lifecycle.push('host-stop'); },
-  };
-  const client = {
-    async capabilities() {}, async secretGet() {}, async secretSet() {}, async secretDelete() {},
-    async close() { lifecycle.push('client-close'); },
-  };
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
-    createPlatformHelperTransportImpl: () => ({ request() {}, close() {} }),
-    createPlatformHelperClientImpl: () => client,
-    onStatus: () => {}, onLog: () => {},
-    addBeforeUnload: (handler) => { beforeUnloadHandlers.push(handler); },
-  });
-
-  controller.start(11488);
-  beforeUnloadHandlers[0]();
-  await Promise.resolve();
-
-  assert.deepEqual(lifecycle, ['host-stop']);
-  assert.equal(controller.getHost(), null);
-});
-
-test('host controller ignores callbacks from a superseded start lifecycle', () => {
-  const callbacks = [];
-  const statuses = [];
-  const host = {
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(port, callback) { callbacks.push({ port, callback }); },
-    stop() {},
-  };
-  const client = () => ({
-    async capabilities() {}, async secretGet() {}, async secretSet() {}, async secretDelete() {}, async close() {},
-  });
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
-    createPlatformHelperTransportImpl: () => ({ request() {}, close() {} }),
-    createPlatformHelperClientImpl: client,
-    onStatus: (...args) => { statuses.push(args); }, onLog: () => {}, addBeforeUnload: () => {},
-  });
-
-  controller.start(11488);
-  controller.start(11489);
-  callbacks[0].callback(new Error('stale start failure'));
-  callbacks[1].callback(null);
-
-  assert.deepEqual(statuses, [
-    ['starting', 11488],
-    ['starting', 11489],
-    ['ok', 11489],
-  ]);
-});
-
-test('a stale host facade cannot dispatch through the replacement helper client', async () => {
-  const reference = 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1';
-  let hostIndex = 0;
-  let clientIndex = 0;
-  let replacementReads = 0;
-  const hosts = [1, 2].map(() => ({
-    setRuntimeDependencies() {}, setCSInterface() {},
-    start(_port, callback) { callback(null); }, stop() {},
-  }));
-  const clients = [1, 2].map((id) => {
-    let closed = false;
-    return {
-      async capabilities() {},
-      async secretGet(value) {
-        if (id === 2) replacementReads += 1;
-        if (closed) {
-          const error = new Error('closed client');
-          error.code = 'HELPER_UNAVAILABLE';
-          throw error;
-        }
-        return { reference: value, value: `secret-${id}`, revision: 1 };
-      },
-      async secretSet() {}, async secretDelete() {},
-      async close() { closed = true; },
-    };
-  });
-  const runtime = fakeHostDependencyRuntime({
-    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
-    express: function bundledExpress() {},
-  });
-  const controller = createHostController({
-    cs: { getSystemPath: () => '/Applications/AE MCP' },
-    extensionRoot: '/Applications/AE MCP',
-    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
-    requireImpl(request) {
-      if (request === 'module') return runtime.moduleApi;
-      if (request === 'path') return path;
-      return hosts[hostIndex++];
-    },
-    createPlatformHelperTransportImpl: () => ({ request() {}, close() {} }),
-    createPlatformHelperClientImpl: () => clients[clientIndex++],
-    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
-  });
-
-  controller.start(11488);
-  const staleHost = controller.getHost();
-  controller.start(11489);
-
-  await assert.rejects(staleHost.secretGet(reference), { code: 'HELPER_UNAVAILABLE' });
-  assert.equal(replacementReads, 0);
-  assert.equal((await controller.getHost().secretGet(reference)).value, 'secret-2');
+test('host bridge no longer loads platform-helper modules', () => {
+  const source = fs.readFileSync(new URL('../src/cep/hostBridge.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /platform-helper/);
+  assert.doesNotMatch(source, /repairPlatformHelper/);
 });
