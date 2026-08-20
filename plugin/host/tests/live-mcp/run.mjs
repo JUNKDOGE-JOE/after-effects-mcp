@@ -12,6 +12,7 @@ const sections = [
     'previewFrame',
     'checkpoint',
     'validateExpressions',
+    'toolLibrary',
     'conversation',
     'perf',
 ];
@@ -284,6 +285,68 @@ async function main() {
                 }),
             checked,
         );
+    });
+    await section('toolLibrary', async function () {
+        const index = value(await call('ae_toolSearch', {}));
+        check(
+            'toolSearch index lists bundled skills',
+            index && index.ok && Array.isArray(index.artifacts)
+                && index.artifacts.some(function (a) { return a.id === 'builtin:skill:ae-execution-guide'; }),
+            index && { count: index.artifacts && index.artifacts.length },
+        );
+        const found = value(await call('ae_toolSearch', { query: 'glow' }));
+        check(
+            'toolSearch query finds glow-recipes',
+            found && found.ok && found.artifacts.some(function (a) { return a.name === 'glow-recipes'; }),
+            found && { total: found.total },
+        );
+        const inspected = value(await call('ae_toolSearch', { name: 'builtin:skill:extendscript-cookbook' }));
+        check(
+            'toolSearch inspect returns full verified artifact',
+            inspected && inspected.ok && inspected.artifact
+                && typeof inspected.artifact.content === 'string' && inspected.artifact.verified === true,
+            inspected && { kind: inspected.artifact && inspected.artifact.kind },
+        );
+        const missing = await call('ae_toolUse', { name: 'user:00000000-0000-4000-8000-000000000000' });
+        check('toolUse missing tool is clean error', missing.isError && value(missing).ok === false, value(missing));
+        const skills = value(await call('ae_skillUse', {}));
+        check(
+            'skillUse lists bundled skills',
+            skills && skills.ok && Array.isArray(skills.skills) && skills.skills.length >= 8,
+            skills && { count: skills.skills && skills.skills.length },
+        );
+        const rendered = value(await call('ae_skillUse', { name: 'ae-execution-guide' }));
+        check(
+            'skillUse renders the prompt skill',
+            rendered && rendered.ok && rendered.template_type === 'prompt'
+                && typeof rendered.rendered === 'string' && rendered.rendered.length > 200,
+            rendered && { length: rendered.rendered && rendered.rendered.length },
+        );
+        // End-to-end execute: throwaway user skill in the real skill dir, removed afterwards.
+        // JSX template values are JSON-encoded on render, so ${marker} must not be quoted.
+        const skillDir = path.join(os.homedir(), '.ae-mcp', 'skills');
+        const probePath = path.join(skillDir, 'aemcp-live-probe.json');
+        fs.mkdirSync(skillDir, { recursive: true });
+        fs.writeFileSync(probePath, JSON.stringify({
+            name: 'aemcp-live-probe',
+            description: 'throwaway live acceptance probe',
+            template_type: 'jsx',
+            template: 'JSON.stringify({ok:true,marker:${marker},ae:String(app.version)})',
+            args_schema: { marker: { type: 'string' } },
+        }, null, 2) + '\n');
+        try {
+            const executed = value(await call('ae_skillUse', {
+                name: 'aemcp-live-probe', execute: true, args: { marker: 'p2b1' },
+            }));
+            check(
+                'skillUse executes a user jsx skill end-to-end',
+                executed && executed.ok === true && executed.marker === 'p2b1'
+                    && /\d/.test(String(executed.ae)),
+                executed,
+            );
+        } finally {
+            fs.rmSync(probePath, { force: true });
+        }
     });
     await section('conversation', async function () {
         if (noCdp) {
