@@ -163,7 +163,11 @@ function makeBackend(options = {}) {
     getPort: async () => 4567,
     fsImpl,
     tempDirName: () => 'ae-opencode-test',
-    getMcpSpec: async () => ({ command: 'ae-mcp', args: ['--stdio'], env: { A: 'B' } }),
+    getMcpSpec: async () => ({
+      kind: 'http',
+      url: 'http://127.0.0.1:11488/mcp/c/opencode-default-token',
+      name: 'ae',
+    }),
     getToolMeta: async () => TOOL_META,
     getModel: () => 'north-mini-code-free',
     getPermissionMode: () => 'manual',
@@ -370,11 +374,9 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   assert.equal(fsImpl.writes.length, 1);
   assert.equal(fsImpl.writes[0].file, 'C:\\tmp\\ae-opencode-test\\opencode\\opencode.json');
   assert.deepEqual(JSON.parse(fsImpl.writes[0].text).mcp.ae, {
-    type: 'local',
-    command: ['ae-mcp', '--stdio'],
+    type: 'remote',
+    url: 'http://127.0.0.1:11488/mcp/c/opencode-default-token',
     enabled: true,
-    timeout: 120000,
-    environment: { A: 'B', AE_MCP_BACKEND: 'ae-mcp' },
   });
 
   await flush();
@@ -387,7 +389,7 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   await pending;
 });
 
-test('createOpenCodeBackend writes a remote MCP URL for cep-host mode', async () => {
+test('createOpenCodeBackend writes only a per-conversation remote MCP URL', async () => {
   const url = 'http://127.0.0.1:11488/mcp/c/opencode-token';
   const { backend, fetched, fsImpl } = makeBackend({
     getMcpSpec: async () => ({ kind: 'http', url, name: 'ae' }),

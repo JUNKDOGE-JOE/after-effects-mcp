@@ -1,31 +1,56 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { initialStepStates, stepReducer, LOCAL_STEPS, SUBSCRIPTION_STEPS } from '../src/lib/wizardSteps.js';
+import {
+  CLI_STEPS,
+  HOST_STEPS,
+  OPTIONAL_CLIENT_STEPS,
+  initialStepStates,
+  stepReducer,
+} from '../src/lib/wizardSteps.js';
 
-test('step ids cover local service and subscription readiness', () => {
-  assert.deepEqual(LOCAL_STEPS, ['uv', 'aeMcp']);
-  assert.deepEqual(SUBSCRIPTION_STEPS, ['node', 'claude', 'login']);
+test('wizard steps cover host health, three AI CLIs, and optional shim Node', () => {
+  assert.deepEqual(HOST_STEPS, ['host']);
+  assert.deepEqual(CLI_STEPS, ['claude', 'codex', 'opencode']);
+  assert.deepEqual(OPTIONAL_CLIENT_STEPS, ['node']);
+  assert.equal(Object.hasOwn(initialStepStates(), 'uv'), false);
+  assert.equal(Object.hasOwn(initialStepStates(), 'aeMcp'), false);
 });
 
 test('reducer walks idle -> checking -> missing -> running -> ok', () => {
-  let s = initialStepStates();
-  s = stepReducer(s, { type: 'detect-start', id: 'uv' });
-  assert.equal(s.uv.status, 'checking');
-  s = stepReducer(s, { type: 'detect-result', id: 'uv', ok: false });
-  assert.equal(s.uv.status, 'missing');
-  s = stepReducer(s, { type: 'run-start', id: 'uv' });
-  assert.equal(s.uv.status, 'running');
-  s = stepReducer(s, { type: 'run-chunk', id: 'uv', text: 'installing...' });
-  assert.ok(s.uv.logTail.includes('installing'));
-  s = stepReducer(s, { type: 'detect-result', id: 'uv', ok: true, version: 'uv 0.7.2' });
-  assert.equal(s.uv.status, 'ok');
-  assert.equal(s.uv.version, 'uv 0.7.2');
+  let state = initialStepStates();
+  state = stepReducer(state, { type: 'detect-start', id: 'host' });
+  assert.equal(state.host.status, 'checking');
+  state = stepReducer(state, {
+    type: 'detect-result',
+    id: 'host',
+    ok: false,
+    detail: 'connection refused',
+  });
+  assert.equal(state.host.status, 'missing');
+  assert.equal(state.host.logTail, 'connection refused');
+  state = stepReducer(state, { type: 'run-start', id: 'host' });
+  assert.equal(state.host.status, 'running');
+  state = stepReducer(state, { type: 'run-chunk', id: 'host', text: 'checking...' });
+  assert.ok(state.host.logTail.includes('checking'));
+  state = stepReducer(state, {
+    type: 'detect-result',
+    id: 'host',
+    ok: true,
+    version: 'Host 0.9.6',
+  });
+  assert.equal(state.host.status, 'ok');
+  assert.equal(state.host.version, 'Host 0.9.6');
 });
 
-test('run failure keeps the log tail and marks fail', () => {
-  let s = initialStepStates();
-  s = stepReducer(s, { type: 'run-start', id: 'node' });
-  s = stepReducer(s, { type: 'run-done', id: 'node', ok: false, output: 'boom' });
-  assert.equal(s.node.status, 'fail');
-  assert.ok(s.node.logTail.includes('boom'));
+test('optional Node install failure keeps its log tail', () => {
+  let state = initialStepStates();
+  state = stepReducer(state, { type: 'run-start', id: 'node' });
+  state = stepReducer(state, {
+    type: 'run-done',
+    id: 'node',
+    ok: false,
+    output: 'boom',
+  });
+  assert.equal(state.node.status, 'fail');
+  assert.ok(state.node.logTail.includes('boom'));
 });

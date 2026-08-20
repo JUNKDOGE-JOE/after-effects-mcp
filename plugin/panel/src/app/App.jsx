@@ -19,8 +19,7 @@ import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
 import { installBeforeUnloadReset } from '../lib/backendLifecycle.js';
 import { containsExactSecret, redactText } from '../lib/exactSecretRedaction.js';
-import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
-import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTierFile';
+import { createMcpClient } from '../cep/mcpClient';
 import { createToolsApi } from '../cep/toolsApi';
 import { createLegacyApiKeyStore } from '../cep/apiKey';
 import { createZcodeCredentialManager } from '../cep/zcodeCredential.js';
@@ -69,25 +68,19 @@ import { useWizardWiring } from './wizardWiring';
 import { runDiagnostics } from '../cep/diagnostics';
 import { copyText } from '../lib/clipboard';
 import { copyWizardConfig } from '../lib/wizardCopy.js';
-import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
+import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, isValidPort } from '../cep/hostBridge';
 import { httpConfigFor } from '../cep/externalClients.js';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
 import pkg from '../../package.json';
-import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine, readDatedLogTail } from '../lib/logExport.js';
+import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
 import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
 import { readCepSystemPath } from '../cep/platform/paths.js';
-import { createRuntimeManager, hasDevelopmentRuntimeOverride } from '../cep/runtimeManager.js';
 import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
 import { createHostConversation } from '../lib/hostConversation.js';
 import { createHostApprovalBridge } from '../lib/hostApprovalBridge.js';
-import {
-  MCP_ENGINE_CEP_HOST,
-  getMcpSpec as resolveChatMcpSpec,
-  loadMcpEngine,
-  saveMcpEngine,
-} from '../lib/mcpEngine.js';
+import { getMcpSpec as resolveChatMcpSpec } from '../lib/mcpEngine.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
@@ -155,13 +148,6 @@ function writePref(key, value) {
 }
 
 const CODEX_MODELS_CACHE_KEY = 'ae_mcp_codex_models';
-
-const CLIENT_NAMES = {
-  builtin: { zh: '面板内置对话', en: 'Built-in chat' },
-  'claude-desktop': { zh: 'Claude Desktop', en: 'Claude Desktop' },
-  'claude-code': { zh: 'Claude Code', en: 'Claude Code' },
-  cursor: { zh: 'Cursor', en: 'Cursor' },
-};
 
 function cepRequire(mod) {
   if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
@@ -366,18 +352,9 @@ function Shell({ cs }) {
   const [sessionModel, setSessionModel] = React.useState(null);
   const [sessionEffort, setSessionEffort] = React.useState(null);
   const [sessionFast, setSessionFast] = React.useState(null);
-  const [mcpEngine, setMcpEngine] = React.useState(() => loadMcpEngine(window.localStorage));
-  const mcpEngineRef = React.useRef(mcpEngine);
-  mcpEngineRef.current = mcpEngine;
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
   const permissionModeRef = React.useRef(permissionMode);
   permissionModeRef.current = permissionMode;
-  const approvalTierFile = React.useMemo(() => createApprovalTierFile({
-    fs: platform.fs,
-    paths: platform.paths,
-    platformId: platform.id,
-    pid: (window.cep_node && window.cep_node.process && window.cep_node.process.pid) || 0,
-  }), [platform]);
   const elicitationCoordinator = React.useMemo(() => createElicitationCoordinator({
     resolveApproval: (_request, { plan }) => decideToolPlan({
       tier: permissionModeRef.current,
@@ -402,15 +379,11 @@ function Shell({ cs }) {
   const [toolApproval, setToolApproval] = React.useState(() => elicitationCoordinator.snapshot());
   React.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
   React.useEffect(() => {
-    approvalTierFile.write(permissionMode);
-    if (mcpEngine === MCP_ENGINE_CEP_HOST) {
-      hostConversation.updatePolicy({ approvalTier: permissionMode });
-    }
-  }, [approvalTierFile, hostConversation, mcpEngine, permissionMode]);
+    hostConversation.updatePolicy({ approvalTier: permissionMode });
+  }, [hostConversation, permissionMode]);
   React.useEffect(() => () => {
     elicitationCoordinator.dispose();
-    try { approvalTierFile.dispose(); } catch (error) { /* best effort on shutdown */ }
-  }, [approvalTierFile, elicitationCoordinator]);
+  }, [elicitationCoordinator]);
   // Panel-lifetime navigation guard (#208): file drops must never navigate the
   // CEP WebView, on any tab. Attaching is handled by the Composer's own guard
   // while the chat screen is mounted; this one only blocks navigation, and
@@ -448,22 +421,16 @@ function Shell({ cs }) {
   const expertGuidanceRef = React.useRef(expertGuidance);
   expertGuidanceRef.current = expertGuidance;
   React.useEffect(() => {
-    if (mcpEngine === MCP_ENGINE_CEP_HOST) {
-      hostConversation.updatePolicy({ expertGuidance });
-    }
-  }, [expertGuidance, hostConversation, mcpEngine]);
+    hostConversation.updatePolicy({ expertGuidance });
+  }, [expertGuidance, hostConversation]);
   React.useEffect(() => {
-    if (mcpEngine !== MCP_ENGINE_CEP_HOST) {
-      hostConversation.closeConversation();
-      return;
-    }
     if (status.state !== 'ok') return;
     hostConversation.ensureConversation({
       label: chatSessionIdRef.current,
       approvalTier: permissionModeRef.current,
       expertGuidance: expertGuidanceRef.current,
     });
-  }, [hostConversation, mcpEngine, status.state]);
+  }, [hostConversation, status.state]);
   const resolveHostConversationContext = React.useCallback((conversationId) => {
     const current = hostConversation.currentConversation();
     if (!current || current.id !== conversationId) return null;
@@ -473,7 +440,7 @@ function Shell({ cs }) {
     };
   }, [hostConversation]);
   React.useEffect(() => {
-    if (mcpEngine !== MCP_ENGINE_CEP_HOST || status.state !== 'ok') {
+    if (status.state !== 'ok') {
       hostApprovalBridge.detach();
       return undefined;
     }
@@ -485,7 +452,7 @@ function Shell({ cs }) {
       resolveConversationContext: resolveHostConversationContext,
     });
     return () => hostApprovalBridge.detach();
-  }, [elicitationCoordinator, getHost, hostApprovalBridge, mcpEngine, resolveHostConversationContext, status.state]);
+  }, [elicitationCoordinator, getHost, hostApprovalBridge, resolveHostConversationContext, status.state]);
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(null);
@@ -675,91 +642,25 @@ function Shell({ cs }) {
   const runtimeRef = React.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: 'subscription', claudeApiProvider: null });
   const previousCodexProviderProfileRef = React.useRef(providerProfile);
   const extRoot = React.useMemo(() => readCepSystemPath({ cs, platform }), [cs, platform]);
-  const developmentRuntimeFallback = React.useMemo(() => {
-    if (platform.id !== 'macos-arm64') return false;
-    const debugMarker = platform.paths.join([extRoot, '.debug']);
-    const bundleManifest = platform.paths.join([extRoot, 'bundle-manifest.json']);
-    return platform.fs.existsSync(debugMarker)
-      && !platform.fs.existsSync(bundleManifest);
-  }, [extRoot, platform]);
-  const developmentRuntimeOverride = React.useMemo(
-    () => hasDevelopmentRuntimeOverride(platform.env),
-    [platform],
-  );
-  const runtimeManager = React.useMemo(() => (
-    platform.id === 'macos-arm64' && (!developmentRuntimeFallback || developmentRuntimeOverride)
-      ? createRuntimeManager({ platform, extensionRoot: extRoot })
-      : null
-  ), [developmentRuntimeFallback, developmentRuntimeOverride, extRoot, platform]);
-  const [runtimeActivation, setRuntimeActivation] = React.useState(() => ({
-    state: runtimeManager ? 'starting' : 'ready',
-    result: null,
-    error: null,
-  }));
-  const markRuntimeReady = React.useCallback((result) => {
-    setRuntimeActivation({ state: 'ready', result: result || null, error: null });
-  }, []);
-  React.useEffect(() => {
-    if (!runtimeManager) {
-      setRuntimeActivation({ state: 'ready', result: null, error: null });
-      return undefined;
-    }
-    let alive = true;
-    setRuntimeActivation({ state: 'starting', result: null, error: null });
-    let retryTimer = null;
-    const activate = () => {
-      runtimeManager.ensureReady().then((result) => {
-        if (alive) markRuntimeReady(result);
-      }).catch((error) => {
-        if (!alive) return;
-        setRuntimeActivation({ state: 'error', result: null, error });
-        // A second panel can hold the short-lived install lock during boot.
-        // Keep configuration hidden, then retry without requiring a reload.
-        if (error && error.code === 'RUNTIME_MANAGER_LOCKED') {
-          retryTimer = setTimeout(activate, 1000);
-        }
-      });
-    };
-    activate();
-    return () => {
-      alive = false;
-      if (retryTimer) clearTimeout(retryTimer);
-    };
-  }, [markRuntimeReady, runtimeManager]);
-  const runtimeReady = runtimeActivation.state === 'ready';
-  const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
-  const getPythonMcpSpec = React.useCallback(async () => {
-    try {
-      const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
-      if (runtimeManager && spec.runtime) markRuntimeReady(spec.runtime);
-      return withToolApprovalTier(spec, approvalTierFile);
-    } catch (error) {
-      if (runtimeManager) setRuntimeActivation({ state: 'error', result: null, error });
-      throw error;
-    }
-  }, [approvalTierFile, extRoot, markRuntimeReady, platform, runtimeManager]);
   const hostPortRef = React.useRef(status.port);
   hostPortRef.current = status.port;
   const getMcpSpec = React.useCallback(() => resolveChatMcpSpec({
-    engine: mcpEngineRef.current,
     port: hostPortRef.current,
     label: chatSessionIdRef.current,
     approvalTier: permissionModeRef.current,
     expertGuidance: expertGuidanceRef.current,
     hostConversation,
-    resolvePythonSpec: getPythonMcpSpec,
-  }), [getPythonMcpSpec, hostConversation]);
+  }), [hostConversation]);
   const mcp = React.useMemo(() => createMcpClient({
-    platform,
     extRoot,
-    // Tool Library and the panel's own Tools UI stay on Python stdio until
-    // their server-side implementation moves into the CEP host.
-    resolveCommand: getPythonMcpSpec,
-    env: approvalTierFile.env(),
-    onElicitation: elicitationCoordinator.handle,
-    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
-    randomBytes: (size) => cepRequire('crypto').randomBytes(size),
-  }), [approvalTierFile, elicitationCoordinator, extRoot, getPythonMcpSpec, platform]);
+    getHost,
+    getPort: () => hostPortRef.current,
+    getConversation: () => hostConversation.ensureConversation({
+      label: chatSessionIdRef.current,
+      approvalTier: permissionModeRef.current,
+      expertGuidance: expertGuidanceRef.current,
+    }),
+  }), [extRoot, getHost, hostConversation]);
   const toolsApi = React.useMemo(() => createToolsApi(mcp), [mcp]);
   React.useEffect(() => () => mcp.stop(), [mcp]);
   const releaseTurnAttachments = React.useCallback((turn) => {
@@ -1390,7 +1291,7 @@ function Shell({ cs }) {
     hostConversation.closeConversation();
     activeBackend.reset();
     resetAttachmentDraftSession();
-    if (mcpEngineRef.current === MCP_ENGINE_CEP_HOST && status.state === 'ok') {
+    if (status.state === 'ok') {
       hostConversation.ensureConversation({
         label: chatSessionIdRef.current,
         approvalTier: permissionModeRef.current,
@@ -1461,8 +1362,6 @@ function Shell({ cs }) {
           fs: cepRequire('fs'),
           fetchImpl: window.fetch.bind(window),
           platform,
-          runtimeManager,
-          allowDevelopmentPath: developmentRuntimeFallback,
         });
       } catch (error) {
         diagnosticsError = error?.message || String(error);
@@ -1498,30 +1397,6 @@ function Shell({ cs }) {
       // the Chromium UA line in the same header carries the OS release.
       const osInfo = { platform: platform.id || '-' };
       const versions = processApi.versions || {};
-      const today = new Date();
-      const dateKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-      const pythonLogPath = platform.paths.join([logsDir, 'server-' + dateKey + '.log']);
-      let pythonServerLog;
-      try {
-        const hasFile = [0, 1].some((offset) => {
-          const date = new Date(today);
-          date.setDate(date.getDate() - offset);
-          const key = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
-          return platform.fs.existsSync(platform.paths.join([logsDir, 'server-' + key + '.log']));
-        });
-        pythonServerLog = hasFile ? readDatedLogTail({
-          fsImpl: platform.fs,
-          pathJoin: platform.paths.join,
-          dir: logsDir,
-          prefix: 'server-',
-          suffix: '.log',
-          now: today,
-          days: 2,
-          lines: 300,
-        }) : undefined;
-      } catch (error) {
-        pythonServerLog = undefined;
-      }
       const backendStderrTails = {};
       for (const [name, backend] of [
         ['claude', claudeBackend],
@@ -1540,7 +1415,6 @@ function Shell({ cs }) {
         panelLogs: logs,
         hostInfo: {
           hostVersion: connection.hostVersion || '-',
-          pythonVersion: connection.pythonVersion || '-',
           aeApp,
           cepVersion,
           os: osInfo,
@@ -1562,8 +1436,6 @@ function Shell({ cs }) {
         diagnostics: diagnosticItems,
         diagnosticsError,
         backendStderrTails,
-        pythonServerLog,
-        pythonLogPath,
         version: pkgVersion,
         exactSecrets,
       });
@@ -1573,7 +1445,21 @@ function Shell({ cs }) {
     } catch (e) {
       pushLog('Log export failed: ' + (e && e.message ? e.message : String(e)));
     }
-  }, [logs, connInfo, claudeBackend, codexBackend, openCodeBackend, zcodeBackend, providerSecretService, pushLog, attachmentDraft, getHost, platform, runtimeManager, developmentRuntimeFallback, status.port, cs]);
+  }, [
+    logs,
+    connInfo,
+    claudeBackend,
+    codexBackend,
+    openCodeBackend,
+    zcodeBackend,
+    providerSecretService,
+    pushLog,
+    attachmentDraft,
+    getHost,
+    platform,
+    status.port,
+    cs,
+  ]);
 
   const undoToPreviousCheckpoint = React.useCallback(async () => {
     try {
@@ -1719,16 +1605,12 @@ function Shell({ cs }) {
         fs: cepRequire('fs'),
         fetchImpl: window.fetch.bind(window),
         platform,
-        runtimeManager,
-        allowDevelopmentPath: developmentRuntimeFallback,
       });
-      const verifiedRuntime = items.find((item) => item.id === 'node' && item.ok && item.runtime)?.runtime;
-      if (verifiedRuntime) markRuntimeReady(verifiedRuntime);
       setDiagnostics(items);
     } catch (e) {
       setDiagnostics([{ id: 'host-listening', ok: false, detail: String(e && e.message), fixHint: { zh: '诊断执行失败，重启面板后重试。', en: 'Diagnostics failed to run; reload the panel and retry.' } }]);
     }
-  }, [developmentRuntimeFallback, getHost, markRuntimeReady, platform, runtimeManager, status.port]);
+  }, [getHost, platform, status.port]);
 
   const togglePause = () => {
     const host = getHost();
@@ -1758,29 +1640,15 @@ function Shell({ cs }) {
     setWizardDone(true);
   };
 
-  const externalMcpReady = mcpEngine === MCP_ENGINE_CEP_HOST
-    ? status.state === 'ok'
-    : runtimeReady;
-  const mcpConfigStr = externalMcpReady ? JSON.stringify(
-    mcpEngine === MCP_ENGINE_CEP_HOST
-      ? httpConfigFor('claude-desktop', status.port, extRoot)
-      : buildMcpConfig(status.port, expertGuidance, mcpCommand),
-    null,
-    2,
-  ) : '';
-  const claudeStatus = probe === null ? { state: 'checking' }
-    : probe.reason === 'cli-too-old' ? { state: 'cli-too-old', detail: probe.detail }
-    : probe.cliOk === false ? { state: 'no-cli', detail: probe.detail }
-    : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
-    : { state: 'ready', cliVersion: probe.cliVersion };
+  const externalMcpReady = status.state === 'ok';
+  const mcpConfigStr = externalMcpReady
+    ? JSON.stringify(httpConfigFor('claude-desktop', status.port, extRoot), null, 2)
+    : '';
   const wizard = useWizardWiring({
-    extRoot,
     lang,
-    claudeStatus,
-    recheckLogin: runClaudeProbe,
     platform,
-    runtimeManager,
-    onRuntimeReady: markRuntimeReady,
+    port: status.port,
+    fetchImpl: window.fetch.bind(window),
   });
 
   if (!wizardDone) {
@@ -1791,15 +1659,9 @@ function Shell({ cs }) {
         onLangChange={setLang}
         client={wizClient}
         onClient={setWizClient}
-        clientName={(CLIENT_NAMES[wizClient] || CLIENT_NAMES['claude-desktop'])[lang]}
-        mcpConfig={mcpConfigStr}
-        mcpCommand={mcpCommand}
+        extensionRoot={extRoot}
         mcpReady={externalMcpReady}
-        mcpEngine={mcpEngine}
         port={status.port}
-        expertGuidance={expertGuidance}
-        channels={channels}
-        activeChannel={effective.channel || ''}
         onNext={() => setWizStep((s) => Math.min(3, s + 1))}
         onBack={() => setWizStep((s) => Math.max(1, s - 1))}
         onCopy={(text) => copyWizardConfig(copyText, mcpConfigStr, text)}
@@ -1886,8 +1748,6 @@ function Shell({ cs }) {
           <ToolsScreen
             api={toolsApi}
             lang={lang}
-            cepFs={window.cep && window.cep.fs}
-            initialPath={extRoot}
           />
         ) : null}
         {tab === 'settings' ? (
@@ -1898,12 +1758,7 @@ function Shell({ cs }) {
             port={status.port}
             onApplyPort={applyPort}
             mcpConfig={mcpConfigStr}
-            mcpCommand={mcpCommand}
             mcpReady={externalMcpReady}
-            mcpEngine={mcpEngine}
-            onMcpEngineChange={(value) => {
-              setMcpEngine(saveMcpEngine(window.localStorage, value));
-            }}
             logs={logs}
             clients={clients}
             mcpSessions={mcpSessions}
@@ -1926,7 +1781,6 @@ function Shell({ cs }) {
             }}
             onRegenToken={() => setConfirmRegen(true)}
             hostVersion={(connInfo && connInfo.hostVersion) || '-'}
-            pythonVersion={(connInfo && connInfo.pythonVersion) || '-'}
             channels={channels}
             activeChannel={effective.channel || ''}
             selectedChannel={channelChoices[backendPref === 'codex' ? 'codex' : 'claude'] || ''}
@@ -2038,7 +1892,7 @@ function Shell({ cs }) {
         lang={lang}
         info={connInfo || {}}
         diagnostics={Array.isArray(diagnostics) ? diagnostics : []}
-        copyReady={runtimeReady}
+        copyReady={externalMcpReady}
         onDiagnose={runDiag}
         onCopyConfig={() => copyText(mcpConfigStr)}
         onRestart={() => applyPort(status.port)}

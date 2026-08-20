@@ -161,8 +161,6 @@ export function buildLogExport({
   hostLogDisk,
   diagnostics,
   diagnosticsError,
-  pythonServerLog,
-  pythonLogPath,
   version = '',
   now = new Date(),
   exactSecrets = [],
@@ -173,7 +171,6 @@ export function buildLogExport({
     ['exported-at', now.toISOString()],
     ['panel-version', version || '-'],
     ['host-version', hostInfo.hostVersion || '-'],
-    ['python-version', hostInfo.pythonVersion || '-'],
     ['ae-app', formatObject(hostInfo.aeApp)],
     ['cep', hostInfo.cepVersion || '-'],
     ['os', formatObject(hostInfo.os)],
@@ -214,14 +211,13 @@ export function buildLogExport({
     }
     return result;
   }, exactSecrets);
-  section(lines, '## python server log (tail)', () => {
-    if (pythonServerLog === undefined || pythonServerLog === null) {
-      return pythonLogPath ? '(no file: ' + pythonLogPath + ')' : unavailable('python server log is unavailable');
-    }
-    return pythonServerLog ? String(pythonServerLog) : '(empty)';
-  }, exactSecrets);
   section(lines, '## previewFrame branches', () => {
-    const summary = summarizePreviewFrameBranches(pythonServerLog || '');
+    const previewSource = [hostLogMemory, hostLogDisk]
+      .filter(Array.isArray)
+      .flat()
+      .map(formatHostLog)
+      .join('\n');
+    const summary = summarizePreviewFrameBranches(previewSource);
     const result = ['summary: ' + summary.summary];
     result.push('fallbackReason counts:');
     if (!summary.fallbackReasons.length) result.push('(none)');

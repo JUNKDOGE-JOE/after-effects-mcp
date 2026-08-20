@@ -2,115 +2,33 @@ export const EXTERNAL_CLIENTS = [
   {
     id: 'claude-desktop',
     name: 'Claude Desktop',
-    kind: 'mcp-stdio',
-    installHint: 'Install Claude Desktop and open its MCP server settings.',
-    loginHint: 'Sign in to Claude Desktop before starting the handshake.',
+    kind: 'mcp-shim',
+    installHint: 'Claude Desktop uses the bundled stdio-to-HTTP shim and requires system Node.',
+    loginHint: 'Sign in to Claude Desktop before using the connection.',
     docsUrl: 'https://support.anthropic.com/en/articles/10949351-getting-started-with-model-context-protocol-mcp-on-claude-for-desktop',
   },
   {
     id: 'claude-code',
     name: 'Claude Code',
-    kind: 'mcp-stdio',
-    installHint: 'Install Claude Code and add ae-mcp as a local MCP server.',
+    kind: 'mcp-http',
+    installHint: 'Add the panel host as a Streamable HTTP MCP server.',
     loginHint: 'Run claude /login if Claude Code is not signed in.',
     docsUrl: 'https://docs.anthropic.com/en/docs/claude-code/mcp',
   },
   {
     id: 'cursor',
     name: 'Cursor',
-    kind: 'mcp-stdio',
-    installHint: 'Open Cursor MCP settings and add this server config.',
+    kind: 'mcp-http',
+    installHint: 'Open Cursor MCP settings and add the local panel URL.',
     loginHint: 'Restart Cursor after saving MCP settings.',
     docsUrl: 'https://docs.cursor.com/context/model-context-protocol',
   },
-  {
-    id: 'openclaw',
-    name: 'OpenClaw',
-    kind: 'mcp-doc',
-    installHint: 'Follow the OpenClaw integration docs for adding external tools.',
-    loginHint: 'Use the account and runtime required by your OpenClaw deployment.',
-    docsUrl: 'https://github.com/bestK/OpenClaw',
-    networkNote: 'OpenClaw is often long-running or Dockerized. Keep it on the same machine / 同机 as After Effects, or make sure it can reach 127.0.0.1:11488. MCP-client support is unverified; ae may need to be wrapped as an OpenClaw skill.',
-  },
-  {
-    id: 'astrbot',
-    name: 'AstrBot',
-    kind: 'mcp-doc',
-    installHint: 'AstrBot v3.5.0+ can add multiple MCP servers from the panel.',
-    loginHint: 'Use the account and platform adapter required by your AstrBot deployment.',
-    docsUrl: 'https://docs.astrbot.app/',
-    networkNote: 'AstrBot is often long-running or Dockerized. Keep it on the same machine / 同机 as After Effects, or make sure it can reach 127.0.0.1:11488 before adding the MCP server in AstrBot v3.5.0+.',
-  },
-  {
-    id: 'gemini-antigravity',
-    name: 'Gemini Antigravity',
-    kind: 'mcp-stdio',
-    installHint: 'Add ae-mcp as a local stdio MCP server in Gemini Antigravity.',
-    loginHint: 'Sign in to Gemini Antigravity before starting the handshake.',
-    docsUrl: 'https://ai.google.dev/gemini-api/docs',
-  },
-  {
-    id: 'opencode-external',
-    name: 'opencode',
-    kind: 'mcp-stdio',
-    installHint: 'Use this external opencode config when the embedded panel flow is blocked.',
-    loginHint: 'Sign in to opencode before starting the handshake.',
-    docsUrl: 'https://opencode.ai/docs',
-  },
-  {
-    id: 'zcode',
-    name: 'ZCode',
-    kind: 'mcp-stdio',
-    installHint: 'Add ae-mcp as a local MCP server in ~/.zcode/cli/config.json (mcp.servers).',
-    loginHint: 'Open ZCode and make sure its selected provider has an API key before starting.',
-    docsUrl: 'https://zcode.z.ai',
-  },
 ];
 
-// The ae-mcp server defaults the expert anti-error guidance ON, so we only need
-// to emit an env var when the user has turned it OFF. Returns {} when enabled.
+// The host defaults expert anti-error guidance ON. This helper remains only
+// for the legacy ZCode provider route until its serial cleanup lands.
 export function expertGuidanceEnv(on) {
   return on ? {} : { AE_MCP_EXPERT_GUIDANCE: '0' };
-}
-
-// ZCode reads MCP servers from ~/.zcode/cli/config.json under `mcp.servers`,
-// NOT the standard `mcpServers` key. Its server objects are strict:
-// {name, command, args, env} where env is an OBJECT {KEY:VALUE} (ZCode runs
-// Object.entries(env) internally, so an array would corrupt the values).
-// See issue #36 / the ZCode config debugging saga.
-function zcodeMcpConfig(port = 11488, expertGuidance = true, command = 'ae-mcp') {
-  return {
-    mcp: {
-      servers: {
-        ae: {
-          name: 'ae',
-          command,
-          args: [],
-          env: Object.assign(
-            { AE_MCP_BACKEND: 'ae-mcp' },
-            expertGuidanceEnv(expertGuidance !== false),
-            { AE_MCP_PLUGIN_URL: `http://127.0.0.1:${port}` },
-          ),
-        },
-      },
-    },
-  };
-}
-
-export function mcpConfigFor(client, port = 11488, expertGuidance = true, command = 'ae-mcp') {
-  if (client && client.id === 'zcode') return zcodeMcpConfig(port, expertGuidance, command);
-  return {
-    mcpServers: {
-      ae: {
-        command,
-        env: {
-          AE_MCP_BACKEND: 'ae-mcp',
-          ...expertGuidanceEnv(expertGuidance !== false),
-          AE_MCP_PLUGIN_URL: `http://127.0.0.1:${port}`,
-        },
-      },
-    },
-  };
 }
 
 export function httpConfigFor(client, port = 11488, extensionRoot = '<extension root>') {
@@ -118,27 +36,28 @@ export function httpConfigFor(client, port = 11488, extensionRoot = '<extension 
   const url = `http://127.0.0.1:${port}/mcp`;
   const shimPath = String(extensionRoot).replace(/[\\/]+$/, '') + '/host/stdio-shim.js';
   if (id === 'claude-desktop') {
-    return { mcpServers: { ae: { command: 'node', args: [shimPath] } } };
+    return {
+      mcpServers: {
+        ae: {
+          command: 'node',
+          args: [shimPath],
+          env: { AE_MCP_HTTP_URL: url },
+        },
+      },
+    };
   }
   if (id === 'claude-code') {
     return `claude mcp add --transport http ae ${url}`;
   }
-  if (id === 'cursor') {
-    return { mcpServers: { ae: { url } } };
-  }
+  if (id === 'cursor') return { mcpServers: { ae: { url } } };
   return { mcpServers: { ae: { type: 'http', url } } };
 }
 
 export function externalClientConfigText({
   client,
-  engine = 'python',
   port = 11488,
-  expertGuidance = true,
-  command = 'ae-mcp',
   extensionRoot = '<extension root>',
 } = {}) {
-  const config = engine === 'cep-host'
-    ? httpConfigFor(client, port, extensionRoot)
-    : mcpConfigFor(client, port, expertGuidance, command);
+  const config = httpConfigFor(client, port, extensionRoot);
   return typeof config === 'string' ? config : JSON.stringify(config, null, 2);
 }

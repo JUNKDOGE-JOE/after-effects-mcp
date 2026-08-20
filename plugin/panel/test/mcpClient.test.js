@@ -1,416 +1,242 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { _createRpc, createMcpClient, findProjectRoot, resolveMcpCommand } from '../src/cep/mcpClient.js';
+import { createMcpClient, PANEL_VERSION } from '../src/cep/mcpClient.js';
 
-function makeRpc(timeoutMs = 50) {
-  const writes = [];
-  let pushChunk = null;
-  const rpc = _createRpc(
-    (text) => writes.push(text),
-    (handler) => { pushChunk = handler; },
-    { timeoutMs },
-  );
-  return { rpc, writes, pushChunk: (text) => pushChunk(text) };
+const TOOL_NAMES = [
+  'ae_status',
+  'ae_exec',
+  'ae_read',
+  'ae_previewFrame',
+  'ae_checkpoint',
+  'ae_revert',
+  'ae_validateExpressions',
+  'ae_nativeExec',
+  'ae_toolSearch',
+  'ae_toolUse',
+  'ae_skillUse',
+];
+
+function rpcResult(message, result) {
+  return { jsonrpc: '2.0', id: message.id, result };
 }
 
-test('_createRpc pairs requests with out-of-order responses', async () => {
-  const io = makeRpc();
-
-  const first = io.rpc.request('first', { a: 1 });
-  const second = io.rpc.request('second', { b: 2 });
-  const sent = io.writes.map((line) => JSON.parse(line));
-
-  io.pushChunk(JSON.stringify({ jsonrpc: '2.0', id: sent[1].id, result: 'two' }) + '\n');
-  io.pushChunk(JSON.stringify({ jsonrpc: '2.0', id: sent[0].id, result: 'one' }) + '\n');
-
-  assert.equal(await first, 'one');
-  assert.equal(await second, 'two');
-});
-
-test('_createRpc buffers torn lines before parsing JSON-RPC frames', async () => {
-  const io = makeRpc();
-
-  const pending = io.rpc.request('split', {});
-  const id = JSON.parse(io.writes[0]).id;
-
-  io.pushChunk('{"jsonrpc":"2.0","id":');
-  io.pushChunk(String(id) + ',"result":{"ok":true}}\n');
-
-  assert.deepEqual(await pending, { ok: true });
-});
-
-test('_createRpc rejects timed out requests', async () => {
-  const io = makeRpc(5);
-
-  await assert.rejects(io.rpc.request('slow', {}), /timed out/);
-});
-
-test('_createRpc supports a longer timeout for cold-start initialization', async () => {
-  const io = makeRpc(5);
-
-  const pending = io.rpc.request('initialize', {}, 50);
-  const id = JSON.parse(io.writes[0]).id;
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  io.pushChunk(JSON.stringify({ jsonrpc: '2.0', id, result: { ok: true } }) + '\n');
-
-  assert.deepEqual(await pending, { ok: true });
-});
-
-test('_createRpc rejects JSON-RPC error responses', async () => {
-  const io = makeRpc();
-
-  const pending = io.rpc.request('bad', {});
-  const id = JSON.parse(io.writes[0]).id;
-  io.pushChunk(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -1, message: 'nope' } }) + '\n');
-
-  await assert.rejects(pending, /nope/);
-});
-
-function fakeCommandPlatform({ launcher = '/Users/a/.ae-mcp/bin/ae-mcp', resolved = null, exists = () => false } = {}) {
+function textResult(value) {
   return {
-    id: launcher.includes('\\') ? 'windows-x64' : 'macos-arm64',
-    paths: {
-      launcher,
-      join: (parts) => parts.join(launcher.includes('\\') ? '\\' : '/'),
-      dirname: (value) => value.slice(0, Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'))),
-      resolve: (parts) => parts.join(launcher.includes('\\') ? '\\' : '/').replace(/\//g, launcher.includes('\\') ? '\\' : '/'),
-    },
-    fs: { existsSync: exists },
-    resolveExecutable: async () => resolved || ({ ok: true, id: 'ae-mcp', path: launcher, argsPrefix: [], source: 'runtime', version: null, arch: null }),
+    content: [{ type: 'text', text: JSON.stringify(value) }],
+    structuredContent: value,
   };
 }
 
-test('resolveMcpCommand prefers an explicit executable path', async () => {
-  const result = await resolveMcpCommand({
-    explicitPath: 'C:/tools/ae-mcp.exe',
-    platform: fakeCommandPlatform(),
-  });
-
-  assert.deepEqual(result, { command: 'C:/tools/ae-mcp.exe', args: [], source: 'explicit' });
-});
-
-test('resolveMcpCommand prefers the installed stable launcher on both platforms', async () => {
-  const mac = fakeCommandPlatform({ launcher: '/Users/a/.ae-mcp/bin/ae-mcp' });
-  const win = fakeCommandPlatform({ launcher: 'C:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe' });
-  assert.deepEqual(await resolveMcpCommand({ platform: mac }), {
-    command: '/Users/a/.ae-mcp/bin/ae-mcp', args: [], source: 'runtime',
-  });
-  assert.deepEqual(await resolveMcpCommand({ platform: win }), {
-    command: 'C:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe', args: [], source: 'runtime',
-  });
-});
-
-test('resolveMcpCommand lets the macOS RuntimeManager verify and activate before spawn', async () => {
-  const platform = fakeCommandPlatform({ launcher: '/Users/a/.ae-mcp/bin/ae-mcp' });
+function makeMounted() {
   const calls = [];
-  const result = await resolveMcpCommand({
-    platform,
-    extRoot: '/Applications/AE MCP 插件',
-    runtimeManager: {
-      async ensureReady() {
-        calls.push('ensureReady');
-        return {
-          action: 'install',
-          launcher: platform.paths.launcher,
-          version: '0.9.3',
-          sourceCommitSha: 'a'.repeat(40),
-        };
+  const deleted = [];
+  let sessionSequence = 0;
+  const mounted = {
+    sessions: {
+      delete(id) {
+        deleted.push(id);
+        return true;
       },
     },
-  });
-
-  assert.deepEqual(calls, ['ensureReady']);
-  assert.equal(result.command, platform.paths.launcher);
-  assert.equal(result.cwd, undefined);
-  assert.equal(result.source, 'runtime-manager');
-  assert.equal(result.runtime.version, '0.9.3');
-});
-
-test('resolveMcpCommand launches a selected development checkout interpreter directly', async () => {
-  const platform = fakeCommandPlatform({ launcher: '/Users/a/.ae-mcp/bin/ae-mcp' });
-  const bootstrap = 'import runpy,sys;sys.path.insert(0,sys.argv[1]);runpy.run_module("ae_mcp",run_name="__main__")';
-  const result = await resolveMcpCommand({
-    platform,
-    extRoot: '/Users/a/Development/AE MCP',
-    runtimeManager: {
-      async ensureReady() {
+    async dispatch(request, message, conversation) {
+      calls.push({
+        message,
+        conversation,
+        sessionId: request.get('mcp-session-id'),
+        protocol: request.get('mcp-protocol-version'),
+        port: request.socket.localPort,
+      });
+      if (message.method === 'initialize') {
+        const session = { id: 'session-' + (++sessionSequence) };
         return {
-          action: 'development-runtime',
-          developmentRuntime: true,
-          launcher: '/Users/a/src/ae-mcp/.venv/bin/python3',
-          args: ['-B', '-I', '-c', bootstrap, '/Users/a/src/ae-mcp/packages/core'],
-          cwd: '/Users/a/src/ae-mcp',
+          status: 200,
+          session,
+          response: rpcResult(message, {
+            protocolVersion: '2025-06-18',
+            instructions: 'HOST_INSTRUCTIONS',
+            serverInfo: { name: 'ae-mcp-host', version: PANEL_VERSION },
+          }),
         };
-      },
-    },
-  });
-
-  assert.equal(result.command, '/Users/a/src/ae-mcp/.venv/bin/python3');
-  assert.deepEqual(result.args, [
-    '-B', '-I', '-c', bootstrap, '/Users/a/src/ae-mcp/packages/core',
-  ]);
-  assert.equal(result.cwd, '/Users/a/src/ae-mcp');
-  assert.equal(result.source, 'development-runtime');
-});
-
-test('resolveMcpCommand allows PATH only for an explicit .debug install without a bundle', async () => {
-  const calls = [];
-  const platform = fakeCommandPlatform({
-    launcher: '/Users/a/.ae-mcp/bin/ae-mcp',
-    exists: (candidate) => candidate === '/Applications/AE MCP/.debug',
-  });
-  platform.resolveExecutable = async (_id, options) => {
-    calls.push(options);
-    return { ok: true, path: '/Users/a/.local/bin/ae-mcp', argsPrefix: [], source: 'path' };
-  };
-
-  const result = await resolveMcpCommand({ platform, extRoot: '/Applications/AE MCP' });
-
-  assert.equal(result.command, '/Users/a/.local/bin/ae-mcp');
-  assert.deepEqual(calls, [{ allowDevelopmentPath: true }]);
-});
-
-test('findProjectRoot is exported for wizard repo probing', () => {
-  const platform = fakeCommandPlatform({ launcher: 'E:\\Users\\a\\.ae-mcp\\bin\\ae-mcp.exe' });
-  const root = findProjectRoot({
-    extRoot: 'E:/repo/plugin/panel',
-    repoRoot: '',
-    platform,
-    fsImpl: { existsSync: (p) => p === 'E:\\repo\\pyproject.toml' },
-  });
-
-  assert.equal(root, 'E:\\repo');
-});
-
-test('resolveMcpCommand reports a repair hint when no executable can be found', async () => {
-  await assert.rejects(
-    resolveMcpCommand({
-      platform: fakeCommandPlatform({ resolved: { ok: false, id: 'ae-mcp', code: 'NOT_FOUND', attempts: [] } }),
-    }),
-    /Unable to find ae-mcp/,
-  );
-});
-
-function makeFakeProc() {
-  const stdoutHandlers = [];
-  let killed = false;
-  return {
-    stdin: { write() {} },
-    stdout: { on(event, handler) { if (event === 'data') stdoutHandlers.push(handler); } },
-    stderr: { on() {} },
-    on() {},
-    kill() { killed = true; },
-    get killed() { return killed; },
-    pushStdout(message) {
-      const line = typeof message === 'string' ? message : JSON.stringify(message) + '\n';
-      for (const handler of stdoutHandlers) handler(line);
-    },
-  };
-}
-
-test('createMcpClient terminates a child that cannot initialize in time', async () => {
-  const proc = makeFakeProc();
-  const client = createMcpClient({
-    spawnImpl: () => proc,
-    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
-    initializeTimeoutMs: 5,
-    retryDelays: [],
-  });
-
-  await assert.rejects(client.start(), /initialize timed out after 5ms/);
-  assert.equal(proc.killed, true);
-  assert.equal(client.state().status, 'error');
-});
-
-// Spawn fake that auto-answers initialize (with a configurable result) and
-// tools/list so createMcpClient.start() resolves to ready.
-function spawnReplying(initResult) {
-  let proc = null;
-  const spawnImpl = (_command, _args, options) => {
-    proc = makeFakeProc();
-    proc.spawnOptions = options;
-    proc.clientWrites = [];
-    const origWrite = proc.stdin.write;
-    proc.stdin.write = (line) => {
-      origWrite(line);
-      const msg = JSON.parse(line);
-      proc.clientWrites.push(msg);
-      if (msg.method === 'initialize') {
-        proc.pushStdout({ jsonrpc: '2.0', id: msg.id, result: initResult });
-      } else if (msg.method === 'tools/list') {
-        proc.pushStdout({ jsonrpc: '2.0', id: msg.id, result: { tools: [] } });
-      } else if (msg.method === 'tools/call') {
-        proc.pushStdout({
-          jsonrpc: '2.0',
-          id: msg.id,
-          result: { content: [{ type: 'text', text: '{"ok":true}' }] },
-        });
       }
-    };
-    return proc;
+      if (message.method === 'notifications/initialized') {
+        return { status: 202, response: null };
+      }
+      if (message.method === 'tools/list') {
+        return {
+          status: 200,
+          response: rpcResult(message, {
+            tools: TOOL_NAMES.map((name) => ({ name, inputSchema: { type: 'object' } })),
+          }),
+        };
+      }
+      const args = message.params.arguments;
+      if (message.params.name === 'ae_toolSearch') {
+        const value = args.name
+          ? { ok: true, artifact: { id: args.name, name: 'Fade' } }
+          : { ok: true, artifacts: [{ id: 'user:fade', name: 'Fade' }] };
+        return { status: 200, response: rpcResult(message, textResult(value)) };
+      }
+      if (message.params.name === 'ae_skillUse') {
+        const value = args.name
+          ? { ok: true, name: args.name, rendered: 'rendered skill' }
+          : { ok: true, skills: [{ name: 'ease-and-timing' }] };
+        return { status: 200, response: rpcResult(message, textResult(value)) };
+      }
+      return {
+        status: 200,
+        response: rpcResult(message, textResult({ ok: true, tool: message.params.name })),
+      };
+    },
   };
-  return { spawnImpl, getProc: () => proc };
+  return { mounted, calls, deleted };
 }
 
-test('createMcpClient spawns a selected development runtime in its checkout', async () => {
-  const { spawnImpl, getProc } = spawnReplying({});
-  const bootstrap = 'import runpy,sys;sys.path.insert(0,sys.argv[1]);runpy.run_module("ae_mcp",run_name="__main__")';
+test('createMcpClient prefers the mounted host handle and lists all 11 tools', async () => {
+  const fixture = makeMounted();
+  let fetchCalls = 0;
+  const conversation = { id: 'conversation-1', path: '/mcp/c/token-1' };
   const client = createMcpClient({
-    spawnImpl,
-    resolveCommand: async () => ({
-      command: '/checkout/.venv/bin/python3',
-      args: ['-B', '-I', '-c', bootstrap, '/checkout/packages/core'],
-      cwd: '/checkout',
-      source: 'development-runtime',
-    }),
+    getHost: () => ({ mcp: fixture.mounted }),
+    getConversation: () => conversation,
+    getPort: () => 11488,
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      throw new Error('HTTP fallback should not run');
+    },
   });
 
-  await client.start();
-  assert.deepEqual(getProc().clientWrites[0].method, 'initialize');
-  assert.equal(getProc().spawnOptions.cwd, '/checkout');
-  assert.equal(getProc().spawnOptions.shell, false);
+  assert.deepEqual((await client.listTools()).map((tool) => tool.name), TOOL_NAMES);
+  assert.equal(client.state().transport, 'in-process');
+  assert.equal(fetchCalls, 0);
+  assert.equal(client.getServerInstructions(), 'HOST_INSTRUCTIONS');
+  assert.deepEqual(client.getServerInfo(), {
+    name: 'ae-mcp-host',
+    version: PANEL_VERSION,
+  });
+  assert.deepEqual(fixture.calls[0].message.params.clientInfo, {
+    name: 'ae-mcp-panel',
+    version: PANEL_VERSION,
+  });
+  assert.equal(fixture.calls[0].conversation, conversation);
+  assert.equal(fixture.calls[0].port, 11488);
+  assert.equal(fixture.calls[1].sessionId, 'session-1');
   client.stop();
+  assert.deepEqual(fixture.deleted, ['session-1']);
 });
 
-test('createMcpClient captures server instructions from the initialize result', async () => {
-  const { spawnImpl } = spawnReplying({ instructions: 'SERVER_GUIDE' });
+test('mounted host round-trips search, detail, skill list, and skill render', async () => {
+  const fixture = makeMounted();
   const client = createMcpClient({
-    spawnImpl,
-    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+    getHost: () => ({ mcp: fixture.mounted }),
+    getConversation: () => ({ id: 'conversation-1' }),
   });
 
-  assert.equal(client.getServerInstructions(), '');
-  await client.start();
-  assert.equal(client.getServerInstructions(), 'SERVER_GUIDE');
-  client.stop();
-});
-
-test('createMcpClient defaults server instructions to empty when absent', async () => {
-  const { spawnImpl } = spawnReplying({});
-  const client = createMcpClient({
-    spawnImpl,
-    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  const searched = await client.callTool('ae_toolSearch', { query: 'fade' });
+  const inspected = await client.callTool('ae_toolSearch', { name: 'user:fade' });
+  const skills = await client.callTool('ae_skillUse', { include_templates: true });
+  const rendered = await client.callTool('ae_skillUse', {
+    name: 'ease-and-timing',
+    args: {},
+    execute: false,
   });
 
-  await client.start();
-  assert.equal(client.getServerInstructions(), '');
-  client.stop();
-});
-
-test('createMcpClient passes the Tool Library tier file into the direct MCP process', async () => {
-  const { spawnImpl, getProc } = spawnReplying({});
-  const client = createMcpClient({
-    spawnImpl,
-    env: { AE_MCP_TOOL_APPROVAL_TIER_FILE: '/tmp/panel.tier' },
-    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
-  });
-
-  await client.start();
-  assert.equal(
-    getProc().spawnOptions.env.AE_MCP_TOOL_APPROVAL_TIER_FILE,
-    '/tmp/panel.tier',
+  assert.deepEqual(searched.structuredContent.artifacts, [{ id: 'user:fade', name: 'Fade' }]);
+  assert.equal(inspected.structuredContent.artifact.id, 'user:fade');
+  assert.deepEqual(skills.structuredContent.skills, [{ name: 'ease-and-timing' }]);
+  assert.equal(rendered.structuredContent.rendered, 'rendered skill');
+  assert.deepEqual(
+    fixture.calls.filter((call) => call.message.method === 'tools/call')
+      .map((call) => call.message.params.name),
+    ['ae_toolSearch', 'ae_toolSearch', 'ae_skillUse', 'ae_skillUse'],
   );
-  client.stop();
 });
 
-test('createMcpClient keeps Developer Tools behind a per-process panel capability', async () => {
-  const { spawnImpl, getProc } = spawnReplying({});
-  const client = createMcpClient({
-    spawnImpl,
-    randomBytes: (size) => new Uint8Array(size).fill(0xab),
-    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
-  });
-
-  await client.start();
-  assert.equal(getProc().spawnOptions.env.AE_MCP_PANEL_CAPABILITY, 'ab'.repeat(32));
-  await client.callPanelTool('ae_toolIndex', { kinds: ['system-command'] });
-  const call = getProc().clientWrites.find((message) => message.method === 'tools/call');
-  assert.equal(call.params.arguments._ae_panel_capability, 'ab'.repeat(32));
-  assert.equal(client.newOperationId(), 'ab'.repeat(16));
-  client.stop();
-});
-
-test('createMcpClient relays elicitation with server metadata and responds', async () => {
-  const initResult = {
-    instructions: 'SERVER_GUIDE',
-    serverInfo: { name: 'ae', version: '1.2.3' },
+function httpResponse(body, sessionId = '') {
+  return {
+    ok: true,
+    status: body === null ? 202 : 200,
+    headers: { get: (name) => name.toLowerCase() === 'mcp-session-id' ? sessionId : null },
+    text: async () => body === null ? '' : JSON.stringify(body),
   };
-  const { spawnImpl, getProc } = spawnReplying(initResult);
-  const seen = [];
-  const client = createMcpClient({
-    spawnImpl,
-    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
-    onElicitation: async (request, { signal }) => {
-      seen.push({ request, signal });
-      return { action: 'accept', content: { decision: 'once' } };
-    },
-  });
-  await client.start();
-  getProc().pushStdout({
-    jsonrpc: '2.0',
-    id: 77,
-    method: 'elicitation/create',
-    params: {
-      mode: 'form',
-      message: 'Approve tool?',
-      requestedSchema: { type: 'object' },
-      _meta: { progressToken: 'p1' },
-    },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
-  assert.equal(seen.length, 1);
-  assert.equal(seen[0].request.message, 'Approve tool?');
-  assert.equal(seen[0].request.mode, 'form');
-  assert.deepEqual(seen[0].request.requestedSchema, { type: 'object' });
-  assert.deepEqual(seen[0].request.serverInfo, initResult.serverInfo);
-  assert.equal(seen[0].request.serverInstructions, 'SERVER_GUIDE');
-  assert.deepEqual(seen[0].request.meta, { progressToken: 'p1' });
-  assert.equal(seen[0].signal.aborted, false);
-  assert.deepEqual(getProc().clientWrites.find((message) => message.id === 77), {
-    jsonrpc: '2.0', id: 77, result: { action: 'accept', content: { decision: 'once' } },
+test('createMcpClient falls back to the host /mcp HTTP endpoint', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    const payload = options.body ? JSON.parse(options.body) : null;
+    calls.push({ url, options, payload });
+    if (options.method === 'DELETE') return httpResponse(null);
+    if (payload.method === 'initialize') {
+      return httpResponse(rpcResult(payload, {
+        instructions: 'HTTP_INSTRUCTIONS',
+        serverInfo: { name: 'ae-mcp-host', version: '1' },
+      }), 'http-session');
+    }
+    if (payload.method === 'notifications/initialized') return httpResponse(null);
+    if (payload.method === 'tools/list') {
+      return httpResponse(rpcResult(payload, { tools: [{ name: 'ae_toolSearch' }] }));
+    }
+    return httpResponse(rpcResult(payload, textResult({ ok: true })));
+  };
+  const client = createMcpClient({
+    getHost: () => null,
+    getPort: () => 12000,
+    fetchImpl,
   });
+
+  assert.deepEqual(await client.listTools(), [{ name: 'ae_toolSearch' }]);
+  assert.equal(client.state().transport, 'http');
+  await client.callTool('ae_toolSearch', {});
+  assert.ok(calls.every((call) => call.url === 'http://127.0.0.1:12000/mcp'));
+  assert.equal(calls[1].options.headers['mcp-session-id'], 'http-session');
   client.stop();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls.at(-1).options.method, 'DELETE');
 });
 
-test('createMcpClient declines elicitation when no callback is configured', async () => {
-  const { spawnImpl, getProc } = spawnReplying({ serverInfo: { name: 'ae', version: '1' } });
+test('a changed conversation reinitializes the in-process MCP session', async () => {
+  const fixture = makeMounted();
+  let conversation = { id: 'conversation-1' };
   const client = createMcpClient({
-    spawnImpl,
-    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+    getHost: () => ({ mcp: fixture.mounted }),
+    getConversation: () => conversation,
   });
-  await client.start();
-  getProc().pushStdout({
-    jsonrpc: '2.0', id: 78, method: 'elicitation/create', params: { message: 'Approve?' },
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await client.listTools();
+  conversation = { id: 'conversation-2' };
+  await client.listTools();
 
-  assert.deepEqual(getProc().clientWrites.find((message) => message.id === 78), {
-    jsonrpc: '2.0', id: 78, result: { action: 'decline', content: {} },
-  });
-  client.stop();
+  const initializes = fixture.calls.filter((call) => call.message.method === 'initialize');
+  assert.equal(initializes.length, 2);
+  assert.deepEqual(fixture.deleted, ['session-1']);
 });
 
-test('createMcpClient returns JSON-RPC method-not-found for unknown server requests', async () => {
-  const { spawnImpl, getProc } = spawnReplying({ serverInfo: { name: 'ae', version: '1' } });
-  const client = createMcpClient({
-    spawnImpl,
-    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
-  });
-  await client.start();
-  getProc().pushStdout({
-    jsonrpc: '2.0', id: 79, method: 'unknown/request', params: {},
-  });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+test('JSON-RPC errors are exposed and invalidate the failed session', async () => {
+  const fixture = makeMounted();
+  fixture.mounted.dispatch = async (request, message) => {
+    if (message.method === 'initialize') {
+      return {
+        session: { id: 'session-error' },
+        response: rpcResult(message, {}),
+      };
+    }
+    if (message.method === 'notifications/initialized') return { response: null };
+    if (message.method === 'tools/list') {
+      return { response: rpcResult(message, { tools: [] }) };
+    }
+    return {
+      response: {
+        jsonrpc: '2.0',
+        id: message.id,
+        error: { code: -32602, message: 'bad arguments', data: { field: 'name' } },
+      },
+    };
+  };
+  const client = createMcpClient({ getHost: () => ({ mcp: fixture.mounted }) });
 
-  assert.deepEqual(getProc().clientWrites.find((message) => message.id === 79), {
-    jsonrpc: '2.0',
-    id: 79,
-    error: {
-      code: -32601,
-      message: 'Method not found',
-      data: { method: 'unknown/request' },
-    },
-  });
-  client.stop();
+  await assert.rejects(
+    client.callTool('ae_toolSearch', {}),
+    (error) => error.code === -32602 && error.data.field === 'name',
+  );
+  assert.equal(client.state().status, 'error');
+  assert.deepEqual(fixture.deleted, ['session-error']);
 });

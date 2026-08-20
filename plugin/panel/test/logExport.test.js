@@ -6,7 +6,7 @@ import { revealLogExport, writeLogExport } from '../src/cep/logExportFs.js';
 test('buildLogExport aggregates panel logs, host info, and sidecar tail', () => {
   const text = buildLogExport({
     panelLogs: ['[10:00:00] Host ready on 127.0.0.1:11488', '[10:00:05] Error: boom'],
-    hostInfo: { hostVersion: '0.9.0', pythonVersion: '0.9.0' },
+    hostInfo: { hostVersion: '0.9.0' },
     sidecarTail: 'sidecar stderr line',
     version: '0.9.0',
     now: new Date('2026-07-03T10:00:00Z'),
