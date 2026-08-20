@@ -21065,8 +21065,6 @@
     };
     const same = (left, right) => canonical(left) === canonical(right);
     const configRoot = join([normalizedHome, ".ae-mcp"]);
-    const runtimeRoot = join([configRoot, "runtime"]);
-    const binRoot = join([configRoot, "bin"]);
     return Object.freeze({
       home: normalizedHome,
       tempRoot: normalizedTemp,
@@ -21076,11 +21074,6 @@
       migrationRoot: join([configRoot, "migrations"]),
       logsRoot: join([configRoot, "logs"]),
       captureSpool: join([configRoot, "capture-spool"]),
-      runtimeRoot,
-      currentPointer: join([runtimeRoot, "current"]),
-      previousPointer: join([runtimeRoot, "previous"]),
-      binRoot,
-      launcher: join([binRoot, windows ? "ae-mcp.exe" : "ae-mcp"]),
       join,
       dirname,
       basename,
@@ -21097,7 +21090,17 @@
   var DEFAULT_OUTPUT_LIMIT = 8192;
   var TERMINATE_GRACE_MS = 50;
   var FORCE_CLOSE_GRACE_MS = 250;
-  var EXECUTABLE_IDS = /* @__PURE__ */ new Set(["ae-mcp", "node", "claude", "codex", "zcode", "uv", "npm", "opencode", "brew", "winget", "powershell"]);
+  var EXECUTABLE_IDS = /* @__PURE__ */ new Set([
+    "node",
+    "claude",
+    "codex",
+    "zcode",
+    "npm",
+    "opencode",
+    "brew",
+    "winget",
+    "powershell"
+  ]);
   var WINDOWS_COMMAND_SCRIPT = /\.(?:cmd|bat)$/i;
   function environmentKey(environment, name, caseInsensitive) {
     if (!caseInsensitive) return Object.prototype.hasOwnProperty.call(environment, name) ? name : null;
@@ -21214,12 +21217,10 @@
         setEnvironmentDefault(result, "TEMP", paths.tempRoot, true);
         setEnvironmentDefault(result, "TMP", paths.tempRoot, true);
         const pathKey = environmentKey(result, "PATH", true) || "Path";
-        const inherited = String(result[pathKey] || "").split(separator).filter((entry) => entry && entry.toLowerCase() !== paths.binRoot.toLowerCase());
-        result[pathKey] = [paths.binRoot, ...inherited].join(separator);
+        if (result[pathKey] === void 0) result[pathKey] = "";
       } else {
         setEnvironmentDefault(result, "HOME", paths.home, false);
-        const inherited = String(result.PATH || "").split(separator).filter((entry) => entry && entry !== paths.binRoot);
-        result.PATH = [paths.binRoot, ...inherited].join(separator);
+        if (result.PATH === void 0) result.PATH = "";
       }
       return result;
     }
@@ -21384,7 +21385,6 @@
       }
     }
     function runtimeCandidates(id) {
-      if (id === "ae-mcp") return [paths.launcher];
       return [];
     }
     function pathCandidates(id, env) {
@@ -21585,7 +21585,6 @@
         attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "architecture " + verifiedArch + " does not match " + options.requiredArch });
         return { failure: "ARCH_MISMATCH" };
       }
-      if (id === "ae-mcp") return { success: executable };
       const args = id === "node" ? ["-p", 'process.version + " " + process.arch'] : id === "powershell" ? ["-NoProfile", "-Command", "$PSVersionTable.PSVersion.ToString()"] : ["--version"];
       const result = await run({ executable, args, env: options.env, timeoutMs: DEFAULT_TIMEOUT_MS, maxOutputBytes: DEFAULT_OUTPUT_LIMIT });
       const output = (result.stdout + "\n" + result.stderr).trim();
@@ -21610,7 +21609,7 @@
       return { success: { ...executable, version, arch } };
     }
     async function loginShellCandidate(id, env, attempts) {
-      if (windows || !["claude", "codex", "zcode", "uv", "npm", "opencode", "node", "ae-mcp"].includes(id)) return null;
+      if (windows || !["claude", "codex", "zcode", "npm", "opencode", "node"].includes(id)) return null;
       const shell = fileCandidate("/bin/zsh", "standard", env);
       if (!shell) return null;
       const begin = "__AE_MCP_PATH_BEGIN__";
@@ -21638,13 +21637,12 @@
       const env = hasExplicitEnv ? completeEnvironment(options.env || {}) : completeSpawnEnv();
       const envKey = "AE_MCP_" + id.toUpperCase().replace("-", "_") + "_CLI";
       const override = String(options.overridePath || environmentValue(env, envKey, windows) || "").trim();
-      const stableLauncherOnly = !windows && id === "ae-mcp" && options.allowDevelopmentPath !== true;
       const attempts = [];
       let strongestFailure = "NOT_FOUND";
       const groups = [
         { source: "override", values: override ? [override] : [] },
         { source: "runtime", values: runtimeCandidates(id) },
-        ...stableLauncherOnly ? [] : [{ source: "path", values: pathCandidates(id, env) }]
+        { source: "path", values: pathCandidates(id, env) }
       ];
       for (const group of groups) {
         for (const path of group.values) {
@@ -21662,13 +21660,13 @@
           strongestFailure = result.failure === "ARCH_MISMATCH" ? result.failure : strongestFailure === "NOT_FOUND" || strongestFailure === "PROBE_FAILED" && result.failure === "VERSION_TOO_OLD" ? result.failure : strongestFailure;
         }
       }
-      const shellCandidate = stableLauncherOnly ? null : await loginShellCandidate(id, env, attempts);
+      const shellCandidate = await loginShellCandidate(id, env, attempts);
       if (shellCandidate) {
         const result = await probe(shellCandidate, id, { ...options, env }, attempts);
         if (result.success) return result.success;
         strongestFailure = result.failure;
       }
-      for (const path of stableLauncherOnly ? [] : standardCandidates(id, env)) {
+      for (const path of standardCandidates(id, env)) {
         const rawCandidate = fileCandidate(path, "standard", env, id !== "node");
         if (!rawCandidate) continue;
         const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);
@@ -21695,15 +21693,15 @@
     const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "arm64" });
     return Object.freeze({
       id: "macos-arm64",
-      // RuntimeManager needs the CEP process environment for its explicit,
-      // development-only direct-checkout override.  Keep it on the adapter so
-      // callers do not need to reach around the platform boundary.
-      env: deps.env,
       paths,
       fs: deps.fs,
       ...boundary,
       revealFile(filePath) {
-        return boundary.run({ executable: fixed("ae-mcp", "/usr/bin/open"), args: ["-R", String(filePath)], timeoutMs: 5e3 });
+        return boundary.run({
+          executable: fixed("system-open", "/usr/bin/open"),
+          args: ["-R", String(filePath)],
+          timeoutMs: 5e3
+        });
       },
       openLoginTerminal(tool) {
         if (tool !== "claude" && tool !== "codex") throw new TypeError("Unsupported login tool");
@@ -21711,14 +21709,9 @@
         const script = 'tell application "Terminal" to do script ' + JSON.stringify(command) + '\ntell application "Terminal" to activate';
         return boundary.run({ executable: fixed(tool, "/usr/bin/osascript"), args: ["-e", script], timeoutMs: 5e3 });
       },
-      legacyWizardInstallCommands({ panelVersion, repoRoot, repo }) {
-        const src = (sub) => repoRoot ? paths.join([repoRoot, "packages", sub]) : `git+${repo}@v${panelVersion}#subdirectory=packages/${sub}`;
+      legacyWizardInstallCommands() {
         return {
-          uv: { file: "brew", executableId: "brew", args: ["install", "uv"] },
-          uvFallback: { file: "brew", executableId: "brew", args: ["install", "uv"] },
-          node: { file: "brew", executableId: "brew", args: ["install", "node@24"] },
-          claude: { file: "npm", executableId: "npm", args: ["install", "-g", "@anthropic-ai/claude-code"] },
-          aeMcp: { file: "uv", executableId: "uv", args: ["tool", "install", "--force", "--from", src("core"), "ae-mcp", "--with", src("bridge"), "--with", src("snapshot-mss")] }
+          node: { file: "brew", executableId: "brew", args: ["install", "node@24"] }
         };
       }
     });
@@ -21743,7 +21736,11 @@
       ...boundary,
       revealFile(filePath) {
         const explorer = paths.join([systemRoot, "explorer.exe"]);
-        return boundary.run({ executable: fixed("ae-mcp", explorer), args: ["/select,", String(filePath)], timeoutMs: 5e3 });
+        return boundary.run({
+          executable: fixed("explorer", explorer),
+          args: ["/select,", String(filePath)],
+          timeoutMs: 5e3
+        });
       },
       openLoginTerminal(tool) {
         if (tool !== "claude" && tool !== "codex") throw new TypeError("Unsupported login tool");
@@ -21751,14 +21748,9 @@
         const args = tool === "claude" ? ["start", "", "claude"] : ["start", "", "codex", "login"];
         return boundary.run({ executable: fixed(tool, cmd, ["/d", "/s", "/c"]), args, timeoutMs: 5e3 });
       },
-      legacyWizardInstallCommands({ panelVersion, repoRoot, repo }) {
-        const src = (sub) => repoRoot ? paths.join([repoRoot, "packages", sub]) : `git+${repo}@v${panelVersion}#subdirectory=packages/${sub}`;
+      legacyWizardInstallCommands() {
         return {
-          uv: { file: "winget", executableId: "winget", args: ["install", "--id", "astral-sh.uv", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
-          uvFallback: { file: "powershell", executableId: "powershell", args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://astral.sh/uv/install.ps1 | iex"] },
-          node: { file: "winget", executableId: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
-          claude: { file: "npm", executableId: "npm", args: ["install", "-g", "@anthropic-ai/claude-code"] },
-          aeMcp: { file: "uv", executableId: "uv", args: ["tool", "install", "--force", "--from", src("core"), "ae-mcp", "--with", src("bridge"), "--with", src("snapshot-mss")] }
+          node: { file: "winget", executableId: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] }
         };
       }
     });
@@ -22685,7 +22677,7 @@
       start: "\u5F00\u59CB\u4F7F\u7528",
       skip: "\u8DF3\u8FC7\u5411\u5BFC",
       t1: "\u68C0\u67E5\u9762\u677F\u5BBF\u4E3B",
-      b1: "\u9762\u677F\u5185\u7684 CEP \u5BBF\u4E3B\u76F4\u63A5\u63D0\u4F9B MCP \u4E0E After Effects \u6267\u884C\u80FD\u529B\uFF0C\u4E0D\u518D\u9700\u8981 Python \u670D\u52A1\u3002",
+      b1: "\u9762\u677F\u5185\u7684 CEP \u5BBF\u4E3B\u76F4\u63A5\u63D0\u4F9B MCP \u4E0E After Effects \u6267\u884C\u80FD\u529B\u3002",
       langLabel: "\u754C\u9762\u8BED\u8A00 \xB7 Language",
       t2: "\u68C0\u67E5 AI CLI",
       b2: "\u5185\u7F6E\u5BF9\u8BDD\u53EF\u4F7F\u7528 Claude\u3001Codex \u6216 opencode\uFF1B\u6309\u9700\u5B89\u88C5\u5176\u4E2D\u4EFB\u610F\u4E00\u4E2A\u3002",
@@ -22708,7 +22700,7 @@
       start: "Start using",
       skip: "Skip setup",
       t1: "Check the panel host",
-      b1: "The CEP host now serves MCP and After Effects execution directly, with no Python service.",
+      b1: "The CEP host serves MCP and After Effects execution directly.",
       langLabel: "\u754C\u9762\u8BED\u8A00 \xB7 Language",
       t2: "Check AI CLIs",
       b2: "Built-in chat can use Claude, Codex, or opencode. Install any CLI you need.",
@@ -23261,7 +23253,7 @@
   }
   function ConnectionDrawerBody({ lang = "zh", info = {}, panelVersion = package_default.version, statusLabel, copyReady = true, onCopyConfig, onRestart, onDiagnose }) {
     const t = D[lang] || D.zh;
-    const connected = !!info.lastClientSeenAt || !!info.lastHealthAt;
+    const connected = !!info.lastClientSeenAt;
     const hostVersion = info.hostVersion || "-";
     const mismatch = info.hostVersion && info.hostVersion !== panelVersion;
     const recent = info.lastClientSeenAt ? [{ time: formatTime(info.lastClientSeenAt), text: lang === "zh" ? "\u5916\u90E8 MCP \u5BA2\u6237\u7AEF" : "External MCP client" }] : [];
@@ -25341,7 +25333,7 @@
     zh: {
       hello: "\u4F60\u597D\uFF01\u6211\u53EF\u4EE5\u76F4\u63A5\u64CD\u4F5C\u5F53\u524D\u6253\u5F00\u7684 AE \u5DE5\u7A0B\u3002\u8BD5\u8BD5\u8FD9\u4E9B\uFF1A",
       keyTitle: "\u5728\u8BBE\u7F6E\u7684 Provider \u7BA1\u7406\u4E2D\u9009\u62E9\u53EF\u7528\u6E20\u9053",
-      keyCaption: "\u51ED\u636E\u7531\u7CFB\u7EDF\u51ED\u636E Helper \u4FDD\u7BA1\uFF1B\u5982\u4E0D\u53EF\u7528\uFF0C\u8BF7\u6309\u8BBE\u7F6E\u4E2D\u7684\u4FEE\u590D\u63D0\u793A\u5904\u7406\u3002",
+      keyCaption: "\u51ED\u636E\u7531\u6240\u9009 CLI \u7684\u767B\u5F55\u6001\u6216\u51ED\u636E\u5B58\u50A8\u4FDD\u7BA1\u3002",
       newSession: "\u65B0\u4F1A\u8BDD",
       placeholder: "\u63CF\u8FF0\u4F60\u60F3\u5728 AE \u91CC\u505A\u4EC0\u4E48\u2026",
       noticeAction: "\u65B0\u4F1A\u8BDD",
@@ -25368,7 +25360,7 @@
     en: {
       hello: "Hi! I can operate the open AE project directly. Try one of these:",
       keyTitle: "Choose an available channel in Provider Manager",
-      keyCaption: "Credentials stay in the system credential helper; follow the repair guidance in Settings if it is unavailable.",
+      keyCaption: "Credentials stay in the selected CLI login or credential store.",
       newSession: "New session",
       placeholder: "Describe what to do in AE\u2026",
       noticeAction: "New session",
@@ -42653,23 +42645,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     };
     const samePath = (left, right) => nativePath.same(left, right);
     try {
-      const runtimePackageAnchor = adapter.paths.join([
-        extensionRoot,
-        "runtime",
-        adapter.id,
-        "node",
-        "host",
-        "package.json"
-      ]);
-      const developmentMarker = adapter.paths.join([extensionRoot, ".debug"]);
-      const developmentPackageAnchor = adapter.paths.join([extensionRoot, "host", "package.json"]);
-      let packageAnchor = "";
-      if (ordinaryAnchor(runtimePackageAnchor)) {
-        packageAnchor = runtimePackageAnchor;
-      } else if (fs.existsSync(developmentMarker) && ordinaryAnchor(developmentPackageAnchor)) {
-        packageAnchor = developmentPackageAnchor;
-      }
-      if (!packageAnchor) throw new Error("no selected host package anchor");
+      const packageAnchor = adapter.paths.join([extensionRoot, "host", "package.json"]);
+      if (!ordinaryAnchor(packageAnchor)) throw new Error("bundled host package anchor is missing");
       const hostRoot = nativePath.dirname(packageAnchor);
       const lexicalExtensionRoot = nativePath.resolve([extensionRoot]);
       const realExtensionRoot = nativePath.resolve([fs.realpathSync(extensionRoot)]);
@@ -42765,7 +42742,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }) {
     const adapter = platform || createPlatformAdapter();
     let host = null;
-    let platformRoots = null;
     let beforeUnloadInstalled = false;
     let lifecycleGeneration = 0;
     function disposeLifecycle(hostInstance) {
@@ -42779,14 +42755,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       onStatus("starting", port);
       const priorHost = host;
       host = null;
-      platformRoots = null;
       if (priorHost) disposeLifecycle(priorHost);
       try {
         const cepRequire4 = requireImpl || getCepRequire5();
         const extRoot = normalizeCepPath(extensionRoot || cs2.getSystemPath("extension"), adapter);
         const hostPath = adapter.paths.join([extRoot, "host", "server.js"]);
-        const roots = { extensionRoot: extRoot, runtimeRoot: adapter.paths.runtimeRoot };
-        platformRoots = roots;
         onLog("host: " + hostPath);
         const runtimeDependencies = loadBundledHostDependencies({
           cepRequire: cepRequire4,
@@ -42802,7 +42775,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           nextHost.setNativeAegpRuntime(nativeAegpRuntime(adapter.id));
         }
         nextHost.setCSInterface(cs2);
-        if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
         host = nextHost;
         if (!beforeUnloadInstalled) {
           const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener("beforeunload", handler));
@@ -42810,7 +42782,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             lifecycleGeneration += 1;
             const closingHost = host;
             host = null;
-            platformRoots = null;
             disposeLifecycle(closingHost);
           });
           beforeUnloadInstalled = true;
@@ -42819,11 +42790,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           if (generation !== lifecycleGeneration || host !== nextHost) return;
           if (err) onStatus("error", port, err.message);
           else onStatus("ok", port);
-        }, roots);
+        });
       } catch (e) {
         const failedHost = host;
         host = null;
-        platformRoots = null;
         disposeLifecycle(failedHost);
         if (generation === lifecycleGeneration) onStatus("error", port, e.message);
       }
@@ -42837,7 +42807,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           if (generation !== lifecycleGeneration || host !== restartingHost) return;
           if (err) onStatus("error", port, err.message);
           else onStatus("ok", port);
-        }, platformRoots);
+        });
       }
     }
     return { start, restart, getHost: () => host };
@@ -43108,7 +43078,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function buildLogExport({
     panelLogs = [],
     hostInfo = {},
-    sidecarTail = "",
     backendStderrTails = null,
     hostActivity,
     hostLogMemory,
@@ -43155,7 +43124,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }, exactSecrets);
     section(lines, "## panel log (" + panelLogs.length + ")", () => panelLogs.map(String), exactSecrets);
     section(lines, "## backend stderr tails", () => {
-      const tails = backendStderrTails || (sidecarTail ? { claude: sidecarTail } : null);
+      const tails = backendStderrTails;
       if (!tails || typeof tails !== "object" || !Object.keys(tails).length) return unavailable("no backend stderr tail is available");
       const result = [];
       for (const [name, tail] of Object.entries(tails)) {
