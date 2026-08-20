@@ -38,6 +38,7 @@ const CEP_EXECUTED_FILES = [
     'mcp/approvals.js',
     'mcp/annotations.js',
     'mcp/approval-gate.js',
+    'mcp/canonical-json.js',
     'mcp/checkpoint-store.js',
     'mcp/checkpoint-ops.js',
     'mcp/instructions.js',
@@ -46,6 +47,7 @@ const CEP_EXECUTED_FILES = [
     'mcp/error-hints.js',
     'mcp/jsx-result.js',
     'mcp/template.js',
+    'mcp/tool-library.js',
     'mcp/tools.js',
     'mcp/tool-result.js',
     // One file per /mcp tool (see mcp/tools.js). Every new tool module must be
@@ -59,10 +61,24 @@ const CEP_EXECUTED_FILES = [
     'mcp/tools/revert.js',
     'mcp/tools/validate-expressions.js',
     'mcp/tools/native-exec.js',
+    'mcp/tools/tool-search.js',
+    'mcp/tools/tool-use.js',
+    'mcp/tools/skill-use.js',
     // Generated twins the host requires at runtime. They live under plugin/host because
     // only plugin/ ships to the CEP extension directory (native/ does not).
     'mcp/generated/native_exec.generated.json',
     'mcp/generated/aegp-rpc.schema.json',
+    // Bundled Tool Library skills are runtime data loaded through fs, not
+    // require(). Keep them explicit so CEP payload changes remain audited.
+    'mcp/skills_bundled/ae-execution-guide.json',
+    'mcp/skills_bundled/ease-and-timing.json',
+    'mcp/skills_bundled/extendscript-cookbook.json',
+    'mcp/skills_bundled/glow-recipes.json',
+    'mcp/skills_bundled/grade-stack.json',
+    'mcp/skills_bundled/kinetic-typography.json',
+    'mcp/skills_bundled/manifest.json',
+    'mcp/skills_bundled/project-organization.json',
+    'mcp/skills_bundled/render-order.json',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',

@@ -18,6 +18,9 @@ const TOOL_MODULES = [
     require('./tools/revert'),
     require('./tools/validate-expressions'),
     require('./tools/native-exec'),
+    require('./tools/tool-search'),
+    require('./tools/tool-use'),
+    require('./tools/skill-use'),
 ];
 
 function buildTools(deps) {
