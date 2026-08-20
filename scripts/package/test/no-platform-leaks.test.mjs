@@ -18,6 +18,9 @@ const GATED_PLATFORM_ALLOWLIST = new Map([
   ['plugin/panel/src/cep/providerStore.js::native-path-home-module', 2],
   // Provider env shaping is part of the same gated provider-facade migration.
   ['plugin/panel/src/lib/providerProfile.js::windows-user-root-env', 4],
+  // 'PowerShell' here is the Claude CLI builtin TOOL NAME being disallowed
+  // (--disallowedTools), not a system command invocation.
+  ['plugin/panel/src/cep/claudeAgentBackend.js::system-discovery-command', 1],
 ]);
 
 const FORBIDDEN_PLATFORM_PATTERNS = [
