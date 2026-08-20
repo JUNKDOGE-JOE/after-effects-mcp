@@ -379,6 +379,11 @@ export function createOpenCodeBackend({
       proc = adapter.spawn(executable, ['serve', '--port', String(port)], {
         stdio: 'pipe',
         windowsHide: true,
+        // OpenCode scopes its project context to the cwd. Inheriting the CEP
+        // process cwd (AE's Support Files, thousands of files) inflated every
+        // provider request until the relay-side WAF rejected it with a 403
+        // challenge page (live-debugged 2026-08-20); pin a tiny neutral dir.
+        cwd: configHome,
         env: spawnEnv,
       });
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
@@ -572,10 +577,15 @@ export function createOpenCodeBackend({
     if (type === 'session.error') {
       assistantDeltaRedactor.discard();
       const error = p.error || p;
+      const detail = (error && error.data && error.data.message)
+        || (error && error.message)
+        || (typeof error === 'string' ? error : '');
       emit({
         type: 'error',
         kind: error.kind || 'mcp',
-        message: error.message || String(error || 'OpenCode session error'),
+        // OpenCode session errors arrive as {name, data:{message}} objects;
+        // String() on that shape rendered "[object Object]" in the chat.
+        message: detail || (error && error.name) || 'OpenCode session error',
         ...activeTurnFailureFields(),
       });
       finishActive();

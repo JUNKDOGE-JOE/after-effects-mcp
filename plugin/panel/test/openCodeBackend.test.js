@@ -372,6 +372,9 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   assert.deepEqual(spawned.calls[0].args, ['serve', '--port', '4567']);
   assert.equal(spawned.calls[0].options.shell, undefined);
   assert.equal(spawned.calls[0].options.windowsHide, true);
+  // OpenCode scopes project context to cwd; inheriting AE's cwd ballooned
+  // provider requests until relay-side WAFs rejected them (2026-08-20).
+  assert.equal(spawned.calls[0].options.cwd, 'C:\\tmp\\ae-opencode-test');
   assert.equal(spawned.calls[0].options.env.XDG_CONFIG_HOME, 'C:\\tmp\\ae-opencode-test');
 
   assert.equal(fsImpl.writes.length, 1);
@@ -555,4 +558,23 @@ test('openCode descriptors use the free default and map provider model metadata'
   assert.deepEqual(descriptor.models.map((m) => m.id), ['north-mini-code-free', 'south-pro-code']);
   assert.equal(descriptor.defaultModelId, 'north-mini-code-free');
   assert.equal(descriptor.approvalModes.length, 4);
+});
+
+test('session.error objects surface their nested message, never "[object Object]"', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser({ turnId: 'turn-err', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: { name: 'UnknownError', data: { message: 'relay rejected the request (403)' } },
+    },
+  });
+  await pending;
+  const errorEvent = [...events].reverse().find((evt) => evt.type === 'error');
+  assert.equal(errorEvent.message, 'relay rejected the request (403)');
 });
