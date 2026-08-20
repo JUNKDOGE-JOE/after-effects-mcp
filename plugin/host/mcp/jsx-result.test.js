@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { parseJsxResult } = require('./jsx-result');
+const { parseJsxResult, parseExecResult } = require('./jsx-result');
 
 test('parseJsxResult returns parsed JSON objects and arrays', () => {
     assert.deepEqual(parseJsxResult('{"ok":true,"value":42}'), { ok: true, value: 42 });
@@ -43,5 +43,44 @@ test('parseJsxResult wraps non-JSON strings and preserves parsed ok:false', () =
     assert.deepEqual(parseJsxResult('hi'), { ok: true, content: 'hi' });
     assert.deepEqual(parseJsxResult('{"ok":false,"error":"no layer"}'), {
         ok: false, error: 'no layer',
+    });
+});
+
+test('parseExecResult maps explicit transport types without sniffing JSON-like text', () => {
+    assert.deepEqual(parseExecResult('text', '{"ok":true}'), {
+        ok: false,
+        error: 'ae_exec returned an invalid result type',
+        raw: '{"ok":true}',
+    });
+    assert.deepEqual(parseExecResult('string', '{"ok":false,"error":"not an exec error"}'), {
+        ok: true,
+        content: '{"ok":false,"error":"not an exec error"}',
+        contentType: 'text',
+    });
+    assert.deepEqual(parseExecResult('string', '[object Object]'), {
+        ok: true,
+        content: '[object Object]',
+        contentType: 'text',
+    });
+    assert.deepEqual(parseExecResult('json', '{"ok":true,"n":42}'), {
+        ok: true,
+        content: '{"ok":true,"n":42}',
+        contentType: 'json',
+    });
+});
+
+test('parseExecResult preserves empty, undefined, and EvalScript sentinel errors', () => {
+    assert.deepEqual(parseExecResult('string', ''), {
+        ok: false,
+        error: 'jsx returned no value (empty output)',
+        raw: '',
+    });
+    const undefinedResult = parseExecResult('string', 'undefined');
+    assert.equal(undefinedResult.ok, false);
+    assert.match(undefinedResult.error, /evaluated to undefined/);
+    assert.deepEqual(parseExecResult('string', 'EvalScript error.'), {
+        ok: false,
+        error: 'EvalScript error.',
+        raw: 'EvalScript error.',
     });
 });

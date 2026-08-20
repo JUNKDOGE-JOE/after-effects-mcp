@@ -67,7 +67,7 @@ async function fixture() {
     server.setRuntimeDependencies({ express });
     server.setPaused(false);
     server.setCSInterface({
-        evalScript: function (_jsx, callback) { callback('{"ok":true,"result":"identity-ok"}'); },
+        evalScript: function (_jsx, callback) { callback('{"ok":true,"resultType":"string","result":"identity-ok"}'); },
     });
     const app = server.buildApp();
     const listener = await new Promise(function (resolve) {
@@ -117,7 +117,11 @@ test('MCP identity blocks existing and new sessions, then restores after unblock
             jsonrpc: '2.0', id: 3, method: 'tools/call',
             params: { name: 'ae_exec', arguments: { code: '1 + 1' } },
         });
-        assert.deepEqual(restored.body.result.structuredContent, { ok: true, content: 'identity-ok' });
+        assert.deepEqual(restored.body.result.structuredContent, {
+            ok: true,
+            content: 'identity-ok',
+            contentType: 'text',
+        });
 
         host.server.setClientBlocked('cursor', true);
         const rejected = await request(host.port, 'POST', '/mcp', {}, initializeMessage(4, 'cursor', '2.0'));

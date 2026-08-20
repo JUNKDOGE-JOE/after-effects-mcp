@@ -47,7 +47,11 @@ async function fixture() {
                     isThreeD: false, locked: false, parentLocator: null, sourceItemLocator: null,
                 }],
             };
-            callback(JSON.stringify({ ok: true, result: JSON.stringify(result) }));
+            callback(JSON.stringify({
+                ok: true,
+                resultType: 'string',
+                result: JSON.stringify(result),
+            }));
         },
     });
     const app = server.buildApp();

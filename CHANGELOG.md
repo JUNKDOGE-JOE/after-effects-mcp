@@ -28,6 +28,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 - **`ae.skillUse(execute=true)` 恢复 v0.9.0 透传返回形状**——技能脚本自己的 JSON 结果原样放在顶层，不再包 `{ok,name,template_type,result}`，也不再出现外层 `ok:true` 包住内层 `ok:false` 的矛盾；v0.9.2–v0.9.6 期间按 `result.*` 读取的调用方需改回顶层字段。执行仍走审批引擎，`execute=false` 不变。（#269）
 - **ExtendScript 超时不再提前放行串行锁（#260）**——调用方仍会按原期限收到超时，但 Bridge 会等迟到回调或排空哨兵返回后才继续，期间 `/health`、`/exec`、`ae.status` 与 `ae.diagnose` 报告 `degraded`；错误 disposition 收敛为三值：从未进入 AE、可安全重试的 `not_dispatched`，已派发但结果未知的 `uncertain`，以及已执行并明确报错的 `failed`。
 - **依赖清扫：`npm audit` 归零**——`plugin/sidecar` 锁文件把 `fast-uri` 升到 3.1.5（修 CVE-2026-13676 / GHSA-4c8g-83qw-93j6 以及其后的 GHSA-v2hh-gcrm-f6hx、GHSA-7p8r-x3mc-p8w7，仍在 ajv 声明的 `^3.0.1` 范围内，不引入 `overrides`），同批升级 `ip-address` 10.5.0、`hono` 4.13.3、`@hono/node-server` 1.19.17、`body-parser` 2.3.0；`plugin/host` 的 `express` 4.22.1→4.22.2（连带 `qs` 6.15.3、`body-parser` 1.20.6）。两个工作区 `npm audit` 均为 0；这些包只在本机回环路径上工作，属扫描器噪音清理而非已确认可达的漏洞。由 #271（@anupamme / OrbisAI 扫描报告）触发。
+- **`ae_exec` 非字符串结果不再被摧毁（#254）**——ExtendScript 侧新增 ES3 安全序列化器：数字 / 布尔 / `null` / 纯 Object / 纯 Array 结果在 AE 内序列化为规范 JSON 文本原样带回（`structuredContent.contentType: "json"`，`content` 恒为字符串），字符串结果保持原语义（`contentType: "text"`）。此前对象变成 `"[object Object]"` 解析错误、数组变成 `ok:true` 的 `"1,two,[object Object]"` 静默损毁。宿主对象（CompItem / Layer 等）不做深遍历、保持 `String(v)` 叶节点；循环引用 / 深度超 12 / 序列化超 1,000,000 字符按确定性错误返回并提示改用更小的投影；`ae_exec` 路径彻底移除「结果看着像 JSON 就尝试解析」的猜测逻辑，其余工具的结果解析不受影响。
 
 
 ### [0.9.6] — 2026-08-19

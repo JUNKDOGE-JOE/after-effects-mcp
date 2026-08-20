@@ -35,7 +35,7 @@ async function fixture() {
     server.activity._reset();
     server.setPaused(false);
     server.setCSInterface({
-        evalScript: function (_jsx, callback) { callback('{"ok":true,"result":"bridge-ok"}'); },
+        evalScript: function (_jsx, callback) { callback('{"ok":true,"resultType":"string","result":"bridge-ok"}'); },
     });
     const app = server.buildApp();
     assert.equal(typeof server.mcp.conversations.create, 'function');
@@ -63,7 +63,11 @@ test('MCP ae_exec shares paused/blocked gates and activity records with /exec', 
             jsonrpc: '2.0', id: 2, method: 'tools/call',
             params: { name: 'ae_exec', arguments: { code: '1 + 1', undo_group_name: 'MCP test' } },
         });
-        assert.deepEqual(success.body.result.structuredContent, { ok: true, content: 'bridge-ok' });
+        assert.deepEqual(success.body.result.structuredContent, {
+            ok: true,
+            content: 'bridge-ok',
+            contentType: 'text',
+        });
         const invalidParams = await request(host.port, headers, {
             jsonrpc: '2.0', id: 21, method: 'tools/call', params: {},
         });
