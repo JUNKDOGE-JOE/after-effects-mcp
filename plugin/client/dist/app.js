@@ -29468,6 +29468,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       id,
       name,
       baseUrl: normalizeBaseUrl(value.baseUrl),
+      // Relay endpoints differ per model family in which dialect they accept;
+      // the user picks the wire dialect per provider (#263 live follow-up:
+      // gemini models behind an Anthropic-dialect call broke with Google's
+      // unknown-field errors, while /chat/completions served every family).
+      protocol: value.protocol === "openai" ? "openai" : "anthropic",
       allowInsecureHttp: value.allowInsecureHttp === true,
       modelIds: normalizeModelIds(value.modelIds || value.modelId),
       needsApiKey: value.needsApiKey === true
@@ -29544,10 +29549,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (provider.needsApiKey) continue;
       const root = provider.baseUrl.replace(/\/+$/, "");
       definitions[provider.id] = {
-        npm: "@ai-sdk/anthropic",
+        npm: provider.protocol === "openai" ? "@ai-sdk/openai-compatible" : "@ai-sdk/anthropic",
         name: provider.name,
-        // @ai-sdk/anthropic appends "/messages" directly to baseURL, so the
-        // injected URL must carry the "/v1" segment relay endpoints expect.
+        // Both loaders append their endpoint path ("/messages" or
+        // "/chat/completions") directly to baseURL, so the injected URL must
+        // carry the "/v1" segment relay endpoints expect.
         options: { baseURL: root.endsWith("/v1") ? root : root + "/v1" },
         models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }]))
       };
@@ -30374,7 +30380,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       name: "",
       baseUrl: "",
       allowInsecureHttp: false,
-      modelId: ""
+      modelId: "",
+      protocol: "anthropic"
     };
   }
   function draftFromEntry(entry) {
@@ -30384,7 +30391,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       name: String((entry == null ? void 0 : entry.name) || ""),
       baseUrl: String((entry == null ? void 0 : entry.baseUrl) || ""),
       allowInsecureHttp: (entry == null ? void 0 : entry.allowInsecureHttp) === true,
-      modelId: Array.isArray(entry == null ? void 0 : entry.modelIds) ? entry.modelIds.join(", ") : ""
+      modelId: Array.isArray(entry == null ? void 0 : entry.modelIds) ? entry.modelIds.join(", ") : "",
+      protocol: (entry == null ? void 0 : entry.protocol) === "openai" ? "openai" : "anthropic"
     };
   }
   function validateDraft(draft) {
@@ -30423,6 +30431,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       baseUrl: "Base URL",
       apiKey: "API Key",
       model: "\u6A21\u578B",
+      dialect: "\u63A5\u53E3\u65B9\u8A00",
+      dialectAnthropic: "Anthropic\uFF08/v1/messages\uFF09",
+      dialectOpenAi: "OpenAI \u517C\u5BB9\uFF08/v1/chat/completions\uFF09",
+      dialectCap: "\u4E2D\u8F6C\u7AEF\u70B9\u5E38\u6309\u6A21\u578B\u5BB6\u65CF\u533A\u5206\u65B9\u8A00\uFF1B\u6DF7\u5408\u6A21\u578B\u5217\u8868\u9009 OpenAI \u517C\u5BB9\u901A\u5E38\u5168\u90E8\u53EF\u7528\u3002",
       openCodeKeyCap: "\u5BC6\u94A5\u5199\u5165 OpenCode auth.json\uFF1B\u4ECE\u65E7\u7248\u672C\u5347\u7EA7\u7684 Provider \u5FC5\u987B\u91CD\u65B0\u586B\u5199\u3002",
       needsApiKey: "\u9700\u91CD\u586B key",
       insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09",
@@ -30440,6 +30452,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       baseUrl: "Base URL",
       apiKey: "API Key",
       model: "Model",
+      dialect: "Wire dialect",
+      dialectAnthropic: "Anthropic (/v1/messages)",
+      dialectOpenAi: "OpenAI-compatible (/v1/chat/completions)",
+      dialectCap: "Relays often vary the dialect per model family; OpenAI-compatible usually covers mixed model lists.",
       openCodeKeyCap: "The key is written to OpenCode auth.json. Older providers must be entered again.",
       needsApiKey: "API key required",
       insecure: "Allow non-loopback HTTP (confirmed again on save)",
@@ -30610,6 +30626,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
               value: draft.baseUrl,
               onChange: (value) => setDraft({ ...draft, baseUrl: value }),
               placeholder: "https://api.example.com/v1"
+            }
+          ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.dialect, caption: t.dialectCap, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+            Select,
+            {
+              value: draft.protocol,
+              onChange: (value) => setDraft({ ...draft, protocol: value }),
+              options: [
+                { value: "anthropic", label: t.dialectAnthropic },
+                { value: "openai", label: t.dialectOpenAi }
+              ]
             }
           ) }),
           /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(

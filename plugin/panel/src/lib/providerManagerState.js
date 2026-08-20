@@ -7,6 +7,7 @@ export function emptyDraft() {
     baseUrl: '',
     allowInsecureHttp: false,
     modelId: '',
+    protocol: 'anthropic',
   };
 }
 
@@ -18,6 +19,7 @@ export function draftFromEntry(entry) {
     baseUrl: String(entry?.baseUrl || ''),
     allowInsecureHttp: entry?.allowInsecureHttp === true,
     modelId: Array.isArray(entry?.modelIds) ? entry.modelIds.join(', ') : '',
+    protocol: entry?.protocol === 'openai' ? 'openai' : 'anthropic',
   };
 }
 

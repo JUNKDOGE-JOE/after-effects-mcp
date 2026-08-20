@@ -2,6 +2,7 @@ import React from 'react';
 import { Badge } from '../core/Badge';
 import { Button } from '../core/Button';
 import { Input } from '../forms/Input';
+import { Select } from '../forms/Select';
 import { Field } from '../forms/Field';
 import {
   draftFromEntry,
@@ -14,6 +15,9 @@ const L = {
   zh: {
     title: 'Provider 管理', add: '新增', edit: '编辑', del: '删除', save: '保存', cancel: '取消',
     name: '名称', baseUrl: 'Base URL', apiKey: 'API Key', model: '模型',
+    dialect: '接口方言', dialectAnthropic: 'Anthropic（/v1/messages）',
+    dialectOpenAi: 'OpenAI 兼容（/v1/chat/completions）',
+    dialectCap: '中转端点常按模型家族区分方言；混合模型列表选 OpenAI 兼容通常全部可用。',
     openCodeKeyCap: '密钥写入 OpenCode auth.json；从旧版本升级的 Provider 必须重新填写。',
     needsApiKey: '需重填 key', insecure: '允许非回环 HTTP（保存时再次确认）',
     models: (count) => `${count} 个模型`, selected: '已选',
@@ -26,6 +30,9 @@ const L = {
     save: 'Save',
     cancel: 'Cancel',
     name: 'Name', baseUrl: 'Base URL', apiKey: 'API Key', model: 'Model',
+    dialect: 'Wire dialect', dialectAnthropic: 'Anthropic (/v1/messages)',
+    dialectOpenAi: 'OpenAI-compatible (/v1/chat/completions)',
+    dialectCap: 'Relays often vary the dialect per model family; OpenAI-compatible usually covers mixed model lists.',
     openCodeKeyCap: 'The key is written to OpenCode auth.json. Older providers must be entered again.',
     needsApiKey: 'API key required', insecure: 'Allow non-loopback HTTP (confirmed again on save)',
     models: (count) => `${count} models`, selected: 'selected',
@@ -170,6 +177,16 @@ export function ProviderManagerSection({
                 value={draft.baseUrl}
                 onChange={(value) => setDraft({ ...draft, baseUrl: value })}
                 placeholder="https://api.example.com/v1"
+              />
+            </Field>
+            <Field label={t.dialect} caption={t.dialectCap}>
+              <Select
+                value={draft.protocol}
+                onChange={(value) => setDraft({ ...draft, protocol: value })}
+                options={[
+                  { value: 'anthropic', label: t.dialectAnthropic },
+                  { value: 'openai', label: t.dialectOpenAi },
+                ]}
               />
             </Field>
             <Field label={t.model}>

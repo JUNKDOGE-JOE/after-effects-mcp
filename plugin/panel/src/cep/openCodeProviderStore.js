@@ -63,6 +63,11 @@ function normalizeProvider(value) {
     id,
     name,
     baseUrl: normalizeBaseUrl(value.baseUrl),
+    // Relay endpoints differ per model family in which dialect they accept;
+    // the user picks the wire dialect per provider (#263 live follow-up:
+    // gemini models behind an Anthropic-dialect call broke with Google's
+    // unknown-field errors, while /chat/completions served every family).
+    protocol: value.protocol === 'openai' ? 'openai' : 'anthropic',
     allowInsecureHttp: value.allowInsecureHttp === true,
     modelIds: normalizeModelIds(value.modelIds || value.modelId),
     needsApiKey: value.needsApiKey === true,
@@ -137,10 +142,11 @@ export function openCodeProviderDefinitions(providers) {
     if (provider.needsApiKey) continue;
     const root = provider.baseUrl.replace(/\/+$/, '');
     definitions[provider.id] = {
-      npm: '@ai-sdk/anthropic',
+      npm: provider.protocol === 'openai' ? '@ai-sdk/openai-compatible' : '@ai-sdk/anthropic',
       name: provider.name,
-      // @ai-sdk/anthropic appends "/messages" directly to baseURL, so the
-      // injected URL must carry the "/v1" segment relay endpoints expect.
+      // Both loaders append their endpoint path ("/messages" or
+      // "/chat/completions") directly to baseURL, so the injected URL must
+      // carry the "/v1" segment relay endpoints expect.
       options: { baseURL: root.endsWith('/v1') ? root : root + '/v1' },
       models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }])),
     };

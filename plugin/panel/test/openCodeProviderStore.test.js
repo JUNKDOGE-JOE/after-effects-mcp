@@ -89,3 +89,17 @@ test('openCodeProviderDefinitions appends /v1 to a bare relay base URL', () => {
   }]);
   assert.equal(definitions['aemcp-bare'].options.baseURL, 'https://relay.example/v1');
 });
+
+test('openai-protocol providers inject the openai-compatible loader', () => {
+  const definitions = openCodeProviderDefinitions([{
+    id: 'aemcp-relay',
+    name: 'Relay',
+    baseUrl: 'https://relay.example',
+    allowInsecureHttp: false,
+    modelIds: ['gemini-test'],
+    needsApiKey: false,
+    protocol: 'openai',
+  }]);
+  assert.equal(definitions['aemcp-relay'].npm, '@ai-sdk/openai-compatible');
+  assert.equal(definitions['aemcp-relay'].options.baseURL, 'https://relay.example/v1');
+});
