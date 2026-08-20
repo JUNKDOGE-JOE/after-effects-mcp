@@ -92,13 +92,9 @@ jobs:
             > "$RUNNER_TEMP/main-build-rc.yml"
           cmp -s "$RUNNER_TEMP/dispatched-build-rc.yml" "$RUNNER_TEMP/main-build-rc.yml"
 
-          # Do not burn the irreversible lock while the separately approved
-          # platform-helper/foundation jobs are still absent.
           node scripts/release/native-coverage-gate.mjs \
             --root "$GITHUB_WORKSPACE" \
             --policy "$GITHUB_WORKSPACE/packaging/native-coverage-approvals.json"
-          test -f scripts/package/build-platform-helper.mjs
-          test -f .github/workflows/platform-foundation-ci.yml
           grep -Fq 'AE_MCP_NOTARY_KEYCHAIN_PATH' scripts/package/package-macos-dmg.sh
           grep -Fq -- '--keychain "$AE_MCP_NOTARY_KEYCHAIN_PATH"' \
             scripts/package/package-macos-dmg.sh
@@ -425,16 +421,13 @@ jobs:
             printf 'AE_MCP_ZXP_SIGN_CMD_SHA256=%s\n' "$AE_MCP_ZXP_SIGN_CMD_SHA256"
           } >> "$GITHUB_ENV"
 
-      - name: Build locked foundation inputs
+      - name: Build locked runtime input
         shell: bash
         run: |
           set -euo pipefail
           node scripts/package/build-portable-runtime.mjs \
             --platform macos-arm64 \
             --out build/runtime/macos-arm64
-          node scripts/package/build-platform-helper.mjs \
-            --platform macos-arm64 \
-            --out build/helper/macos-arm64
           bundled_node="$GITHUB_WORKSPACE/build/runtime/macos-arm64/node/bin/node"
           [[ -x "$bundled_node" && "$("$bundled_node" --version)" =~ ^v24\. ]]
           printf '%s\n' "$GITHUB_WORKSPACE/build/runtime/macos-arm64/node/bin" >> "$GITHUB_PATH"
@@ -686,20 +679,13 @@ jobs:
           "AE_MCP_ZXP_SIGN_CMD=$toolPath" >> $env:GITHUB_ENV
           "AE_MCP_ZXP_SIGN_CMD_SHA256=$env:AE_MCP_ZXP_SIGN_CMD_SHA256" >> $env:GITHUB_ENV
 
-      - name: Build locked foundation inputs
+      - name: Build locked runtime input
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           node scripts/package/build-portable-runtime.mjs `
             --platform windows-x64 `
             --out build/runtime/windows-x64
-          node scripts/package/build-platform-helper.mjs `
-            --platform windows-x64 `
-            --out build/helper/windows-x64
-          $env:AE_MCP_WINDOWS_ADDON_PATH = Join-Path $env:GITHUB_WORKSPACE 'build\helper\windows-x64\lib\ae-mcp-platform-helper-transport.node'
-          $env:AE_MCP_WINDOWS_HELPER_PATH = Join-Path $env:GITHUB_WORKSPACE 'build\helper\windows-x64\bin\ae-mcp-platform-helper.exe'
-          node --test native/platform-helper/windows/Tests/platform-helper-addon-live.test.mjs
-          if ($LASTEXITCODE -ne 0) { throw 'Windows Platform Helper live identity test failed' }
           $bundledNode = Join-Path $env:GITHUB_WORKSPACE 'build\runtime\windows-x64\node\node.exe'
           if ((& $bundledNode --version) -notmatch '^v24\.') { throw 'bundled Node must be v24' }
           (Join-Path $env:GITHUB_WORKSPACE 'build\runtime\windows-x64\node') >> $env:GITHUB_PATH

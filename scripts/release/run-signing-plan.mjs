@@ -157,7 +157,6 @@ function command({ file, args, label, evidencePath, expectedStepIds, envNames, o
 export function buildReleaseSigningCommands(input, { sourceStageSha256 } = {}) {
   const validated = validateReleaseSigningInput(input);
   const pathApi = platformPath(validated.platform);
-  const nestedEvidencePath = pathApi.join(validated.outRoot, 'nested-signing-evidence.json');
   // package-macos-dmg.sh consumes this exact sibling name to bind the DMG to
   // the already-verified ZXP bytes. Keep one filename across Phase 0 and RCs.
   const zxpEvidencePath = pathApi.join(validated.outRoot, 'zxp-evidence.json');
@@ -169,26 +168,6 @@ export function buildReleaseSigningCommands(input, { sourceStageSha256 } = {}) {
     const dmgName = `ae-mcp-panel-v${validated.version}-${validated.platform}.dmg`;
     const dmgPath = pathApi.join(validated.outRoot, dmgName);
     return Object.freeze([
-      command({
-        file: 'bash',
-        args: [
-          'scripts/package/sign-macos-nested.sh',
-          '--root',
-          validated.signingRoot,
-          '--evidence',
-          nestedEvidencePath,
-        ],
-        label: 'sign-macos-nested',
-        evidencePath: nestedEvidencePath,
-        expectedStepIds: [
-          'sign-helper', 'sign-xpc', 'sign-addon', 'sign-launcher', 'verify-nested',
-        ],
-        envNames: [
-          'AE_MCP_APPLE_CERT_FINGERPRINT_SHA256',
-          'AE_MCP_APPLE_SIGNING_IDENTITY',
-          'AE_MCP_APPLE_TEAM_ID',
-        ],
-      }),
       command({
         file: process.execPath,
         args: [
@@ -244,26 +223,6 @@ export function buildReleaseSigningCommands(input, { sourceStageSha256 } = {}) {
   }
 
   return Object.freeze([
-    command({
-      file: 'pwsh',
-      args: [
-        '-NoProfile',
-        '-File',
-        'scripts/package/sign-windows-nested.ps1',
-        '-Root',
-        validated.signingRoot,
-        '-Evidence',
-        nestedEvidencePath,
-      ],
-      label: 'sign-windows-nested',
-      evidencePath: nestedEvidencePath,
-      expectedStepIds: ['sign-helper', 'sign-addon', 'sign-launcher', 'verify-authenticode'],
-      envNames: [
-        'AE_MCP_WINDOWS_SIGNING_CERT_SHA1',
-        'AE_MCP_WINDOWS_SIGNTOOL_PATH',
-        'AE_MCP_WINDOWS_TIMESTAMP_URL',
-      ],
-    }),
     command({
       file: process.execPath,
       args: [

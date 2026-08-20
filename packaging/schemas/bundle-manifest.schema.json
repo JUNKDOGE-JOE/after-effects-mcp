@@ -9,7 +9,6 @@
     "platform",
     "sourceCommitSha",
     "runtime",
-    "helper",
     "files"
   ],
   "properties": {
@@ -36,15 +35,6 @@
         "manifestSha256": { "$ref": "#/$defs/sha256" },
         "sbomSha256": { "$ref": "#/$defs/sha256" },
         "licenseInventorySha256": { "$ref": "#/$defs/sha256" }
-      }
-    },
-    "helper": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["helperId", "manifestSha256"],
-      "properties": {
-        "helperId": { "const": "com.junkdoge.ae-mcp.platform-helper" },
-        "manifestSha256": { "$ref": "#/$defs/sha256" }
       }
     },
     "nativePlugin": {

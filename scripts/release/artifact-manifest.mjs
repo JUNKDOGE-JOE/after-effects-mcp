@@ -217,23 +217,13 @@ function assertNativeSignatureEvidence(record, platform, candidateSha, artifacts
       || value.signedBundleManifestSha256 !== record.sha256.signedBundleManifest
       || value.finalRootSha256 !== record.signingReport.finalRootSha256
       || !Number.isSafeInteger(value.discoveredNativeCount)
-      || value.discoveredNativeCount < 2 || !Array.isArray(value.files)
+      || value.discoveredNativeCount < 1 || !Array.isArray(value.files)
       || value.files.length !== value.discoveredNativeCount
       || !Array.isArray(value.artifacts)) {
     throw new Error('final native signature evidence identity mismatch');
   }
   const finalFiles = new Map(record.signedBundleManifest.files.map((item) => [item.path, item]));
   const expectedKind = platform === 'macos-arm64' ? 'codesign' : 'authenticode';
-  const requiredSuffixes = platform === 'macos-arm64'
-    ? [
-      '/bin/ae-mcp-platform-helper',
-      '/lib/ae-mcp-platform-helper-transport.node',
-    ]
-    : [
-      '/bin/ae-mcp-platform-helper.exe',
-      '/lib/ae-mcp-platform-helper-transport.node',
-      '/bin/ae-mcp.exe',
-    ];
   let previous = '';
   const seen = new Set();
   for (const item of value.files) {
@@ -250,7 +240,8 @@ function assertNativeSignatureEvidence(record, platform, candidateSha, artifacts
     seen.add(item.path);
     previous = item.path;
   }
-  if (requiredSuffixes.some((suffix) => ![...seen].some((item) => item.endsWith(suffix)))) {
+  if (record.signedBundleManifest.nativePlugin
+      && ![...seen].some((item) => item.startsWith('artifacts/native-plugin/'))) {
     throw new Error('final product native signature coverage is missing');
   }
   const expectedArtifacts = expectedSigningOutputs(artifacts, platform)

@@ -61,19 +61,7 @@ async function readJson(pathname) {
 }
 
 async function productOwnedPaths(root, platform, manifest) {
-  const helperManifestPath = path.join(
-    root,
-    'platform',
-    platform,
-    'helper-manifest.json',
-  );
-  const helper = await readJson(helperManifestPath);
-  if (helper?.platform !== platform || !Array.isArray(helper.files)) {
-    throw new Error('signed helper manifest identity mismatch');
-  }
-  const owned = new Set(helper.files.map((record) => (
-    `platform/${platform}/${String(record?.path)}`
-  )));
+  const owned = new Set();
   if (manifest.nativePlugin) {
     const nativeManifest = await readJson(resolveManifestFile(
       root,
@@ -273,17 +261,7 @@ export async function verifyFinalNativeSignatures(input, dependencies = {}) {
   }
   files.sort((left, right) => compareUtf8(left.path, right.path));
 
-  const requiredProductPaths = platform === 'macos-arm64'
-    ? [
-      'platform/macos-arm64/bin/ae-mcp-platform-helper',
-      'platform/macos-arm64/lib/ae-mcp-platform-helper-transport.node',
-    ]
-    : [
-      'platform/windows-x64/bin/ae-mcp-platform-helper.exe',
-      'platform/windows-x64/lib/ae-mcp-platform-helper-transport.node',
-      'platform/windows-x64/bin/ae-mcp.exe',
-    ];
-  if (requiredProductPaths.some((requiredPath) => (
+  if ([...owned].some((requiredPath) => (
     !owned.has(requiredPath) || !productVerifiedPaths.has(requiredPath)
   ))) {
     throw new Error('final product native signature coverage is missing');

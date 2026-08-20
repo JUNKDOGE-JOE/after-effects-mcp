@@ -15,7 +15,6 @@ import { zcodeDefaultModelLocked as shouldLockZcodeDefaultModel, zcodeManagedMod
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 import { createPlatformAdapter } from '../cep/platform/index';
-import { platformHelperRepairView } from '../app/providerInitState';
 
 const REPO_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';
 const DOCS_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp#readme';
@@ -47,23 +46,10 @@ const S = {
     backend: '后端',
     backendSub: 'Claude',
     backendCodex: 'Codex',
+    backendOpenCode: 'OpenCode',
     backendZcode: 'ZCode',
     recheck: '重新检测',
-    providerNone: '（未选择 provider）',
-    importClaudeSettings: '从 ~/.claude/settings.json 导入',
-    claude3pNote: '同一个 Provider 可同时用于 Claude 和 Codex；协议与兼容转换按当前模型自动选择。',
-    providerHelperStartFailed: 'Provider 凭据功能已安全停用。平台 Helper 会随 AE 自动启动，但本次未能启动或连接；请先重新打开面板，仍失败时重启 AE。不会回退读取明文凭据。',
-    providerHelperRepair: 'Provider 凭据功能已安全停用。平台 Helper 已启动但未通过握手、版本或授权检查；请重启 AE，仍失败时再修复当前安装。不会回退读取明文凭据。',
-    repairHelper: '修复 Helper',
-    repairingHelper: '正在修复 Helper…',
-    providerStoreCorrupt: 'Provider 配置文件损坏；当前列表已保留。请先从备份恢复 providers.json，再点「重新检测」。',
-    providerStoreUnavailable: 'Provider 配置文件不可用；当前列表已保留。请检查 ~/.ae-mcp 的磁盘空间与读写权限。',
-    providerMigrationConflict: 'Provider 迁移期间配置发生冲突；当前列表已保留。请关闭其他面板实例后重新启动 AE 再检测。',
-    providerSecretMismatch: 'Provider 引用与系统凭据不一致；当前列表已保留。请在 Provider 管理中重新保存对应凭据。',
-    providerInitializationFailed: 'Provider 初始化失败；当前列表已保留。请导出日志后重新检测。',
-    zcodeKeyPlaceholder: '粘贴 provider API Key（存本机）',
-    zcodeKeyStored: '已保存到系统安全凭据库，可粘贴新值覆盖',
-    zcodeKeySaveFailed: '安全凭据保存失败，请修复 Helper 后重试。',
+    providerInitializationFailed: 'Provider 初始化失败；当前列表已保留。请检查 OpenCode provider 配置后重新检测。',
     save: '保存',
     modelDefault: '默认模型（打开面板时使用）',
     customModel: '自定义模型 ID',
@@ -122,23 +108,11 @@ const S = {
     backend: 'Backend',
     backendSub: 'Claude',
     backendCodex: 'Codex',
+    backendOpenCode: 'OpenCode',
     backendZcode: 'ZCode',
     recheck: 'Re-check',
-    providerNone: '(no provider selected)',
-    importClaudeSettings: 'Import from ~/.claude/settings.json',
-    claude3pNote: 'The same Provider can serve Claude and Codex; protocol routing and compatibility conversion are selected per model.',
-    providerHelperStartFailed: 'Provider credentials are safely disabled. Platform Helper starts with AE but could not start or connect in this session. Reopen the panel, then restart AE if it still fails. Plaintext fallback is disabled.',
-    providerHelperRepair: 'Provider credentials are safely disabled. Platform Helper started but failed its handshake, version, or authorization check. Restart AE, then repair the current install if it still fails. Plaintext fallback is disabled.',
-    repairHelper: 'Repair Helper',
-    repairingHelper: 'Repairing Helper…',
-    providerStoreCorrupt: 'The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.',
-    providerStoreUnavailable: 'The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.',
-    providerMigrationConflict: 'The provider configuration changed during migration; the current list was retained. Close other panel instances, restart AE, then re-check.',
-    providerSecretMismatch: 'A provider reference no longer matches its system credential; the current list was retained. Save that credential again in Provider Manager.',
-    providerInitializationFailed: 'Provider initialization failed; the current list was retained. Export logs, then re-check.',
-    zcodeKeyPlaceholder: 'Paste the provider API key (stored locally)',
-    zcodeKeyStored: 'Saved in the protected system credential store; paste a new value to overwrite',
-    zcodeKeySaveFailed: 'Protected credential save failed. Repair the Helper and retry.',
+    providerInitializationFailed: 'Provider initialization failed; the current list was retained. '
+      + 'Check the OpenCode provider configuration, then re-check.',
     save: 'Save',
     modelDefault: 'Default model (used when the panel opens)',
     customModel: 'Custom model ID',
@@ -198,35 +172,6 @@ function Section({ id, title, children, disabled, caption, expanded, onToggle })
       </button>
       {expanded && caption ? <div style={{ font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{caption}</div> : null}
       {expanded ? children : null}
-    </div>
-  );
-}
-
-function ZcodeKeyFallback({ t, stored, onSave }) {
-  const [draft, setDraft] = React.useState('');
-  const [saving, setSaving] = React.useState(false);
-  const [error, setError] = React.useState('');
-  const save = async () => {
-    if (!onSave || saving || !draft.trim()) return;
-    setSaving(true);
-    setError('');
-    try {
-      const saved = await onSave(draft.trim());
-      if (saved === false) setError(t.zcodeKeySaveFailed);
-      else setDraft('');
-    } catch {
-      setError(t.zcodeKeySaveFailed);
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <Input secret value={draft} onChange={setDraft} placeholder={stored ? t.zcodeKeyStored : t.zcodeKeyPlaceholder} style={{ flex: 1 }} />
-        <Button variant="primary" size="sm" disabled={saving || !draft.trim()} onClick={save}>{t.save}</Button>
-      </div>
-      {error ? <div style={{ font: '400 10px/1.4 var(--font-ui)', color: 'var(--warn)' }}>{error}</div> : null}
     </div>
   );
 }
@@ -349,48 +294,22 @@ export function SettingsScreen({
   onBackendChange,
   expertGuidance = true,
   onExpertGuidance,
-  channels = { claude: [], codex: [], zcode: [] },
+  channels = { claude: [], codex: [], opencode: [], zcode: [] },
   activeChannel = '',
   selectedChannel = '',
   onSelectChannel,
   onRecheckBackend,
   recheckDisabled = false,
-  providers = [],
-  claudeProviderId = '',
-  onClaudeProviderChange,
-  codexProviderId = '',
-  onCodexProviderChange,
-  onImportClaudeSettings,
-  claudeSettingsImportAvailable = false,
-  onSaveZcodeKey,
-  zcodeKeyStored = false,
-  onSaveCodexKey,
-  codexKeyStored = false,
   codexCliConfig = null,
   providerManager = null,
   providerInit = { state: 'checking', error: '' },
-  onRepairPlatformHelper,
-  providerRepairing = false,
   logLevel = 'info',
   onLogLevel,
   onExportLogs,
   onRerunWizard,
 }) {
   const t = S[lang] || S.zh;
-  const providerInitMessage = {
-    PLATFORM_HELPER_START_FAILED: t.providerHelperStartFailed,
-    PLATFORM_HELPER_REPAIR_REQUIRED: t.providerHelperRepair,
-    PROVIDER_STORE_CORRUPT: t.providerStoreCorrupt,
-    PROVIDER_STORE_UNAVAILABLE: t.providerStoreUnavailable,
-    PROVIDER_MIGRATION_CONFLICT: t.providerMigrationConflict,
-    PROVIDER_SECRET_MISMATCH: t.providerSecretMismatch,
-    PROVIDER_INITIALIZATION_FAILED: t.providerInitializationFailed,
-  }[providerInit.error] || t.providerInitializationFailed;
-  const helperRepair = platformHelperRepairView(
-    providerInit,
-    providerRepairing,
-    typeof onRepairPlatformHelper === 'function',
-  );
+  const providerInitMessage = t.providerInitializationFailed;
   const zcodeModelLocked = shouldLockZcodeDefaultModel({ backend, models: modelOptions });
   const [customModelDraft, setCustomModelDraft] = React.useState(customModel);
   const [draftPort, setDraftPort] = React.useState(String(port));
@@ -431,11 +350,14 @@ export function SettingsScreen({
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
             { value: 'codex', label: t.backendCodex },
+            { value: 'opencode', label: t.backendOpenCode },
           ]} />
         </Field>
         <ChannelCard
           lang={lang}
-          channels={backend === 'codex' ? channels.codex : backend === 'zcode' ? channels.zcode : channels.claude}
+          channels={backend === 'codex'
+            ? channels.codex : backend === 'opencode'
+              ? channels.opencode : backend === 'zcode' ? channels.zcode : channels.claude}
           activeChannel={activeChannel}
           selectedChannel={selectedChannel}
           onSelectChannel={onSelectChannel}
@@ -443,31 +365,6 @@ export function SettingsScreen({
           recheckLabel={t.recheck}
           recheckDisabled={recheckDisabled}
           renderChannelBody={(channel) => {
-            if (backend !== 'codex' && backend !== 'zcode' && channel === 'api') {
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <Select value={claudeProviderId} onChange={onClaudeProviderChange} options={[
-                    { value: '', label: t.providerNone },
-                    ...providers.map((p) => ({ value: p.id, label: p.name })),
-                  ]} />
-                  {claudeSettingsImportAvailable ? (
-                    <Button variant="secondary" size="sm" icon="download" onClick={onImportClaudeSettings}>{t.importClaudeSettings}</Button>
-                  ) : null}
-                  <div style={{ font: '400 10px/1.5 var(--font-ui)', color: 'var(--text-tertiary)' }}>{t.claude3pNote}</div>
-                </div>
-              );
-            }
-            if (backend === 'codex' && channel === 'custom') {
-              return (
-                <Select value={codexProviderId} onChange={onCodexProviderChange} options={[
-                  { value: '', label: t.providerNone },
-                  ...providers.map((p) => ({ value: p.id, label: p.name })),
-                ]} />
-              );
-            }
-            if (backend === 'zcode' && channel === 'cli-config') {
-              return <ZcodeKeyFallback t={t} stored={zcodeKeyStored} onSave={onSaveZcodeKey} />;
-            }
             if (backend === 'codex' && channel === 'cli-config') {
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -476,7 +373,6 @@ export function SettingsScreen({
                       {[codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(' · ')}
                     </div>
                   ) : null}
-                  {onSaveCodexKey ? <ZcodeKeyFallback t={t} stored={codexKeyStored} onSave={onSaveCodexKey} /> : null}
                 </div>
               );
             }
@@ -486,18 +382,6 @@ export function SettingsScreen({
         {providerInit.state === 'unavailable' ? (
           <div role="alert" style={{ padding: '7px 8px', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', background: 'var(--error-bg)', color: 'var(--error)', font: '400 10px/1.5 var(--font-ui)' }}>
             {providerInitMessage}{providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : ''}
-            {helperRepair ? (
-              <div style={{ marginTop: 6 }}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={helperRepair.disabled}
-                  onClick={onRepairPlatformHelper}
-                >
-                  {helperRepair.label === 'repairing' ? t.repairingHelper : t.repairHelper}
-                </Button>
-              </div>
-            ) : null}
           </div>
         ) : null}
         {providerManager}

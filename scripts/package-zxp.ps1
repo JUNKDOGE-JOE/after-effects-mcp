@@ -1,9 +1,10 @@
 # Build a signed ZXP package for the ae-mcp CEP panel.
 #
 # Usage:
-#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw> -HelperRoot build\helper\windows-x64
+#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw>
 # Optional:
-#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw> -HelperRoot build\helper\windows-x64 -CertPath release\ae-mcp.p12
+#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw> `
+#     -CertPath release\ae-mcp.p12
 #
 # -CertPassword is REQUIRED (no baked-in default secret). The same password is
 # used to create the self-signed cert (if none exists) and to sign.
@@ -14,9 +15,6 @@ param(
 
     [Parameter(Mandatory=$true)]
     [string]$CertPassword,
-
-    [Parameter(Mandatory=$true)]
-    [string]$HelperRoot,
 
     [string]$CertPath = "",
     [string]$OutputPath = "",
@@ -36,11 +34,6 @@ $pluginSrc = Join-Path $repoRoot 'plugin'
 if (-not (Test-Path $ZxpSignCmd)) {
     throw "ZXPSignCmd not found: $ZxpSignCmd"
 }
-if (-not (Test-Path -LiteralPath $HelperRoot -PathType Container)) {
-    throw "Windows Platform Helper root not found: $HelperRoot"
-}
-$HelperRoot = (Resolve-Path -LiteralPath $HelperRoot).Path
-
 if (-not $OutputPath) {
     $OutputPath = Join-Path $releaseDir 'ae-mcp-panel.zxp'
 }
@@ -72,14 +65,7 @@ if (Test-Path (Join-Path $stageDir 'sidecar\test')) {
 # local process attach a DevTools/Node client. Strip it before signing.
 Remove-Item -Force (Join-Path $stageDir '.debug') -ErrorAction SilentlyContinue
 
-Write-Host "[2/6] Staging the Windows Platform Helper..."
-$helperStageDir = Join-Path $stageDir 'platform\windows-x64'
-New-Item -ItemType Directory -Force -Path $helperStageDir | Out-Null
-Get-ChildItem -LiteralPath $HelperRoot -Force | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination $helperStageDir -Recurse -Force
-}
-
-Write-Host "[3/6] Installing production host runtime dependencies..."
+Write-Host "[2/5] Installing production host runtime dependencies..."
 $runtimeHostDir = Join-Path $stageDir 'runtime\windows-x64\node\host'
 New-Item -ItemType Directory -Force -Path $runtimeHostDir | Out-Null
 Copy-Item -LiteralPath (Join-Path $stageDir 'host\package.json') -Destination $runtimeHostDir
@@ -99,7 +85,7 @@ foreach ($requiredHostFile in @('package.json', 'node_modules\express\package.js
     }
 }
 
-Write-Host "[4/6] Installing sidecar production dependencies..."
+Write-Host "[3/5] Installing sidecar production dependencies..."
 Push-Location (Join-Path $stageDir 'sidecar')
 try {
     npm ci --omit=dev

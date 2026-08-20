@@ -23,20 +23,7 @@ const PLANS = Object.freeze({
   'macos-arm64': Object.freeze({
     platform: 'macos-arm64',
     steps: Object.freeze([
-      freezeStep('sign-helper', ['platform/macos-arm64/bin/ae-mcp-platform-helper']),
-      freezeStep('sign-xpc', [
-        'platform/macos-arm64/xpc/com.junkdoge.ae-mcp.platform-helper.xpc/Contents/MacOS/ae-mcp-platform-helper',
-        'platform/macos-arm64/xpc/com.junkdoge.ae-mcp.platform-helper.xpc/Contents/_CodeSignature/CodeResources',
-      ]),
-      freezeStep('sign-addon', [
-        'platform/macos-arm64/lib/ae-mcp-platform-helper-transport.node',
-      ]),
-      freezeStep('sign-launcher', []),
-      freezeStep('verify-nested', []),
-      freezeStep('freeze-signed-manifests', [
-        'platform/macos-arm64/helper-manifest.json',
-        'bundle-manifest.json',
-      ]),
+      freezeStep('freeze-signed-manifests', ['bundle-manifest.json']),
       freezeStep('sign-zxp', ['artifact/zxp']),
       freezeStep('verify-zxp', []),
       freezeStep('build-dmg', ['artifact/dmg']),
@@ -49,16 +36,7 @@ const PLANS = Object.freeze({
   'windows-x64': Object.freeze({
     platform: 'windows-x64',
     steps: Object.freeze([
-      freezeStep('sign-helper', ['platform/windows-x64/bin/ae-mcp-platform-helper.exe']),
-      freezeStep('sign-addon', [
-        'platform/windows-x64/lib/ae-mcp-platform-helper-transport.node',
-      ]),
-      freezeStep('sign-launcher', ['platform/windows-x64/bin/ae-mcp.exe']),
-      freezeStep('verify-authenticode', []),
-      freezeStep('freeze-signed-manifests', [
-        'platform/windows-x64/helper-manifest.json',
-        'bundle-manifest.json',
-      ]),
+      freezeStep('freeze-signed-manifests', ['bundle-manifest.json']),
       freezeStep('sign-zxp', ['artifact/zxp']),
       freezeStep('verify-zxp', []),
     ]),
@@ -66,11 +44,6 @@ const PLANS = Object.freeze({
 });
 
 export const SIGNING_STEP_IDS = Object.freeze([
-  'sign-helper',
-  'sign-xpc',
-  'sign-addon',
-  'sign-launcher',
-  'verify-nested',
   'freeze-signed-manifests',
   'sign-zxp',
   'verify-zxp',
@@ -79,7 +52,6 @@ export const SIGNING_STEP_IDS = Object.freeze([
   'notarize-dmg',
   'staple-dmg',
   'verify-gatekeeper',
-  'verify-authenticode',
 ]);
 
 export function buildSigningPlan(platform) {
@@ -278,14 +250,10 @@ function sliceKind(platform, ids) {
   const joined = ids.join(',');
   const kinds = platform === 'macos-arm64'
     ? new Map([
-      ['sign-helper,sign-xpc,sign-addon,sign-launcher,verify-nested', 'nested'],
       ['sign-zxp,verify-zxp', 'zxp'],
       ['build-dmg,sign-dmg,notarize-dmg,staple-dmg,verify-gatekeeper', 'dmg'],
     ])
-    : new Map([
-      ['sign-helper,sign-addon,sign-launcher,verify-authenticode', 'nested'],
-      ['sign-zxp,verify-zxp', 'zxp'],
-    ]);
+    : new Map([['sign-zxp,verify-zxp', 'zxp']]);
   const kind = kinds.get(joined);
   if (!kind) {
     throw signingError(
@@ -326,12 +294,6 @@ function validateVerifiedIdentity(platform, kind, identity) {
     && /^[0-9a-f]{64}$/.test(identity.certificateFingerprint)
     && typeof identity.developerIdTeamId === 'string'
     && /^[A-Z0-9]{10}$/.test(identity.developerIdTeamId);
-  if (kind === 'nested') {
-    if (!baseValid || !exactKeys(identity, ['certificateFingerprint', 'developerIdTeamId'])) {
-      throw signingError('SIGNING_IDENTITY_INVALID', 'invalid Developer ID identity evidence');
-    }
-    return;
-  }
   if (!baseValid
       || !exactKeys(identity, [
         'certificateFingerprint',

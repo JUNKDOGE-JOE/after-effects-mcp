@@ -254,7 +254,7 @@ test('chat renders question entries through the dedicated QuestionCard', () => {
 
 test('App wires answerQuestion and surfaces generic MCP elicitation as the same form', () => {
   const app = readFileSync(new URL('../src/app/App.jsx', import.meta.url), 'utf8');
-  assert.match(app, /onAnswerQuestion=\{\(id, result\) => activeBackend\.answerQuestion/);
+  assert.match(app, /onAnswerQuestion=\{\(id, result\) => activeBackend\?\.answerQuestion/);
   assert.match(app, /questionsFromElicitationSchema\(/);
   assert.match(app, /<QuestionFormDialog/);
   // The old always-decline stub must not come back.

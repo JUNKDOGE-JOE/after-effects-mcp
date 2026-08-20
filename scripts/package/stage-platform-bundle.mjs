@@ -9,7 +9,6 @@ import {
   NATIVE_PLUGIN_MANIFEST_PATH,
   SEMVER_PATTERN,
   SOURCE_SHA_PATTERN,
-  assertPortableRelativePath,
   bundleError,
   collectManifestEntries,
   copyTree,
@@ -61,78 +60,6 @@ async function requiredFile(filePath, label) {
   }
 }
 
-function validateHelperInput(value, platform) {
-  const expectedTop = ['entrypoints', 'files', 'helperId', 'platform', 'schemaVersion'];
-  if (!value || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedTop)
-      || value.schemaVersion !== 1 || value.platform !== platform
-      || value.helperId !== 'com.junkdoge.ae-mcp.platform-helper'
-      || !value.entrypoints || typeof value.entrypoints.helper !== 'string'
-      || typeof value.entrypoints.launcher !== 'string'
-      || JSON.stringify(Object.keys(value.entrypoints).sort())
-        !== JSON.stringify(['helper', 'launcher'])
-      || value.entrypoints.helper === value.entrypoints.launcher
-      || !Array.isArray(value.files) || value.files.length < 2) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper input manifest is invalid');
-  }
-  const paths = new Set();
-  for (const record of value.files) {
-    assertPortableRelativePath(record?.path, 'BUNDLE_HELPER_IDENTITY_INVALID');
-    if (JSON.stringify(Object.keys(record ?? {}).sort())
-          !== JSON.stringify(['architecture', 'path', 'sha256'])
-        || paths.has(record.path)
-        || !['macho-arm64', 'pe-x64', 'script', 'data'].includes(record.architecture)
-        || !/^[a-f0-9]{64}$/.test(record.sha256 ?? '')) {
-      throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper payload record is invalid');
-    }
-    paths.add(record.path);
-  }
-  if (!paths.has(value.entrypoints.helper) || !paths.has(value.entrypoints.launcher)) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper entrypoints are not declared payload files');
-  }
-  const records = new Map(value.files.map((record) => [record.path, record]));
-  const nativeArchitecture = platform === 'macos-arm64' ? 'macho-arm64' : 'pe-x64';
-  const helperArchitecture = records.get(value.entrypoints.helper)?.architecture;
-  const launcherArchitecture = records.get(value.entrypoints.launcher)?.architecture;
-  if (helperArchitecture !== nativeArchitecture
-      || (platform === 'macos-arm64'
-        ? !['macho-arm64', 'script'].includes(launcherArchitecture)
-        : launcherArchitecture !== nativeArchitecture)) {
-    throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper entrypoint architecture is invalid');
-  }
-  return value;
-}
-
-async function copyHelperPayload(sourceRoot, destinationRoot, manifest, verificationProfile) {
-  await fs.promises.mkdir(destinationRoot, { recursive: true });
-  const sourceManifest = path.join(sourceRoot, 'helper-manifest.json');
-  await fs.promises.copyFile(
-    sourceManifest,
-    path.join(destinationRoot, 'helper-manifest.json'),
-    fs.constants.COPYFILE_EXCL,
-  );
-  for (const record of manifest.files) {
-    const source = path.join(sourceRoot, ...record.path.split('/'));
-    const destination = path.join(destinationRoot, ...record.path.split('/'));
-    const stats = await fs.promises.lstat(source).catch(() => null);
-    if (!stats?.isFile() || stats.isSymbolicLink()) {
-      throw bundleError('BUNDLE_INPUT_MISSING', `declared helper payload is missing: ${record.path}`);
-    }
-    if (stats.nlink !== 1) {
-      throw bundleError(
-        'BUNDLE_HARDLINK_FORBIDDEN',
-        `hard-linked helper payload is forbidden: ${record.path}`,
-      );
-    }
-    if (requiresExactIdentity(verificationProfile)
-        && await sha256File(source) !== record.sha256) {
-      throw bundleError('BUNDLE_HASH_MISMATCH', `helper input SHA-256 mismatch: ${record.path}`);
-    }
-    await fs.promises.mkdir(path.dirname(destination), { recursive: true });
-    await fs.promises.copyFile(source, destination, fs.constants.COPYFILE_EXCL);
-    if (process.platform !== 'win32') await fs.promises.chmod(destination, stats.mode & 0o777);
-  }
-}
-
 async function makeTemporarySibling(destination) {
   await fs.promises.mkdir(path.dirname(destination), { recursive: true });
   return fs.promises.mkdtemp(path.join(path.dirname(destination), `.${path.basename(destination)}.tmp-`));
@@ -165,7 +92,6 @@ export async function stagePlatformBundle({
 
   const pluginRoot = path.resolve(inputs.pluginRoot ?? path.join(resolvedRepoRoot, 'plugin'));
   const runtimeRoot = path.resolve(inputs.runtimeRoot ?? path.join(resolvedRepoRoot, 'build', 'runtime', platform));
-  const helperRoot = path.resolve(inputs.helperRoot ?? path.join(resolvedRepoRoot, 'build', 'helper', platform));
   const toolsRoot = path.resolve(inputs.bundledToolsRoot
     ?? path.join(resolvedRepoRoot, 'packages', 'core', 'ae_mcp', 'skills_bundled'));
   const supportMatrixPath = path.resolve(inputs.supportMatrixPath
@@ -181,33 +107,21 @@ export async function stagePlatformBundle({
   await requiredDirectory(pluginRoot, 'plugin');
   await requiredFile(path.join(pluginRoot, '.debug'), 'tracked plugin .debug');
   await requiredDirectory(runtimeRoot, 'runtime');
-  await requiredDirectory(helperRoot, 'helper');
   await requiredDirectory(toolsRoot, 'bundled tools');
   await requiredFile(supportMatrixPath, 'support matrix');
   for (const [file, label] of [
     [path.join(runtimeRoot, 'runtime-manifest.json'), 'runtime manifest'],
     [path.join(runtimeRoot, 'sbom.spdx.json'), 'SPDX SBOM'],
     [path.join(runtimeRoot, 'license-inventory.json'), 'license inventory'],
-    [path.join(helperRoot, 'helper-manifest.json'), 'helper manifest'],
   ]) await requiredFile(file, label);
 
   const runtimeManifest = await readJsonFile(path.join(runtimeRoot, 'runtime-manifest.json'));
   validateRuntimeManifest(runtimeManifest, platform);
-  const helperManifest = validateHelperInput(
-    await readJsonFile(path.join(helperRoot, 'helper-manifest.json')),
-    platform,
-  );
 
   const temporary = await makeTemporarySibling(destination);
   try {
     await copyTree(pluginRoot, temporary, { filter: pluginFilter });
     await copyTree(runtimeRoot, path.join(temporary, 'runtime', platform));
-    await copyHelperPayload(
-      helperRoot,
-      path.join(temporary, 'platform', platform),
-      helperManifest,
-      profile,
-    );
     await copyTree(toolsRoot, path.join(temporary, 'bundled-tools'));
     await fs.promises.mkdir(path.join(temporary, 'metadata'), { recursive: true });
     await fs.promises.copyFile(
@@ -234,7 +148,6 @@ export async function stagePlatformBundle({
       platform,
       'license-inventory.json',
     );
-    const helperManifestPath = path.join(temporary, 'platform', platform, 'helper-manifest.json');
     const manifest = validateBundleManifest({
       schemaVersion: 1,
       version,
@@ -252,10 +165,6 @@ export async function stagePlatformBundle({
         manifestSha256: await sha256File(runtimeManifestPath),
         sbomSha256: await sha256File(runtimeSbomPath),
         licenseInventorySha256: await sha256File(licenseInventoryPath),
-      },
-      helper: {
-        helperId: helperManifest.helperId,
-        manifestSha256: await sha256File(helperManifestPath),
       },
       files: await collectManifestEntries(temporary),
     });

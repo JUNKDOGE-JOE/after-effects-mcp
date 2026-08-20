@@ -88,9 +88,6 @@ $requiredFiles = @(
     'host\node_modules\express\package.json',
     'sidecar\node_modules\@anthropic-ai\claude-agent-sdk\package.json',
     'jsx\runtime.jsx',
-    'platform\windows-x64\helper-manifest.json',
-    'platform\windows-x64\bin\ae-mcp-platform-helper.exe',
-    'platform\windows-x64\lib\ae-mcp-platform-helper-transport.node',
     '.debug'
 )
 foreach ($relative in $requiredFiles) {
@@ -207,16 +204,6 @@ try {
 
     Write-Host '[5/6] Atomically replacing the CEP panel while retaining the old install...'
     try {
-        $installedHelper = Join-Path $cepDir 'platform\windows-x64\bin\ae-mcp-platform-helper.exe'
-        foreach ($process in @(Get-Process | Where-Object {
-            $_.ProcessName -ceq 'ae-mcp-platform-helper'
-        })) {
-            if (-not $process.Path -or
-                [IO.Path]::GetFullPath($process.Path) -ne [IO.Path]::GetFullPath($installedHelper)) {
-                Fail-DevInstall "another Platform Helper is running outside the deployed panel: $($process.Path)"
-            }
-            Stop-Process -Id $process.Id -Force
-        }
         if (Test-Path -LiteralPath $cepDir) {
             Move-Item -LiteralPath $cepDir -Destination $backup
             $oldMoved = $true
@@ -249,7 +236,7 @@ try {
 
     $completed = $true
     Write-Host "[6/6] Installed and verified: $cepDir"
-    Write-Host 'Restart After Effects, then open Window -> Extensions -> ae-mcp. The panel starts Platform Helper automatically.'
+    Write-Host 'Restart After Effects, then open Window -> Extensions -> ae-mcp.'
     if ($oldMoved) {
         Write-Host "Backup retained at: $backup"
         Write-Host 'Restore command (run only while After Effects is closed):'
