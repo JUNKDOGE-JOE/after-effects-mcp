@@ -2,13 +2,23 @@
 // ChannelProbe: { channel, source:{zh,en}, checking, ok, detail, fixHint:{zh,en} }
 
 export function claudeChannels({ probe } = {}) {
+  const probeFailed = ['probe-timeout', 'probe-failed'].includes(probe?.reason);
   return [{
     channel: 'subscription',
     source: { zh: '订阅登录', en: 'Subscription login' },
     checking: probe === null,
     ok: Boolean(probe && probe.cliOk !== false && probe.loggedIn),
     detail: probe?.detail || '',
-    fixHint: probe?.reason === 'cli-too-old'
+    fixHint: probeFailed
+      ? {
+        zh: probe?.reason === 'probe-timeout'
+          ? 'Claude 登录探针超时。请在「设置 → 诊断」查看通道状态，并导出日志排查。'
+          : 'Claude 登录探针失败。请在「设置 → 诊断」查看通道状态，并导出日志排查。',
+        en: probe?.reason === 'probe-timeout'
+          ? 'The Claude login probe timed out. Check Settings → Diagnostics and export logs for troubleshooting.'
+          : 'The Claude login probe failed. Check Settings → Diagnostics and export logs for troubleshooting.',
+      }
+      : probe?.reason === 'cli-too-old'
       ? {
         zh: 'Claude CLI 版本过旧：请升级 Claude CLI 到 2.x 或更高版本后重新检测。',
         en: 'Claude CLI is too old. Upgrade Claude CLI to version 2.x or newer, then re-check.',
@@ -35,12 +45,12 @@ export function codexChannels({ codexProbe } = {}) {
     checking: codexProbe === null,
     ok: Boolean(codexProbe?.loggedIn),
     detail: codexProbe
-      ? [
+      ? (codexProbe.loggedIn ? [
         codexProbe.email,
         codexProbe.planType,
         codexProbe.cliPath,
         codexProbe.cliVersion,
-      ].filter(Boolean).join(' · ')
+      ].filter(Boolean).join(' · ') : (codexProbe.detail || ''))
       : '',
     fixHint: {
       zh: '在终端完成 codex 登录后重新检测；若 codex 不在面板 PATH 上，设置环境变量 '

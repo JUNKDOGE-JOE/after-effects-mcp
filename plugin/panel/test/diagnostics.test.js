@@ -139,3 +139,26 @@ test('missing optional CLIs use channel-specific hints and actions', async () =>
   assert.equal(items.find((item) => item.id === 'opencode').action, undefined);
   assert.match(items.find((item) => item.id === 'opencode').fixHint.en, /opencode/);
 });
+
+test('failed CLI diagnostics include at most three attempted paths', async () => {
+  const items = await runDiagnostics({
+    ...makeDeps({
+      resolutions: {
+        codex: {
+          ok: false,
+          code: 'ARCH_MISMATCH',
+          attempts: [
+            { path: '/one/codex' },
+            { path: '/two/codex' },
+            { path: '/three/codex' },
+            { path: '/four/codex' },
+          ],
+        },
+      },
+    }),
+    port: 11488,
+  });
+  const codex = items.find((item) => item.id === 'codex');
+  assert.match(codex.detail, /^ARCH_MISMATCH\ntried: \/one\/codex; \/two\/codex; \/three\/codex$/);
+  assert.equal(codex.detail.includes('/four/codex'), false);
+});

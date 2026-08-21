@@ -240,9 +240,11 @@ codex / opencode）；删旧代码时仍按调用图，而非仅按 UI 判断。
 
 1. **`ae.exec` 恢复信封**（抄 Atom，修它两个错）：失败时落盘可编辑脚本 + 元数据，返回 `recoveryId`，模型用自己的 Edit 工具改那个文件后凭 `recoveryId` 重跑，默认先还原到失败前 checkpoint。
    **不要放 `<projectDir>/`**——`checkpoint_store` 已按解析后工程路径做 key 存在 `%TEMP%` 并 prune 到 50 份，那个设计是对的（#10 修过碰撞）。恢复脚本放同一个 keyed 目录，返回绝对路径。同时允许 `ae.exec({ recoveryId, code })` **直接带修好的脚本**——Claude Code 默认权限下 Edit 改 cwd 之外的 `%TEMP%` 文件每次都要用户确认，内联重发是给它的退路。
+   **已落地（#265 / PR #288，2026-08-22）**：契约见 `docs/REFERENCE.md` 的 "`ae_exec` failure recovery"。
 2. **touched-path / failed-mutation 归因**：**不要抄 Atom 的原型猴子补丁**——持久引擎共享全局，会跨调用污染。用我们自己拥有的 `wrapForEvalScriptTransport`（`plugin/host/server.js:365`）装一个显式的 per-call recorder，`finally` 拆除。
-3. **previewFrame 对比表 / 区间采样 / A-B 差分**：合成与缩放在**面板的 Chromium canvas** 里做，不要引入 Node 图像库（Atom 正是这么做的，也顺带消掉 Pillow 依赖）。
-4. **32bpc / EXR / ACES 正确性面**。
+   **已落地，但机制改了（#265 / PR #288）**：AE 2026 真机实测宿主类原型上没有任何方法、往原型赋的 JS 函数宿主调用不经过、实例级遮蔽直接 TypeError——**调用拦截在这台引擎上不可能**（Atom 的做法在此不可复现）。归因改为失败前后快照差分（项目项 + 活动合成图层指纹），配 `errorLine` + `errorSource` 定位语句；`$.writeln` 捕获可行并保留。
+3. **previewFrame 对比表 / 区间采样 / A-B 差分**：→ #290。合成、缩放、差分在宿主里用已有的零依赖 `plugin/host/mcp/png.js`（解码 / 盒式降采样 / zlib 编码）做纯 JS 像素运算，不引入 Node 图像库；原先"面板 Chromium canvas"的写法出自 png.js 存在之前，canvas 在 Node 单测里跑不了、外部客户端也不该依赖面板页面状态。
+4. ~~**32bpc / EXR / ACES 正确性面**~~ —— **不做**（owner 2026-08-22：对 MCP 工具本身不是刚需）。
 
 ---
 

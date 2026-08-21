@@ -97,6 +97,42 @@ endpoint. Errors include a stable error code and a human-readable message.
 The panel log export records host status, request identifiers, and bounded
 diagnostic tails; credentials and access tokens are redacted.
 
+### Panel chat error codes
+
+The built-in claude, codex, and opencode chat channels use the same stable
+category vocabulary. The error card shows the code, a localized action hint,
+and a collapsed redacted detail block when process, RPC, HTTP, resolution, or
+stderr evidence is available.
+
+| Code | Meaning | Common action |
+|---|---|---|
+| `CLI_MISSING` | The selected CLI could not be resolved. | Install it or make its executable visible on the panel PATH. |
+| `CLI_TOO_OLD` | The resolved CLI is below the supported version. | Upgrade the CLI and re-check the channel. |
+| `CLI_ARCH_MISMATCH` | The resolved executable does not match the AE host architecture. | Install the matching x64 or arm64 build. |
+| `CLI_PROBE_FAILED` | The executable was found but its version/start probe failed. | Run the CLI version command in a terminal and inspect Diagnostics. |
+| `SPAWN_FAILED` | The OS refused or could not create the CLI process. | Check the path, execute permission, and security software. |
+| `PROCESS_EXITED` | A running CLI process exited unexpectedly. | Expand the exit/signal and stderr detail. |
+| `AUTH_REQUIRED` | The CLI or upstream requires login or credentials. | Complete that CLI's login flow and re-check. |
+| `MCP_UNREACHABLE` | The channel could not prepare or reach the conversation MCP server. | Keep the panel host running and inspect the MCP diagnostic row. |
+| `SESSION_START_FAILED` | A Codex thread or OpenCode session was not created. | Repair the channel, then retry; the turn was not dispatched. |
+| `TURN_START_FAILED` | Starting or posting a turn failed. | Check `dispatchState` before retrying because dispatch may be uncertain. |
+| `RPC_TIMEOUT` | A Codex app-server RPC method timed out. | Inspect the method detail and check the CLI process/network. |
+| `UPSTREAM_HTTP_<status>` | An upstream service returned a three-digit HTTP status. `401`/`403` are authentication failures. | Use the numeric status to check login, quota, model access, or relay health. |
+| `UPSTREAM_ERROR` | The model/upstream failed without a usable HTTP status. | Check model availability and provider service status. |
+| `EVENT_STREAM_FAILED` | The OpenCode SSE event stream disconnected. | Check the OpenCode process and local network. |
+| `TURN_INPUT_INVALID` | The turn or one of its attachments is invalid/unavailable. | Re-select or remove the unavailable attachment. |
+| `TURN_ABORTED` | The user stopped the active turn. | Confirm no write remains unresolved before resending. |
+| `CANCELLED` | The backend cancelled, canceled, or interrupted the request. | Confirm the session is still usable, then retry. |
+| `TRANSPORT_UNCERTAIN` | The transport cannot prove whether dispatch completed. | Inspect AE state before any retry. |
+| `BACKEND_UNAVAILABLE` | No usable chat backend is selected. | Enable an available channel in Settings. |
+| `BACKEND_ERROR` | A backend failure did not match a more specific category. | Expand details and attach an exported diagnostics bundle. |
+
+Settings → Export log writes the last 50 structured chat failures under
+`## backend errors (last 50)`, per-line-cleaned process output under
+`## backend stderr tails`, and persisted chat events in both host-log sections.
+These sections are complementary: the category is the routing handle, while
+the process/RPC detail and host timeline provide the failure context.
+
 ## Development files
 
 The maintained source boundaries are:

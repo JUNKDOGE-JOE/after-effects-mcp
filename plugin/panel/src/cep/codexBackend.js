@@ -5,6 +5,12 @@ import {
   redactText,
   redactValue,
 } from '../lib/exactSecretRedaction.js';
+import {
+  boundedResolution,
+  classifyErrorCode,
+  extractHttpStatus,
+  trimStderrTail,
+} from '../lib/errorCodes.js';
 import { PANEL_VERSION } from './mcpClient.js';
 import { createPlatformAdapter } from './platform/index.js';
 import {
@@ -117,7 +123,12 @@ function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEO
     if (params !== undefined) message.params = params;
     const limit = timeoutOverrideMs || timeoutMs;
     const promise = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => rejectPending(id, new Error(method + ' timed out after ' + limit + 'ms')), limit);
+      const timer = setTimeout(() => {
+        const error = new Error(method + ' timed out after ' + limit + 'ms');
+        error.method = method;
+        error.timeoutMs = limit;
+        rejectPending(id, error);
+      }, limit);
       pending.set(id, { resolve, reject, timer });
     });
     writeMessage(message);
@@ -190,12 +201,62 @@ function threadIdFromResult(result) {
   return (result && (result.threadId || result.id || (result.thread && result.thread.id))) || null;
 }
 
-export async function resolveCodexCli({ env, platform } = {}) {
+function resolutionArchitecture(resolution) {
+  for (const attempt of resolution?.attempts || []) {
+    const match = String(attempt?.detail || '').match(/architecture\s+(arm64|aarch64|x64|amd64|x86_64)\b/i);
+    if (match) return match[1];
+  }
+  return '';
+}
+
+function codexResolutionMessage(code, lang, resolution) {
+  if (code === 'VERSION_TOO_OLD') {
+    return lang === 'zh'
+      ? 'Codex CLI 版本过旧，请升级后重新检测。'
+      : 'Codex CLI is too old. Upgrade it and re-check.';
+  }
+  if (code === 'ARCH_MISMATCH') {
+    const found = resolutionArchitecture(resolution);
+    if (lang === 'zh') {
+      return found
+        ? `Codex CLI 架构不匹配：找到的是 ${found} 架构。请安装与 After Effects 一致的版本。`
+        : 'Codex CLI 架构不匹配。请安装与 After Effects 一致的版本。';
+    }
+    return found
+      ? `Codex CLI architecture mismatch: the detected executable is ${found}. Install a build matching After Effects.`
+      : 'Codex CLI architecture mismatch. Install a build matching After Effects.';
+  }
+  if (code === 'PROBE_FAILED') {
+    return lang === 'zh'
+      ? '已找到 Codex CLI，但版本探针启动失败。请在终端确认 codex --version 可正常运行。'
+      : 'Codex CLI was found, but its version probe failed. Confirm codex --version runs in a terminal.';
+  }
+  return lang === 'zh'
+    ? '未找到 Codex CLI。请安装 Codex CLI，并确保 codex 在 PATH 中。'
+    : 'Codex CLI was not found. Install Codex CLI and put codex on PATH.';
+}
+
+function taggedError(error, property, value) {
+  const result = error instanceof Error
+    ? error
+    : new Error(error?.message || String(error || value));
+  result[property] = value;
+  return result;
+}
+
+export async function resolveCodexCli({ env, platform, lang = 'zh' } = {}) {
   const adapter = platform || createPlatformAdapter();
   const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
   const resolved = await adapter.resolveExecutable('codex', { env: env || {}, ...(requiredArch ? { requiredArch } : {}) });
   if (!resolved.ok) {
-    return { ok: false, cliPath: '', version: '', detail: 'codex CLI resolution failed: ' + resolved.code, resolution: resolved };
+    return {
+      ok: false,
+      code: resolved.code,
+      cliPath: '',
+      version: '',
+      detail: codexResolutionMessage(resolved.code, lang, resolved),
+      resolution: resolved,
+    };
   }
   // cliPath is diagnostics-only (#225): show the tool the user installed, not
   // the node.exe a materialized cmd-shim spawns through.
@@ -213,10 +274,14 @@ export function createCodexBackend({
   getServerInstructions = () => '',
   resolveCli = resolveCodexCli,
   onEvent,
+  getLang,
   lang = 'zh',
   env,
+  rpcTimeoutMs = RPC_TIMEOUT_MS,
+  turnTimeoutMs = 180000,
 }) {
   const adapter = platform || createPlatformAdapter();
+  const currentLang = () => (typeof getLang === 'function' ? getLang() : lang) || 'zh';
   let proc = null;
   let rpc = null;
   let startPromise = null;
@@ -430,10 +495,11 @@ export function createCodexBackend({
     if (message.method === 'turn/completed') {
       currentTurnId = null;
       const turn = params.turn && typeof params.turn === 'object' ? params.turn : params;
+      const cancelled = ['cancelled', 'canceled', 'interrupted'].includes(String(turn.status || '').toLowerCase());
       const completionFailure = turn.error || params.error
         || (turn.status === 'failed' || turn.status === 'error'
           ? { code: turn.status, message: 'Codex turn failed.' }
-          : null);
+          : (cancelled ? { code: turn.status, message: `Codex turn ${turn.status}.` } : null));
       if (completionFailure) {
         providerDeltaRedactor.discard();
         void handleTurnFailure(completionFailure);
@@ -578,8 +644,8 @@ export function createCodexBackend({
   function handleExit(code, signal) {
     const wasStopping = stopping;
     providerStderrRedactor.flush();
-    const detail = stderrTail ? String(code) + (signal ? ' ' + signal : '') + ' ' + stderrTail : String(code) + (signal ? ' ' + signal : '');
-    if (rpc) rpc.close(new Error('codex app-server exited: ' + detail));
+    const tail = trimStderrTail(stderrTail);
+    if (rpc) rpc.close(new Error('codex app-server exited'));
     proc = null;
     rpc = null;
     startPromise = null;
@@ -596,10 +662,17 @@ export function createCodexBackend({
       return;
     }
     if (activeRun) {
+      const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
       emit({
         type: 'error',
-        kind: 'mcp',
-        message: 'codex app-server exited: ' + detail,
+        kind: classified.kind,
+        code: classified.code,
+        message: 'Codex app-server exited unexpectedly.',
+        detail: {
+          exitCode: code,
+          ...(signal ? { signal } : {}),
+          ...(tail ? { stderrTail: tail } : {}),
+        },
         ...activeTurnFailureFields(),
       });
       finishActive();
@@ -609,6 +682,7 @@ export function createCodexBackend({
 
   function handleError(error) {
     const err = error instanceof Error ? error : new Error('codex app-server error');
+    providerStderrRedactor.flush();
     if (rpc) rpc.close(err);
     proc = null;
     rpc = null;
@@ -619,7 +693,18 @@ export function createCodexBackend({
     preambleSent = false;
     drainApprovals();
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: err.message, ...activeTurnFailureFields() });
+      const classified = classifyErrorCode({ error: err, spawnError: true });
+      emit({
+        type: 'error',
+        kind: classified.kind,
+        code: classified.code,
+        message: 'Codex app-server process could not continue.',
+        detail: {
+          ...(err.code ? { spawnCode: err.code } : {}),
+          ...(trimStderrTail(stderrTail) ? { stderrTail: trimStderrTail(stderrTail) } : {}),
+        },
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
     clearProcessStderrAttachmentPaths();
@@ -635,10 +720,18 @@ export function createCodexBackend({
     const pendingStart = (async () => {
       const spawnEnv = currentEnv();
       stderrTail = '';
+      resetProviderStderrRedactor();
       stopping = false;
-      const cliInfo = await resolveCli({ env: spawnEnv, platform: adapter });
+      const resolvedLang = currentLang();
+      const cliInfo = await resolveCli({ env: spawnEnv, platform: adapter, lang: resolvedLang });
       assertCurrentStart();
-      if (!cliInfo || !cliInfo.ok) throw new Error((cliInfo && cliInfo.detail) || 'codex CLI is unavailable');
+      if (!cliInfo || !cliInfo.ok) {
+        const error = new Error((cliInfo && cliInfo.detail) || codexResolutionMessage(cliInfo?.code, resolvedLang, cliInfo?.resolution || cliInfo));
+        const classified = classifyErrorCode({ resolutionCode: cliInfo?.code || cliInfo?.resolution?.code });
+        error.categoryCode = classified.code;
+        error.resolution = boundedResolution(cliInfo?.resolution || cliInfo);
+        throw error;
+      }
       lastCliInfo = cliInfo;
       const executable = cliInfo.executable || {
         ok: true, id: 'codex', path: cliInfo.cliPath, argsPrefix: [], source: 'path', version: cliInfo.version || null, arch: null,
@@ -648,11 +741,16 @@ export function createCodexBackend({
         'app-server',
         '-c', 'features.default_mode_request_user_input=true',
       ];
-      const spawnedProc = adapter.spawn(executable, appServerArgs, {
-        stdio: 'pipe',
-        windowsHide: true,
-        env: spawnEnv,
-      });
+      let spawnedProc;
+      try {
+        spawnedProc = adapter.spawn(executable, appServerArgs, {
+          stdio: 'pipe',
+          windowsHide: true,
+          env: spawnEnv,
+        });
+      } catch (error) {
+        throw taggedError(error, 'spawnError', true);
+      }
       proc = spawnedProc;
       const generation = startGeneration + 1;
       runtimeGeneration = generation;
@@ -660,6 +758,7 @@ export function createCodexBackend({
         writeLine: (line) => spawnedProc.stdin.write(line),
         onNotification: handleNotification,
         onRequest: handleRequest,
+        timeoutMs: rpcTimeoutMs,
       });
       rpc = nextRpc;
       const reader = createNdjsonReader((message) => {
@@ -723,29 +822,42 @@ export function createCodexBackend({
     await initialize();
     const threadRpc = rpc;
     const threadGeneration = runtimeGeneration;
-    const mcpSpec = await getMcpSpec();
-    toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+    let mcpSpec;
+    try {
+      mcpSpec = await getMcpSpec();
+      toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+    } catch (error) {
+      throw taggedError(error, 'categoryCode', 'MCP_UNREACHABLE');
+    }
     if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
       throw new Error('Codex thread start was cancelled');
     }
     const spawnEnv = currentEnv();
-    const result = await threadRpc.request('thread/start', {
-      ephemeral: true,
-      cwd: defaultCwd(spawnEnv, adapter),
-      model: getModel(),
-      approvalPolicy: APPROVAL_POLICY,
-      approvalsReviewer: 'user',
-      sandboxPolicy: SANDBOX_POLICY,
-      config: {
-        mcp_servers: {
-          ae: { url: mcpSpec.url },
+    let result;
+    try {
+      result = await threadRpc.request('thread/start', {
+        ephemeral: true,
+        cwd: defaultCwd(spawnEnv, adapter),
+        model: getModel(),
+        approvalPolicy: APPROVAL_POLICY,
+        approvalsReviewer: 'user',
+        sandboxPolicy: SANDBOX_POLICY,
+        config: {
+          mcp_servers: {
+            ae: { url: mcpSpec.url },
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      throw taggedError(error, 'fallbackCode', 'SESSION_START_FAILED');
+    }
     if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
       throw new Error('Codex thread start was cancelled');
     }
     threadId = threadIdFromResult(result);
+    if (!threadId) {
+      throw taggedError(new Error('Codex did not return a thread id.'), 'fallbackCode', 'SESSION_START_FAILED');
+    }
     return threadId;
   }
 
@@ -791,7 +903,7 @@ export function createCodexBackend({
       preambleSent = true;
     }
     activeTurnDispatched = true;
-    rpc.request('turn/start', turnParams(activeTurn, turnText), 180000).catch((error) => {
+    rpc.request('turn/start', turnParams(activeTurn, turnText), turnTimeoutMs).catch((error) => {
       void handleTurnFailure(error);
     });
   }
@@ -800,26 +912,52 @@ export function createCodexBackend({
     if (!activeRun || turnFailureInFlight) return;
     turnFailureInFlight = true;
     try {
-      const failure = {
-        kind: error?.kind,
-        code: error?.code,
-        message: redactValue(
-          error?.message || 'Failed to start Codex turn.',
-          activeAttachmentPaths,
-        ),
+      const rawMessage = redactValue(
+        error?.message || 'Failed to start Codex turn.',
+        activeAttachmentPaths,
+      );
+      const httpStatus = extractHttpStatus(error?.httpStatus) || extractHttpStatus(rawMessage);
+      const fallbackCode = error?.fallbackCode
+        || (activeTurnDispatched ? 'TURN_START_FAILED' : 'SESSION_START_FAILED');
+      const classified = classifyErrorCode({
+        error,
+        code: error?.categoryCode,
+        method: error?.method,
+        httpStatus,
+        upstreamText: rawMessage,
+        spawnError: error?.spawnError === true,
+        fallbackCode,
+      });
+      const detail = {
+        ...(error?.method ? { method: error.method } : {}),
+        ...(httpStatus ? { httpStatus } : {}),
+        ...(typeof error?.code === 'number' ? { jsonRpcCode: error.code } : {}),
+        ...(error?.data !== undefined ? { jsonRpcData: error.data } : {}),
+        ...(error?.resolution ? { resolution: error.resolution } : {}),
+        ...(error?.code && error?.spawnError ? { spawnCode: error.code } : {}),
       };
       providerDeltaRedactor.discard();
       // The turn is reaching its error terminal state; settle any approval that
       // is still awaiting the user so the card cannot outlive its turn (#220).
       // The peer may still be alive here, so drain delivers real declines.
       drainApprovals();
-      const message = failure?.message || 'Failed to start Codex turn.';
-      const httpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
+      let message = rawMessage || 'Failed to start Codex turn.';
+      if (classified.code.startsWith('UPSTREAM_HTTP_')) message = 'Codex upstream request failed.';
+      else if (classified.code === 'AUTH_REQUIRED') message = 'Codex authentication is required.';
+      else if (classified.code === 'CANCELLED') message = 'Codex request was cancelled.';
+      else if (classified.code === 'SPAWN_FAILED') message = 'Codex app-server process could not be started.';
+      else if (classified.code === 'MCP_UNREACHABLE') message = 'Codex could not reach the panel MCP server.';
+      else if (classified.code === 'SESSION_START_FAILED') message = 'Codex session could not be started.';
+      else if (classified.code === 'TURN_START_FAILED') message = 'Codex turn could not be started.';
+      if (message !== rawMessage && rawMessage) {
+        detail.upstreamMessage = String(rawMessage).slice(0, 500);
+      }
       emit({
         type: 'error',
-        kind: failure?.kind || (httpFailure || /model/i.test(message) ? 'model' : 'mcp'),
-        ...(failure?.code ? { code: failure.code } : {}),
+        kind: classified.kind,
+        code: classified.code,
         message,
+        ...(Object.keys(detail).length ? { detail } : {}),
         ...activeTurnFailureFields(),
       });
       finishActive();
@@ -898,7 +1036,7 @@ export function createCodexBackend({
     drainApprovals();
     providerDeltaRedactor.discard();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.', ...activeTurnFailureFields() });
+      emit({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }

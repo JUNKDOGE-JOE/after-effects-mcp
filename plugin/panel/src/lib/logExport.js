@@ -42,6 +42,12 @@ function appendRedacted(lines, value, exactSecrets) {
   lines.push(redactSecrets(value, exactSecrets));
 }
 
+function redactBackendStderrLine(value, exactSecrets) {
+  const text = String(value ?? '');
+  const bounded = text.replace(/https?:\/\/\S+/gi, '[redacted-url]');
+  return redactSecrets(bounded, exactSecrets);
+}
+
 function formatActivity(event) {
   if (!event || typeof event !== 'object') return '-';
   return [
@@ -58,23 +64,71 @@ function formatActivity(event) {
   ].filter(Boolean).join(' ');
 }
 
-function formatHostLog(event) {
+function redactedField(value, exactSecrets) {
+  return redactCredentialText(
+    String(value ?? '').replace(/https?:\/\/\S+/gi, '[redacted-url]'),
+    exactSecrets,
+  );
+}
+
+function redactedBackendErrorField(value, exactSecrets) {
+  return redactBackendStderrLine(value, exactSecrets);
+}
+
+function redactedExtraValue(key, value, exactSecrets) {
+  let encoded;
+  try { encoded = JSON.stringify({ [key]: value }); } catch { return '[unserializable]'; }
+  const redacted = redactCredentialText(
+    encoded.replace(/https?:\/\/[^"\\\s]+/gi, '[redacted-url]'),
+    exactSecrets,
+  );
+  try {
+    const parsed = JSON.parse(redacted);
+    return Object.prototype.hasOwnProperty.call(parsed, key) ? parsed[key] : '[redacted]';
+  } catch {
+    return '[redacted]';
+  }
+}
+
+function formatHostLog(event, exactSecrets = []) {
   if (!event || typeof event !== 'object') return '-';
   const known = new Set(['id', 'ts', 'pid', 'level', 'source', 'message']);
   const extra = {};
-  for (const [key, value] of Object.entries(event)) if (!known.has(key)) extra[key] = value;
+  for (const [key, value] of Object.entries(event)) {
+    if (!known.has(key)) extra[key] = redactedExtraValue(key, value, exactSecrets);
+  }
   const suffix = Object.keys(extra).length ? ' ' + JSON.stringify(extra) : '';
-  return [iso(event.ts), 'pid=' + scalar(event.pid), scalar(event.level), scalar(event.source), scalar(event.message) + suffix].join(' ');
+  return [
+    iso(event.ts),
+    'pid=' + scalar(redactedField(event.pid, exactSecrets)),
+    scalar(redactedField(event.level, exactSecrets)),
+    scalar(redactedField(event.source, exactSecrets)),
+    scalar(redactedField(event.message, exactSecrets)) + suffix,
+  ].join(' ');
 }
 
-function section(lines, title, producer, exactSecrets) {
+function formatBackendError(event, exactSecrets) {
+  if (!event || typeof event !== 'object') return '-';
+  return [
+    iso(event.ts),
+    'backend=' + scalar(redactedField(event.backend, exactSecrets)),
+    'code=' + scalar(redactedField(event.code, exactSecrets)),
+    'kind=' + scalar(redactedField(event.kind, exactSecrets)),
+    'message=' + scalar(redactedBackendErrorField(event.message, exactSecrets)),
+    event.detail ? 'detail=' + scalar(redactedBackendErrorField(event.detail, exactSecrets)) : null,
+  ].filter(Boolean).join(' ');
+}
+
+function section(lines, title, producer, exactSecrets, alreadyRedacted = false) {
   lines.push(title);
   try {
     const value = producer();
     if (Array.isArray(value)) {
       if (!value.length) appendRedacted(lines, '(empty)', exactSecrets);
+      else if (alreadyRedacted) value.forEach((item) => lines.push(String(item)));
       else value.forEach((item) => appendRedacted(lines, item, exactSecrets));
-    } else appendRedacted(lines, value, exactSecrets);
+    } else if (alreadyRedacted) lines.push(String(value));
+    else appendRedacted(lines, value, exactSecrets);
   } catch (error) {
     appendRedacted(lines, unavailable(error?.message || String(error)), exactSecrets);
   }
@@ -155,6 +209,7 @@ export function buildLogExport({
   panelLogs = [],
   hostInfo = {},
   backendStderrTails = null,
+  backendErrors = [],
   hostActivity,
   hostLogMemory,
   hostLogDisk,
@@ -193,28 +248,37 @@ export function buildLogExport({
   }, exactSecrets);
   section(lines, '## host log (memory, last 500)', () => {
     if (!Array.isArray(hostLogMemory)) return unavailable('host memory log is unavailable');
-    return hostLogMemory.slice(-500).map(formatHostLog);
-  }, exactSecrets);
+    return hostLogMemory.slice(-500).map((event) => formatHostLog(event, exactSecrets));
+  }, exactSecrets, true);
   section(lines, '## host log (disk tail, 2 days, last 500)', () => {
     if (!Array.isArray(hostLogDisk)) return unavailable('host disk log is unavailable');
-    return hostLogDisk.slice(-500).map(formatHostLog);
-  }, exactSecrets);
+    return hostLogDisk.slice(-500).map((event) => formatHostLog(event, exactSecrets));
+  }, exactSecrets, true);
   section(lines, '## panel log (' + panelLogs.length + ')', () => panelLogs.map(String), exactSecrets);
+  section(lines, '## backend errors (last 50)', () => {
+    if (!Array.isArray(backendErrors)) return unavailable('backend error history is unavailable');
+    return backendErrors.slice(-50).map((event) => formatBackendError(event, exactSecrets));
+  }, exactSecrets, true);
   section(lines, '## backend stderr tails', () => {
     const tails = backendStderrTails;
     if (!tails || typeof tails !== 'object' || !Object.keys(tails).length) return unavailable('no backend stderr tail is available');
     const result = [];
     for (const [name, tail] of Object.entries(tails)) {
       result.push('### ' + name);
-      result.push(tail ? String(tail) : '(empty)');
+      if (!tail) {
+        result.push('(empty)');
+        continue;
+      }
+      result.push(...String(tail).replace(/\r\n/g, '\n').split('\n')
+        .map((line) => redactBackendStderrLine(line, exactSecrets)));
     }
     return result;
-  }, exactSecrets);
+  }, exactSecrets, true);
   section(lines, '## previewFrame branches', () => {
     const previewSource = [hostLogMemory, hostLogDisk]
       .filter(Array.isArray)
       .flat()
-      .map(formatHostLog)
+      .map((event) => formatHostLog(event, exactSecrets))
       .join('\n');
     const summary = summarizePreviewFrameBranches(previewSource);
     const result = ['summary: ' + summary.summary];

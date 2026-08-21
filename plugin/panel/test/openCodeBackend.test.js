@@ -8,6 +8,7 @@ async function flush() {
 }
 
 function makeProc() {
+  const stdoutHandlers = [];
   const stderrHandlers = [];
   const exitHandlers = [];
   const errorHandlers = [];
@@ -16,7 +17,11 @@ function makeProc() {
     get killed() {
       return killed;
     },
-    stdout: { on() {} },
+    stdout: {
+      on(event, handler) {
+        if (event === 'data') stdoutHandlers.push(handler);
+      },
+    },
     stderr: {
       on(event, handler) {
         if (event === 'data') stderrHandlers.push(handler);
@@ -37,6 +42,9 @@ function makeProc() {
     },
     pushStderr(text) {
       for (const handler of stderrHandlers) handler(text);
+    },
+    pushStdout(text) {
+      for (const handler of stdoutHandlers) handler(text);
     },
   };
 }
@@ -96,12 +104,15 @@ function jsonResponse(value, ok = true, status = 200) {
 
 function makeFetch() {
   const calls = [];
-  const sse = makeSseStream();
+  const sseStreams = [];
+  let sse = null;
   async function fetchImpl(url, options = {}) {
     const parsed = new URL(url);
     const body = options.body ? JSON.parse(options.body) : null;
     calls.push({ method: options.method || 'GET', path: parsed.pathname, body });
     if (parsed.pathname === '/event') {
+      sse = makeSseStream();
+      sseStreams.push(sse);
       return { ok: true, status: 200, body: sse.responseBody() };
     }
     if (parsed.pathname === '/mcp') return jsonResponse({ ae: { status: 'connected' } });
@@ -117,7 +128,12 @@ function makeFetch() {
     }
     return jsonResponse({ ok: true });
   }
-  return { fetchImpl, calls, sse };
+  return {
+    fetchImpl,
+    calls,
+    sseStreams,
+    get sse() { return sse; },
+  };
 }
 
 function makeFs() {
@@ -154,8 +170,11 @@ function makeBackend(options = {}) {
     paths: { tempRoot: 'C:\\tmp', join: (parts) => parts.join('\\') },
     fs: fsImpl,
     completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
-    resolveExecutable: async () => ({ ok: true, id: 'opencode', path: 'C:\\Tools\\opencode.exe', argsPrefix: [], source: 'path', version: '1.0.0', arch: 'x64' }),
-    spawn: (executable, args, spawnOptions) => spawned.spawn(executable.path, [...(executable.argsPrefix || []), ...args], spawnOptions),
+    resolveExecutable: options.resolveExecutable || (async () => ({ ok: true, id: 'opencode', path: 'C:\\Tools\\opencode.exe', argsPrefix: [], source: 'path', version: '1.0.0', arch: 'x64' })),
+    spawn: (executable, args, spawnOptions) => {
+      if (options.spawnError) throw options.spawnError;
+      return spawned.spawn(executable.path, [...(executable.argsPrefix || []), ...args], spawnOptions);
+    },
   };
   const backend = createOpenCodeBackend({
     platform,
@@ -359,9 +378,12 @@ test('createOpenCodeBackend correlates a failed message POST as uncertain withou
   // for the already-rendered turn, not a draft-recovery dispatchState.
   assert.deepEqual(events.at(-1), {
     type: 'error',
-    kind: 'mcp',
-    message: 'message POST disconnected',
+    kind: 'backend',
+    code: 'TURN_START_FAILED',
+    message: 'OpenCode turn could not be started.',
+    detail: { endpoint: '/session/session_1/message' },
     turnId: 'turn-post-failed',
+    dispatchState: 'uncertain',
   });
   assert.equal(base.calls.filter((call) => call.path === '/session/session_1/message').length, 1);
 });
@@ -537,7 +559,7 @@ test('OpenCode stop interrupts the session, drains pending approvals, and emits 
   assert.equal(fetched.calls.some((call) => call.path === '/session/session_1/interrupt'), true);
   assert.deepEqual(events.slice(-2), [
     { type: 'tool-denied', toolUseId: 'perm_stop' },
-    { type: 'error', kind: 'aborted', message: 'Turn aborted.' },
+    { type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.' },
   ]);
   await pending;
 });
@@ -564,7 +586,7 @@ test('openCode descriptors use the free default and map provider model metadata'
   assert.equal(descriptor.approvalModes.length, 4);
 });
 
-test('session.error objects surface their nested message, never "[object Object]"', async () => {
+test('session.error objects surface their nested message as UPSTREAM_ERROR', async () => {
   const { backend, events, fetched } = makeBackend();
   const pending = backend.sendUser({ turnId: 'turn-err', text: 'hello', attachments: [] });
   for (let index = 0; index < 30
@@ -575,12 +597,189 @@ test('session.error objects surface their nested message, never "[object Object]
     type: 'session.error',
     properties: {
       sessionID: 'session_1',
-      error: { name: 'UnknownError', data: { message: 'relay rejected the request (403)' } },
+      error: { name: 'UnknownError', data: { message: 'relay rejected the model request' } },
     },
   });
   await pending;
   const errorEvent = [...events].reverse().find((evt) => evt.type === 'error');
-  assert.equal(errorEvent.message, 'relay rejected the request (403)');
+  assert.equal(errorEvent.message, 'relay rejected the model request');
+  assert.equal(errorEvent.code, 'UPSTREAM_ERROR');
+  assert.equal(errorEvent.detail.errorName, 'UnknownError');
+});
+
+test('OpenCode session creation HTTP 400 keeps status, endpoint, and a bounded response excerpt', async () => {
+  const base = makeFetch();
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/session' && options.method === 'POST') {
+      return jsonResponse({ error: 'request body rejected' }, false, 400);
+    }
+    return base.fetchImpl(url, options);
+  };
+  const { backend, events } = makeBackend({ fetchImpl });
+  await backend.sendUser({ turnId: 'turn-session-400', text: 'hello', attachments: [] });
+
+  const error = events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'UPSTREAM_HTTP_400');
+  assert.deepEqual(error.detail, {
+    httpStatus: 400,
+    endpoint: '/session',
+    responseExcerpt: '{"error":"request body rejected"}',
+  });
+  assert.equal(error.dispatchState, 'not-started');
+});
+
+test('OpenCode MCP readiness timeout keeps the fixed message and last response detail', async () => {
+  const base = makeFetch();
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/mcp') return jsonResponse({ error: 'starting' }, false, 503);
+    return base.fetchImpl(url, options);
+  };
+  const { backend, events } = makeBackend({
+    fetchImpl,
+    readyTimeoutMs: 3,
+    readyPollMs: 0,
+    sleepImpl: async () => {},
+  });
+  await backend.sendUser({ turnId: 'turn-mcp-timeout', text: 'hello', attachments: [] });
+
+  const error = events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'MCP_UNREACHABLE');
+  assert.equal(error.message, 'OpenCode MCP server did not become ready.');
+  assert.equal(error.detail.mcpStatus, 503);
+  assert.equal(error.detail.httpStatus, 503);
+  assert.equal(error.detail.lastError, 'OpenCode request failed.');
+  assert.equal(error.detail.responseExcerpt, '{"error":"starting"}');
+});
+
+test('OpenCode separates session-start failure from a dispatched message POST failure', async () => {
+  const base = makeFetch();
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/session' && options.method === 'POST') return jsonResponse({});
+    return base.fetchImpl(url, options);
+  };
+  const { backend, events } = makeBackend({ fetchImpl });
+  await backend.sendUser({ turnId: 'turn-no-session', text: 'hello', attachments: [] });
+
+  const error = events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'SESSION_START_FAILED');
+  assert.equal(error.dispatchState, 'not-started');
+});
+
+test('OpenCode captures stdout in the same bounded process tail', async () => {
+  const { backend, spawned, fetched } = makeBackend();
+  const pending = backend.sendUser({ turnId: 'turn-stdout', text: 'hello', attachments: [] });
+  await flush();
+  spawned.procs[0].pushStdout('server ready on stdout\n');
+  assert.match(backend.getStderrTail(), /server ready on stdout/);
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+});
+
+test('OpenCode maps session.error HTTP status to an upstream HTTP category', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser({ turnId: 'turn-http-error', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: { name: 'RelayError', data: { message: 'unexpected status 403' } },
+    },
+  });
+  await pending;
+  const error = events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'UPSTREAM_HTTP_403');
+  assert.equal(error.detail.httpStatus, 403);
+  assert.equal(error.detail.upstreamMessage, 'unexpected status 403');
+});
+
+test('OpenCode SSE disconnect emits EVENT_STREAM_FAILED and settles the turn', async () => {
+  const { backend, events, fetched, spawned } = makeBackend();
+  const pending = backend.sendUser({ turnId: 'turn-sse-close', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  fetched.sse.close();
+  await pending;
+
+  const errors = events.filter((event) => event.type === 'error');
+  assert.equal(errors.length, 1);
+  const [error] = errors;
+  assert.equal(error.code, 'EVENT_STREAM_FAILED');
+  assert.equal(error.detail.endpoint, '/event');
+  assert.equal(error.turnId, 'turn-sse-close');
+  assert.equal(spawned.procs[0].killed, true);
+});
+
+test('OpenCode restarts after an idle SSE disconnect without emitting a turn error', async () => {
+  const { backend, events, fetched, spawned } = makeBackend();
+  await backend.probeAccount();
+  assert.equal(spawned.calls.length, 1);
+  fetched.sse.close();
+  await flush();
+  await flush();
+
+  assert.equal(events.some((event) => event.type === 'error'), false);
+  const pending = backend.sendUser({ turnId: 'turn-after-idle-close', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  assert.equal(spawned.calls.length, 2);
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+  assert.equal(events.some((event) => event.type === 'error'), false);
+});
+
+test('OpenCode reads getLang for each resolution failure without rebuilding the backend', async () => {
+  let currentLang = 'en';
+  const h = makeBackend({
+    getLang: () => currentLang,
+    resolveExecutable: async () => ({ ok: false, code: 'NOT_FOUND' }),
+  });
+
+  await h.backend.sendUser({ turnId: 'turn-en', text: 'hello', attachments: [] });
+  currentLang = 'zh';
+  await h.backend.sendUser({ turnId: 'turn-zh', text: 'hello', attachments: [] });
+
+  const errors = h.events.filter((event) => event.type === 'error');
+  assert.match(errors[0].message, /not found/i);
+  assert.match(errors[1].message, /未找到/);
+  assert.equal(h.spawned.calls.length, 0);
+});
+
+test('OpenCode distinguishes CLI architecture and spawn failures', async () => {
+  const resolution = makeBackend({
+    resolveExecutable: async () => ({
+      ok: false,
+      code: 'ARCH_MISMATCH',
+      attempts: [{ path: 'C:\\Tools\\opencode.exe', source: 'path', detail: 'architecture arm64' }],
+    }),
+  });
+  await resolution.backend.sendUser({ turnId: 'turn-arch', text: 'hello', attachments: [] });
+  const arch = resolution.events.find((event) => event.type === 'error');
+  assert.equal(arch.code, 'CLI_ARCH_MISMATCH');
+  assert.match(arch.message, /arm64/);
+  assert.equal(arch.detail.resolution.attempts.length, 1);
+
+  const denied = new Error('spawn EACCES');
+  denied.code = 'EACCES';
+  const spawn = makeBackend({ spawnError: denied });
+  await spawn.backend.sendUser({ turnId: 'turn-spawn', text: 'hello', attachments: [] });
+  assert.equal(spawn.events.find((event) => event.type === 'error')?.code, 'SPAWN_FAILED');
 });
 
 test('probe then send reuse one opencode instance and one event stream', async () => {

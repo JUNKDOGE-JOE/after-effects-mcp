@@ -57,8 +57,25 @@ test('failed tool-result marks a tool as error with returned text', () => {
 });
 
 test('error event appends an error entry', () => {
-  const entries = reduceEvent([], { type: 'error', kind: 'auth', message: 'Invalid key' });
-  assert.deepEqual(entries, [{ id: 'error-1', type: 'error', kind: 'auth', message: 'Invalid key' }]);
+  const entries = reduceEvent([], {
+    type: 'error',
+    kind: 'auth',
+    code: 'AUTH_REQUIRED',
+    message: 'Invalid key',
+    detail: { httpStatus: 401 },
+    turnId: 'turn-1',
+    dispatchState: 'not-started',
+  });
+  assert.deepEqual(entries, [{
+    id: 'error-1',
+    type: 'error',
+    kind: 'auth',
+    code: 'AUTH_REQUIRED',
+    message: 'Invalid key',
+    detail: { httpStatus: 401 },
+    turnId: 'turn-1',
+    dispatchState: 'not-started',
+  }]);
 });
 
 test('turn-accepted appends only redacted display attachment metadata', () => {
