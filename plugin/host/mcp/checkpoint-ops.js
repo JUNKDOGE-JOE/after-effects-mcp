@@ -141,9 +141,21 @@ async function createCheckpoint(options, context, deps) {
     });
     const parsed = parseJsxResult(requireSuccessfulExecution(execution));
     if (!record(parsed) || parsed.ok !== true) {
-        return { ok: false, error: 'checkpoint-failed: bad-result', backendResult: parsed };
+        return {
+            ok: false,
+            error: 'checkpoint-failed: bad-result',
+            projectPath,
+            backendResult: parsed,
+        };
     }
-    if (parsed.skipped) return { ok: false, error: parsed.reason || 'skipped', backendResult: parsed };
+    if (parsed.skipped) {
+        return {
+            ok: false,
+            error: parsed.reason || 'skipped',
+            projectPath,
+            backendResult: parsed,
+        };
+    }
     const sizeBytes = ensureCheckpointFile(projectPath, destination, parsed);
     if (sizeBytes === null) {
         return {
@@ -175,16 +187,36 @@ async function createCheckpoint(options, context, deps) {
 }
 
 async function autoCheckpoint(args, context, deps) {
-    if (!args.checkpoint_label) return null;
+    if (!args.checkpoint_label) return { skipped: null, checkpoint: null };
+    let projectPath = null;
     try {
-        const checkpoint = await createCheckpoint({ label: args.checkpoint_label }, context, deps);
-        if (checkpoint.ok) return null;
-        if (checkpoint.error === 'untitled-project') return 'untitled-project';
-        if (checkpoint.error === 'checkpoint file missing after AE copy') return 'checkpoint-file-missing';
-        return checkpoint.error || 'checkpoint-failed: bad-result';
+        projectPath = await resolveProjectPath(context, deps);
+        if (!projectPath) {
+            return {
+                skipped: 'untitled-project',
+                checkpoint: { ok: false, error: 'untitled-project', projectPath: null },
+            };
+        }
+        const checkpoint = await createCheckpoint(
+            { label: args.checkpoint_label, projectPath },
+            context,
+            deps,
+        );
+        if (checkpoint.ok) return { skipped: null, checkpoint };
+        if (checkpoint.error === 'checkpoint file missing after AE copy') {
+            return { skipped: 'checkpoint-file-missing', checkpoint };
+        }
+        return { skipped: checkpoint.error || 'checkpoint-failed: bad-result', checkpoint };
     } catch (error) {
-        if (error && error.code === 'CHECKPOINT_TIMEOUT') return 'checkpoint-timeout';
-        return 'checkpoint-failed: ' + (error && error.message ? error.message : String(error));
+        const skipped = error && error.code === 'CHECKPOINT_TIMEOUT'
+            ? 'checkpoint-timeout'
+            : 'checkpoint-failed: ' + (error && error.message ? error.message : String(error));
+        return {
+            skipped,
+            checkpoint: projectPath
+                ? { ok: false, error: skipped, projectPath }
+                : null,
+        };
     }
 }
 

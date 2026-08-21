@@ -12,10 +12,16 @@ const APPROVAL_SCHEMA = Object.freeze({
 
 function summaryLines(summary) {
   const value = summary && typeof summary === 'object' ? summary : {};
+  const retry = value.recoveryId
+    ? `Retry: ${value.recoveryId} (${value.retryMode === 'continue'
+      ? 'continue'
+      : `restore checkpoint ${value.restoreCheckpointId || 'unavailable'}`})`
+    : '';
   return [
     value.code ? `Code: ${String(value.code).slice(0, 200)}` : '',
     value.undo_group_name ? `Undo group: ${value.undo_group_name}` : '',
     value.checkpoint_label ? `Checkpoint: ${value.checkpoint_label}` : '',
+    retry,
   ].filter(Boolean);
 }
 

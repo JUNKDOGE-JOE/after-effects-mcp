@@ -108,6 +108,10 @@ function approvalSummary(args) {
         code: typeof input.code === 'string' ? input.code.slice(0, 200) : '',
         undo_group_name: input.undo_group_name === undefined ? null : input.undo_group_name,
         checkpoint_label: input.checkpoint_label === undefined ? null : input.checkpoint_label,
+        recoveryId: input.recoveryId === undefined ? null : input.recoveryId,
+        retryMode: input.retryMode === undefined ? null : input.retryMode,
+        restoreCheckpointId: input.restoreCheckpointId === undefined
+            ? null : input.restoreCheckpointId,
     };
 }
 

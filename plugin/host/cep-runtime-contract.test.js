@@ -37,6 +37,7 @@ const CEP_EXECUTED_FILES = [
     'mcp/approval-gate.js',
     'mcp/canonical-json.js',
     'mcp/checkpoint-store.js',
+    'mcp/recovery-store.js',
     'mcp/checkpoint-ops.js',
     'mcp/instructions.js',
     'mcp/json-schema-lite.js',

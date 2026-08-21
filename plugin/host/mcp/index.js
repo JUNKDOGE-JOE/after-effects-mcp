@@ -7,6 +7,7 @@ const { buildTools } = require('./tools');
 const { ConversationStore } = require('./conversations');
 const { ApprovalQueue } = require('./approvals');
 const { CheckpointStore } = require('./checkpoint-store');
+const { RecoveryStore } = require('./recovery-store');
 const { buildInstructions } = require('./instructions');
 const { TOOL_MODULES } = require('./tools');
 
@@ -101,6 +102,7 @@ function mountMcp(app, deps) {
     const conversations = new ConversationStore(sessions);
     const approvals = deps.approvals || new ApprovalQueue({ timeoutMs: deps.approvalTimeoutMs });
     let checkpointStore = deps.checkpointStore || null;
+    let recoveryStore = deps.recoveryStore || null;
     const sseOptions = deps.sseOptions || null;
     const progressIntervalMs = deps.progressIntervalMs || 5000;
     const tools = buildTools({
@@ -110,6 +112,13 @@ function mountMcp(app, deps) {
         getCheckpointStore: function () {
             if (!checkpointStore) checkpointStore = new CheckpointStore(deps.checkpointStoreOptions);
             return checkpointStore;
+        },
+        getRecoveryStore: function () {
+            if (!recoveryStore) {
+                if (!checkpointStore) checkpointStore = new CheckpointStore(deps.checkpointStoreOptions);
+                recoveryStore = new RecoveryStore({ checkpointStore });
+            }
+            return recoveryStore;
         },
         sessionCount: function () { return sessions.size; },
     });

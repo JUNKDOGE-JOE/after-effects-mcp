@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
@@ -56,10 +57,128 @@ function loadServer() {
     return server;
 }
 
-function evaluateTransportEnvelope(server, code) {
-    const wrapped = server.wrapForEvalScriptTransport(code);
+function evaluateTransportEnvelope(server, code, options) {
+    const wrapped = server.wrapForEvalScriptTransport(code, options);
     const encoded = Function('return ' + wrapped)();
-    return { wrapped, encoded, payload: JSON.parse(encoded) };
+    const outer = JSON.parse(encoded);
+    let payload = outer;
+    if (outer && Object.hasOwn(outer, 'inner') && outer.diag) {
+        payload = outer.inner === null ? { ok: false, error: outer.diag.fatal } : outer.inner;
+        ['projectPath', 'revision', 'logs', 'logsTruncated'].forEach(function (field) {
+            if (Object.hasOwn(outer.diag, field)) payload[field] = outer.diag[field];
+        });
+        if (payload.ok !== true) {
+            ['line', 'touched'].forEach(function (field) {
+                if (Object.hasOwn(outer.diag, field)) payload[field] = outer.diag[field];
+            });
+        }
+    }
+    return { wrapped, encoded, outer, payload };
+}
+
+const DIAGNOSTIC_GLOBALS = [
+    'CompItem', '$', 'app', '__diagnosticComp', '__diagnosticMakeLayer', '__diagnosticProject',
+];
+
+function withDiagnosticGlobals(values, run) {
+    const prior = {};
+    DIAGNOSTIC_GLOBALS.forEach(function (name) {
+        prior[name] = Object.getOwnPropertyDescriptor(global, name) || null;
+        delete global[name];
+    });
+    Object.keys(values || {}).forEach(function (name) { global[name] = values[name]; });
+    try {
+        return run();
+    } finally {
+        DIAGNOSTIC_GLOBALS.forEach(function (name) {
+            delete global[name];
+            if (prior[name]) Object.defineProperty(global, name, prior[name]);
+        });
+    }
+}
+
+function diagnosticSnapshotFakes(layerCount) {
+    function makeLayer(name, index, id, opacity) {
+        const transform = {
+            'ADBE Anchor Point': { value: [0, 0] },
+            'ADBE Position': { value: [index * 10, index * 20] },
+            'ADBE Scale': { value: [100, 100] },
+            'ADBE Rotate Z': { value: 0 },
+            'ADBE Opacity': { value: opacity },
+        };
+        return {
+            id,
+            index,
+            name,
+            enabled: true,
+            solo: false,
+            shy: false,
+            locked: false,
+            label: 1,
+            inPoint: 0,
+            outPoint: 5,
+            startTime: 0,
+            stretch: 100,
+            parent: null,
+            blendingMode: 'NORMAL',
+            threeDLayer: false,
+            property: function (matchName) {
+                if (matchName === 'ADBE Transform Group') {
+                    return { property: function (name2) { return transform[name2] || null; } };
+                }
+                if (matchName === 'ADBE Effect Parade') return { numProperties: 1 };
+                if (matchName === 'ADBE Mask Parade') return { numProperties: 0 };
+                return null;
+            },
+        };
+    }
+    function CompItem(id, name, layers) {
+        this.id = id;
+        this.name = name;
+        this.typeName = 'Composition';
+        this._layers = layers || [];
+    }
+    Object.defineProperty(CompItem.prototype, 'numLayers', {
+        get: function () { return this._layers.length; },
+    });
+    CompItem.prototype.layer = function (index) { return this._layers[index - 1] || null; };
+    const layers = [];
+    const total = layerCount === undefined ? 1 : layerCount;
+    for (let index = 1; index <= total; index += 1) {
+        layers.push(makeLayer('Layer ' + index, index, 100 + index, 100));
+    }
+    const comp = new CompItem(41, 'Comp', layers);
+    const projectItems = [comp];
+    const items = {
+        item: function (index) { return projectItems[index - 1] || null; },
+        push: function (item) { projectItems.push(item); },
+    };
+    Object.defineProperty(items, 'length', { get: function () { return projectItems.length; } });
+    const project = {
+        revision: 10,
+        file: { fsName: 'C:/project.aep' },
+        activeItem: comp,
+        items,
+        itemByID: function (id) {
+            return projectItems.find(function (item) { return item.id === id; }) || null;
+        },
+    };
+    Object.defineProperty(project, 'numItems', { get: function () { return projectItems.length; } });
+    const writes = [];
+    return {
+        globals: {
+            CompItem,
+            app: { project },
+            $: { writeln: function (value) { writes.push(String(value)); } },
+            __diagnosticComp: comp,
+            __diagnosticMakeLayer: makeLayer,
+            __diagnosticProject: project,
+        },
+        CompItem,
+        comp,
+        project,
+        writes,
+    };
 }
 
 function fakeNativeClient(overrides) {
@@ -560,6 +679,255 @@ test('/exec fails closed when connected graph invalidation fails', async () => {
     }
 });
 
+test('default ExtendScript transport remains byte-identical to its fixed baseline', () => {
+    const server = loadServer();
+    const wrapped = server.wrapForEvalScriptTransport('1 + 1');
+    assert.equal(Buffer.byteLength(wrapped), 3730);
+    assert.equal(
+        crypto.createHash('sha256').update(wrapped).digest('hex'),
+        'a9c18556f6daa331a68e1d7f9a313a6e7fc8bcdf34e5cab15f6faf8096b30b6f',
+    );
+});
+
+test('diagnostic transport embeds string and JSON results without re-escaping them', () => {
+    const server = loadServer();
+    const fakes = diagnosticSnapshotFakes();
+    const expected = 'quote:" slash:\\ newline:\n中文 </script>';
+    withDiagnosticGlobals(fakes.globals, function () {
+        const stringResult = evaluateTransportEnvelope(
+            server,
+            '$.writeln("success");' + JSON.stringify(expected),
+            { diagnostics: true },
+        );
+        assert.equal(stringResult.outer.inner.resultType, 'string');
+        assert.equal(stringResult.outer.inner.result, expected);
+        assert.deepEqual(server.decodeEvalScriptTransportResult(stringResult.encoded), {
+            resultType: 'string',
+            result: expected,
+            logs: ['success'],
+            revision: { before: 10, after: 10 },
+            projectPath: 'C:/project.aep',
+        });
+        assert.doesNotMatch(
+            stringResult.wrapped,
+            /__aemcp_quote\(__aemcp_payload\.result\)/,
+        );
+
+        const jsonResult = evaluateTransportEnvelope(
+            server,
+            '({text:"中文",items:[1,"two",{ok:true}]})',
+            { diagnostics: true },
+        );
+        const decodedJson = server.decodeEvalScriptTransportResult(jsonResult.encoded);
+        assert.equal(decodedJson.resultType, 'json');
+        assert.deepEqual(JSON.parse(decodedJson.result), {
+            text: '中文',
+            items: [1, 'two', { ok: true }],
+        });
+    });
+});
+
+test('diagnostic decoder classifies an outer fatal error as a dispatched failure', () => {
+    const server = loadServer();
+    const fakes = diagnosticSnapshotFakes();
+    withDiagnosticGlobals(fakes.globals, function () {
+        const nativeEval = global.eval;
+        global.eval = function () { throw new Error('outer failed'); };
+        try {
+            const evaluated = evaluateTransportEnvelope(server, '42', { diagnostics: true });
+            assert.equal(evaluated.outer.inner, null);
+            assert.match(evaluated.outer.diag.fatal, /outer failed/);
+            assert.throws(
+                function () { server.decodeEvalScriptTransportResult(evaluated.encoded); },
+                function (error) {
+                    return error.disposition === 'failed'
+                        && /outer failed/.test(error.message)
+                        && error.projectPath === 'C:/project.aep';
+                },
+            );
+        } finally {
+            global.eval = nativeEval;
+        }
+    });
+});
+
+test('diagnostic transport reports bounded layer snapshot differences', () => {
+    const server = loadServer();
+    const fakes = diagnosticSnapshotFakes();
+    withDiagnosticGlobals(fakes.globals, function () {
+        const originalWriteln = fakes.globals.$.writeln;
+        const evaluated = evaluateTransportEnvelope(
+            server,
+            '$.writeln("captured");\n'
+                + '__diagnosticComp._layers.push(__diagnosticMakeLayer("Added",2,102,100));\n'
+                + '__diagnosticComp.layer(1).property("ADBE Transform Group").property("ADBE Opacity").value=42;\n'
+                + 'app.project.revision=11;\n'
+                + '(function(){var e=new Error("boom");e.line=5;throw e;})()',
+            { diagnostics: true },
+        );
+        assert.equal(evaluated.payload.ok, false);
+        assert.equal(evaluated.payload.line, 5);
+        assert.equal(evaluated.payload.touched.level, 'layer_diff');
+        assert.equal(evaluated.payload.touched.method, 'snapshot-diff');
+        assert.equal(Object.hasOwn(evaluated.payload.touched, 'recorder'), false);
+        assert.equal(Object.hasOwn(evaluated.payload.touched, 'mutations'), false);
+        assert.deepEqual(evaluated.payload.touched.comp, { id: 41, name: 'Comp' });
+        assert.ok(evaluated.payload.touched.layersAdded.some(function (layer) {
+            return layer.name === 'Added' && layer.id === 102;
+        }));
+        assert.ok(evaluated.payload.touched.layersChanged[0].changes.some(function (change) {
+            return change.field === 'transform.opacity'
+                && change.before === '100' && change.after === '42';
+        }));
+        assert.deepEqual(evaluated.payload.logs, ['captured']);
+        assert.deepEqual(evaluated.payload.revision, { before: 10, after: 11 });
+        assert.equal(evaluated.payload.projectPath, 'C:/project.aep');
+        assert.equal(fakes.globals.$.writeln, originalWriteln);
+        assert.throws(
+            function () { server.decodeEvalScriptTransportResult(evaluated.encoded); },
+            function (error) {
+                return error.disposition === 'failed'
+                    && error.line === 5
+                    && error.touched.level === 'layer_diff'
+                    && error.logs[0] === 'captured';
+            },
+        );
+    });
+});
+
+test('diagnostic layer differences ignore index shifts and use stable parent identity', () => {
+    const server = loadServer();
+    const fakes = diagnosticSnapshotFakes(2);
+    const layerA = fakes.comp._layers[0];
+    const layerB = fakes.comp._layers[1];
+    layerA.name = 'A';
+    layerA.id = 1;
+    layerB.name = 'B';
+    layerB.id = 2;
+    layerB.parent = layerA;
+    withDiagnosticGlobals(fakes.globals, function () {
+        const evaluated = evaluateTransportEnvelope(
+            server,
+            'var c=__diagnosticMakeLayer("C",1,3,100);'
+                + '__diagnosticComp._layers.unshift(c);'
+                + 'for(var i=0;i<__diagnosticComp._layers.length;i++)'
+                + '{__diagnosticComp._layers[i].index=i+1;}'
+                + '__diagnosticComp.layer(3).property("ADBE Transform Group")'
+                + '.property("ADBE Opacity").value=42;'
+                + '(function(){var e=new Error("expected");e.line=7;throw e;})()',
+            { diagnostics: true },
+        );
+        assert.deepEqual(evaluated.payload.touched.layersAdded, [{ index: 1, name: 'C', id: 3 }]);
+        assert.equal(evaluated.payload.touched.layersChanged.length, 1);
+        assert.deepEqual(evaluated.payload.touched.layersChanged[0], {
+            layer: { index: 3, name: 'B', id: 2 },
+            changes: [{ field: 'transform.opacity', before: '100', after: '42' }],
+        });
+    });
+});
+
+test('diagnostic transport reports project item additions without layer changes', () => {
+    const server = loadServer();
+    const fakes = diagnosticSnapshotFakes();
+    withDiagnosticGlobals(fakes.globals, function () {
+        const evaluated = evaluateTransportEnvelope(
+            server,
+            'var added=new CompItem(52,"Added Comp",[]);'
+                + '__diagnosticProject.items.push(added);app.project.activeItem=added;'
+                + 'app.project.revision=12;'
+                + '(function(){var e=new Error("boom");e.line=2;throw e;})()',
+            { diagnostics: true },
+        );
+        assert.equal(evaluated.payload.touched.level, 'item_diff');
+        assert.deepEqual(evaluated.payload.touched.itemsAdded, [{
+            id: 52,
+            name: 'Added Comp',
+            type: 'Composition',
+        }]);
+        assert.deepEqual(evaluated.payload.touched.layersAdded, []);
+        assert.deepEqual(evaluated.payload.touched.layersChanged, []);
+        assert.deepEqual(evaluated.payload.touched.activeCompChanged, {
+            from: { id: 41, name: 'Comp' },
+            to: { id: 52, name: 'Added Comp' },
+        });
+    });
+});
+
+test('diagnostic transport fails open without an active comp or app', () => {
+    const server = loadServer();
+    const fakes = diagnosticSnapshotFakes();
+    fakes.project.activeItem = null;
+    withDiagnosticGlobals(fakes.globals, function () {
+        const evaluated = evaluateTransportEnvelope(
+            server,
+            '(function(){var e=new Error("expected");e.line=4;throw e;})()',
+            { diagnostics: true },
+        );
+        assert.equal(evaluated.payload.touched.level, 'none');
+        assert.equal(evaluated.payload.touched.comp, null);
+    });
+    withDiagnosticGlobals({}, function () {
+        const failed = evaluateTransportEnvelope(
+            server,
+            '(function(){var e=new Error("expected");e.line=2;throw e;})()',
+            { diagnostics: true },
+        );
+        assert.equal(failed.payload.touched.level, 'none');
+        assert.equal(failed.payload.touched.comp, null);
+        const succeeded = evaluateTransportEnvelope(server, '6*7', { diagnostics: true });
+        assert.equal(succeeded.payload.ok, true);
+        assert.equal(succeeded.payload.result, '42');
+    });
+});
+
+test('diagnostic transport limits active comp snapshots to 200 layers', () => {
+    const server = loadServer();
+    const fakes = diagnosticSnapshotFakes(250);
+    withDiagnosticGlobals(fakes.globals, function () {
+        const evaluated = evaluateTransportEnvelope(
+            server,
+            '__diagnosticComp.layer(201).property("ADBE Transform Group")'
+                + '.property("ADBE Opacity").value=42;'
+                + '(function(){var e=new Error("expected");e.line=4;throw e;})()',
+            { diagnostics: true },
+        );
+        assert.equal(evaluated.payload.touched.level, 'none');
+        assert.equal(evaluated.payload.touched.truncated, true);
+        assert.deepEqual(evaluated.payload.touched.layersAdded, []);
+        assert.deepEqual(evaluated.payload.touched.layersRemoved, []);
+    });
+});
+
+test('diagnostic transport marks truncated writeln output', () => {
+    const server = loadServer();
+    const fakes = diagnosticSnapshotFakes();
+    withDiagnosticGlobals(fakes.globals, function () {
+        const evaluated = evaluateTransportEnvelope(
+            server,
+            'for(var i=0;i<250;i++){$.writeln("line "+i);}'
+                + '(function(){var e=new Error("expected");e.line=2;throw e;})()',
+            { diagnostics: true },
+        );
+        assert.equal(evaluated.payload.logs.length, 200);
+        assert.equal(evaluated.outer.diag.logsTruncated, true);
+        assert.equal(evaluated.payload.logsTruncated, true);
+        assert.equal(evaluated.payload.touched.truncated, true);
+    });
+});
+
+test('diagnostic transport restores writeln after repeated successful calls', () => {
+    const server = loadServer();
+    const fakes = diagnosticSnapshotFakes();
+    const originalWriteln = fakes.globals.$.writeln;
+    withDiagnosticGlobals(fakes.globals, function () {
+        for (let index = 0; index < 20; index += 1) {
+            const evaluated = evaluateTransportEnvelope(server, '"ok"', { diagnostics: true });
+            assert.equal(evaluated.payload.ok, true);
+            assert.equal(global.$.writeln, originalWriteln);
+        }
+    });
+});
+
 test('ExtendScript transport serializes typed primitive and structured results as ASCII', () => {
     const server = loadServer();
     const cases = [
@@ -692,6 +1060,69 @@ test('evalScript transport decoder requires typed successes and preserves error 
     }
     assert.match(legacyError.message, /boom/);
     assert.equal(legacyError.disposition, 'failed');
+});
+
+test('diagnostic decoder and executeJsx preserve optional success and failure evidence', async () => {
+    const touched = {
+        level: 'layer_diff',
+        method: 'snapshot-diff',
+        layersChanged: [{ layer: { id: 1 }, changes: [] }],
+    };
+    let invocation = 0;
+    const fixture = await startApp({
+        evalScript: function (jsx, callback) {
+            assert.match(jsx, /__aemcp_snapshot/);
+            invocation += 1;
+            if (invocation === 1) {
+                callback(JSON.stringify({
+                    ok: true,
+                    resultType: 'string',
+                    result: 'done',
+                    projectPath: 'C:/project.aep',
+                    revision: { before: 1, after: 2 },
+                    logs: ['hello'],
+                    logsTruncated: true,
+                }));
+                return;
+            }
+            callback(JSON.stringify({
+                ok: false,
+                error: 'Error: bad (line 4)',
+                line: 4,
+                projectPath: 'C:/project.aep',
+                revision: { before: 2, after: 3 },
+                logs: ['before bad'],
+                logsTruncated: true,
+                touched,
+            }));
+        },
+    });
+    try {
+        const successOutput = await fixture.server.executeJsx({
+            code: '"done"', client: 'test', diagnostics: true,
+        });
+        assert.deepEqual(successOutput.payload, {
+            ok: true,
+            resultType: 'string',
+            result: 'done',
+            projectPath: 'C:/project.aep',
+            revision: { before: 1, after: 2 },
+            logs: ['hello'],
+            logsTruncated: true,
+        });
+        const failedOutput = await fixture.server.executeJsx({
+            code: 'throw new Error("bad")', client: 'test', diagnostics: true,
+        });
+        assert.equal(failedOutput.payload.disposition, 'failed');
+        assert.equal(failedOutput.payload.errorLine, 4);
+        assert.deepEqual(failedOutput.payload.touched, touched);
+        assert.deepEqual(failedOutput.payload.logs, ['before bad']);
+        assert.equal(failedOutput.payload.logsTruncated, true);
+        assert.deepEqual(failedOutput.payload.revision, { before: 2, after: 3 });
+        assert.equal(failedOutput.payload.projectPath, 'C:/project.aep');
+    } finally {
+        await closeFixture(fixture);
+    }
 });
 
 test('health and activity expose only authenticated operational state', async () => {

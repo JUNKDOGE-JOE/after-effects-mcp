@@ -1,27 +1,35 @@
 'use strict';
 
-// ae_exec — run ExtendScript through the host JSX bridge (shares the /exec
-// execution chain: pause / client block, undo group, transport envelope,
-// native graph invalidation, activity log).
-
+const crypto = require('crypto');
 const { textResult } = require('../tool-result');
 const { VERB_ANNOTATIONS } = require('../annotations');
 const { enforce } = require('../approval-gate');
 const { parseExecResult } = require('../jsx-result');
-const { autoCheckpoint, executionFailure, record } = require('../checkpoint-ops');
+const {
+    autoCheckpoint,
+    executionFailure,
+    record,
+    resolveProjectPath,
+} = require('../checkpoint-ops');
+const { resolveForKey } = require('../checkpoint-store');
+const { RECOVERY_ID } = require('../recovery-store');
+const { revertToCheckpoint } = require('./revert');
+
+let recentProjectPath = null;
 
 const definition = {
     name: 'ae_exec',
-    description: 'Run ExtendScript in After Effects through the host JSX bridge. Successful structuredContent is {ok:true,content,contentType}; contentType is "json" for numbers, booleans, null, plain Objects, and Arrays serialized in ExtendScript, or "text" for string results. The content field always remains a string.',
+    description: 'Run ExtendScript in After Effects. On a dispatched failure, the result includes a recoveryId and editable scriptPath. Edit that file with your normal editing tools, or pass corrected inline code, then call ae_exec({recoveryId}); it restores the pre-failure checkpoint by default. Use retryMode:"continue" to keep the current project state. A restorable point exists only when checkpoint_label created one. Successful content remains a string with contentType "json" or "text".',
     inputSchema: {
         type: 'object',
         properties: {
             code: { type: 'string', minLength: 1 },
+            recoveryId: { type: 'string', pattern: '^[a-z0-9]{6}$' },
+            retryMode: { type: 'string', enum: ['restore', 'continue'], default: 'restore' },
             undo_group_name: { type: 'string' },
             checkpoint_label: { type: 'string' },
             timeout_sec: { type: 'number', minimum: 1, maximum: 600 },
         },
-        required: ['code'],
         additionalProperties: false,
     },
     outputSchema: {
@@ -32,6 +40,17 @@ const definition = {
             contentType: { type: 'string', enum: ['text', 'json'] },
             error: { type: 'string' },
             disposition: { type: 'string' },
+            recoveryId: { type: 'string' },
+            scriptPath: { type: 'string' },
+            checkpointId: { type: ['string', 'null'] },
+            errorLine: { type: ['number', 'null'] },
+            errorSource: { type: 'string' },
+            touched: { type: ['object', 'null'] },
+            logs: { type: 'array', items: { type: 'string' } },
+            logsTruncated: { type: 'boolean' },
+            revision: { type: 'object' },
+            attempt: { type: 'number' },
+            restored: { type: 'string' },
         },
         required: ['ok'],
         additionalProperties: true,
@@ -39,49 +58,338 @@ const definition = {
     annotations: Object.assign({}, VERB_ANNOTATIONS.ae_exec, { openWorldHint: false }),
 };
 
-async function call(args, context, deps) {
-    if (typeof args.code !== 'string' || args.code.length === 0) {
-        return { result: textResult({ ok: false, error: 'missing or empty `code`' }, true) };
+function hasOwn(value, field) {
+    return Object.prototype.hasOwnProperty.call(value, field);
+}
+
+function validationError(args) {
+    const recovering = hasOwn(args, 'recoveryId');
+    if (!recovering && (typeof args.code !== 'string' || args.code.length === 0)) {
+        return 'missing or empty `code`';
+    }
+    if (recovering && (typeof args.recoveryId !== 'string' || !RECOVERY_ID.test(args.recoveryId))) {
+        return '`recoveryId` must match ^[a-z0-9]{6}$';
+    }
+    if (hasOwn(args, 'code') && (typeof args.code !== 'string' || args.code.length === 0)) {
+        return 'missing or empty `code`';
+    }
+    if (!recovering && hasOwn(args, 'retryMode')) return '`retryMode` requires `recoveryId`';
+    if (recovering && hasOwn(args, 'retryMode')
+        && ['restore', 'continue'].indexOf(args.retryMode) === -1) {
+        return '`retryMode` must be restore or continue';
     }
     if (args.undo_group_name !== undefined && typeof args.undo_group_name !== 'string') {
-        return { result: textResult({ ok: false, error: '`undo_group_name` must be a string' }, true) };
+        return '`undo_group_name` must be a string';
     }
     if (args.checkpoint_label !== undefined && typeof args.checkpoint_label !== 'string') {
-        return { result: textResult({ ok: false, error: '`checkpoint_label` must be a string' }, true) };
+        return '`checkpoint_label` must be a string';
     }
     if (args.timeout_sec !== undefined
         && (!Number.isFinite(args.timeout_sec) || args.timeout_sec < 1 || args.timeout_sec > 600)) {
-        return { result: textResult({ ok: false, error: '`timeout_sec` must be between 1 and 600' }, true) };
+        return '`timeout_sec` must be between 1 and 600';
     }
-    try {
-        const denied = await enforce(
-            'ae_exec',
-            Object.assign({}, context, { arguments: args }),
-            deps,
-        );
-        if (denied) return { result: textResult(denied, true) };
-        const checkpointSkipped = await autoCheckpoint(args, context, deps);
-        const execution = await deps.executeJsx({
-            code: args.code,
-            undoGroup: args.undo_group_name,
-            // Auto-checkpoint belongs to the ae_exec MCP tool layer. The shared
-            // /exec chain intentionally continues to accept but ignore this
-            // field so direct HTTP /exec retains today's Python-era semantics.
-            checkpointLabel: args.checkpoint_label,
-            timeoutMs: (args.timeout_sec === undefined ? 30 : args.timeout_sec) * 1000,
+    return null;
+}
+
+function sha256(code) {
+    return crypto.createHash('sha256').update(code, 'utf8').digest('hex');
+}
+
+function nullableArg(args, name) {
+    return args[name] === undefined ? null : args[name];
+}
+
+function storedArgs(args) {
+    return {
+        undo_group_name: nullableArg(args, 'undo_group_name'),
+        checkpoint_label: nullableArg(args, 'checkpoint_label'),
+        timeout_sec: nullableArg(args, 'timeout_sec'),
+    };
+}
+
+function currentCheckpoint(checkpointRun) {
+    return checkpointRun && checkpointRun.checkpoint && checkpointRun.checkpoint.ok === true
+        ? checkpointRun.checkpoint : null;
+}
+
+function annotateCheckpoint(value, checkpointRun) {
+    if (record(value) && checkpointRun && checkpointRun.skipped
+        && !hasOwn(value, 'checkpointSkipped')) {
+        value.checkpointSkipped = checkpointRun.skipped;
+    }
+    return value;
+}
+
+function executionDisposition(execution, failure) {
+    if (failure && typeof failure.disposition === 'string') return failure.disposition;
+    if (execution && typeof execution.disposition === 'string') return execution.disposition;
+    return null;
+}
+
+function resultFailure(execution) {
+    if (!execution || !execution.payload || execution.payload.ok !== true) {
+        return executionFailure(execution);
+    }
+    const parsed = parseExecResult(execution.payload.resultType, execution.payload.result);
+    if (parsed.ok !== false) return null;
+    ['projectPath', 'revision', 'logs', 'logsTruncated'].forEach(function (field) {
+        if (hasOwn(execution.payload, field)) parsed[field] = execution.payload[field];
+    });
+    return parsed;
+}
+
+function withErrorSource(failure, code) {
+    if (!failure || !Number.isInteger(failure.errorLine) || failure.errorLine < 1
+        || typeof code !== 'string') return failure;
+    const lines = code.split(/\r?\n/);
+    if (failure.errorLine > lines.length) return failure;
+    return Object.assign({}, failure, {
+        errorSource: lines[failure.errorLine - 1].trim().slice(0, 200),
+    });
+}
+
+function attemptRecord(values) {
+    const failure = values.failure || null;
+    const revision = failure && failure.revision
+        ? failure.revision
+        : (values.execution && values.execution.payload && values.execution.payload.revision) || null;
+    const touched = failure && failure.touched
+        ? failure.touched
+        : (values.execution && values.execution.payload && values.execution.payload.touched) || null;
+    return {
+        n: values.n,
+        at: new Date().toISOString(),
+        scriptSha256: sha256(values.code),
+        retryMode: values.retryMode,
+        restored: values.restored,
+        checkpointId: values.checkpointId || null,
+        ok: !failure,
+        error: failure ? failure.error || 'ae_exec failed' : null,
+        errorLine: failure && hasOwn(failure, 'errorLine') ? failure.errorLine : null,
+        errorSource: failure && hasOwn(failure, 'errorSource') ? failure.errorSource : null,
+        disposition: failure ? executionDisposition(values.execution, failure) : null,
+        revision,
+        touchedLevel: touched && typeof touched.level === 'string' ? touched.level : null,
+    };
+}
+
+function recoverySourcePath(failure, checkpointRun) {
+    if (failure && hasOwn(failure, 'projectPath')) return failure.projectPath || null;
+    const checkpoint = checkpointRun && checkpointRun.checkpoint;
+    if (checkpoint && checkpoint.projectPath) return checkpoint.projectPath;
+    return recentProjectPath;
+}
+
+function createRecovery(args, context, deps, code, execution, failure, checkpointRun) {
+    const checkpoint = currentCheckpoint(checkpointRun);
+    const checkpointId = checkpoint ? checkpoint.id : null;
+    const sourceProjectPath = recoverySourcePath(failure, checkpointRun) || null;
+    const attempt = attemptRecord({
+        n: 1,
+        code,
+        retryMode: 'initial',
+        restored: 'not-applicable',
+        checkpointId,
+        execution,
+        failure,
+    });
+    const entry = deps.getRecoveryStore().create({
+        sourceProjectPath,
+        code,
+        meta: {
+            checkpointId,
+            args: storedArgs(args),
             client: context.session.clientName,
-            nativeProjectGraphEffect: 'invalidate',
+            conversationId: context.session.conversationId || null,
+            attempts: [attempt],
+        },
+    });
+    return Object.assign({}, failure, {
+        recoveryId: entry.recoveryId,
+        scriptPath: entry.scriptPath,
+        checkpointId,
+        attempt: 1,
+    });
+}
+
+async function execute(code, args, context, deps) {
+    return deps.executeJsx({
+        code,
+        undoGroup: args.undo_group_name === null ? undefined : args.undo_group_name,
+        checkpointLabel: args.checkpoint_label === null ? undefined : args.checkpoint_label,
+        timeoutMs: (args.timeout_sec === undefined || args.timeout_sec === null
+            ? 30 : args.timeout_sec) * 1000,
+        client: context.session.clientName,
+        nativeProjectGraphEffect: 'invalidate',
+        diagnostics: true,
+    });
+}
+
+async function runInitial(args, context, deps) {
+    const denied = await enforce('ae_exec', Object.assign({}, context, { arguments: args }), deps);
+    if (denied) return denied;
+    const checkpointRun = await autoCheckpoint(args, context, deps);
+    const execution = await execute(args.code, args, context, deps);
+    if (execution && execution.payload
+        && hasOwn(execution.payload, 'projectPath')) {
+        recentProjectPath = execution.payload.projectPath || null;
+    }
+    const failure = withErrorSource(resultFailure(execution), args.code);
+    if (failure) {
+        annotateCheckpoint(failure, checkpointRun);
+        const disposition = executionDisposition(execution, failure);
+        if (execution && execution.payload && execution.payload.ok !== true
+            && ['failed', 'uncertain'].indexOf(disposition) === -1) return failure;
+        return createRecovery(args, context, deps, args.code, execution, failure, checkpointRun);
+    }
+    const parsed = parseExecResult(execution.payload.resultType, execution.payload.result);
+    return annotateCheckpoint(parsed, checkpointRun);
+}
+
+function effectiveArgs(meta, args) {
+    const prior = meta.args && typeof meta.args === 'object' ? meta.args : {};
+    const output = {};
+    ['undo_group_name', 'checkpoint_label', 'timeout_sec'].forEach(function (name) {
+        const value = hasOwn(args, name) ? args[name] : prior[name];
+        if (value !== null && value !== undefined) output[name] = value;
+    });
+    return output;
+}
+
+function sameProject(expected, actual) {
+    if (!expected || !actual) return expected === actual;
+    return resolveForKey(expected) === resolveForKey(actual);
+}
+
+function lastAttempt(meta) {
+    return Array.isArray(meta.attempts) && meta.attempts.length
+        ? meta.attempts[meta.attempts.length - 1] : null;
+}
+
+function unchangedRevision(meta) {
+    const prior = lastAttempt(meta);
+    const revision = prior && prior.revision;
+    return revision && typeof revision.before === 'number' && typeof revision.after === 'number'
+        && revision.before === revision.after;
+}
+
+async function restoreForRetry(recoveryId, retryMode, meta, context, deps) {
+    if (retryMode === 'continue') return { ok: true, restored: 'skipped' };
+    if (!meta.checkpointId) {
+        if (unchangedRevision(meta)) return { ok: true, restored: 'not-needed' };
+        const prior = lastAttempt(meta);
+        const revision = prior && prior.revision ? prior.revision : { before: null, after: null };
+        return {
+            ok: false,
+            code: 'RECOVERY_RESTORE_UNAVAILABLE',
+            error: 'no checkpoint was recorded for this call and the project changed (revision '
+                + String(revision.before) + '\u2192' + String(revision.after)
+                + '); pass retryMode:"continue" to run on the current state, or ae_revert to an earlier checkpoint first',
+        };
+    }
+    const projectPath = await resolveProjectPath(context, deps);
+    if (!sameProject(meta.sourceProjectPath || null, projectPath || null)) {
+        return {
+            ok: false,
+            code: 'RECOVERY_PROJECT_MISMATCH',
+            error: 'recovery ' + recoveryId + ' belongs to project '
+                + String(meta.sourceProjectPath) + ' but ' + String(projectPath)
+                + ' is open; open the matching project or use the recovery from its checkpoint directory',
+        };
+    }
+    const reverted = await revertToCheckpoint(
+        meta.checkpointId,
+        { projectPath },
+        context,
+        deps,
+    );
+    if (!reverted || reverted.ok !== true) {
+        return Object.assign({}, reverted || { ok: false, error: 'checkpoint restore failed' }, {
+            recoveryId,
+            stage: 'restore',
         });
-        if (!execution || !execution.payload || execution.payload.ok !== true) {
-            const failure = executionFailure(execution);
-            return { result: textResult(failure, true) };
-        }
-        const parsed = parseExecResult(execution.payload.resultType, execution.payload.result);
-        if (record(parsed) && checkpointSkipped
-            && !Object.prototype.hasOwnProperty.call(parsed, 'checkpointSkipped')) {
-            parsed.checkpointSkipped = checkpointSkipped;
-        }
-        return { result: textResult(parsed, record(parsed) && parsed.ok === false) };
+    }
+    recentProjectPath = projectPath;
+    return { ok: true, restored: 'checkpoint' };
+}
+
+async function runRecovery(args, context, deps) {
+    const store = deps.getRecoveryStore();
+    const entry = store.lookup(args.recoveryId, recentProjectPath);
+    if (!entry) return { ok: false, error: 'unknown recoveryId: ' + args.recoveryId };
+    const meta = store.readMeta(entry);
+    const code = hasOwn(args, 'code') ? args.code : store.readScript(entry);
+    if (!code) return { ok: false, error: 'recovery script is empty: ' + args.recoveryId };
+    if (hasOwn(args, 'code')) store.writeScript(entry, code);
+    const retryMode = args.retryMode || 'restore';
+    const resolvedArgs = effectiveArgs(meta, args);
+    const approvalArguments = Object.assign({}, resolvedArgs, {
+        code,
+        recoveryId: args.recoveryId,
+        retryMode,
+        restoreCheckpointId: meta.checkpointId || null,
+    });
+    const denied = await enforce(
+        'ae_exec',
+        Object.assign({}, context, { arguments: approvalArguments }),
+        deps,
+    );
+    if (denied) return denied;
+    const restoration = await restoreForRetry(args.recoveryId, retryMode, meta, context, deps);
+    if (!restoration.ok) return restoration;
+    const checkpointRun = await autoCheckpoint(resolvedArgs, context, deps);
+    const checkpoint = currentCheckpoint(checkpointRun);
+    if (checkpoint) {
+        meta.checkpointId = checkpoint.id;
+        meta.sourceProjectPath = checkpoint.projectPath;
+        store.writeMeta(entry, meta);
+    }
+    const execution = await execute(code, resolvedArgs, context, deps);
+    if (execution && execution.payload
+        && hasOwn(execution.payload, 'projectPath')) {
+        recentProjectPath = execution.payload.projectPath || null;
+    }
+    const failure = withErrorSource(resultFailure(execution), code);
+    const attemptNumber = Array.isArray(meta.attempts) ? meta.attempts.length + 1 : 1;
+    const checkpointId = checkpoint ? checkpoint.id : (meta.checkpointId || null);
+    const attempt = attemptRecord({
+        n: attemptNumber,
+        code,
+        retryMode,
+        restored: restoration.restored,
+        checkpointId,
+        execution,
+        failure,
+    });
+    store.appendAttempt(entry, attempt);
+    if (failure) {
+        annotateCheckpoint(failure, checkpointRun);
+        return Object.assign({}, failure, {
+            recoveryId: args.recoveryId,
+            scriptPath: entry.scriptPath,
+            checkpointId,
+            attempt: attemptNumber,
+            restored: restoration.restored,
+        });
+    }
+    const parsed = parseExecResult(execution.payload.resultType, execution.payload.result);
+    annotateCheckpoint(parsed, checkpointRun);
+    return Object.assign({}, parsed, {
+        recoveryId: args.recoveryId,
+        attempt: attemptNumber,
+        restored: restoration.restored,
+    });
+}
+
+async function call(args, context, deps) {
+    const input = args || {};
+    const invalid = validationError(input);
+    if (invalid) return { result: textResult({ ok: false, error: invalid }, true) };
+    try {
+        const value = hasOwn(input, 'recoveryId')
+            ? await runRecovery(input, context, deps)
+            : await runInitial(input, context, deps);
+        return { result: textResult(value, record(value) && value.ok === false) };
     } catch (error) {
         const payload = { ok: false, error: error && error.message ? error.message : String(error) };
         if (error && typeof error.disposition === 'string') payload.disposition = error.disposition;
@@ -89,4 +397,8 @@ async function call(args, context, deps) {
     }
 }
 
-module.exports = { definition, call };
+module.exports = {
+    definition,
+    call,
+    _resetRecentProjectPathForTest: function () { recentProjectPath = null; },
+};

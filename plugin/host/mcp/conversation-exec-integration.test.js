@@ -13,19 +13,24 @@ const { READONLY_DENIED } = require('./approval-gate');
 
 function start(options) {
     const input = options || {};
+    const ownedStoreRoot = input.checkpointStore
+        ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-conversation-store-'));
+    const checkpointStore = input.checkpointStore
+        || new CheckpointStore({ root: ownedStoreRoot });
     const app = express();
     app.use(express.json());
     const mounted = mountMcp(app, {
         version: '0.9.6-test',
         getStatus: function () { return { ok: true }; },
         executeJsx: input.executeJsx,
-        checkpointStore: input.checkpointStore,
+        checkpointStore,
+        recoveryStore: input.recoveryStore,
         progressIntervalMs: input.progressIntervalMs,
         approvalTimeoutMs: input.approvalTimeoutMs,
     });
     return new Promise(function (resolve) {
         const listener = app.listen(0, '127.0.0.1', function () {
-            resolve({ listener, port: listener.address().port, mounted });
+            resolve({ listener, port: listener.address().port, mounted, ownedStoreRoot });
         });
     });
 }
@@ -75,6 +80,9 @@ function toolCall(id, code, extra, meta) {
 
 async function closeFixture(fixture) {
     await new Promise(function (resolve) { fixture.listener.close(resolve); });
+    if (fixture.ownedStoreRoot) {
+        fs.rmSync(fixture.ownedStoreRoot, { recursive: true, force: true });
+    }
 }
 
 test('conversation tiers isolate calls, external calls bypass, updates are live, and unknown tokens 404', async () => {
@@ -138,9 +146,11 @@ test('conversation tiers isolate calls, external calls bypass, updates are live,
             'Mcp-Session-Id': external.session,
         }, toolCall(5, 'empty'));
         assert.equal(empty.body.result.isError, true);
-        assert.deepEqual(empty.body.result.structuredContent, {
-            ok: false, error: 'jsx returned no value (empty output)', raw: '',
-        });
+        assert.equal(empty.body.result.structuredContent.ok, false);
+        assert.equal(empty.body.result.structuredContent.error, 'jsx returned no value (empty output)');
+        assert.equal(empty.body.result.structuredContent.raw, '');
+        assert.match(empty.body.result.structuredContent.recoveryId, /^[a-z0-9]{6}$/);
+        assert.equal(fs.existsSync(empty.body.result.structuredContent.scriptPath), true);
 
         fixture.mounted.conversations.update(none.id, { approvalTier: 'readonly' });
         const updated = await request(fixture.port, 'POST', none.path, {
