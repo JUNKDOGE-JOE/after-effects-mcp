@@ -784,3 +784,65 @@ test('stop emits one aborted error, drains controls, and kills the process', asy
   );
   assert.equal(h.events.filter((event) => event.type === 'tool-denied').length, 1);
 });
+
+test('Claude emits a session reference when stream-json reveals the session id', async () => {
+  const h = makeHarness();
+  const run = h.backend.sendUser('hello');
+  await flush();
+  emitWire(h.processes[0], { type: 'system', subtype: 'init', session_id: 'claude-session-1' });
+  finishTurn(h.processes[0]);
+  await run;
+  assert.deepEqual(h.events.find((event) => event.type === 'session-ref'), {
+    type: 'session-ref',
+    ref: { kind: 'claude-session', id: 'claude-session-1' },
+  });
+  assert.deepEqual(h.backend.getSessionRef(), h.events.filter((event) => event.type === 'session-ref').at(-1).ref);
+});
+
+test('Claude adopts a stored session id for the next spawn', async () => {
+  const h = makeHarness();
+  h.backend.adoptSessionRef({ kind: 'claude-session', id: 'claude-saved' });
+  const run = h.backend.sendUser('continue');
+  await flush();
+  const args = h.spawns[0].args;
+  assert.equal(args[args.indexOf('--resume') + 1], 'claude-saved');
+  h.backend.reset();
+  await run;
+});
+
+test('Claude retries a missing resumed session once without --resume', async () => {
+  const h = makeHarness();
+  h.backend.adoptSessionRef({ kind: 'claude-session', id: 'claude-missing' });
+  const run = h.backend.sendUser('continue');
+  await flush();
+  emitWire(h.processes[0], {
+    type: 'result',
+    subtype: 'error',
+    is_error: true,
+    result: 'No conversation found for session claude-missing',
+  });
+  await flush(24);
+  assert.equal(h.processes.length, 2);
+  assert.equal(h.spawns[1].args.includes('--resume'), false);
+  assert.equal(written(h.processes[1]).filter((message) => message.type === 'user').length, 1);
+  emitWire(h.processes[1], { type: 'system', subtype: 'init', session_id: 'claude-new' });
+  emitWire(h.processes[1], {
+    type: 'result',
+    subtype: 'success',
+    is_error: false,
+    result: 'continued',
+    session_id: 'claude-new',
+  });
+  await run;
+  assert.deepEqual(h.backend.getSessionRef(), { kind: 'claude-session', id: 'claude-new' });
+  assert.equal(h.events.filter((event) => event.type === 'session-ref').at(-1).ref.id, 'claude-new');
+});
+
+test('Claude transcript deletion is explicitly delegated to the CLI', async () => {
+  const h = makeHarness();
+  assert.deepEqual(await h.backend.deleteSessionRef({ kind: 'claude-session', id: 'one' }), {
+    ok: true,
+    skipped: true,
+    detail: 'claude CLI owns its transcript files',
+  });
+});

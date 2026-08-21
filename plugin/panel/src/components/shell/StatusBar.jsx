@@ -7,10 +7,12 @@ export function StatusBar({
   status = 'waiting',
   label,
   onStatusClick,
+  onSessions,
   onTogglePause,
   onSettings,
   pauseTitle = '暂停所有 AI 操作 Pause all AI actions',
   resumeTitle = '恢复 Resume',
+  sessionsTitle = '会话 Sessions',
   settingsTitle = '设置 Settings',
   style,
 }) {
@@ -65,6 +67,7 @@ export function StatusBar({
         <Icon name="chevron-down" size={11} color="var(--text-tertiary)" />
       </button>
       <span style={{ flex: 1 }}></span>
+      <IconButton icon="history" title={sessionsTitle} onClick={onSessions} />
       <PauseButton paused={paused} title={paused ? resumeTitle : pauseTitle} onClick={onTogglePause} />
       <IconButton icon="settings" title={settingsTitle} onClick={onSettings} />
     </div>

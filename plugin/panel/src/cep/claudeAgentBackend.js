@@ -375,6 +375,9 @@ export function createClaudeAgentBackend({
   let processConversationIdentity = null;
   let processSettings = null;
   let sessionId = null;
+  let lastEmittedSessionId = null;
+  let processResumeSessionId = null;
+  let resumeRetryUsed = false;
   let runtimeGeneration = 0;
   let configDir = '';
   let providerSensitiveValues = [];
@@ -598,6 +601,7 @@ export function createClaudeAgentBackend({
     if (clearTranscript) transcript = [];
     if (clearSession) {
       sessionId = null;
+      lastEmittedSessionId = null;
       processConversationIdentity = null;
       sessionAllowedTools.clear();
     }
@@ -634,6 +638,10 @@ export function createClaudeAgentBackend({
   function handleExit(target, generation, code, signal) {
     stderrDeltaRedactor.flush();
     const tail = trimStderrTail(stderrTail);
+    if (shouldRetryMissingSession(tail)) {
+      void retryWithoutMissingSession(target, generation);
+      return;
+    }
     handleProcessFailure(target, generation, {
       message: 'Claude CLI exited unexpectedly.',
       classificationInput: { exitCode: code, signal, stderrTail: tail },
@@ -853,6 +861,10 @@ export function createClaudeAgentBackend({
 
   function handleResult(message) {
     if (!activeRun) return;
+    if (message.is_error && shouldRetryMissingSession(message.result || message)) {
+      void retryWithoutMissingSession(proc, runtimeGeneration);
+      return;
+    }
     markTurnAccepted();
     providerDeltaRedactor.flush();
     setThinking(false);
@@ -902,7 +914,14 @@ export function createClaudeAgentBackend({
 
   function handleCliMessage(message) {
     if (!message || typeof message !== 'object') return;
-    if (message.session_id) sessionId = String(message.session_id);
+    if (message.session_id) {
+      const nextSessionId = String(message.session_id);
+      sessionId = nextSessionId;
+      if (nextSessionId !== lastEmittedSessionId) {
+        lastEmittedSessionId = nextSessionId;
+        emit({ type: 'session-ref', ref: { kind: 'claude-session', id: sessionId } });
+      }
+    }
     if (message.type === 'system' && message.subtype === 'init') {
       markTurnAccepted();
       return;
@@ -1047,6 +1066,7 @@ export function createClaudeAgentBackend({
         arch: null,
       };
       const args = buildCliArgs(session, turn, meta, mcpPath);
+      processResumeSessionId = sessionId || null;
       let spawnedProc;
       try {
         try {
@@ -1188,6 +1208,43 @@ export function createClaudeAgentBackend({
     }
   }
 
+  function shouldRetryMissingSession(value) {
+    if (!processResumeSessionId || resumeRetryUsed || activeTurnAccepted || !activeRun) return false;
+    const text = truncateDetail(value || '');
+    return /no conversation found|conversation (?:was )?not found|session (?:does not exist|not found|is missing)/i.test(text);
+  }
+
+  async function retryWithoutMissingSession(target, generation) {
+    if (generation !== runtimeGeneration || proc !== target || !activeRun || resumeRetryUsed) return;
+    resumeRetryUsed = true;
+    runtimeGeneration += 1;
+    proc = null;
+    startPromise = null;
+    processSettings = null;
+    processResumeSessionId = null;
+    sessionId = null;
+    processConversationIdentity = null;
+    providerDeltaRedactor.discard();
+    setThinking(false);
+    drainControls('Claude CLI session could not be resumed.');
+    cleanupConfig();
+    try { target?.kill?.(); } catch {}
+    const run = activeRun;
+    const turn = activeTurn;
+    const ok = await ensureCli(run, turn);
+    if (!ok || activeRun !== run || !proc) {
+      if (activeRun === run) finishActive();
+      return;
+    }
+    writeMessage({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text: withAttachmentManifest(turn.text, turn.attachments) }],
+      },
+    });
+  }
+
   async function sendUser(input) {
     if (activeRun) return activeRun;
     let turn;
@@ -1209,6 +1266,7 @@ export function createClaudeAgentBackend({
     activeTurn = turn;
     activeTurnAccepted = false;
     activeTurnDispatched = false;
+    resumeRetryUsed = false;
     setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
     resetProviderDeltaRedactor();
     activeRun = new Promise((resolve) => { activeResolve = resolve; });
@@ -1251,12 +1309,32 @@ export function createClaudeAgentBackend({
     });
   }
 
+  function getSessionRef() {
+    return sessionId ? { kind: 'claude-session', id: sessionId } : null;
+  }
+
+  function adoptSessionRef(ref) {
+    sessionId = ref && ref.kind === 'claude-session' && ref.id ? String(ref.id) : null;
+    processResumeSessionId = null;
+  }
+
+  async function deleteSessionRef() {
+    return {
+      ok: true,
+      skipped: true,
+      detail: 'claude CLI owns its transcript files',
+    };
+  }
+
   return {
     sendUser,
     approve,
     answerQuestion,
     stop,
     reset,
+    getSessionRef,
+    adoptSessionRef,
+    deleteSessionRef,
     getMessages: () => clone(transcript),
     getStderrTail: () => stderrTail,
   };

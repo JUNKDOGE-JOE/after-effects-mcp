@@ -41,6 +41,12 @@ remain confined to protected release environments.
 This promise covers accidental disclosure by ae-mcp. It is not a promise to resist an administrator,
 OS compromise, memory inspection, or hostile code already running as the trusted host user.
 
+## Local conversation data
+
+- Panel conversation transcripts are stored only on the local machine under `~/.ae-mcp/sessions`
+  with mode 0600 applied on a best-effort basis. They may contain project information, are deleted
+  from that store when the user deletes the session, and are never included in telemetry.
+
 ## Explicitly rejected security work
 
 The product does not claim or plan defenses against:

@@ -93,7 +93,7 @@
       }, enqueueReplaceState: function() {
       }, enqueueSetState: function() {
       } };
-      var C2 = Object.assign;
+      var C3 = Object.assign;
       var D2 = {};
       function E(a, b, e) {
         this.props = a;
@@ -120,7 +120,7 @@
       }
       var H = G.prototype = new F();
       H.constructor = G;
-      C2(H, E.prototype);
+      C3(H, E.prototype);
       H.isPureReactComponent = true;
       var I = Array.isArray;
       var J = Object.prototype.hasOwnProperty;
@@ -241,7 +241,7 @@
       exports.act = X2;
       exports.cloneElement = function(a, b, e) {
         if (null === a || void 0 === a) throw Error("React.cloneElement(...): The argument must be a React element, but you passed " + a + ".");
-        var d = C2({}, a.props), c = a.key, k = a.ref, h = a._owner;
+        var d = C3({}, a.props), c = a.key, k = a.ref, h = a._owner;
         if (null != b) {
           void 0 !== b.ref && (k = b.ref, h = K.current);
           void 0 !== b.key && (c = "" + b.key);
@@ -375,8 +375,8 @@
         if (c !== b) {
           a[0] = c;
           a: for (var d = 0, e = a.length, w = e >>> 1; d < w; ) {
-            var m = 2 * (d + 1) - 1, C2 = a[m], n = m + 1, x = a[n];
-            if (0 > g(C2, c)) n < e && 0 > g(x, C2) ? (a[d] = x, a[n] = c, d = n) : (a[d] = C2, a[m] = c, d = m);
+            var m = 2 * (d + 1) - 1, C3 = a[m], n = m + 1, x = a[n];
+            if (0 > g(C3, c)) n < e && 0 > g(x, C3) ? (a[d] = x, a[n] = c, d = n) : (a[d] = C3, a[m] = c, d = m);
             else if (n < e && 0 > g(x, c)) a[d] = x, a[n] = c, d = n;
             else break a;
           }
@@ -1643,7 +1643,7 @@
           c &= ~e;
         }
       }
-      var C2 = 0;
+      var C3 = 0;
       function Dc(a) {
         a &= -a;
         return 1 < a ? 4 < a ? 0 !== (a & 268435455) ? 16 : 536870912 : 4 : 1;
@@ -1781,21 +1781,21 @@
       var cd = ua.ReactCurrentBatchConfig;
       var dd = true;
       function ed(a, b, c, d) {
-        var e = C2, f = cd.transition;
+        var e = C3, f = cd.transition;
         cd.transition = null;
         try {
-          C2 = 1, fd(a, b, c, d);
+          C3 = 1, fd(a, b, c, d);
         } finally {
-          C2 = e, cd.transition = f;
+          C3 = e, cd.transition = f;
         }
       }
       function gd(a, b, c, d) {
-        var e = C2, f = cd.transition;
+        var e = C3, f = cd.transition;
         cd.transition = null;
         try {
-          C2 = 4, fd(a, b, c, d);
+          C3 = 4, fd(a, b, c, d);
         } finally {
-          C2 = e, cd.transition = f;
+          C3 = e, cd.transition = f;
         }
       }
       function fd(a, b, c, d) {
@@ -2868,10 +2868,10 @@
       function jg() {
         if (!gg && null !== eg) {
           gg = true;
-          var a = 0, b = C2;
+          var a = 0, b = C3;
           try {
             var c = eg;
-            for (C2 = 1; a < c.length; a++) {
+            for (C3 = 1; a < c.length; a++) {
               var d = c[a];
               do
                 d = d(true);
@@ -2882,7 +2882,7 @@
           } catch (e) {
             throw null !== eg && (eg = eg.slice(a + 1)), ac(fc, jg), e;
           } finally {
-            C2 = b, gg = false;
+            C3 = b, gg = false;
           }
         }
         return null;
@@ -3844,15 +3844,15 @@
         return b;
       }
       function vi(a, b) {
-        var c = C2;
-        C2 = 0 !== c && 4 > c ? c : 4;
+        var c = C3;
+        C3 = 0 !== c && 4 > c ? c : 4;
         a(true);
         var d = Gh.transition;
         Gh.transition = {};
         try {
           a(false), b();
         } finally {
-          C2 = c, Gh.transition = d;
+          C3 = c, Gh.transition = d;
         }
       }
       function wi() {
@@ -5843,7 +5843,7 @@
         if (0 === (a.mode & 1)) return 1;
         if (0 !== (K & 2) && 0 !== Z) return Z & -Z;
         if (null !== Kg.transition) return 0 === Bk && (Bk = yc()), Bk;
-        a = C2;
+        a = C3;
         if (0 !== a) return a;
         a = window.event;
         a = void 0 === a ? 16 : jd(a.type);
@@ -6057,11 +6057,11 @@
         null !== wk && 0 === wk.tag && 0 === (K & 6) && Hk();
         var b = K;
         K |= 1;
-        var c = ok.transition, d = C2;
+        var c = ok.transition, d = C3;
         try {
-          if (ok.transition = null, C2 = 1, a) return a();
+          if (ok.transition = null, C3 = 1, a) return a();
         } finally {
-          C2 = d, ok.transition = c, K = b, 0 === (K & 6) && jg();
+          C3 = d, ok.transition = c, K = b, 0 === (K & 6) && jg();
         }
       }
       function Hj() {
@@ -6309,11 +6309,11 @@
         0 === T2 && (T2 = 5);
       }
       function Pk(a, b, c) {
-        var d = C2, e = ok.transition;
+        var d = C3, e = ok.transition;
         try {
-          ok.transition = null, C2 = 1, Wk(a, b, c, d);
+          ok.transition = null, C3 = 1, Wk(a, b, c, d);
         } finally {
-          ok.transition = e, C2 = d;
+          ok.transition = e, C3 = d;
         }
         return null;
       }
@@ -6341,8 +6341,8 @@
         if (0 !== (c.subtreeFlags & 15990) || f) {
           f = ok.transition;
           ok.transition = null;
-          var g = C2;
-          C2 = 1;
+          var g = C3;
+          C3 = 1;
           var h = K;
           K |= 4;
           nk.current = null;
@@ -6355,7 +6355,7 @@
           hk(c, a, e);
           dc();
           K = h;
-          C2 = g;
+          C3 = g;
           ok.transition = f;
         } else a.current = c;
         vk && (vk = false, wk = a, xk = e);
@@ -6373,10 +6373,10 @@
       }
       function Hk() {
         if (null !== wk) {
-          var a = Dc(xk), b = ok.transition, c = C2;
+          var a = Dc(xk), b = ok.transition, c = C3;
           try {
             ok.transition = null;
-            C2 = 16 > a ? 16 : a;
+            C3 = 16 > a ? 16 : a;
             if (null === wk) var d = false;
             else {
               a = wk;
@@ -6492,7 +6492,7 @@
             }
             return d;
           } finally {
-            C2 = c, ok.transition = b;
+            C3 = c, ok.transition = b;
           }
         }
         return false;
@@ -7107,14 +7107,14 @@
         }
       };
       Hc = function() {
-        return C2;
+        return C3;
       };
       Ic = function(a, b) {
-        var c = C2;
+        var c = C3;
         try {
-          return C2 = a, b();
+          return C3 = a, b();
         } finally {
-          C2 = c;
+          C3 = c;
         }
       };
       yb = function(a, b, c) {
@@ -18214,11 +18214,11 @@
           var a = length;
           var A2 = 1.5707963267948966;
           var B = rotation;
-          var C2 = 1.5707963267948966 - rotation;
+          var C3 = 1.5707963267948966 - rotation;
           var sinA = Math.sin(A2);
           var sinB = Math.sin(B);
-          var sinC = Math.sin(C2);
-          var cosC = Math.cos(C2);
+          var sinC = Math.sin(C3);
+          var cosC = Math.cos(C3);
           var ratio = a / sinA;
           var b = ratio * sinB;
           var c = ratio * sinC;
@@ -19317,12 +19317,12 @@
 
   // src/main.jsx
   init_cep_runtime_inject();
-  var import_react47 = __toESM(require_react(), 1);
+  var import_react48 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
   init_cep_runtime_inject();
-  var import_react46 = __toESM(require_react(), 1);
+  var import_react47 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   init_cep_runtime_inject();
@@ -19436,6 +19436,24 @@
     Component.displayName = `${iconName}`;
     return Component;
   };
+
+  // node_modules/lucide-react/dist/esm/icons/archive-restore.js
+  init_cep_runtime_inject();
+  var ArchiveRestore = createLucideIcon("ArchiveRestore", [
+    ["rect", { width: "20", height: "5", x: "2", y: "3", rx: "1", key: "1wp1u1" }],
+    ["path", { d: "M4 8v11a2 2 0 0 0 2 2h2", key: "tvwodi" }],
+    ["path", { d: "M20 8v11a2 2 0 0 1-2 2h-2", key: "1gkqxj" }],
+    ["path", { d: "m9 15 3-3 3 3", key: "1pd0qc" }],
+    ["path", { d: "M12 12v9", key: "192myk" }]
+  ]);
+
+  // node_modules/lucide-react/dist/esm/icons/archive.js
+  init_cep_runtime_inject();
+  var Archive = createLucideIcon("Archive", [
+    ["rect", { width: "20", height: "5", x: "2", y: "3", rx: "1", key: "1wp1u1" }],
+    ["path", { d: "M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8", key: "1s80jp" }],
+    ["path", { d: "M10 12h4", key: "a56b0p" }]
+  ]);
 
   // node_modules/lucide-react/dist/esm/icons/arrow-up.js
   init_cep_runtime_inject();
@@ -19672,6 +19690,19 @@
     ["rect", { x: "6", y: "4", width: "4", height: "16", rx: "1", key: "1okwgv" }]
   ]);
 
+  // node_modules/lucide-react/dist/esm/icons/pencil.js
+  init_cep_runtime_inject();
+  var Pencil = createLucideIcon("Pencil", [
+    [
+      "path",
+      {
+        d: "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",
+        key: "1a8usu"
+      }
+    ],
+    ["path", { d: "m15 5 4 4", key: "1mk7zo" }]
+  ]);
+
   // node_modules/lucide-react/dist/esm/icons/play.js
   init_cep_runtime_inject();
   var Play = createLucideIcon("Play", [
@@ -19898,12 +19929,15 @@
     box: Box,
     brain: Brain,
     zap: Zap,
-    wrench: Wrench
+    wrench: Wrench,
+    pencil: Pencil,
+    archive: Archive,
+    "archive-restore": ArchiveRestore
   };
   function Icon2({ name, size = 14, strokeWidth = 1.75, color = "currentColor", style }) {
-    const C2 = MAP[name];
-    if (!C2) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(C2, { size, strokeWidth, color, style, "aria-hidden": "true" });
+    const C3 = MAP[name];
+    if (!C3) return null;
+    return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(C3, { size, strokeWidth, color, style, "aria-hidden": "true" });
   }
 
   // src/components/core/StatusDot.jsx
@@ -20002,10 +20036,12 @@
     status = "waiting",
     label,
     onStatusClick,
+    onSessions,
     onTogglePause,
     onSettings,
     pauseTitle = "\u6682\u505C\u6240\u6709 AI \u64CD\u4F5C Pause all AI actions",
     resumeTitle = "\u6062\u590D Resume",
+    sessionsTitle = "\u4F1A\u8BDD Sessions",
     settingsTitle = "\u8BBE\u7F6E Settings",
     style
   }) {
@@ -20067,6 +20103,7 @@
             }
           ),
           /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IconButton, { icon: "history", title: sessionsTitle, onClick: onSessions }),
           /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(PauseButton, { paused, title: paused ? resumeTitle : pauseTitle, onClick: onTogglePause }),
           /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(IconButton, { icon: "settings", title: settingsTitle, onClick: onSettings })
         ]
@@ -20630,9 +20667,14 @@
     disabled = false,
     error = false,
     size = "md",
+    icon,
     suffix,
     full = true,
-    style
+    style,
+    onKeyDown,
+    onBlur,
+    autoFocus = false,
+    ariaLabel
   }) {
     const [focus, setFocus] = import_react16.default.useState(false);
     const [revealed, setRevealed] = import_react16.default.useState(false);
@@ -20655,6 +20697,7 @@
           ...style
         },
         children: [
+          icon ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(Icon2, { name: icon, size: 13, color: "var(--text-tertiary)" }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
             "input",
             {
@@ -20664,7 +20707,13 @@
               disabled,
               onChange: (e) => onChange && onChange(e.target.value),
               onFocus: () => setFocus(true),
-              onBlur: () => setFocus(false),
+              onBlur: (event) => {
+                setFocus(false);
+                if (onBlur) onBlur(event);
+              },
+              onKeyDown,
+              autoFocus,
+              "aria-label": ariaLabel,
               style: {
                 flex: 1,
                 minWidth: 0,
@@ -23333,20 +23382,303 @@
     ] });
   }
 
+  // src/screens/SessionDrawer.jsx
+  init_cep_runtime_inject();
+  var import_react28 = __toESM(require_react(), 1);
+
+  // src/lib/sessionList.js
+  init_cep_runtime_inject();
+  var TITLE_LIMIT = 40;
+  function compactText(value) {
+    return String(value || "").trim().replace(/\s+/g, " ");
+  }
+  function truncateTitle(value) {
+    const chars = Array.from(compactText(value));
+    if (chars.length <= TITLE_LIMIT) return chars.join("");
+    return chars.slice(0, TITLE_LIMIT).join("") + "\u2026";
+  }
+  function localDate(value, lang) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    return date.toLocaleDateString(lang === "en" ? "en-US" : "zh-CN");
+  }
+  function deriveTitle(entries) {
+    const first = (Array.isArray(entries) ? entries : []).find((entry2) => entry2 && entry2.type === "user-text" && compactText(entry2.text));
+    return first ? truncateTitle(first.text) : null;
+  }
+  function displayTitle(meta, lang = "zh") {
+    const title = compactText(meta && meta.title);
+    if (title) return title;
+    const label = lang === "en" ? "New session" : "\u65B0\u4F1A\u8BDD";
+    const date = localDate(meta && (meta.createdAt || meta.updatedAt), lang);
+    return date ? `${label} \xB7 ${date}` : label;
+  }
+  function sortSessions(list) {
+    return [...Array.isArray(list) ? list : []].sort((left, right) => {
+      const leftTime = new Date(left && left.updatedAt).getTime() || 0;
+      const rightTime = new Date(right && right.updatedAt).getTime() || 0;
+      if (rightTime !== leftTime) return rightTime - leftTime;
+      return String(left && left.id).localeCompare(String(right && right.id));
+    });
+  }
+  function filterSessions(list, { archived = false, search = "" } = {}) {
+    const query = compactText(search).toLocaleLowerCase();
+    return (Array.isArray(list) ? list : []).filter((meta) => {
+      if (Boolean(meta && meta.archived) !== Boolean(archived)) return false;
+      if (!query) return true;
+      return compactText(meta && meta.title).toLocaleLowerCase().includes(query);
+    });
+  }
+  function relativeTime(timestamp, now = Date.now(), lang = "zh") {
+    const value = new Date(timestamp).getTime();
+    const current = new Date(now).getTime();
+    if (!Number.isFinite(value) || !Number.isFinite(current)) return "";
+    const elapsed = Math.max(0, current - value);
+    const minutes = Math.floor(elapsed / 6e4);
+    if (minutes < 1) return lang === "en" ? "Just now" : "\u521A\u521A";
+    if (minutes < 60) return lang === "en" ? `${minutes}m ago` : `${minutes} \u5206\u949F\u524D`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return lang === "en" ? `${hours}h ago` : `${hours} \u5C0F\u65F6\u524D`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return lang === "en" ? `${days}d ago` : `${days} \u5929\u524D`;
+    return localDate(timestamp, lang);
+  }
+  function backendLabel(backend, lang = "zh") {
+    const labels = {
+      subscription: "Claude",
+      codex: "Codex",
+      opencode: "OpenCode"
+    };
+    return labels[backend] || (lang === "en" ? "Unknown" : "\u672A\u77E5");
+  }
+
+  // src/screens/SessionDrawer.jsx
+  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
+  var C = {
+    zh: {
+      title: "\u4F1A\u8BDD\u5386\u53F2",
+      close: "\u5173\u95ED",
+      search: "\u641C\u7D22\u4F1A\u8BDD",
+      create: "\u65B0\u4F1A\u8BDD",
+      active: "\u8FDB\u884C\u4E2D",
+      archived: "\u5DF2\u5F52\u6863",
+      current: "\u4F7F\u7528\u4E2D",
+      rename: "\u6539\u540D",
+      archive: "\u5F52\u6863",
+      restore: "\u8FD8\u539F",
+      remove: "\u5220\u9664",
+      confirmRemove: "\u786E\u8BA4\u5220\u9664\uFF1F",
+      cancel: "\u53D6\u6D88",
+      emptyActive: "\u8FD8\u6CA1\u6709\u5386\u53F2\u4F1A\u8BDD",
+      emptyArchived: "\u5F52\u6863\u533A\u4E3A\u7A7A"
+    },
+    en: {
+      title: "Session history",
+      close: "Close",
+      search: "Search sessions",
+      create: "New session",
+      active: "Active",
+      archived: "Archived",
+      current: "In use",
+      rename: "Rename",
+      archive: "Archive",
+      restore: "Restore",
+      remove: "Delete",
+      confirmRemove: "Delete permanently?",
+      cancel: "Cancel",
+      emptyActive: "No session history yet",
+      emptyArchived: "No archived sessions"
+    }
+  };
+  function SessionDrawer({
+    open = false,
+    onClose,
+    lang = "zh",
+    sessions = [],
+    activeId = null,
+    onNew,
+    onSwitch,
+    onRename,
+    onArchive,
+    onUnarchive,
+    onDelete
+  }) {
+    const t = C[lang] || C.zh;
+    const [search, setSearch] = import_react28.default.useState("");
+    const [view, setView] = import_react28.default.useState("active");
+    const [editingId, setEditingId] = import_react28.default.useState(null);
+    const [editingTitle, setEditingTitle] = import_react28.default.useState("");
+    const [confirmId, setConfirmId] = import_react28.default.useState(null);
+    const now = Date.now();
+    const archived = view === "archived";
+    const visible = sortSessions(filterSessions(sessions, { archived, search }));
+    const submitRename = (id) => {
+      if (onRename) onRename(id, editingTitle);
+      setEditingId(null);
+      setEditingTitle("");
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)", flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+          Input,
+          {
+            value: search,
+            onChange: setSearch,
+            placeholder: t.search,
+            ariaLabel: t.search,
+            icon: "search",
+            style: { flex: "1 1 150px" }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+          Button,
+          {
+            variant: "primary",
+            size: "sm",
+            icon: "plus",
+            onClick: () => {
+              if (onNew) onNew();
+              if (onClose) onClose();
+            },
+            children: t.create
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+        Segmented,
+        {
+          full: true,
+          value: view,
+          onChange: (value) => {
+            setView(value);
+            setConfirmId(null);
+            setEditingId(null);
+          },
+          options: [
+            { value: "active", label: t.active },
+            { value: "archived", label: t.archived }
+          ]
+        }
+      ),
+      visible.length ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { display: "flex", flexDirection: "column", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", overflow: "hidden" }, children: visible.map((meta) => {
+        const current = meta.id === activeId;
+        const editing = editingId === meta.id;
+        const confirming = confirmId === meta.id;
+        return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
+          "div",
+          {
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-1)",
+              minWidth: 0,
+              padding: "var(--space-15) var(--space-1) var(--space-15) var(--space-2)",
+              background: current ? "var(--bg-selected)" : "var(--bg-well)",
+              borderBottom: "1px solid var(--border-subtle)"
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+                editing ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+                  Input,
+                  {
+                    value: editingTitle,
+                    onChange: setEditingTitle,
+                    autoFocus: true,
+                    ariaLabel: t.rename,
+                    onKeyDown: (event) => {
+                      if (event.key === "Enter") submitRename(meta.id);
+                      if (event.key === "Escape") setEditingId(null);
+                    }
+                  }
+                ) : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
+                  "button",
+                  {
+                    type: "button",
+                    className: "ds-focusable",
+                    onClick: () => {
+                      if (onSwitch) onSwitch(meta.id);
+                      if (onClose) onClose();
+                    },
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "var(--space-1)",
+                      width: "100%",
+                      minWidth: 0,
+                      padding: 0,
+                      color: "var(--text-primary)",
+                      background: "transparent",
+                      border: 0,
+                      textAlign: "left",
+                      cursor: "pointer"
+                    },
+                    children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", font: "var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)" }, children: displayTitle(meta, lang) }),
+                      current ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "accent", children: t.current }) : null
+                    ]
+                  }
+                ),
+                !editing ? /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, minWidth: 0, marginTop: 3 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "neutral", children: backendLabel(meta.backend, lang) }),
+                  meta.model ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "neutral", children: meta.model }) : null,
+                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { minWidth: 0, color: "var(--text-tertiary)", font: "var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: relativeTime(meta.updatedAt, now, lang) })
+                ] }) : null
+              ] }),
+              confirming ? /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flex: "none" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { color: "var(--error)", font: "var(--weight-medium) var(--text-caption)/1 var(--font-ui)" }, children: t.confirmRemove }),
+                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "danger", size: "sm", onClick: () => {
+                  setConfirmId(null);
+                  if (onDelete) onDelete(meta.id);
+                }, children: t.remove }),
+                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setConfirmId(null), children: t.cancel })
+              ] }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", flex: "none" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+                  IconButton,
+                  {
+                    icon: "pencil",
+                    title: t.rename,
+                    onClick: () => {
+                      setEditingId(meta.id);
+                      setEditingTitle(meta.title || "");
+                      setConfirmId(null);
+                    }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+                  IconButton,
+                  {
+                    icon: meta.archived ? "archive-restore" : "archive",
+                    title: meta.archived ? t.restore : t.archive,
+                    onClick: () => meta.archived ? onUnarchive == null ? void 0 : onUnarchive(meta.id) : onArchive == null ? void 0 : onArchive(meta.id)
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "trash-2", danger: true, title: t.remove, onClick: () => {
+                  setConfirmId(meta.id);
+                  setEditingId(null);
+                } })
+              ] })
+            ]
+          },
+          meta.id
+        );
+      }) }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { padding: "var(--space-5) var(--space-2)", textAlign: "center", color: "var(--text-tertiary)", font: "var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)" }, children: archived ? t.emptyArchived : t.emptyActive })
+    ] }) });
+  }
+
   // src/screens/ChatScreen.jsx
   init_cep_runtime_inject();
-  var import_react38 = __toESM(require_react(), 1);
+  var import_react39 = __toESM(require_react(), 1);
 
   // src/components/chat/ChatBubble.jsx
   init_cep_runtime_inject();
-  var import_react29 = __toESM(require_react(), 1);
+  var import_react30 = __toESM(require_react(), 1);
 
   // src/components/chat/AIAvatar.jsx
   init_cep_runtime_inject();
-  var import_react28 = __toESM(require_react(), 1);
-  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
+  var import_react29 = __toESM(require_react(), 1);
+  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
   function AIAvatar({ size = 20, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
       "span",
       {
         "aria-label": "AI",
@@ -23362,13 +23694,13 @@
           borderRadius: "var(--radius-md)",
           ...style
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
       }
     );
   }
 
   // src/components/chat/ChatBubble.jsx
-  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
   function formatAttachmentBytes(value) {
     const bytes = Number(value) || 0;
     if (bytes < 1024) return bytes + " B";
@@ -23389,7 +23721,7 @@
   }) {
     const children = normalizeBreaks(rawChildren);
     if (role === "user") {
-      return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
+      return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
         "div",
         {
           style: {
@@ -23405,8 +23737,8 @@
             whiteSpace: "pre-wrap"
           },
           children: [
-            children ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { children }) : null,
-            attachments.length ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 3, marginTop: children ? 5 : 0 }, children: attachments.map((attachment) => /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
+            children ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { children }) : null,
+            attachments.length ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 3, marginTop: children ? 5 : 0 }, children: attachments.map((attachment) => /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
               "div",
               {
                 style: {
@@ -23418,8 +23750,8 @@
                   font: "var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)"
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: attachment.name }),
-                  /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { flex: "none", color: "var(--text-tertiary)" }, children: formatAttachmentBytes(attachment.size) })
+                  /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: attachment.name }),
+                  /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { flex: "none", color: "var(--text-tertiary)" }, children: formatAttachmentBytes(attachment.size) })
                 ]
               },
               attachment.id
@@ -23428,9 +23760,9 @@
         }
       ) });
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "flex-start", ...style }, children: [
-      avatar ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(AIAvatar, { style: { marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { width: 20, flex: "none" } }),
-      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "flex-start", ...style }, children: [
+      avatar ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(AIAvatar, { style: { marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { width: 20, flex: "none" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
         "div",
         {
           style: {
@@ -23443,7 +23775,7 @@
           },
           children: [
             children,
-            streaming ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+            streaming ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
               "span",
               {
                 style: {
@@ -23466,15 +23798,15 @@
 
   // src/components/chat/ToolCallCard.jsx
   init_cep_runtime_inject();
-  var import_react30 = __toESM(require_react(), 1);
-  var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
+  var import_react31 = __toESM(require_react(), 1);
+  var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
   function StatusGlyph({ status }) {
-    if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Spinner, { size: 12 });
-    if (status === "error") return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Icon2, { name: "x", size: 12, strokeWidth: 2.5, color: "var(--error)" });
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.5, color: "var(--ok)" });
+    if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Spinner, { size: 12 });
+    if (status === "error") return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "x", size: 12, strokeWidth: 2.5, color: "var(--error)" });
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.5, color: "var(--ok)" });
   }
   function ParamsBlock({ params }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
       "pre",
       {
         style: {
@@ -23494,7 +23826,7 @@
     );
   }
   function DetailsBlock({ details }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
       "pre",
       {
         style: {
@@ -23514,8 +23846,8 @@
     );
   }
   function HeaderRow({ status, verb, target, expandable, expanded, onToggle }) {
-    const [hover, setHover] = import_react30.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+    const [hover, setHover] = import_react31.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
       "div",
       {
         role: expandable ? "button" : void 0,
@@ -23533,9 +23865,9 @@
           transition: "background var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(StatusGlyph, { status }),
-          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-medium) var(--text-body)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
-          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(StatusGlyph, { status }),
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-medium) var(--text-body)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
             "span",
             {
               style: {
@@ -23550,7 +23882,7 @@
               children: target
             }
           ),
-          expandable ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+          expandable ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
             Icon2,
             {
               name: "chevron-down",
@@ -23579,11 +23911,11 @@
     retryLabel = "\u91CD\u8BD5",
     style
   }) {
-    const [expanded, setExpanded] = import_react30.default.useState(defaultExpanded);
+    const [expanded, setExpanded] = import_react31.default.useState(defaultExpanded);
     const isGroup = Array.isArray(steps) && steps.length > 0;
     const hasDetails = details !== void 0 && details !== null && details !== "";
     const expandable = isGroup || params != null || hasDetails;
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
       "div",
       {
         style: {
@@ -23595,7 +23927,7 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
             HeaderRow,
             {
               status,
@@ -23606,14 +23938,14 @@
               onToggle: () => setExpanded(!expanded)
             }
           ),
-          expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+          expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
             "div",
             {
               style: { display: "flex", alignItems: "center", gap: "var(--space-15)", minHeight: 22, padding: "0 var(--space-2) 0 var(--space-5)" },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(StatusGlyph, { status: s.status || "success" }),
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "nowrap" }, children: s.verb }),
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(StatusGlyph, { status: s.status || "success" }),
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "nowrap" }, children: s.verb }),
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
                   "span",
                   {
                     style: {
@@ -23632,9 +23964,9 @@
             },
             i
           )) }) : null,
-          expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(ParamsBlock, { params }) : null,
-          expanded && !isGroup && hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(DetailsBlock, { details }) : null,
-          status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+          expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(ParamsBlock, { params }) : null,
+          expanded && !isGroup && hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(DetailsBlock, { details }) : null,
+          status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
             "div",
             {
               style: {
@@ -23646,10 +23978,10 @@
                 background: "var(--error-bg)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
-                  hint ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: hint }) : null,
-                  hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
+                  hint ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: hint }) : null,
+                  hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
                     "button",
                     {
                       type: "button",
@@ -23659,7 +23991,7 @@
                     }
                   ) : null
                 ] }),
-                onRetry ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
+                onRetry ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
               ]
             }
           ) : null
@@ -23670,8 +24002,8 @@
 
   // src/components/chat/ApprovalCard.jsx
   init_cep_runtime_inject();
-  var import_react31 = __toESM(require_react(), 1);
-  var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
+  var import_react32 = __toESM(require_react(), 1);
+  var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
   var L = {
     zh: {
       needs: "\u9700\u8981\u6279\u51C6",
@@ -23706,10 +24038,10 @@
     onAllowSession,
     style
   }) {
-    const [expanded, setExpanded] = import_react31.default.useState(false);
+    const [expanded, setExpanded] = import_react32.default.useState(false);
     const t = L[lang] || L.zh;
     const high = risk === "high";
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
       "div",
       {
         style: {
@@ -23721,19 +24053,19 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: high ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Badge, { status: "error", icon: "shield-alert", children: t.high }) : /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Badge, { status: "warn", icon: "shield", children: t.needs }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-            description ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: description }) : null,
-            params != null ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(ApprovalParams, { t, expanded, onToggle: () => setExpanded(!expanded), params }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: high ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "error", icon: "shield-alert", children: t.high }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "warn", icon: "shield", children: t.needs }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            description ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: description }) : null,
+            params != null ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ApprovalParams, { t, expanded, onToggle: () => setExpanded(!expanded), params }) : null
           ] }),
-          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: high ? "danger" : "primary", full: true, onClick: onAllow, children: t.allow }),
-              /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: "secondary", full: true, onClick: onDeny, children: t.deny })
+          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: high ? "danger" : "primary", full: true, onClick: onAllow, children: t.allow }),
+              /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "secondary", full: true, onClick: onDeny, children: t.deny })
             ] }),
-            onAllowSession && !high ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { variant: "ghost", size: "sm", onClick: onAllowSession, style: { alignSelf: "flex-start", color: "var(--text-tertiary)" }, children: t.session }) : null
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+            onAllowSession && !high ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "ghost", size: "sm", onClick: onAllowSession, style: { alignSelf: "flex-start", color: "var(--text-tertiary)" }, children: t.session }) : null
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
             "div",
             {
               style: {
@@ -23746,7 +24078,7 @@
                 color: state === "allowed" ? "var(--ok)" : "var(--text-tertiary)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: state === "allowed" ? "check" : "x", size: 12, strokeWidth: 2.5 }),
+                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: state === "allowed" ? "check" : "x", size: 12, strokeWidth: 2.5 }),
                 state === "allowed" ? t.allowed : t.denied
               ]
             }
@@ -23756,9 +24088,9 @@
     );
   }
   function ApprovalParams({ t, expanded, onToggle, params }) {
-    const [hover, setHover] = import_react31.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+    const [hover, setHover] = import_react32.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
         "button",
         {
           type: "button",
@@ -23779,12 +24111,12 @@
             color: hover ? "var(--text-secondary)" : "var(--text-tertiary)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "chevron-right", size: 11, style: { transform: expanded ? "rotate(90deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" } }),
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: "chevron-right", size: 11, style: { transform: expanded ? "rotate(90deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" } }),
             t.params
           ]
         }
       ),
-      expanded ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
         "pre",
         {
           style: {
@@ -23808,7 +24140,7 @@
 
   // src/components/chat/QuestionCard.jsx
   init_cep_runtime_inject();
-  var import_react32 = __toESM(require_react(), 1);
+  var import_react33 = __toESM(require_react(), 1);
 
   // src/lib/questionForm.js
   init_cep_runtime_inject();
@@ -23976,7 +24308,7 @@
   }
 
   // src/components/chat/QuestionCard.jsx
-  var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
   var L2 = {
     zh: {
       needs: "\u9700\u8981\u56DE\u7B54",
@@ -24007,8 +24339,8 @@
   };
   var OTHER_KEY = "__ae_mcp_other__";
   function OptionRow({ selected, multiSelect, label, description, onToggle }) {
-    const [hover, setHover] = import_react32.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+    const [hover, setHover] = import_react33.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
       "button",
       {
         type: "button",
@@ -24033,7 +24365,7 @@
           font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
             "span",
             {
               "aria-hidden": true,
@@ -24050,12 +24382,12 @@
                 background: selected ? "var(--accent)" : "transparent",
                 color: "var(--text-on-solid)"
               },
-              children: selected ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: "check", size: 9, strokeWidth: 3 }) : null
+              children: selected ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: "check", size: 9, strokeWidth: 3 }) : null
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("span", { style: { minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: label }),
-            description ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: label }),
+            description ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
               "span",
               {
                 style: {
@@ -24091,12 +24423,12 @@
     const selected = Array.isArray(selection) ? selection : selection ? [selection] : [];
     const customActive = selected.includes(OTHER_KEY);
     const freeText = !question.options.length;
-    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
         question.prompt || question.header || question.key,
-        question.multiSelect ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { marginLeft: 6, color: "var(--text-tertiary)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: t.multiHint }) : null
+        question.multiSelect ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { marginLeft: 6, color: "var(--text-tertiary)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: t.multiHint }) : null
       ] }),
-      freeText ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+      freeText ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
         "textarea",
         {
           rows: 2,
@@ -24106,8 +24438,8 @@
           onChange: (event) => onCustomText(event.target.value),
           style: textInputStyle(Boolean(error))
         }
-      ) : /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, role: question.multiSelect ? "group" : "radiogroup", children: [
-        question.options.map((option2) => /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+      ) : /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, role: question.multiSelect ? "group" : "radiogroup", children: [
+        question.options.map((option2) => /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
           OptionRow,
           {
             multiSelect: question.multiSelect,
@@ -24118,7 +24450,7 @@
           },
           option2.label
         )),
-        question.allowCustom ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+        question.allowCustom ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
           OptionRow,
           {
             multiSelect: question.multiSelect,
@@ -24128,7 +24460,7 @@
             onToggle: () => onSelect(OTHER_KEY)
           }
         ) : null,
-        question.allowCustom && customActive ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+        question.allowCustom && customActive ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
           "textarea",
           {
             rows: 1,
@@ -24140,7 +24472,7 @@
           }
         ) : null
       ] }),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { color: "var(--error)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: error === "invalid-option" ? t.invalidOption : t.required }) : null
+      error ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { color: "var(--error)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: error === "invalid-option" ? t.invalidOption : t.required }) : null
     ] });
   }
   function collectQuestionValues(questions, selections, customTexts) {
@@ -24170,9 +24502,9 @@
     style
   }) {
     const t = L2[lang] || L2.zh;
-    const [selections, setSelections] = import_react32.default.useState({});
-    const [customTexts, setCustomTexts] = import_react32.default.useState({});
-    const [errors, setErrors] = import_react32.default.useState({});
+    const [selections, setSelections] = import_react33.default.useState({});
+    const [customTexts, setCustomTexts] = import_react33.default.useState({});
+    const [errors, setErrors] = import_react33.default.useState({});
     const select = (question, label) => {
       setSelections((current) => {
         const previous = current[question.id];
@@ -24198,7 +24530,7 @@
       }
       if (onSubmit) onSubmit(values);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
       "div",
       {
         style: {
@@ -24210,10 +24542,10 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "warn", icon: "message-square", children: t.needs }) }),
-            title ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: title }) : null,
-            state === "pending" ? questions.map((question) => /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Badge, { status: "warn", icon: "message-square", children: t.needs }) }),
+            title ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: title }) : null,
+            state === "pending" ? questions.map((question) => /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
               QuestionField,
               {
                 question,
@@ -24227,10 +24559,10 @@
               question.id
             )) : null
           ] }),
-          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "primary", full: true, onClick: submit, children: t.submit }),
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "secondary", full: true, onClick: onCancel, children: t.cancel })
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Button, { variant: "primary", full: true, onClick: submit, children: t.submit }),
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Button, { variant: "secondary", full: true, onClick: onCancel, children: t.cancel })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
             "div",
             {
               style: {
@@ -24243,8 +24575,8 @@
                 color: state === "answered" ? "var(--ok)" : "var(--text-tertiary)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: state === "answered" ? "check" : "x", size: 12, strokeWidth: 2.5, style: { marginTop: 1 } }),
-                /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("span", { style: { minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: state === "answered" ? "check" : "x", size: 12, strokeWidth: 2.5, style: { marginTop: 1 } }),
+                /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
                   state === "answered" ? t.answered : t.cancelled,
                   state === "answered" && answers && Object.keys(answers).length ? ": " + Object.values(answers).join(" \xB7 ") : ""
                 ] })
@@ -24258,11 +24590,11 @@
 
   // src/components/chat/PromptCard.jsx
   init_cep_runtime_inject();
-  var import_react33 = __toESM(require_react(), 1);
-  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
+  var import_react34 = __toESM(require_react(), 1);
+  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
   function PromptCard({ icon = "wand-2", title, caption, onClick, style }) {
-    const [hover, setHover] = import_react33.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+    const [hover, setHover] = import_react34.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
       "button",
       {
         type: "button",
@@ -24285,10 +24617,10 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-            caption ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            caption ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
           ] })
         ]
       }
@@ -24297,11 +24629,11 @@
 
   // src/components/chat/Composer.jsx
   init_cep_runtime_inject();
-  var import_react35 = __toESM(require_react(), 1);
+  var import_react36 = __toESM(require_react(), 1);
 
   // src/components/chat/AttachmentPond.jsx
   init_cep_runtime_inject();
-  var import_react34 = __toESM(require_react(), 1);
+  var import_react35 = __toESM(require_react(), 1);
   var import_react_filepond = __toESM(require_react_filepond(), 1);
   var import_filepond_plugin_image_preview = __toESM(require_filepond_plugin_image_preview(), 1);
 
@@ -24414,7 +24746,7 @@
   }
 
   // src/components/chat/AttachmentPond.jsx
-  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
   (0, import_react_filepond.registerPlugin)(import_filepond_plugin_image_preview.default);
   var DEFAULT_LABELS = {
     add: "\u6DFB\u52A0\u6587\u4EF6 Add files",
@@ -24434,7 +24766,7 @@
   function findItem(items, fileItem) {
     return items.find((item) => item.pondId === (fileItem == null ? void 0 : fileItem.id) || item.file === (fileItem == null ? void 0 : fileItem.file));
   }
-  var AttachmentPond = import_react34.default.forwardRef(function AttachmentPond2({
+  var AttachmentPond = import_react35.default.forwardRef(function AttachmentPond2({
     items = [],
     disabled = false,
     labels: suppliedLabels,
@@ -24442,11 +24774,11 @@
     onRemoveAttachment,
     onRetryAttachment
   }, forwardedRef) {
-    const pondRef = import_react34.default.useRef(null);
+    const pondRef = import_react35.default.useRef(null);
     const labels = { ...DEFAULT_LABELS, ...suppliedLabels || {} };
     const pondFiles = items.map((item) => item.file).filter(Boolean);
     const labelIdle = labels.drop + ' <span class="filepond--label-action">' + labels.add + "</span>";
-    import_react34.default.useImperativeHandle(forwardedRef, () => ({
+    import_react35.default.useImperativeHandle(forwardedRef, () => ({
       addFiles(files) {
         var _a;
         return (_a = pondRef.current) == null ? void 0 : _a.addFiles(Array.from(files || []));
@@ -24461,8 +24793,8 @@
       const item = findItem(items, fileItem);
       if (item) onRemoveAttachment == null ? void 0 : onRemoveAttachment(item);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { className: "ae-attachment-pond", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "ae-attachment-pond", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
         import_react_filepond.FilePond,
         {
           ref: pondRef,
@@ -24481,19 +24813,19 @@
           onremovefile: handleRemove
         }
       ),
-      items.length ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { className: "ae-attachment-status-list", "aria-live": "polite", children: items.map((item) => {
+      items.length ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "ae-attachment-status-list", "aria-live": "polite", children: items.map((item) => {
         var _a, _b, _c, _d, _e, _f;
-        return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+        return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
           "div",
           {
             className: `ae-attachment-status ae-attachment-status--${item.status}`,
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: "paperclip", size: 12 }),
-              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { className: "ae-attachment-status__name", children: ((_a = item.file) == null ? void 0 : _a.name) || ((_b = item.ref) == null ? void 0 : _b.name) }),
-              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { className: "ae-attachment-status__size", children: formatBytes((_e = (_c = item.file) == null ? void 0 : _c.size) != null ? _e : (_d = item.ref) == null ? void 0 : _d.size) }),
-              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { className: "ae-attachment-status__state", children: item.status === "staging" ? labels.staging : item.status === "error" ? ((_f = item.error) == null ? void 0 : _f.message) || labels.retry : labels.ready }),
-              item.status === "error" ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("button", { type: "button", onClick: () => onRetryAttachment == null ? void 0 : onRetryAttachment(item), children: labels.retry }) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("button", { type: "button", onClick: () => onRemoveAttachment == null ? void 0 : onRemoveAttachment(item), children: labels.remove })
+              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "paperclip", size: 12 }),
+              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "ae-attachment-status__name", children: ((_a = item.file) == null ? void 0 : _a.name) || ((_b = item.ref) == null ? void 0 : _b.name) }),
+              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "ae-attachment-status__size", children: formatBytes((_e = (_c = item.file) == null ? void 0 : _c.size) != null ? _e : (_d = item.ref) == null ? void 0 : _d.size) }),
+              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "ae-attachment-status__state", children: item.status === "staging" ? labels.staging : item.status === "error" ? ((_f = item.error) == null ? void 0 : _f.message) || labels.retry : labels.ready }),
+              item.status === "error" ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { type: "button", onClick: () => onRetryAttachment == null ? void 0 : onRetryAttachment(item), children: labels.retry }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { type: "button", onClick: () => onRemoveAttachment == null ? void 0 : onRemoveAttachment(item), children: labels.remove })
             ]
           },
           item.pondId
@@ -24779,7 +25111,7 @@
   }
 
   // src/components/chat/Composer.jsx
-  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
   function ComposerResizeHandle({
     height,
     minHeight,
@@ -24787,10 +25119,10 @@
     onHeightChange,
     onHeightReset
   }) {
-    const [hover, setHover] = import_react35.default.useState(false);
-    const [dragging, setDragging] = import_react35.default.useState(false);
-    const [focused, setFocused] = import_react35.default.useState(false);
-    const dragRef = import_react35.default.useRef(null);
+    const [hover, setHover] = import_react36.default.useState(false);
+    const [dragging, setDragging] = import_react36.default.useState(false);
+    const [focused, setFocused] = import_react36.default.useState(false);
+    const dragRef = import_react36.default.useRef(null);
     const clearDrag = (updateState = true) => {
       const active = dragRef.current;
       if (!active) return;
@@ -24800,7 +25132,7 @@
       dragRef.current = null;
       if (updateState) setDragging(false);
     };
-    import_react35.default.useEffect(() => () => clearDrag(false), []);
+    import_react36.default.useEffect(() => () => clearDrag(false), []);
     const handleMouseDown = (event) => {
       if (event.button !== 0) return;
       event.currentTarget.focus();
@@ -24832,7 +25164,7 @@
       event.preventDefault();
       onHeightChange == null ? void 0 : onHeightChange(nextHeight);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
       "div",
       {
         style: {
@@ -24849,7 +25181,7 @@
           boxShadow: focused ? "0 0 0 1px var(--focus-ring)" : "none"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
             "input",
             {
               type: "text",
@@ -24883,7 +25215,7 @@
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
             "span",
             {
               role: "separator",
@@ -24924,8 +25256,8 @@
     onRetryAttachment,
     attachmentLabels
   }) {
-    const [focus, setFocus] = import_react35.default.useState(false);
-    const attachmentPondRef = import_react35.default.useRef(null);
+    const [focus, setFocus] = import_react36.default.useState(false);
+    const attachmentPondRef = import_react36.default.useRef(null);
     const readyAttachmentCount = readyAttachments(attachmentDraft).length;
     const attachmentsBusy = draftIsBusy(attachmentDraft) || attachmentDraft.items.some((item) => item.status === "error");
     const canSend = !disabled && !streaming && !attachmentsBusy && (value.trim().length > 0 || readyAttachmentCount > 0);
@@ -24950,9 +25282,9 @@
       event.stopPropagation();
       (_a = attachmentPondRef.current) == null ? void 0 : _a.addFiles(files);
     };
-    const dropStateRef = import_react35.default.useRef(null);
+    const dropStateRef = import_react36.default.useRef(null);
     dropStateRef.current = { disabled, streaming, pendingTurnId: attachmentDraft.pendingTurnId };
-    import_react35.default.useEffect(() => {
+    import_react36.default.useEffect(() => {
       const guard = createPanelFileDropGuard({
         target: window,
         canAttach: () => {
@@ -24966,10 +25298,10 @@
       });
       return guard.dispose;
     }, []);
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
       notice,
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { display: "flex", flexDirection: "column", minHeight: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", minHeight: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
           ComposerResizeHandle,
           {
             height,
@@ -24979,7 +25311,7 @@
             onHeightReset
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
           "div",
           {
             style: {
@@ -25001,7 +25333,7 @@
             onDragOverCapture: handleFileDrag,
             onDropCapture: handleFileDrop,
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
                 AttachmentPond,
                 {
                   ref: attachmentPondRef,
@@ -25013,8 +25345,8 @@
                   onRetryAttachment
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { flex: 1, minWidth: 0, minHeight: 0, display: "flex", alignItems: "stretch", gap: "var(--space-15)" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { flex: 1, minWidth: 0, minHeight: 0, display: "flex", alignItems: "stretch", gap: "var(--space-15)" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
                   "textarea",
                   {
                     rows: 1,
@@ -25040,11 +25372,11 @@
                     }
                   }
                 ),
-                !options ? streaming ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 }) : null
+                !options ? streaming ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 }) : null
               ] }),
-              options ? /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { flex: "none", display: "flex", alignItems: "center", gap: 2, minWidth: 0, overflow: "visible" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
-                streaming ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+              options ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { flex: "none", display: "flex", alignItems: "center", gap: 2, minWidth: 0, overflow: "visible" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
+                streaming ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
               ] }) : null
             ]
           }
@@ -25053,9 +25385,9 @@
     ] });
   }
   function SendButton({ icon, title, kind, disabled = false, onClick }) {
-    const [hover, setHover] = import_react35.default.useState(false);
+    const [hover, setHover] = import_react36.default.useState(false);
     const active = kind === "send" && !disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
       "button",
       {
         type: "button",
@@ -25082,21 +25414,21 @@
           cursor: disabled ? "default" : "pointer",
           transition: "background var(--dur-fast) var(--ease-out)"
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
       }
     );
   }
 
   // src/components/chat/ComposerChip.jsx
   init_cep_runtime_inject();
-  var import_react37 = __toESM(require_react(), 1);
+  var import_react38 = __toESM(require_react(), 1);
 
   // src/components/core/Menu.jsx
   init_cep_runtime_inject();
-  var import_react36 = __toESM(require_react(), 1);
-  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
+  var import_react37 = __toESM(require_react(), 1);
+  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
   function Keycap({ children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
       "span",
       {
         style: {
@@ -25117,9 +25449,9 @@
     );
   }
   function MenuRow({ item, onClose }) {
-    const [hover, setHover] = import_react36.default.useState(false);
+    const [hover, setHover] = import_react37.default.useState(false);
     const disabled = !!item.disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
       "button",
       {
         type: "button",
@@ -25148,15 +25480,15 @@
           transition: "background var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
-          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
-          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
+          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
+          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
         ]
       }
     );
   }
   function Menu({ header, items = [], footer, onClose, minWidth = 184, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
       "div",
       {
         role: "menu",
@@ -25170,7 +25502,7 @@
           ...style
         },
         children: [
-          header ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
+          header ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
             "div",
             {
               style: {
@@ -25183,15 +25515,15 @@
                 marginBottom: "var(--space-1)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
-                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Keycap, { children: k }, i)) }) : null
+                /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
+                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Keycap, { children: k }, i)) }) : null
               ]
             }
           ) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
-            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(MenuRow, { item, onClose }, i)
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
+            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(MenuRow, { item, onClose }, i)
           ) }),
-          footer ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+          footer ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
             "div",
             {
               style: {
@@ -25210,7 +25542,7 @@
   }
 
   // src/components/chat/ComposerChip.jsx
-  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
   function ComposerChip({
     icon,
     label,
@@ -25224,11 +25556,11 @@
     title,
     style
   }) {
-    const [hover, setHover] = import_react37.default.useState(false);
-    const [open, setOpen] = import_react37.default.useState(false);
-    const rootRef = import_react37.default.useRef(null);
+    const [hover, setHover] = import_react38.default.useState(false);
+    const [open, setOpen] = import_react38.default.useState(false);
+    const rootRef = import_react38.default.useRef(null);
     const isMenu = Array.isArray(items) && items.length > 0;
-    import_react37.default.useEffect(() => {
+    import_react38.default.useEffect(() => {
       if (!open) return void 0;
       const onDoc = (e) => {
         if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
@@ -25244,8 +25576,8 @@
       };
     }, [open]);
     const lit = active || open;
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(
         "button",
         {
           type: "button",
@@ -25278,14 +25610,14 @@
             whiteSpace: "nowrap"
           },
           children: [
-            icon ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: icon, size: 12 }) : null,
-            label ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
-            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
-            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
+            icon ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Icon2, { name: icon, size: 12 }) : null,
+            label ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
+            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
+            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
           ]
         }
       ),
-      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         "div",
         {
           style: {
@@ -25295,7 +25627,7 @@
             zIndex: 30,
             animation: "ds-fade-up var(--dur-base) var(--ease-out)"
           },
-          children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
+          children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
         }
       ) : null
     ] });
@@ -25950,8 +26282,8 @@
   }
 
   // src/screens/ChatScreen.jsx
-  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
-  var C = {
+  var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
+  var C2 = {
     zh: {
       hello: "\u4F60\u597D\uFF01\u6211\u53EF\u4EE5\u76F4\u63A5\u64CD\u4F5C\u5F53\u524D\u6253\u5F00\u7684 AE \u5DE5\u7A0B\u3002\u8BD5\u8BD5\u8FD9\u4E9B\uFF1A",
       keyTitle: "\u5728\u8BBE\u7F6E\u7684 Provider \u7BA1\u7406\u4E2D\u9009\u62E9\u53EF\u7528\u6E20\u9053",
@@ -26022,10 +26354,10 @@
     ]
   };
   function Notice({ text, actionLabel, onAction }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
-      onAction ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
+      onAction ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
     ] });
   }
   function statusForTool(state) {
@@ -26044,15 +26376,15 @@
     return eventTitle({ undoGroup: `MCP ${entry2.name || ""}` }, lang);
   }
   function Entry({ entry: entry2, lang, onApprove, onAnswerQuestion }) {
-    const t = C[lang] || C.zh;
+    const t = C2[lang] || C2.zh;
     if (entry2.type === "user-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ChatBubble, { role: "user", attachments: entry2.attachments, children: entry2.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(ChatBubble, { role: "user", attachments: entry2.attachments, children: entry2.text });
     }
     if (entry2.type === "ai-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ChatBubble, { role: "ai", children: entry2.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(ChatBubble, { role: "ai", children: entry2.text });
     }
     if (entry2.type === "question") {
-      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         QuestionCard,
         {
           lang,
@@ -26067,8 +26399,8 @@
     }
     if (entry2.type === "tool-call") {
       const highRisk = entry2.risk === "destructive" || entry2.risk === "external";
-      return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
           ToolCallCard,
           {
             verb: titleForTool(entry2, lang),
@@ -26078,7 +26410,7 @@
             errorMessage: entry2.state === "error" ? entry2.text : null
           }
         ),
-        entry2.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+        entry2.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
           ApprovalCard,
           {
             risk: highRisk ? "high" : "normal",
@@ -26095,7 +26427,7 @@
     }
     if (entry2.type === "error") {
       const details = formatErrorDetail(entry2.detail);
-      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         ToolCallCard,
         {
           verb: entry2.kind === "model" ? t.modelErrorTitle : t.errorTitle,
@@ -26145,22 +26477,22 @@
     onRemoveAttachment,
     onRetryAttachment
   }) {
-    const t = C[lang] || C.zh;
-    const logRef = import_react38.default.useRef(null);
-    const layoutRef = import_react38.default.useRef(null);
-    const footerRef = import_react38.default.useRef(null);
-    const [composerSize, dispatchComposerSize] = import_react38.default.useReducer(
+    const t = C2[lang] || C2.zh;
+    const logRef = import_react39.default.useRef(null);
+    const layoutRef = import_react39.default.useRef(null);
+    const footerRef = import_react39.default.useRef(null);
+    const [composerSize, dispatchComposerSize] = import_react39.default.useReducer(
       reduceComposerHeight,
       void 0,
       () => createComposerHeightState()
     );
-    const composerHeightRef = import_react38.default.useRef(composerSize.height);
+    const composerHeightRef = import_react39.default.useRef(composerSize.height);
     composerHeightRef.current = composerSize.height;
     const hasEntries = entries.length > 0;
     const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
     const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
-    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(import_react38.default.Fragment, { children: [
-      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(import_react39.default.Fragment, { children: [
+      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         ComposerChip,
         {
           icon: "box",
@@ -26170,7 +26502,7 @@
           items: menuItems(chips.model.items, chipState.modelId, onChipModel)
         }
       ) : null,
-      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         ComposerChip,
         {
           icon: "brain",
@@ -26180,7 +26512,7 @@
           items: menuItems(chips.effort.items, chipState.effort, onChipEffort)
         }
       ) : null,
-      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         ComposerChip,
         {
           icon: "zap",
@@ -26190,7 +26522,7 @@
           onToggle: (next) => onChipFast && onChipFast(next)
         }
       ) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         ComposerChip,
         {
           icon: "shield",
@@ -26201,11 +26533,11 @@
         }
       )
     ] }) : null;
-    import_react38.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }, [entries, streaming, thinking]);
-    import_react38.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       if (typeof ResizeObserver !== "function") return void 0;
       if (!layoutRef.current || !footerRef.current) return void 0;
       const measureComposerBounds = () => {
@@ -26251,19 +26583,19 @@
       retry: t.attachmentRetry,
       remove: t.attachmentRemove
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
-        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(import_react38.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(AIAvatar, { size: 32 }),
-          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
-          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
+    return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
+        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(import_react39.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(AIAvatar, { size: 32 }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
         ] }) }) : null,
-        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(import_react38.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(AIAvatar, { size: 32 }),
-            /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
+        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(import_react39.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(AIAvatar, { size: 32 }),
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
           ] }),
-          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
             PromptCard,
             {
               icon: card.icon,
@@ -26277,13 +26609,13 @@
             card.id || card.title
           ))
         ] }) : null,
-        entries.map((entry2) => /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Entry, { entry: entry2, lang, onApprove, onAnswerQuestion }, entry2.id)),
-        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Spinner, { size: 12 }),
-          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { children: t.thinking })
+        entries.map((entry2) => /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Entry, { entry: entry2, lang, onApprove, onAnswerQuestion }, entry2.sid || entry2.id)),
+        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Spinner, { size: 12 }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: t.thinking })
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         Composer,
         {
           value: attachmentDraft.text,
@@ -26294,7 +26626,7 @@
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
             Notice,
             {
               text: attachmentDraft.dispatchState === "uncertain" ? t.uncertainTurn : sendError.message,
@@ -26319,12 +26651,12 @@
 
   // src/screens/ToolsScreen.jsx
   init_cep_runtime_inject();
-  var import_react40 = __toESM(require_react(), 1);
+  var import_react41 = __toESM(require_react(), 1);
 
   // src/components/forms/Textarea.jsx
   init_cep_runtime_inject();
-  var import_react39 = __toESM(require_react(), 1);
-  var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
+  var import_react40 = __toESM(require_react(), 1);
+  var import_jsx_runtime38 = __toESM(require_jsx_runtime(), 1);
   function Textarea({
     value,
     onChange,
@@ -26335,8 +26667,8 @@
     rows = 5,
     style
   }) {
-    const [focused, setFocused] = import_react39.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+    const [focused, setFocused] = import_react40.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
       "textarea",
       {
         className: "ds-focusable",
@@ -26370,7 +26702,7 @@
   }
 
   // src/screens/ToolsScreen.jsx
-  var import_jsx_runtime38 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
   var TEXT = {
     zh: {
       title: "\u5DE5\u5177\u5E93",
@@ -26433,7 +26765,7 @@
   }
   function ItemRow({ mode, item, selected, onSelect }) {
     const id = itemId(mode, item);
-    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(
       "button",
       {
         type: "button",
@@ -26452,7 +26784,7 @@
         },
         "data-item-id": id,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
             "span",
             {
               style: {
@@ -26465,7 +26797,7 @@
               children: item.name || item.id
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
             "span",
             {
               style: {
@@ -26486,18 +26818,18 @@
   }
   function ToolsScreen({ api, lang = "zh" }) {
     const t = TEXT[lang] || TEXT.zh;
-    const [mode, setMode] = import_react40.default.useState("tools");
-    const [query, setQuery] = import_react40.default.useState("");
-    const [items, setItems] = import_react40.default.useState([]);
-    const [selectedId, setSelectedId] = import_react40.default.useState("");
-    const [detail, setDetail] = import_react40.default.useState(null);
-    const [argsText, setArgsText] = import_react40.default.useState("{}");
-    const [result, setResult] = import_react40.default.useState(null);
-    const [busy, setBusy] = import_react40.default.useState(false);
-    const [error, setError] = import_react40.default.useState("");
-    const loadSequence = import_react40.default.useRef(0);
-    const selectSequence = import_react40.default.useRef(0);
-    const load = import_react40.default.useCallback(async () => {
+    const [mode, setMode] = import_react41.default.useState("tools");
+    const [query, setQuery] = import_react41.default.useState("");
+    const [items, setItems] = import_react41.default.useState([]);
+    const [selectedId, setSelectedId] = import_react41.default.useState("");
+    const [detail, setDetail] = import_react41.default.useState(null);
+    const [argsText, setArgsText] = import_react41.default.useState("{}");
+    const [result, setResult] = import_react41.default.useState(null);
+    const [busy, setBusy] = import_react41.default.useState(false);
+    const [error, setError] = import_react41.default.useState("");
+    const loadSequence = import_react41.default.useRef(0);
+    const selectSequence = import_react41.default.useRef(0);
+    const load = import_react41.default.useCallback(async () => {
       if (!api) return;
       const sequence = loadSequence.current + 1;
       loadSequence.current = sequence;
@@ -26519,7 +26851,7 @@
         if (sequence === loadSequence.current) setError(cause.message || String(cause));
       }
     }, [api, mode, query]);
-    import_react40.default.useEffect(() => {
+    import_react41.default.useEffect(() => {
       const timer = setTimeout(load, 120);
       return () => clearTimeout(timer);
     }, [load]);
@@ -26572,13 +26904,13 @@
     const selectedSchema = selected && (detail.mode === "skills" ? selected.args_schema : selected.argsSchema);
     const selectedContent = selected && (detail.mode === "skills" ? selected.template : selected.content);
     const canExecuteSkill = detail && detail.mode === "skills" && selected.template_type === "jsx";
-    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-screen", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("header", { className: "tools-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-header__title", children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-header__actions", children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "ghost", icon: "rotate-cw", onClick: load, disabled: busy, children: t.refresh }) })
+    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-screen", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("header", { className: "tools-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-header__title", children: t.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-header__actions", children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "ghost", icon: "rotate-cw", onClick: load, disabled: busy, children: t.refresh }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-filters", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-filters", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
           Segmented,
           {
             value: mode,
@@ -26589,7 +26921,7 @@
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
           Input,
           {
             value: query,
@@ -26598,9 +26930,9 @@
           }
         )
       ] }),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-error", role: "alert", children: error }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-split", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("section", { className: "tools-list", "aria-label": mode === "skills" ? t.skills : t.tools, children: items.length ? items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+      error ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-error", role: "alert", children: error }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-split", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("section", { className: "tools-list", "aria-label": mode === "skills" ? t.skills : t.tools, children: items.length ? items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
           ItemRow,
           {
             mode,
@@ -26609,22 +26941,22 @@
             onSelect: select
           },
           itemId(mode, item)
-        )) : /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(EmptyState, { icon: "box", title: t.empty, compact: true }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("section", { className: "tools-detail", children: !selected ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-detail__heading", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h2", { children: selected.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("p", { children: selected.description })
+        )) : /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(EmptyState, { icon: "box", title: t.empty, compact: true }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("section", { className: "tools-detail", children: !selected ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(import_react41.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-detail__heading", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h2", { children: selected.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("p", { children: selected.description })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { status: selected.verified ? "ok" : "neutral", children: selected.verified ? t.signed : detail.mode === "skills" ? t.prompt : t.user })
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: selected.verified ? "ok" : "neutral", children: selected.verified ? t.signed : detail.mode === "skills" ? t.prompt : t.user })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.content }),
-            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: selectedContent || "\u2014" })
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.content }),
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { className: "tools-content", children: selectedContent || "\u2014" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.args }),
-            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.args }),
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
               Textarea,
               {
                 mono: true,
@@ -26633,13 +26965,13 @@
                 rows: Math.max(4, Object.keys((selectedSchema == null ? void 0 : selectedSchema.properties) || {}).length + 2)
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-runner__actions", children: [
-              detail.mode === "skills" ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "secondary", onClick: () => invoke("render"), disabled: busy, children: t.render }) : null,
-              detail.mode === "tools" || canExecuteSkill ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: () => invoke("execute"), disabled: busy, children: t.run }) : null
+            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-runner__actions", children: [
+              detail.mode === "skills" ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "secondary", onClick: () => invoke("render"), disabled: busy, children: t.render }) : null,
+              detail.mode === "tools" || canExecuteSkill ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "primary", onClick: () => invoke("execute"), disabled: busy, children: t.run }) : null
             ] }),
-            result ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.result }),
-              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: JSON.stringify(result, null, 2) })
+            result ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(import_react41.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.result }),
+              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { className: "tools-content", children: JSON.stringify(result, null, 2) })
             ] }) : null
           ] })
         ] }) })
@@ -26649,8 +26981,8 @@
 
   // src/components/tools/ToolApprovalDialog.jsx
   init_cep_runtime_inject();
-  var import_react41 = __toESM(require_react(), 1);
-  var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
+  var import_react42 = __toESM(require_react(), 1);
+  var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
   var L3 = {
     zh: {
       title: "\u6279\u51C6\u5DE5\u5177\u6267\u884C\uFF1F",
@@ -26680,29 +27012,29 @@
     const t = L3[lang] || L3.zh;
     const plan = record.plan || {};
     const resolve = (decision) => onResolve && onResolve({ id: record.id, decision });
-    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve("deny") }),
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-approval", role: "alertdialog", "aria-label": t.title, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-approval__heading", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: t.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: plan.risk === "destructive" || plan.risk === "external" ? "error" : "warn", children: plan.risk })
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve("deny") }),
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-approval", role: "alertdialog", "aria-label": t.title, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-approval__heading", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: t.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: plan.risk === "destructive" || plan.risk === "external" ? "error" : "warn", children: plan.risk })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("dl", { className: "tools-kv", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.artifact }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: plan.artifactId || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.operation }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: plan.operation || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.risk }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: plan.risk || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.args }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { children: JSON.stringify(plan.normalizedArgs || {}, null, 2) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: t.target }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { children: JSON.stringify(plan.target || {}, null, 2) }) })
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("dl", { className: "tools-kv", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.artifact }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: plan.artifactId || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.operation }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: plan.operation || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.risk }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: plan.risk || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.args }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { children: JSON.stringify(plan.normalizedArgs || {}, null, 2) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.target }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { children: JSON.stringify(plan.target || {}, null, 2) }) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-approval__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "ghost", onClick: () => resolve("deny"), children: t.deny }),
-          record.policy && record.policy.allowSession ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "secondary", onClick: () => resolve("session"), children: t.session }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "primary", onClick: () => resolve("once"), children: t.once })
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-approval__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", onClick: () => resolve("deny"), children: t.deny }),
+          record.policy && record.policy.allowSession ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", onClick: () => resolve("session"), children: t.session }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", onClick: () => resolve("once"), children: t.once })
         ] })
       ] })
     ] });
@@ -26710,17 +27042,17 @@
 
   // src/components/tools/QuestionFormDialog.jsx
   init_cep_runtime_inject();
-  var import_react42 = __toESM(require_react(), 1);
-  var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
+  var import_react43 = __toESM(require_react(), 1);
+  var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
   function QuestionFormDialog({ record, lang = "zh", onResolve }) {
     if (!record) return null;
     const presentation = record.presentation;
     if (!presentation || presentation.kind !== "question-form") return null;
     const questions = Array.isArray(presentation.questions) ? presentation.questions : [];
     const resolve = (result) => onResolve && onResolve({ id: record.id, ...result });
-    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve({ action: "cancel", content: {} }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-approval", role: "dialog", "aria-label": presentation.title || "", children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve({ action: "cancel", content: {} }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "tools-approval", role: "dialog", "aria-label": presentation.title || "", children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
         QuestionCard,
         {
           lang,
@@ -27127,7 +27459,7 @@
 
   // src/lib/backendLifecycle.js
   init_cep_runtime_inject();
-  function installBeforeUnloadReset(target, backend) {
+  function installBeforeUnloadReset(target, backend, onBeforeUnload) {
     if (!backend || typeof backend.reset !== "function") {
       throw new TypeError("A backend with reset() is required");
     }
@@ -27138,6 +27470,7 @@
       if (target && typeof target.removeEventListener === "function") {
         target.removeEventListener("beforeunload", dispose);
       }
+      if (typeof onBeforeUnload === "function") onBeforeUnload();
       backend.reset();
     };
     if (target && typeof target.addEventListener === "function") {
@@ -28075,6 +28408,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let processConversationIdentity = null;
     let processSettings = null;
     let sessionId = null;
+    let lastEmittedSessionId = null;
+    let processResumeSessionId = null;
+    let resumeRetryUsed = false;
     let runtimeGeneration = 0;
     let configDir = "";
     let providerSensitiveValues = [];
@@ -28287,6 +28623,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (clearTranscript) transcript = [];
       if (clearSession) {
         sessionId = null;
+        lastEmittedSessionId = null;
         processConversationIdentity = null;
         sessionAllowedTools.clear();
       }
@@ -28321,6 +28658,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function handleExit(target, generation, code, signal) {
       stderrDeltaRedactor.flush();
       const tail = trimStderrTail(stderrTail);
+      if (shouldRetryMissingSession(tail)) {
+        void retryWithoutMissingSession(target, generation);
+        return;
+      }
       handleProcessFailure(target, generation, {
         message: "Claude CLI exited unexpectedly.",
         classificationInput: { exitCode: code, signal, stderrTail: tail },
@@ -28527,6 +28868,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function handleResult(message) {
       if (!activeRun) return;
+      if (message.is_error && shouldRetryMissingSession(message.result || message)) {
+        void retryWithoutMissingSession(proc, runtimeGeneration);
+        return;
+      }
       markTurnAccepted();
       providerDeltaRedactor.flush();
       setThinking(false);
@@ -28572,7 +28917,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function handleCliMessage(message) {
       if (!message || typeof message !== "object") return;
-      if (message.session_id) sessionId = String(message.session_id);
+      if (message.session_id) {
+        const nextSessionId = String(message.session_id);
+        sessionId = nextSessionId;
+        if (nextSessionId !== lastEmittedSessionId) {
+          lastEmittedSessionId = nextSessionId;
+          emit({ type: "session-ref", ref: { kind: "claude-session", id: sessionId } });
+        }
+      }
       if (message.type === "system" && message.subtype === "init") {
         markTurnAccepted();
         return;
@@ -28717,6 +29069,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           arch: null
         };
         const args = buildCliArgs(session, turn, meta, mcpPath);
+        processResumeSessionId = sessionId || null;
         let spawnedProc;
         try {
           try {
@@ -28845,6 +29198,45 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return false;
       }
     }
+    function shouldRetryMissingSession(value) {
+      if (!processResumeSessionId || resumeRetryUsed || activeTurnAccepted || !activeRun) return false;
+      const text = truncateDetail(value || "");
+      return /no conversation found|conversation (?:was )?not found|session (?:does not exist|not found|is missing)/i.test(text);
+    }
+    async function retryWithoutMissingSession(target, generation) {
+      var _a;
+      if (generation !== runtimeGeneration || proc !== target || !activeRun || resumeRetryUsed) return;
+      resumeRetryUsed = true;
+      runtimeGeneration += 1;
+      proc = null;
+      startPromise = null;
+      processSettings = null;
+      processResumeSessionId = null;
+      sessionId = null;
+      processConversationIdentity = null;
+      providerDeltaRedactor.discard();
+      setThinking(false);
+      drainControls("Claude CLI session could not be resumed.");
+      cleanupConfig();
+      try {
+        (_a = target == null ? void 0 : target.kill) == null ? void 0 : _a.call(target);
+      } catch {
+      }
+      const run = activeRun;
+      const turn = activeTurn;
+      const ok = await ensureCli(run, turn);
+      if (!ok || activeRun !== run || !proc) {
+        if (activeRun === run) finishActive();
+        return;
+      }
+      writeMessage({
+        type: "user",
+        message: {
+          role: "user",
+          content: [{ type: "text", text: withAttachmentManifest(turn.text, turn.attachments) }]
+        }
+      });
+    }
     async function sendUser(input) {
       if (activeRun) return activeRun;
       let turn;
@@ -28866,6 +29258,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       activeTurn = turn;
       activeTurnAccepted = false;
       activeTurnDispatched = false;
+      resumeRetryUsed = false;
       setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
       resetProviderDeltaRedactor();
       activeRun = new Promise((resolve) => {
@@ -28907,12 +29300,29 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         clearStderr: true
       });
     }
+    function getSessionRef() {
+      return sessionId ? { kind: "claude-session", id: sessionId } : null;
+    }
+    function adoptSessionRef(ref) {
+      sessionId = ref && ref.kind === "claude-session" && ref.id ? String(ref.id) : null;
+      processResumeSessionId = null;
+    }
+    async function deleteSessionRef() {
+      return {
+        ok: true,
+        skipped: true,
+        detail: "claude CLI owns its transcript files"
+      };
+    }
     return {
       sendUser,
       approve,
       answerQuestion,
       stop,
       reset,
+      getSessionRef,
+      adoptSessionRef,
+      deleteSessionRef,
       getMessages: () => clone(transcript),
       getStderrTail: () => stderrTail
     };
@@ -29257,6 +29667,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let initializePromise = null;
     let initialized = false;
     let threadId = null;
+    let adoptedThreadId = null;
     let preambleSent = false;
     let currentTurnId = null;
     let stopping = false;
@@ -29576,6 +29987,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       startPromise = null;
       initializePromise = null;
       initialized = false;
+      if (threadId) adoptedThreadId = threadId;
       threadId = null;
       preambleSent = false;
       drainApprovals();
@@ -29610,6 +30022,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       startPromise = null;
       initializePromise = null;
       initialized = false;
+      if (threadId) adoptedThreadId = threadId;
       threadId = null;
       preambleSent = false;
       drainApprovals();
@@ -29759,23 +30172,40 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         throw new Error("Codex thread start was cancelled");
       }
       const spawnEnv = currentEnv();
-      let result;
-      try {
-        result = await threadRpc.request("thread/start", {
-          ephemeral: true,
-          cwd: defaultCwd(spawnEnv, adapter),
-          model: getModel(),
-          approvalPolicy: APPROVAL_POLICY,
-          approvalsReviewer: "user",
-          sandboxPolicy: SANDBOX_POLICY,
-          config: {
-            mcp_servers: {
-              ae: { url: mcpSpec.url }
-            }
+      const params = {
+        cwd: defaultCwd(spawnEnv, adapter),
+        model: getModel(),
+        approvalPolicy: APPROVAL_POLICY,
+        approvalsReviewer: "user",
+        sandboxPolicy: SANDBOX_POLICY,
+        config: {
+          mcp_servers: {
+            ae: { url: mcpSpec.url }
           }
-        });
-      } catch (error) {
-        throw taggedError(error, "fallbackCode", "SESSION_START_FAILED");
+        }
+      };
+      let result;
+      if (adoptedThreadId) {
+        try {
+          result = await threadRpc.request("thread/resume", {
+            threadId: adoptedThreadId,
+            ...params
+          });
+          preambleSent = true;
+        } catch (error) {
+          adoptedThreadId = null;
+          preambleSent = false;
+        }
+      }
+      if (!result) {
+        try {
+          result = await threadRpc.request("thread/start", {
+            ephemeral: false,
+            ...params
+          });
+        } catch (error) {
+          throw taggedError(error, "fallbackCode", "SESSION_START_FAILED");
+        }
       }
       if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
         throw new Error("Codex thread start was cancelled");
@@ -29784,6 +30214,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (!threadId) {
         throw taggedError(new Error("Codex did not return a thread id."), "fallbackCode", "SESSION_START_FAILED");
       }
+      adoptedThreadId = threadId;
+      emit({ type: "session-ref", ref: { kind: "codex-thread", id: threadId } });
       return threadId;
     }
     function turnInput(turn, text) {
@@ -29967,6 +30399,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       initializePromise = null;
       initialized = false;
       threadId = null;
+      adoptedThreadId = null;
       preambleSent = false;
       currentTurnId = null;
       transcript = [];
@@ -30079,12 +30512,78 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         probeRpc.close(new Error("codex login probe finished"));
       }
     }
+    function getSessionRef() {
+      const id = threadId || adoptedThreadId;
+      return id ? { kind: "codex-thread", id } : null;
+    }
+    function adoptSessionRef(ref) {
+      const valid = ref && ref.kind === "codex-thread" && ref.id;
+      threadId = null;
+      adoptedThreadId = valid ? String(ref.id) : null;
+      preambleSent = Boolean(adoptedThreadId);
+    }
+    async function deleteSessionRef(ref) {
+      var _a, _b, _c, _d, _e, _f, _g;
+      if (!ref || ref.kind !== "codex-thread" || !ref.id) {
+        return { ok: false, detail: "invalid codex thread reference" };
+      }
+      let deleteProc = null;
+      let deleteRpc = null;
+      try {
+        const spawnEnv = currentEnv();
+        const cliInfo = lastCliInfo || await resolveCli({
+          env: spawnEnv,
+          platform: adapter,
+          lang: currentLang()
+        });
+        if (!(cliInfo == null ? void 0 : cliInfo.ok)) return { ok: false, detail: (cliInfo == null ? void 0 : cliInfo.detail) || "codex CLI is unavailable" };
+        lastCliInfo = cliInfo;
+        const executable = cliInfo.executable || {
+          ok: true,
+          id: "codex",
+          path: cliInfo.cliPath,
+          argsPrefix: [],
+          source: "path",
+          version: cliInfo.version || null,
+          arch: null
+        };
+        deleteProc = adapter.spawn(executable, ["app-server"], {
+          stdio: "pipe",
+          windowsHide: true,
+          env: spawnEnv
+        });
+        deleteRpc = createRpc({ writeLine: (line) => deleteProc.stdin.write(line) });
+        const reader = createNdjsonReader((message) => deleteRpc.handleMessage(message));
+        (_b = (_a = deleteProc.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", reader);
+        (_d = (_c = deleteProc.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", () => {
+        });
+        (_e = deleteProc.on) == null ? void 0 : _e.call(deleteProc, "exit", () => deleteRpc.close(new Error("codex app-server exited during thread delete")));
+        (_f = deleteProc.on) == null ? void 0 : _f.call(deleteProc, "error", (error) => deleteRpc.close(error));
+        await deleteRpc.request("initialize", {
+          clientInfo: { name: "ae-mcp-panel", version: PANEL_VERSION },
+          capabilities: { experimentalApi: true }
+        });
+        await deleteRpc.request("thread/delete", { threadId: String(ref.id) });
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, detail: (error == null ? void 0 : error.message) || String(error) };
+      } finally {
+        try {
+          (_g = deleteProc == null ? void 0 : deleteProc.kill) == null ? void 0 : _g.call(deleteProc);
+        } catch {
+        }
+        if (deleteRpc) deleteRpc.close(new Error("codex thread delete finished"));
+      }
+    }
     return {
       sendUser,
       approve,
       answerQuestion,
       stop,
       reset,
+      getSessionRef,
+      adoptSessionRef,
+      deleteSessionRef,
       getMessages: () => clone2(transcript),
       getStderrTail: () => stderrTail,
       probeAccount
@@ -30503,6 +31002,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let baseUrl = "";
     let configHome = "";
     let sessionId = null;
+    let adoptedSessionId = null;
+    let sessionWasAdopted = false;
     let serverPromise = null;
     let sessionPromise = null;
     let sseStarted = false;
@@ -30858,7 +31359,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
     }
     async function ensureSession() {
-      if (sessionId) return sessionId;
       if (sessionPromise) return sessionPromise;
       sessionPromise = (async () => {
         await startServer();
@@ -30867,12 +31367,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         } catch (error) {
           throw taggedError2(error, "categoryCode", "MCP_UNREACHABLE");
         }
+        if (sessionId) return sessionId;
+        if (adoptedSessionId) {
+          sessionId = adoptedSessionId;
+          sessionWasAdopted = true;
+          return sessionId;
+        }
         const result = await postJson("/session", {
           title: "After Effects MCP",
           model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID)
         });
         sessionId = String(result && (result.id || result.sessionID || result.sessionId) || "");
         if (!sessionId) throw taggedError2(new Error("OpenCode did not return a session id."), "fallbackCode", "SESSION_START_FAILED");
+        adoptedSessionId = sessionId;
+        sessionWasAdopted = false;
+        emit({ type: "session-ref", ref: { kind: "opencode-session", id: sessionId } });
         return sessionId;
       })();
       try {
@@ -31086,9 +31595,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           activeTurnAccepted = true;
           emit({ type: "turn-accepted", turnId: turn.turnId, transport: "opencode-file-part" });
         }
-        await postJson("/session/" + encodeURIComponent(id) + "/message", {
-          parts: openCodeParts(turn)
-        });
+        const messageBody = { parts: openCodeParts(turn) };
+        try {
+          await postJson("/session/" + encodeURIComponent(id) + "/message", messageBody);
+        } catch (error) {
+          if ((error == null ? void 0 : error.httpStatus) !== 404 || !sessionWasAdopted) throw error;
+          sessionId = null;
+          adoptedSessionId = null;
+          sessionWasAdopted = false;
+          const replacementId = await ensureSession();
+          await postJson("/session/" + encodeURIComponent(replacementId) + "/message", messageBody);
+        }
       } catch (e) {
         const httpStatus = extractHttpStatus(e == null ? void 0 : e.httpStatus);
         const fallbackCode = (e == null ? void 0 : e.fallbackCode) || (messageDispatched ? "TURN_START_FAILED" : "SESSION_START_FAILED");
@@ -31156,6 +31673,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       pendingApprovals.clear();
       sessionAllowedTools.clear();
       sessionId = null;
+      adoptedSessionId = null;
+      sessionWasAdopted = false;
       sessionPromise = null;
       activeResolve = null;
       activeRun = null;
@@ -31191,7 +31710,43 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function getMessages() {
       return transcript.slice();
     }
-    return { sendUser, approve, stop, reset, getMessages, getStderrTail: () => stderrTail, probeAccount };
+    function getSessionRef() {
+      const id = sessionId || adoptedSessionId;
+      return id ? { kind: "opencode-session", id } : null;
+    }
+    function adoptSessionRef(ref) {
+      sessionId = null;
+      adoptedSessionId = ref && ref.kind === "opencode-session" && ref.id ? String(ref.id) : null;
+      sessionWasAdopted = Boolean(adoptedSessionId);
+    }
+    async function deleteSessionRef(ref) {
+      if (!ref || ref.kind !== "opencode-session" || !ref.id) {
+        return { ok: false, detail: "invalid opencode session reference" };
+      }
+      if (!baseUrl || !proc || sseClosed) {
+        return { ok: false, skipped: true, detail: "opencode server not running" };
+      }
+      try {
+        await request("/session/" + encodeURIComponent(String(ref.id)), { method: "DELETE" });
+        if (sessionId === ref.id) sessionId = null;
+        if (adoptedSessionId === ref.id) adoptedSessionId = null;
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, detail: (error == null ? void 0 : error.message) || String(error) };
+      }
+    }
+    return {
+      sendUser,
+      approve,
+      stop,
+      reset,
+      getSessionRef,
+      adoptSessionRef,
+      deleteSessionRef,
+      getMessages,
+      getStderrTail: () => stderrTail,
+      probeAccount
+    };
   }
 
   // src/lib/channels.js
@@ -31281,7 +31836,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/components/settings/ProviderManagerSection.jsx
   init_cep_runtime_inject();
-  var import_react43 = __toESM(require_react(), 1);
+  var import_react44 = __toESM(require_react(), 1);
 
   // src/lib/providerManagerState.js
   init_cep_runtime_inject();
@@ -31329,7 +31884,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
 
   // src/components/settings/ProviderManagerSection.jsx
-  var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
   var L4 = {
     zh: {
       title: "Provider \u7BA1\u7406",
@@ -31375,7 +31930,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
   };
   function SecretInput({ name, disabled = false }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
       "input",
       {
         name,
@@ -31407,8 +31962,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     disabled = false
   }) {
     const t = L4[lang] || L4.zh;
-    const [draft, setDraft] = import_react43.default.useState(null);
-    const [error, setError] = import_react43.default.useState("");
+    const [draft, setDraft] = import_react44.default.useState(null);
+    const [error, setError] = import_react44.default.useState("");
     const save = async (event) => {
       var _a, _b;
       event.preventDefault();
@@ -31427,25 +31982,25 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         (_b = (_a = event.currentTarget) == null ? void 0 : _a.reset) == null ? void 0 : _b.call(_a);
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("details", { style: {
+    return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("details", { style: {
       border: "1px solid var(--border-subtle)",
       borderRadius: "var(--radius-md)",
       background: "var(--bg-well)",
       padding: "7px 8px"
     }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("summary", { style: {
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("summary", { style: {
         cursor: "pointer",
         listStyle: "none",
         display: "flex",
         alignItems: "center",
         gap: 8
       }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: {
+        /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { style: {
           flex: 1,
           font: "500 12px/1.35 var(--font-ui)",
           color: "var(--text-primary)"
         }, children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
           Button,
           {
             variant: "secondary",
@@ -31459,11 +32014,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
         providers.map((provider) => {
           const modelCount = Array.isArray(provider == null ? void 0 : provider.modelIds) ? provider.modelIds.length : 0;
           const selected = provider.id === activeProviderId;
-          return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { "data-provider-id": provider.id, style: {
+          return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { "data-provider-id": provider.id, style: {
             display: "flex",
             flexDirection: "column",
             gap: 4,
@@ -31472,8 +32027,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             borderRadius: "var(--radius-sm)",
             background: "var(--bg-panel)"
           }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: {
+            /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { style: {
                 flex: 1,
                 minWidth: 120,
                 font: "500 12px/1.35 var(--font-ui)",
@@ -31482,19 +32037,19 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap"
               }, children: provider.name }),
-              selected ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "accent", children: t.selected }) : null,
-              provider.needsApiKey ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "warn", children: t.needsApiKey }) : null,
-              modelCount ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
+              selected ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Badge, { status: "accent", children: t.selected }) : null,
+              provider.needsApiKey ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Badge, { status: "warn", children: t.needsApiKey }) : null,
+              modelCount ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: {
+            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
               font: "400 10px/1.35 var(--font-mono)",
               color: "var(--text-tertiary)",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap"
             }, children: provider.baseUrl }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
                 Button,
                 {
                   variant: "ghost",
@@ -31507,7 +32062,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
                   children: t.edit
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
                 Button,
                 {
                   variant: "ghost",
@@ -31520,7 +32075,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             ] })
           ] }, provider.id);
         }),
-        draft ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("form", { onSubmit: save, style: {
+        draft ? /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("form", { onSubmit: save, style: {
           display: "flex",
           flexDirection: "column",
           gap: 6,
@@ -31529,8 +32084,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           borderRadius: "var(--radius-sm)",
           background: "var(--bg-panel)"
         }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
             Input,
             {
               mono: true,
@@ -31539,7 +32094,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
               placeholder: "https://api.example.com/v1"
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.dialect, caption: t.dialectCap, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.dialect, caption: t.dialectCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
             Select,
             {
               value: draft.protocol,
@@ -31550,7 +32105,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
               ]
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
             Input,
             {
               mono: true,
@@ -31559,13 +32114,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
               placeholder: "claude-sonnet-4"
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: {
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("label", { style: {
             display: "flex",
             gap: 6,
             alignItems: "center",
             font: "400 11px/1.35 var(--font-ui)"
           }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
               "input",
               {
                 type: "checkbox",
@@ -31578,13 +32133,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             ),
             t.insecure
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) }),
-          error ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: {
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) }),
+          error ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
             font: "400 10px/1.4 var(--font-ui)",
             color: "var(--warn)"
           }, children: error }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
               Button,
               {
                 variant: "ghost",
@@ -31596,7 +32151,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
                 children: t.cancel
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
               Button,
               {
                 variant: "primary",
@@ -32030,10 +32585,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/cep/useActivity.js
   init_cep_runtime_inject();
-  var import_react44 = __toESM(require_react(), 1);
+  var import_react45 = __toESM(require_react(), 1);
   function useActivity(getHost) {
-    const [events, setEvents] = import_react44.default.useState([]);
-    import_react44.default.useEffect(() => {
+    const [events, setEvents] = import_react45.default.useState([]);
+    import_react45.default.useEffect(() => {
       let unsub = null;
       let retry = null;
       let disposed = false;
@@ -32055,7 +32610,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (retry) clearTimeout(retry);
       };
     }, [getHost]);
-    const clear = import_react44.default.useCallback(() => setEvents([]), []);
+    const clear = import_react45.default.useCallback(() => setEvents([]), []);
     return { events, clear };
   }
 
@@ -32084,7 +32639,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/app/wizardWiring.js
   init_cep_runtime_inject();
-  var import_react45 = __toESM(require_react(), 1);
+  var import_react46 = __toESM(require_react(), 1);
 
   // src/cep/wizardActions.js
   init_cep_runtime_inject();
@@ -32209,15 +32764,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     fetchImpl,
     platform
   } = {}) {
-    const [stepStates, dispatch] = import_react45.default.useReducer(stepReducer, null, initialStepStates);
-    const commands = import_react45.default.useMemo(
+    const [stepStates, dispatch] = import_react46.default.useReducer(stepReducer, null, initialStepStates);
+    const commands = import_react46.default.useMemo(
       () => buildInstallCommands({ platform }),
       [platform]
     );
-    const commandPreviews = import_react45.default.useMemo(() => ({
+    const commandPreviews = import_react46.default.useMemo(() => ({
       node: commandPreview(commands.node)
     }), [commands]);
-    const detect = import_react45.default.useCallback(async (id) => {
+    const detect = import_react46.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
       const result = await detectTool(id, {
         platform,
@@ -32233,7 +32788,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
       return result;
     }, [fetchImpl, platform, port]);
-    const install = import_react45.default.useCallback(async (id) => {
+    const install = import_react46.default.useCallback(async (id) => {
       const command = commands[id];
       if (!command) return { ok: false, output: "No install command configured for " + id };
       dispatch({ type: "run-start", id });
@@ -32246,8 +32801,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       await detect(id);
       return result;
     }, [commands, detect, platform]);
-    const bootDetectRef = import_react45.default.useRef(false);
-    import_react45.default.useEffect(() => {
+    const bootDetectRef = import_react46.default.useRef(false);
+    import_react46.default.useEffect(() => {
       if (bootDetectRef.current) return;
       bootDetectRef.current = true;
       [...HOST_STEPS, ...CLI_STEPS, ...OPTIONAL_CLIENT_STEPS].forEach((id) => {
@@ -33272,6 +33827,20 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const response = direct || decisionResult(result.decision, entry2.policy);
       return removeEntry(entry2, response);
     }
+    function cancelAll() {
+      const pending = entries.splice(0);
+      for (const entry2 of pending) {
+        if (entry2.signal && entry2.abortHandler) {
+          entry2.signal.removeEventListener("abort", entry2.abortHandler);
+        }
+        if (entry2.externalSignal && entry2.forwardAbort) {
+          entry2.externalSignal.removeEventListener("abort", entry2.forwardAbort);
+        }
+        entry2.controller.abort();
+        entry2.resolve(cancelResult());
+      }
+      publish();
+    }
     function dispose() {
       if (disposed) return;
       disposed = true;
@@ -33289,7 +33858,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         entry2.resolve(cancelResult());
       }
     }
-    return { handle, snapshot, subscribe, resolveVisible, dispose };
+    return { handle, snapshot, subscribe, resolveVisible, cancelAll, dispose };
   }
 
   // src/lib/hostConversation.js
@@ -33460,6 +34029,593 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     return { attach, detach };
   }
 
+  // src/lib/sessionController.js
+  init_cep_runtime_inject();
+  var VERSION2 = 1;
+  function clone4(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+  function emptyIndex() {
+    return { version: VERSION2, activeId: null, sessions: [] };
+  }
+  function isoTime(now) {
+    const value = typeof now === "function" ? now() : Date.now();
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : (/* @__PURE__ */ new Date()).toISOString();
+  }
+  function validIndex(value) {
+    if (!value || value.version !== VERSION2 || !Array.isArray(value.sessions)) return emptyIndex();
+    return {
+      version: VERSION2,
+      activeId: typeof value.activeId === "string" ? value.activeId : null,
+      sessions: value.sessions.map((meta) => {
+        const copy = clone4(meta);
+        delete copy.touched;
+        return copy;
+      })
+    };
+  }
+  function backendRef(value) {
+    if (!value || typeof value !== "object" || !value.kind || !value.id) return null;
+    return { kind: String(value.kind), id: String(value.id) };
+  }
+  function sanitizeRestored(entries) {
+    return (Array.isArray(entries) ? entries : []).map((entry2) => {
+      const next = clone4(entry2);
+      if (next.type === "tool-call" && next.state === "awaiting-approval") next.state = "denied";
+      if (next.type === "question" && next.state === "pending") next.state = "cancelled";
+      if (next.state === "streaming") next.state = "complete";
+      if (Object.prototype.hasOwnProperty.call(next, "streaming")) next.streaming = false;
+      if (Object.prototype.hasOwnProperty.call(next, "isStreaming")) next.isStreaming = false;
+      return next;
+    });
+  }
+  function createSessionController({
+    store,
+    now = () => Date.now(),
+    uuid,
+    deps = {},
+    setTimeoutImpl,
+    clearTimeoutImpl
+  } = {}) {
+    if (!store || typeof store.loadIndex !== "function") {
+      throw new TypeError("A session store is required");
+    }
+    if (typeof uuid !== "function") throw new TypeError("A UUID function is required");
+    const scheduleTimeout = setTimeoutImpl || deps.setTimeout || setTimeout;
+    const cancelTimeout = clearTimeoutImpl || deps.clearTimeout || clearTimeout;
+    const listeners = /* @__PURE__ */ new Set();
+    let index = emptyIndex();
+    let activeId = null;
+    let activeMeta = null;
+    let latestEntries = [];
+    let dirty = false;
+    let timer = null;
+    let booted = false;
+    let operationTail = Promise.resolve();
+    function report(message, error) {
+      if (typeof deps.log !== "function") return;
+      try {
+        deps.log(`${message}: ${(error == null ? void 0 : error.message) || String(error || "")}`);
+      } catch {
+      }
+    }
+    function snapshot() {
+      return { sessions: clone4(index.sessions), activeId };
+    }
+    function publish() {
+      const value = snapshot();
+      for (const listener of [...listeners]) {
+        try {
+          listener(value);
+        } catch {
+        }
+      }
+    }
+    function subscribe(listener) {
+      if (typeof listener !== "function") return () => {
+      };
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+    function enqueue(operation) {
+      const pending = operationTail.then(operation, operation);
+      operationTail = pending.catch(() => {
+      });
+      return pending;
+    }
+    function currentIndexMeta() {
+      return index.sessions.find((meta) => meta.id === activeId) || null;
+    }
+    function upsertActiveMeta() {
+      if (!activeMeta) return;
+      const position = index.sessions.findIndex((meta) => meta.id === activeMeta.id);
+      const value = clone4(activeMeta);
+      delete value.touched;
+      if (position >= 0) index.sessions[position] = value;
+      else index.sessions.push(value);
+    }
+    function saveIndex() {
+      try {
+        store.saveIndex({
+          ...index,
+          sessions: index.sessions.map((meta) => {
+            const value = clone4(meta);
+            delete value.touched;
+            return value;
+          })
+        });
+        dirty = false;
+      } catch (error) {
+        dirty = true;
+        report("Session index save failed", error);
+      }
+    }
+    function materialized() {
+      return Boolean(activeMeta && (activeMeta.touched || latestEntries.length || index.sessions.some((meta) => meta.id === activeMeta.id)));
+    }
+    function refreshActiveMeta() {
+      if (!activeMeta) return;
+      activeMeta.entryCount = latestEntries.length;
+      if (activeMeta.titleSource !== "manual") {
+        activeMeta.title = deriveTitle(latestEntries);
+        activeMeta.titleSource = "auto";
+      }
+    }
+    function persistActive() {
+      if (!activeMeta || !activeId) return false;
+      const currentRef = backendRef(
+        typeof deps.getBackendRef === "function" ? deps.getBackendRef() : null
+      );
+      if (currentRef) activeMeta.backendRef = currentRef;
+      refreshActiveMeta();
+      if (!materialized()) {
+        if (index.activeId === activeId) {
+          index.activeId = null;
+          saveIndex();
+        }
+        return false;
+      }
+      try {
+        store.saveTranscript(activeId, latestEntries);
+      } catch (error) {
+        dirty = true;
+        report("Session transcript save failed", error);
+      }
+      upsertActiveMeta();
+      index.activeId = activeId;
+      saveIndex();
+      publish();
+      return true;
+    }
+    function clearDebounce() {
+      if (timer === null) return;
+      cancelTimeout(timer);
+      timer = null;
+    }
+    function flush() {
+      clearDebounce();
+      return persistActive();
+    }
+    function schedulePersist(immediate) {
+      clearDebounce();
+      if (immediate) {
+        persistActive();
+        return;
+      }
+      timer = scheduleTimeout(() => {
+        timer = null;
+        persistActive();
+      }, 400);
+    }
+    function newMeta() {
+      const timestamp = isoTime(now);
+      return {
+        id: `chat-${uuid()}`,
+        title: null,
+        titleSource: "auto",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        backend: deps.currentBackend(),
+        channel: deps.currentChannel(),
+        model: deps.currentModel() || null,
+        backendRef: null,
+        archived: false,
+        entryCount: 0,
+        touched: false
+      };
+    }
+    async function switchAway() {
+      clearDebounce();
+      await Promise.resolve(deps.stopActiveTurn && deps.stopActiveTurn());
+      await Promise.resolve(deps.resetActiveBackend && deps.resetActiveBackend());
+      await Promise.resolve(deps.cancelPendingUi && deps.cancelPendingUi());
+      persistActive();
+    }
+    async function createSessionInternal() {
+      if (activeMeta) {
+        persistActive();
+        await switchAway();
+      }
+      activeMeta = newMeta();
+      activeId = activeMeta.id;
+      latestEntries = [];
+      index.activeId = null;
+      saveIndex();
+      if (typeof deps.setEntries === "function") deps.setEntries([]);
+      if (typeof deps.rotateHostConversation === "function") {
+        await Promise.resolve(deps.rotateHostConversation(activeId));
+      }
+      publish();
+      return activeId;
+    }
+    async function bootInternal() {
+      if (booted) return snapshot();
+      booted = true;
+      try {
+        index = validIndex(store.loadIndex());
+      } catch (error) {
+        report("Session index load failed", error);
+        index = emptyIndex();
+      }
+      const meta = index.sessions.find((candidate) => candidate.id === index.activeId);
+      if (!meta || meta.archived || meta.backend !== deps.currentBackend()) {
+        activeId = null;
+        activeMeta = null;
+        return createSessionInternal();
+      }
+      activeId = meta.id;
+      activeMeta = { ...clone4(meta), touched: true };
+      let transcript = null;
+      try {
+        transcript = store.loadTranscript(activeId);
+      } catch (error) {
+        report("Session transcript load failed", error);
+      }
+      latestEntries = sanitizeRestored(transcript && transcript.entries);
+      refreshActiveMeta();
+      if (typeof deps.setEntries === "function") deps.setEntries(clone4(latestEntries));
+      if (typeof deps.adoptBackendRef === "function") {
+        await Promise.resolve(deps.adoptBackendRef(activeMeta.backend, backendRef(activeMeta.backendRef)));
+      }
+      if (typeof deps.rotateHostConversation === "function") {
+        await Promise.resolve(deps.rotateHostConversation(activeId));
+      }
+      publish();
+      return snapshot();
+    }
+    async function switchToInternal(id) {
+      const target = index.sessions.find((meta) => meta.id === id);
+      if (!target) throw new Error(`Unknown session: ${id}`);
+      if (id === activeId) return snapshot();
+      if (activeMeta) {
+        persistActive();
+        await switchAway();
+      }
+      if (target.backend !== deps.currentBackend() && typeof deps.selectBackend === "function") {
+        await Promise.resolve(deps.selectBackend(target.backend));
+      }
+      let transcript = null;
+      try {
+        transcript = store.loadTranscript(target.id);
+      } catch (error) {
+        report("Session transcript load failed", error);
+      }
+      latestEntries = sanitizeRestored(transcript && transcript.entries);
+      if (typeof deps.setEntries === "function") deps.setEntries(clone4(latestEntries));
+      if (typeof deps.adoptBackendRef === "function") {
+        await Promise.resolve(deps.adoptBackendRef(target.backend, backendRef(target.backendRef)));
+      }
+      if (typeof deps.rotateHostConversation === "function") {
+        await Promise.resolve(deps.rotateHostConversation(target.id));
+      }
+      activeId = target.id;
+      activeMeta = { ...clone4(target), touched: true };
+      refreshActiveMeta();
+      index.activeId = activeId;
+      saveIndex();
+      publish();
+      return snapshot();
+    }
+    function recordEntries(entries, event) {
+      if (!activeMeta) return;
+      latestEntries = clone4(Array.isArray(entries) ? entries : []);
+      activeMeta.updatedAt = isoTime(now);
+      refreshActiveMeta();
+      if (latestEntries.length) upsertActiveMeta();
+      dirty = true;
+      publish();
+      schedulePersist((event == null ? void 0 : event.type) === "turn-end" || (event == null ? void 0 : event.type) === "error");
+    }
+    function recordBackendRef(ref) {
+      if (!activeMeta) return;
+      activeMeta.backendRef = backendRef(ref);
+      activeMeta.updatedAt = isoTime(now);
+      activeMeta.touched = true;
+      upsertActiveMeta();
+      index.activeId = activeId;
+      dirty = true;
+      saveIndex();
+      publish();
+    }
+    function rename(id, title) {
+      const value = String(title || "").trim();
+      const meta = id === activeId ? activeMeta : index.sessions.find((candidate) => candidate.id === id);
+      if (!meta) return false;
+      meta.title = value || null;
+      meta.titleSource = "manual";
+      meta.updatedAt = isoTime(now);
+      if (id === activeId) {
+        meta.touched = true;
+        activeMeta = meta;
+      }
+      upsertActiveMeta();
+      if (id !== activeId) {
+        const position = index.sessions.findIndex((candidate) => candidate.id === id);
+        index.sessions[position] = clone4(meta);
+      }
+      if (id === activeId) index.activeId = id;
+      saveIndex();
+      publish();
+      return true;
+    }
+    async function archiveInternal(id) {
+      if (id === activeId && activeMeta) {
+        activeMeta.touched = true;
+        await createSessionInternal();
+      }
+      const meta = index.sessions.find((candidate) => candidate.id === id);
+      if (!meta) return false;
+      meta.archived = true;
+      meta.updatedAt = isoTime(now);
+      saveIndex();
+      publish();
+      return true;
+    }
+    function unarchive(id) {
+      const meta = index.sessions.find((candidate) => candidate.id === id);
+      if (!meta) return false;
+      meta.archived = false;
+      meta.updatedAt = isoTime(now);
+      saveIndex();
+      publish();
+      return true;
+    }
+    async function removeInternal(id) {
+      const meta = id === activeId ? activeMeta || currentIndexMeta() : index.sessions.find((candidate) => candidate.id === id);
+      if (!meta) return null;
+      const ref = backendRef(meta.backendRef);
+      if (id === activeId) await createSessionInternal();
+      try {
+        store.deleteTranscript(id);
+      } catch (error) {
+        report("Session transcript delete failed", error);
+      }
+      index.sessions = index.sessions.filter((candidate) => candidate.id !== id);
+      if (index.activeId === id) index.activeId = null;
+      saveIndex();
+      publish();
+      return ref;
+    }
+    return {
+      boot: () => enqueue(bootInternal),
+      createSession: () => enqueue(createSessionInternal),
+      switchTo: (id) => enqueue(() => switchToInternal(id)),
+      recordEntries,
+      recordBackendRef,
+      rename,
+      archive: (id) => enqueue(() => archiveInternal(id)),
+      unarchive,
+      remove: (id) => enqueue(() => removeInternal(id)),
+      flush,
+      snapshot,
+      subscribe
+    };
+  }
+
+  // src/cep/sessionStore.js
+  init_cep_runtime_inject();
+  var VERSION3 = 1;
+  var TRANSCRIPT_ENTRY_LIMIT = 400;
+  var TRANSCRIPT_BYTE_LIMIT = Math.floor(1.5 * 1024 * 1024);
+  function emptyIndex2() {
+    return { version: VERSION3, activeId: null, sessions: [] };
+  }
+  function clone5(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+  function sessionStoreError(error) {
+    const result = error instanceof Error ? error : new Error(String(error || "Session store unavailable"));
+    result.code = "SESSION_STORE_UNAVAILABLE";
+    return result;
+  }
+  function utf8Length(value) {
+    let bytes = 0;
+    const text = String(value || "");
+    for (let index = 0; index < text.length; index += 1) {
+      const code = text.charCodeAt(index);
+      if (code < 128) bytes += 1;
+      else if (code < 2048) bytes += 2;
+      else if (code >= 55296 && code <= 56319 && index + 1 < text.length && text.charCodeAt(index + 1) >= 56320 && text.charCodeAt(index + 1) <= 57343) {
+        bytes += 4;
+        index += 1;
+      } else bytes += 3;
+    }
+    return bytes;
+  }
+  function stableEntries(id, entries) {
+    const source = clone5(Array.isArray(entries) ? entries : []);
+    const used = /* @__PURE__ */ new Set();
+    let sequence = 0;
+    const matcher = new RegExp(`^${String(id).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:(\\d+)$`);
+    for (const entry2 of source) {
+      const sid = typeof entry2.sid === "string" ? entry2.sid : "";
+      const match = sid.match(matcher);
+      if (sid && !used.has(sid)) {
+        used.add(sid);
+        if (match) sequence = Math.max(sequence, Number(match[1]) || 0);
+      } else {
+        delete entry2.sid;
+      }
+    }
+    for (const entry2 of source) {
+      if (entry2.sid) continue;
+      do {
+        sequence += 1;
+      } while (used.has(`${id}:${sequence}`));
+      entry2.sid = `${id}:${sequence}`;
+      used.add(entry2.sid);
+    }
+    return source;
+  }
+  function serializedTranscriptSize(value) {
+    return utf8Length(`${JSON.stringify(value, null, 2)}
+`);
+  }
+  function transcriptPayload(id, entries) {
+    const source = stableEntries(id, entries);
+    let start = Math.max(0, source.length - TRANSCRIPT_ENTRY_LIMIT);
+    let truncated = start > 0;
+    let payload = { version: VERSION3, id, entries: source.slice(start), truncated };
+    if (serializedTranscriptSize(payload) <= TRANSCRIPT_BYTE_LIMIT) return payload;
+    truncated = true;
+    let low = start;
+    let high = source.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      const candidate = { version: VERSION3, id, entries: source.slice(middle), truncated };
+      if (serializedTranscriptSize(candidate) <= TRANSCRIPT_BYTE_LIMIT) high = middle;
+      else low = middle + 1;
+    }
+    payload = { version: VERSION3, id, entries: source.slice(low), truncated };
+    return payload;
+  }
+  function createSessionStore({ platform, log } = {}) {
+    var _a, _b;
+    const adapter = platform || createPlatformAdapter();
+    const fs = adapter && adapter.fs;
+    if (!fs || !((_a = adapter == null ? void 0 : adapter.paths) == null ? void 0 : _a.join) || !((_b = adapter == null ? void 0 : adapter.paths) == null ? void 0 : _b.configRoot)) {
+      throw new TypeError("A platform adapter with file access is required");
+    }
+    const sessionsRoot = adapter.paths.join([adapter.paths.configRoot, "sessions"]);
+    const indexFile = adapter.paths.join([sessionsRoot, "index.json"]);
+    let nonce = 0;
+    function report(message, error) {
+      if (typeof log !== "function") return;
+      try {
+        log(`${message}: ${(error == null ? void 0 : error.message) || String(error || "")}`);
+      } catch {
+      }
+    }
+    function readJson2(file) {
+      try {
+        return JSON.parse(String(fs.readFileSync(file, "utf8")));
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) === "ENOENT") return null;
+        try {
+          if (!fs.existsSync(file)) return null;
+        } catch {
+        }
+        report("Session store read failed", error);
+        return null;
+      }
+    }
+    function writeAtomic2(file, value) {
+      const temp = `${file}.${Date.now()}-${nonce += 1}.tmp`;
+      try {
+        fs.mkdirSync(sessionsRoot, { recursive: true });
+        fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}
+`, "utf8");
+        try {
+          fs.chmodSync(temp, 384);
+        } catch {
+        }
+        fs.renameSync(temp, file);
+        try {
+          fs.chmodSync(file, 384);
+        } catch {
+        }
+      } catch (error) {
+        try {
+          fs.unlinkSync(temp);
+        } catch {
+        }
+        throw sessionStoreError(error);
+      }
+    }
+    function transcriptFile(id) {
+      const value = String(id || "");
+      if (!/^chat-[A-Za-z0-9-]+$/.test(value)) {
+        throw sessionStoreError(new Error("Session id is invalid"));
+      }
+      return adapter.paths.join([sessionsRoot, `${value}.json`]);
+    }
+    function loadIndex() {
+      const value = readJson2(indexFile);
+      if (value === null) return emptyIndex2();
+      if (!value || value.version !== VERSION3 || !Array.isArray(value.sessions) || value.activeId !== null && typeof value.activeId !== "string") {
+        report("Session index is invalid", new Error("unsupported or malformed index"));
+        return emptyIndex2();
+      }
+      return clone5(value);
+    }
+    function saveIndex(index) {
+      const value = {
+        version: VERSION3,
+        activeId: typeof (index == null ? void 0 : index.activeId) === "string" ? index.activeId : null,
+        sessions: Array.isArray(index == null ? void 0 : index.sessions) ? clone5(index.sessions) : []
+      };
+      writeAtomic2(indexFile, value);
+      return clone5(value);
+    }
+    function loadTranscript(id) {
+      let value;
+      try {
+        value = readJson2(transcriptFile(id));
+      } catch (error) {
+        report("Session transcript path is invalid", error);
+        return null;
+      }
+      if (value === null) return null;
+      if (!value || value.version !== VERSION3 || value.id !== id || !Array.isArray(value.entries)) {
+        report("Session transcript is invalid", new Error("unsupported or malformed transcript"));
+        return null;
+      }
+      return {
+        version: VERSION3,
+        id,
+        entries: clone5(value.entries),
+        truncated: value.truncated === true
+      };
+    }
+    function saveTranscript(id, entries) {
+      const payload = transcriptPayload(id, entries);
+      writeAtomic2(transcriptFile(id), payload);
+      return clone5(payload);
+    }
+    function deleteTranscript(id) {
+      const file = transcriptFile(id);
+      try {
+        fs.unlinkSync(file);
+        return true;
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) === "ENOENT") return false;
+        try {
+          if (!fs.existsSync(file)) return false;
+        } catch {
+        }
+        throw sessionStoreError(error);
+      }
+    }
+    return {
+      loadIndex,
+      saveIndex,
+      loadTranscript,
+      saveTranscript,
+      deleteTranscript
+    };
+  }
+
   // src/lib/mcpEngine.js
   init_cep_runtime_inject();
   function hostUnavailableError() {
@@ -33490,7 +34646,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
 
   // src/app/App.jsx
-  var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime43 = __toESM(require_jsx_runtime(), 1);
   var T = {
     zh: {
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
@@ -33512,7 +34668,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       regenConfirm: "\u91CD\u65B0\u751F\u6210",
       cancel: "\u53D6\u6D88",
       pausedHint: "\u5DF2\u6682\u505C \u2014 \u6062\u590D\u540E\u624D\u80FD\u53D1\u9001",
-      goSettings: "\u53BB\u8BBE\u7F6E"
+      goSettings: "\u53BB\u8BBE\u7F6E",
+      sessions: "\u4F1A\u8BDD\u5386\u53F2"
     },
     en: {
       connected: "Service running",
@@ -33534,7 +34691,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       regenConfirm: "Regenerate",
       cancel: "Cancel",
       pausedHint: "Paused \u2014 resume to send",
-      goSettings: "Open Settings"
+      goSettings: "Open Settings",
+      sessions: "Session history"
     }
   };
   var pkgVersion = package_default.version;
@@ -33569,57 +34727,68 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
-    const langRef = import_react46.default.useRef(lang);
+    const langRef = import_react47.default.useRef(lang);
     langRef.current = lang;
     const t = T[lang];
-    const [tab, setTab] = import_react46.default.useState("chat");
-    const [status, setStatus] = import_react46.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const [paused, setPaused] = import_react46.default.useState(false);
-    const [logs, setLogs] = import_react46.default.useState([]);
-    const backendErrorsRef = import_react46.default.useRef([]);
-    const ctrl = import_react46.default.useRef(null);
-    const getHost = import_react46.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const hostConversation = import_react46.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
-    const hostApprovalBridge = import_react46.default.useMemo(() => createHostApprovalBridge(), []);
-    const [wizardDone, setWizardDone] = import_react46.default.useState(() => isWizardDone(window.localStorage));
-    const [wizStep, setWizStep] = import_react46.default.useState(1);
-    const [wizClient, setWizClient] = import_react46.default.useState("claude-desktop");
-    const [drawerOpen, setDrawerOpen] = import_react46.default.useState(false);
-    const [connInfo, setConnInfo] = import_react46.default.useState(null);
-    const [diagnostics, setDiagnostics] = import_react46.default.useState(null);
+    const [tab, setTab] = import_react47.default.useState("chat");
+    const [status, setStatus] = import_react47.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const statusRef = import_react47.default.useRef(status);
+    statusRef.current = status;
+    const [paused, setPaused] = import_react47.default.useState(false);
+    const [logs, setLogs] = import_react47.default.useState([]);
+    const backendErrorsRef = import_react47.default.useRef([]);
+    const panelLogRef = import_react47.default.useRef(null);
+    const ctrl = import_react47.default.useRef(null);
+    const getHost = import_react47.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const hostConversation = import_react47.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
+    const hostApprovalBridge = import_react47.default.useMemo(() => createHostApprovalBridge(), []);
+    const [wizardDone, setWizardDone] = import_react47.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react47.default.useState(1);
+    const [wizClient, setWizClient] = import_react47.default.useState("claude-desktop");
+    const [drawerOpen, setDrawerOpen] = import_react47.default.useState(false);
+    const [sessionsOpen, setSessionsOpen] = import_react47.default.useState(false);
+    const [connInfo, setConnInfo] = import_react47.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react47.default.useState(null);
     const { events, clear } = useActivity(getHost);
-    const [clients, setClients] = import_react46.default.useState([]);
-    const [mcpSessions, setMcpSessions] = import_react46.default.useState([]);
-    const [confirmRegen, setConfirmRegen] = import_react46.default.useState(false);
-    const [tokenEpoch, setTokenEpoch] = import_react46.default.useState(0);
-    const platform = import_react46.default.useMemo(() => createPlatformAdapter(), []);
-    const attachmentStore = import_react46.default.useMemo(() => createAttachmentStore({
+    const [clients, setClients] = import_react47.default.useState([]);
+    const [mcpSessions, setMcpSessions] = import_react47.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react47.default.useState(false);
+    const [tokenEpoch, setTokenEpoch] = import_react47.default.useState(0);
+    const platform = import_react47.default.useMemo(() => createPlatformAdapter(), []);
+    const sessionStore = import_react47.default.useMemo(() => createSessionStore({
+      platform,
+      log: (message) => {
+        var _a;
+        return (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, message);
+      }
+    }), [platform]);
+    const attachmentStore = import_react47.default.useMemo(() => createAttachmentStore({
       platform,
       randomUUID: randomProviderCredentialId
     }), [platform]);
-    const [attachmentDraft, dispatchAttachmentDraft] = import_react46.default.useReducer(
+    const [attachmentDraft, dispatchAttachmentDraft] = import_react47.default.useReducer(
       reduceAttachmentDraft,
       void 0,
       createAttachmentDraftState
     );
-    const [chatSessionId, setChatSessionId] = import_react46.default.useState("chat-0");
-    const chatSessionIdRef = import_react46.default.useRef(chatSessionId);
+    const [chatSessionId, setChatSessionId] = import_react47.default.useState("chat-0");
+    const chatSessionIdRef = import_react47.default.useRef(chatSessionId);
     chatSessionIdRef.current = chatSessionId;
-    const attachmentOperationsRef = import_react46.default.useRef(/* @__PURE__ */ new Map());
-    const pendingTurnRef = import_react46.default.useRef(null);
-    const acceptedTurnRef = import_react46.default.useRef(null);
-    import_react46.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-    const [model, setModel] = import_react46.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
-    const [logLevel, setLogLevel] = import_react46.default.useState(() => readPref("ae_mcp_log_level", "info"));
-    const logLevelRef = import_react46.default.useRef(logLevel);
+    const attachmentOperationsRef = import_react47.default.useRef(/* @__PURE__ */ new Map());
+    const pendingTurnRef = import_react47.default.useRef(null);
+    const acceptedTurnRef = import_react47.default.useRef(null);
+    import_react47.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
+    const [model, setModel] = import_react47.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [logLevel, setLogLevel] = import_react47.default.useState(() => readPref("ae_mcp_log_level", "info"));
+    const logLevelRef = import_react47.default.useRef(logLevel);
     logLevelRef.current = logLevel;
-    const [sessionModel, setSessionModel] = import_react46.default.useState(null);
-    const [sessionEffort, setSessionEffort] = import_react46.default.useState(null);
-    const [sessionFast, setSessionFast] = import_react46.default.useState(null);
-    const [permissionMode, setPermissionMode] = import_react46.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
-    const permissionModeRef = import_react46.default.useRef(permissionMode);
+    const [sessionModel, setSessionModel] = import_react47.default.useState(null);
+    const [sessionEffort, setSessionEffort] = import_react47.default.useState(null);
+    const [sessionFast, setSessionFast] = import_react47.default.useState(null);
+    const [permissionMode, setPermissionMode] = import_react47.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const permissionModeRef = import_react47.default.useRef(permissionMode);
     permissionModeRef.current = permissionMode;
-    const elicitationCoordinator = import_react46.default.useMemo(() => createElicitationCoordinator({
+    const elicitationCoordinator = import_react47.default.useMemo(() => createElicitationCoordinator({
       resolveApproval: (_request, { plan }) => decideToolPlan({
         tier: permissionModeRef.current,
         plan
@@ -33640,33 +34809,33 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         };
       }
     }), []);
-    const [toolApproval, setToolApproval] = import_react46.default.useState(() => elicitationCoordinator.snapshot());
-    import_react46.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
-    import_react46.default.useEffect(() => {
+    const [toolApproval, setToolApproval] = import_react47.default.useState(() => elicitationCoordinator.snapshot());
+    import_react47.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
+    import_react47.default.useEffect(() => {
       hostConversation.updatePolicy({ approvalTier: permissionMode });
     }, [hostConversation, permissionMode]);
-    import_react46.default.useEffect(() => () => {
+    import_react47.default.useEffect(() => () => {
       elicitationCoordinator.dispose();
     }, [elicitationCoordinator]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       const guard = createPanelFileDropGuard({ target: window });
       return guard.dispose;
     }, []);
-    const backendMigration = import_react46.default.useMemo(() => migrateBackendPref(window.localStorage), []);
-    const [backendPref, setBackendPref] = import_react46.default.useState(() => backendMigration.pref);
-    const [channelChoices, setChannelChoices] = import_react46.default.useState(() => backendMigration.channelChoices);
-    const openCodeProviderStore = import_react46.default.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
-    const [providerInit, setProviderInit] = import_react46.default.useState({ state: "checking", error: "" });
-    const [providers, setProviders] = import_react46.default.useState([]);
-    const providersRef = import_react46.default.useRef(providers);
+    const backendMigration = import_react47.default.useMemo(() => migrateBackendPref(window.localStorage), []);
+    const [backendPref, setBackendPref] = import_react47.default.useState(() => backendMigration.pref);
+    const [channelChoices, setChannelChoices] = import_react47.default.useState(() => backendMigration.channelChoices);
+    const openCodeProviderStore = import_react47.default.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
+    const [providerInit, setProviderInit] = import_react47.default.useState({ state: "checking", error: "" });
+    const [providers, setProviders] = import_react47.default.useState([]);
+    const providersRef = import_react47.default.useRef(providers);
     providersRef.current = providers;
-    const [expertGuidance, setExpertGuidance] = import_react46.default.useState(() => loadExpertGuidance(window.localStorage));
-    const expertGuidanceRef = import_react46.default.useRef(expertGuidance);
+    const [expertGuidance, setExpertGuidance] = import_react47.default.useState(() => loadExpertGuidance(window.localStorage));
+    const expertGuidanceRef = import_react47.default.useRef(expertGuidance);
     expertGuidanceRef.current = expertGuidance;
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       hostConversation.updatePolicy({ expertGuidance });
     }, [expertGuidance, hostConversation]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       if (status.state !== "ok") return;
       hostConversation.ensureConversation({
         label: chatSessionIdRef.current,
@@ -33674,7 +34843,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         expertGuidance: expertGuidanceRef.current
       });
     }, [hostConversation, status.state]);
-    const resolveHostConversationContext = import_react46.default.useCallback((conversationId) => {
+    const resolveHostConversationContext = import_react47.default.useCallback((conversationId) => {
       const current = hostConversation.currentConversation();
       if (!current || current.id !== conversationId) return null;
       return {
@@ -33682,7 +34851,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         conversationLabel: current.label || chatSessionIdRef.current
       };
     }, [hostConversation]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       if (status.state !== "ok") {
         hostApprovalBridge.detach();
         return void 0;
@@ -33696,18 +34865,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
       return () => hostApprovalBridge.detach();
     }, [elicitationCoordinator, getHost, hostApprovalBridge, resolveHostConversationContext, status.state]);
-    const [probe, setProbe] = import_react46.default.useState(null);
-    const [codexProbe, setCodexProbe] = import_react46.default.useState(null);
-    const [codexModels, setCodexModels] = import_react46.default.useState(null);
-    const [openCodeProbe, setOpenCodeProbe] = import_react46.default.useState(null);
-    const [chatEntries, setChatEntries] = import_react46.default.useState([]);
-    const [chatStreaming, setChatStreaming] = import_react46.default.useState(false);
-    const [thinkingActive, setThinkingActive] = import_react46.default.useState(false);
-    const baseDescriptor = import_react46.default.useMemo(
+    const [probe, setProbe] = import_react47.default.useState(null);
+    const [codexProbe, setCodexProbe] = import_react47.default.useState(null);
+    const [codexModels, setCodexModels] = import_react47.default.useState(null);
+    const [openCodeProbe, setOpenCodeProbe] = import_react47.default.useState(null);
+    const [chatEntries, setChatEntries] = import_react47.default.useState([]);
+    const chatEntriesRef = import_react47.default.useRef(chatEntries);
+    chatEntriesRef.current = chatEntries;
+    const sessionControllerRef = import_react47.default.useRef(null);
+    const [chatStreaming, setChatStreaming] = import_react47.default.useState(false);
+    const [thinkingActive, setThinkingActive] = import_react47.default.useState(false);
+    const baseDescriptor = import_react47.default.useMemo(
       () => baseDescriptorFor(backendPref),
       [backendPref]
     );
-    const [descriptor, setDescriptor] = import_react46.default.useState(() => baseDescriptor);
+    const [descriptor, setDescriptor] = import_react47.default.useState(() => baseDescriptor);
     const requestedModel = sessionModel || model;
     const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
@@ -33717,7 +34889,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       defaultEffort: descriptor.defaultEffort
     });
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
       ProviderManagerSection,
       {
         lang,
@@ -33751,7 +34923,7 @@ ${draft.baseUrl}`)) return;
         }
       }
     );
-    const channels = import_react46.default.useMemo(() => ({
+    const channels = import_react47.default.useMemo(() => ({
       claude: claudeChannels({ probe }),
       codex: codexChannels({ codexProbe }),
       opencode: openCodeChannels({ probe: openCodeProbe, providers })
@@ -33762,26 +34934,28 @@ ${draft.baseUrl}`)) return;
       providers
     ]);
     const effective = pickBackend({ pref: backendPref, channels, channelChoices });
-    const effectiveBackendRef = import_react46.default.useRef(effective.backend);
+    const effectiveBackendRef = import_react47.default.useRef(effective.backend);
     effectiveBackendRef.current = effective.backend;
-    const runtimeRef = import_react46.default.useRef({
+    const effectiveChannelRef = import_react47.default.useRef(effective.channel);
+    effectiveChannelRef.current = effective.channel;
+    const runtimeRef = import_react47.default.useRef({
       model: effectiveModel,
       permissionMode,
       effort: effectiveEffort,
       thinking: null,
       fast: effectiveFast
     });
-    const extRoot = import_react46.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
-    const hostPortRef = import_react46.default.useRef(status.port);
+    const extRoot = import_react47.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
+    const hostPortRef = import_react47.default.useRef(status.port);
     hostPortRef.current = status.port;
-    const getMcpSpec2 = import_react46.default.useCallback(() => getMcpSpec({
+    const getMcpSpec2 = import_react47.default.useCallback(() => getMcpSpec({
       port: hostPortRef.current,
       label: chatSessionIdRef.current,
       approvalTier: permissionModeRef.current,
       expertGuidance: expertGuidanceRef.current,
       hostConversation
     }), [hostConversation]);
-    const mcp = import_react46.default.useMemo(() => createMcpClient({
+    const mcp = import_react47.default.useMemo(() => createMcpClient({
       extRoot,
       getHost,
       getPort: () => hostPortRef.current,
@@ -33791,24 +34965,25 @@ ${draft.baseUrl}`)) return;
         expertGuidance: expertGuidanceRef.current
       })
     }), [extRoot, getHost, hostConversation]);
-    const toolsApi = import_react46.default.useMemo(() => createToolsApi(mcp), [mcp]);
-    import_react46.default.useEffect(() => () => mcp.stop(), [mcp]);
-    const releaseTurnAttachments = import_react46.default.useCallback((turn) => {
+    const toolsApi = import_react47.default.useMemo(() => createToolsApi(mcp), [mcp]);
+    import_react47.default.useEffect(() => () => mcp.stop(), [mcp]);
+    const releaseTurnAttachments = import_react47.default.useCallback((turn) => {
       for (const attachment of (turn == null ? void 0 : turn.attachments) || []) {
         attachmentStore.release(attachment.id);
       }
     }, [attachmentStore]);
-    const resetAttachmentDraftSession = import_react46.default.useCallback(() => {
+    const resetAttachmentDraftSession = import_react47.default.useCallback((nextSessionId = null) => {
       attachmentStore.releaseSession(chatSessionIdRef.current);
       attachmentOperationsRef.current.clear();
       pendingTurnRef.current = null;
       acceptedTurnRef.current = null;
       dispatchAttachmentDraft({ type: "reset" });
-      const nextSessionId = "chat-" + randomProviderCredentialId();
-      chatSessionIdRef.current = nextSessionId;
-      setChatSessionId(nextSessionId);
+      if (nextSessionId) {
+        chatSessionIdRef.current = nextSessionId;
+        setChatSessionId(nextSessionId);
+      }
     }, [attachmentStore]);
-    const addAttachment = import_react46.default.useCallback(async ({ pondId, file }) => {
+    const addAttachment = import_react47.default.useCallback(async ({ pondId, file }) => {
       const operation = {};
       const sessionId = chatSessionId;
       attachmentOperationsRef.current.set(pondId, operation);
@@ -33834,15 +35009,28 @@ ${draft.baseUrl}`)) return;
         });
       }
     }, [attachmentStore, chatSessionId]);
-    const removeAttachment = import_react46.default.useCallback((item) => {
+    const removeAttachment = import_react47.default.useCallback((item) => {
       attachmentOperationsRef.current.delete(item.pondId);
       if (item.ref) attachmentStore.release(item.ref.id);
       dispatchAttachmentDraft({ type: "remove", pondId: item.pondId });
     }, [attachmentStore]);
-    const retryAttachment = import_react46.default.useCallback((item) => {
+    const retryAttachment = import_react47.default.useCallback((item) => {
       addAttachment({ pondId: item.pondId, file: item.file });
     }, [addAttachment]);
-    const handleChatEvent = import_react46.default.useCallback((evt) => {
+    const commitChatEntries = import_react47.default.useCallback((updater, event) => {
+      var _a;
+      const current = chatEntriesRef.current;
+      const next = typeof updater === "function" ? updater(current) : updater;
+      chatEntriesRef.current = Array.isArray(next) ? next : current;
+      setChatEntries(chatEntriesRef.current);
+      (_a = sessionControllerRef.current) == null ? void 0 : _a.recordEntries(chatEntriesRef.current, event);
+    }, []);
+    const handleChatEvent = import_react47.default.useCallback((evt) => {
+      var _a;
+      if (evt.type === "session-ref") {
+        (_a = sessionControllerRef.current) == null ? void 0 : _a.recordBackendRef(evt.ref);
+        return;
+      }
       const pending = pendingTurnRef.current;
       if (evt.type === "error") {
         const exactSecrets = attachmentPathSecrets({ pendingTurn: pending });
@@ -33878,7 +35066,7 @@ ${draft.baseUrl}`)) return;
       if (evt.type === "turn-accepted") {
         if (!pending || evt.turnId !== pending.turnId) return;
         acceptedTurnRef.current = pending.turnId;
-        setChatEntries((entries) => entries.concat(userTurnEntry(pending)));
+        commitChatEntries((entries) => entries.concat(userTurnEntry(pending)), evt);
         dispatchAttachmentDraft({ type: "accepted", turnId: pending.turnId });
         setChatStreaming(true);
         return;
@@ -33913,9 +35101,9 @@ ${draft.baseUrl}`)) return;
         setChatStreaming(false);
         setThinkingActive(false);
       }
-      setChatEntries((entries) => reduceEvent(entries, evt));
-    }, [releaseTurnAttachments]);
-    const claudeBackend = import_react46.default.useMemo(() => createClaudeAgentBackend({
+      commitChatEntries((entries) => reduceEvent(entries, evt), evt);
+    }, [commitChatEntries, releaseTurnAttachments]);
+    const claudeBackend = import_react47.default.useMemo(() => createClaudeAgentBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
@@ -33932,7 +35120,7 @@ ${draft.baseUrl}`)) return;
       handleChatEvent,
       platform
     ]);
-    const codexBackend = import_react46.default.useMemo(() => createCodexBackend({
+    const codexBackend = import_react47.default.useMemo(() => createCodexBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
@@ -33946,11 +35134,7 @@ ${draft.baseUrl}`)) return;
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
-    import_react46.default.useEffect(
-      () => installBeforeUnloadReset(window, codexBackend),
-      [codexBackend]
-    );
-    const openCodeBackend = import_react46.default.useMemo(() => createOpenCodeBackend({
+    const openCodeBackend = import_react47.default.useMemo(() => createOpenCodeBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
@@ -33983,7 +35167,92 @@ ${draft.baseUrl}`)) return;
         `Unknown backend id "${effective.backend}". Known backend ids: ${knownBackendIds}`
       );
     })();
-    import_react46.default.useEffect(() => {
+    const backendInstancesRef = import_react47.default.useRef(backendInstances);
+    backendInstancesRef.current = backendInstances;
+    const activeBackendInstanceRef = import_react47.default.useRef(activeBackend);
+    activeBackendInstanceRef.current = activeBackend;
+    const pendingSessionLoadRef = import_react47.default.useRef(null);
+    const [sessionSnapshot, setSessionSnapshot] = import_react47.default.useState({ sessions: [], activeId: null });
+    const sessionController = import_react47.default.useMemo(() => createSessionController({
+      store: sessionStore,
+      now: () => Date.now(),
+      uuid: randomProviderCredentialId,
+      deps: {
+        stopActiveTurn: () => {
+          var _a, _b;
+          return (_b = (_a = activeBackendInstanceRef.current) == null ? void 0 : _a.stop) == null ? void 0 : _b.call(_a);
+        },
+        resetActiveBackend: () => {
+          var _a, _b;
+          return (_b = (_a = activeBackendInstanceRef.current) == null ? void 0 : _a.reset) == null ? void 0 : _b.call(_a);
+        },
+        cancelPendingUi: () => elicitationCoordinator.cancelAll(),
+        rotateHostConversation: (sessionId) => {
+          resetAttachmentDraftSession(sessionId);
+          hostConversation.closeConversation();
+          if (statusRef.current.state === "ok") {
+            hostConversation.ensureConversation({
+              label: sessionId,
+              approvalTier: permissionModeRef.current,
+              expertGuidance: expertGuidanceRef.current
+            });
+          }
+        },
+        adoptBackendRef: (backend, ref) => {
+          var _a, _b;
+          (_b = (_a = backendInstancesRef.current[backend]) == null ? void 0 : _a.adoptSessionRef) == null ? void 0 : _b.call(_a, ref);
+        },
+        getBackendRef: () => {
+          var _a, _b;
+          return ((_b = (_a = activeBackendInstanceRef.current) == null ? void 0 : _a.getSessionRef) == null ? void 0 : _b.call(_a)) || null;
+        },
+        setEntries: (entries) => {
+          chatEntriesRef.current = entries;
+          setChatEntries(entries);
+        },
+        getEntries: () => chatEntriesRef.current,
+        selectBackend: async (backend) => {
+          setBackendPref(backend);
+          writePref("ae_mcp_backend", backend);
+          await new Promise((resolve) => {
+            const afterPaint = () => setTimeout(resolve, 0);
+            if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(afterPaint);
+            else afterPaint();
+          });
+        },
+        currentBackend: () => effectiveBackendRef.current,
+        currentModel: () => runtimeRef.current.model,
+        currentChannel: () => effectiveChannelRef.current,
+        log: (message) => {
+          var _a;
+          return (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, message);
+        }
+      }
+    }), [
+      elicitationCoordinator,
+      hostConversation,
+      resetAttachmentDraftSession,
+      sessionStore
+    ]);
+    sessionControllerRef.current = sessionController;
+    import_react47.default.useEffect(() => sessionController.subscribe(setSessionSnapshot), [sessionController]);
+    const sessionBootStartedRef = import_react47.default.useRef(false);
+    import_react47.default.useEffect(() => {
+      if (status.state !== "ok" || effective.backend === "none" || sessionBootStartedRef.current) return;
+      sessionBootStartedRef.current = true;
+      sessionController.boot().catch((error) => {
+        var _a;
+        return (_a = panelLogRef.current) == null ? void 0 : _a.call(
+          panelLogRef,
+          "Session restore failed: " + ((error == null ? void 0 : error.message) || String(error))
+        );
+      });
+    }, [effective.backend, sessionController, status.state]);
+    import_react47.default.useEffect(
+      () => installBeforeUnloadReset(window, codexBackend, () => sessionController.flush()),
+      [codexBackend, sessionController]
+    );
+    import_react47.default.useEffect(() => {
       const facts = {
         effectiveBackend: effective.backend,
         effectiveChannel: effective.channel,
@@ -34010,8 +35279,8 @@ ${draft.baseUrl}`)) return;
       providers,
       providerInit.state
     ]);
-    const activeBackendRef = import_react46.default.useRef(null);
-    const runClaudeProbe = import_react46.default.useCallback(() => {
+    const lastRealBackendRef = import_react47.default.useRef(null);
+    const runClaudeProbe = import_react47.default.useCallback(() => {
       let alive = true;
       setProbe(null);
       probeClaudeLogin({
@@ -34032,11 +35301,11 @@ ${draft.baseUrl}`)) return;
         alive = false;
       };
     }, [platform]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
     }, [backendPref, runClaudeProbe]);
-    const runCodexProbe = import_react46.default.useCallback(() => {
+    const runCodexProbe = import_react47.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
       codexBackend.probeAccount().then((result) => {
@@ -34057,11 +35326,11 @@ ${draft.baseUrl}`)) return;
         alive = false;
       };
     }, [codexBackend]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
-    const runOpenCodeProbe = import_react46.default.useCallback(() => {
+    const runOpenCodeProbe = import_react47.default.useCallback(() => {
       let alive = true;
       setOpenCodeProbe(null);
       openCodeBackend.probeAccount().then((result) => {
@@ -34073,30 +35342,33 @@ ${draft.baseUrl}`)) return;
         alive = false;
       };
     }, [openCodeBackend]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       if (backendPref !== "opencode") return void 0;
       if (status.state !== "ok" || providerInit.state !== "ready") return void 0;
       return runOpenCodeProbe();
     }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
-    import_react46.default.useEffect(() => {
-      const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
-      activeBackendRef.current = decision.nextReal;
+    import_react47.default.useEffect(() => {
+      const decision = shouldResetOnBackendChange(lastRealBackendRef.current, effective.backend);
+      lastRealBackendRef.current = decision.nextReal;
       if (!decision.reset) return;
       claudeBackend.reset();
       codexBackend.reset();
       openCodeBackend.reset();
       resetAttachmentDraftSession();
-      setChatEntries([]);
       setChatStreaming(false);
+      setThinkingActive(false);
+      if (pendingSessionLoadRef.current) return;
       setSessionModel(null);
       setSessionEffort(null);
       setSessionFast(null);
+      void sessionController.createSession();
     }, [
       effective.backend,
       claudeBackend,
       codexBackend,
       openCodeBackend,
-      resetAttachmentDraftSession
+      resetAttachmentDraftSession,
+      sessionController
     ]);
     const sendChat = (input) => {
       var _a;
@@ -34151,22 +35423,12 @@ ${draft.baseUrl}`)) return;
         });
       }
     };
-    const newChatSession = () => {
-      hostConversation.closeConversation();
-      if (activeBackend) activeBackend.reset();
-      resetAttachmentDraftSession();
-      if (status.state === "ok") {
-        hostConversation.ensureConversation({
-          label: chatSessionIdRef.current,
-          approvalTier: permissionModeRef.current,
-          expertGuidance: expertGuidanceRef.current
-        });
-      }
+    const newChatSession = async () => {
+      await sessionController.createSession();
       setChatStreaming(false);
       setThinkingActive(false);
-      setChatEntries([]);
     };
-    const pushLog = import_react46.default.useCallback((m) => {
+    const pushLog = import_react47.default.useCallback((m) => {
       const message = String(m != null ? m : "");
       const host = getHost();
       try {
@@ -34179,7 +35441,39 @@ ${draft.baseUrl}`)) return;
       if (!keepLogLine(logLevelRef.current, message)) return;
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${message}`]);
     }, [getHost]);
-    const exportLogs = import_react46.default.useCallback(async () => {
+    panelLogRef.current = pushLog;
+    const switchChatSession = import_react47.default.useCallback(async (id) => {
+      const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
+      pendingSessionLoadRef.current = id;
+      if (target) {
+        setSessionModel(target.model || null);
+        setSessionEffort(null);
+        setSessionFast(null);
+      }
+      try {
+        await sessionController.switchTo(id);
+        setChatStreaming(false);
+        setThinkingActive(false);
+      } catch (error) {
+        pushLog("Session switch failed: " + ((error == null ? void 0 : error.message) || String(error)));
+      } finally {
+        pendingSessionLoadRef.current = null;
+      }
+    }, [pushLog, sessionController]);
+    const deleteChatSession = import_react47.default.useCallback(async (id) => {
+      var _a;
+      const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
+      try {
+        const ref = await sessionController.remove(id);
+        if (!target || !ref) return;
+        const backend = backendInstancesRef.current[target.backend];
+        const result = await ((_a = backend == null ? void 0 : backend.deleteSessionRef) == null ? void 0 : _a.call(backend, ref));
+        pushLog(`Session backend delete (${target.backend}): ${JSON.stringify(result || { ok: false })}`);
+      } catch (error) {
+        pushLog("Session delete failed: " + ((error == null ? void 0 : error.message) || String(error)));
+      }
+    }, [pushLog, sessionController]);
+    const exportLogs = import_react47.default.useCallback(async () => {
       var _a;
       try {
         const exactSecrets = [];
@@ -34287,7 +35581,7 @@ ${draft.baseUrl}`)) return;
       status.port,
       cs2
     ]);
-    const undoToPreviousCheckpoint = import_react46.default.useCallback(async () => {
+    const undoToPreviousCheckpoint = import_react47.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
         pushLog("Reverted to previous checkpoint");
@@ -34295,7 +35589,7 @@ ${draft.baseUrl}`)) return;
         pushLog("Checkpoint revert failed: " + (e && e.message ? e.message : String(e)));
       }
     }, [mcp, pushLog]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -34313,7 +35607,7 @@ ${draft.baseUrl}`)) return;
       });
       ctrl.current.start(port);
     }, [cs2, extRoot, platform, pushLog]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       if (status.state !== "ok") return void 0;
       let alive = true;
       setProviderInit({ state: "checking", error: "" });
@@ -34334,7 +35628,7 @@ ${draft.baseUrl}`)) return;
         alive = false;
       };
     }, [openCodeProviderStore, status.state]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
         const h = getHost();
@@ -34344,7 +35638,7 @@ ${draft.baseUrl}`)) return;
       const i = setInterval(update, 3e3);
       return () => clearInterval(i);
     }, [drawerOpen, getHost]);
-    import_react46.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       if (tab !== "settings") return void 0;
       const update = () => {
         const h = getHost();
@@ -34356,7 +35650,7 @@ ${draft.baseUrl}`)) return;
       const i = setInterval(update, 4e3);
       return () => clearInterval(i);
     }, [tab, getHost]);
-    const runDiag = import_react46.default.useCallback(async () => {
+    const runDiag = import_react47.default.useCallback(async () => {
       setDiagnostics("running");
       try {
         const items = await runDiagnostics({
@@ -34405,7 +35699,7 @@ ${draft.baseUrl}`)) return;
       fetchImpl: window.fetch.bind(window)
     });
     if (!wizardDone) {
-      return /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
         WizardScreen,
         {
           step: wizStep,
@@ -34435,8 +35729,8 @@ ${draft.baseUrl}`)) return;
     const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
-    return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)(import_react46.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)(import_react47.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
         StatusBar,
         {
           status: statusForBar,
@@ -34444,15 +35738,17 @@ ${draft.baseUrl}`)) return;
           onStatusClick: () => {
             setDrawerOpen(true);
           },
+          onSessions: () => setSessionsOpen(true),
           onTogglePause: togglePause,
           onSettings: () => setTab("settings"),
           pauseTitle: t.pauseAll,
           resumeTitle: t.resume,
+          sessionsTitle: t.sessions,
           settingsTitle: t.settings
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
-        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
+        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
           ChatScreen,
           {
             lang,
@@ -34490,7 +35786,7 @@ ${draft.baseUrl}`)) return;
             onRetryAttachment: retryAttachment
           }
         ) : null,
-        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
           ActivityScreen,
           {
             events,
@@ -34501,14 +35797,14 @@ ${draft.baseUrl}`)) return;
             emptyCaption: t.actEmptyB
           }
         ) : null,
-        tab === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+        tab === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
           ToolsScreen,
           {
             api: toolsApi,
             lang
           }
         ) : null,
-        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
           SettingsScreen,
           {
             lang,
@@ -34574,6 +35870,7 @@ ${draft.baseUrl}`)) return;
             },
             backend: backendPref,
             onBackendChange: (m) => {
+              sessionController.flush();
               setBackendPref(m);
               writePref("ae_mcp_backend", m);
             },
@@ -34597,8 +35894,8 @@ ${draft.baseUrl}`)) return;
           tokenEpoch
         ) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
         ConnectionDrawer,
         {
           open: drawerOpen,
@@ -34612,7 +35909,23 @@ ${draft.baseUrl}`)) return;
           onRestart: () => applyPort(status.port)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+        SessionDrawer,
+        {
+          open: sessionsOpen,
+          onClose: () => setSessionsOpen(false),
+          lang,
+          sessions: sessionSnapshot.sessions,
+          activeId: sessionSnapshot.activeId,
+          onNew: newChatSession,
+          onSwitch: switchChatSession,
+          onRename: (id, title) => sessionController.rename(id, title),
+          onArchive: (id) => sessionController.archive(id),
+          onUnarchive: (id) => sessionController.unarchive(id),
+          onDelete: deleteChatSession
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
         ConfirmDialog,
         {
           open: confirmRegen,
@@ -34634,7 +35947,7 @@ ${draft.baseUrl}`)) return;
           }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
         ToolApprovalDialog,
         {
           record: toolApproval && toolApproval.plan ? toolApproval : null,
@@ -34642,7 +35955,7 @@ ${draft.baseUrl}`)) return;
           onResolve: (result) => elicitationCoordinator.resolveVisible(result)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
         QuestionFormDialog,
         {
           record: toolApproval && !toolApproval.plan ? toolApproval : null,
@@ -34653,13 +35966,13 @@ ${draft.baseUrl}`)) return;
     ] });
   }
   function App({ cs: cs2 }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Shell, { cs: cs2 }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Shell, { cs: cs2 }) });
   }
 
   // src/main.jsx
-  var import_jsx_runtime43 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime44 = __toESM(require_jsx_runtime(), 1);
   var cs = new window.CSInterface();
-  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime43.jsx)(App, { cs }));
+  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime44.jsx)(App, { cs }));
 })();
 /*! Bundled license information:
 
@@ -34757,6 +36070,22 @@ lucide-react/dist/esm/Icon.js:
    *)
 
 lucide-react/dist/esm/createLucideIcon.js:
+  (**
+   * @license lucide-react v0.453.0 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   *)
+
+lucide-react/dist/esm/icons/archive-restore.js:
+  (**
+   * @license lucide-react v0.453.0 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   *)
+
+lucide-react/dist/esm/icons/archive.js:
   (**
    * @license lucide-react v0.453.0 - ISC
    *
@@ -34949,6 +36278,14 @@ lucide-react/dist/esm/icons/message-square.js:
    *)
 
 lucide-react/dist/esm/icons/pause.js:
+  (**
+   * @license lucide-react v0.453.0 - ISC
+   *
+   * This source code is licensed under the ISC license.
+   * See the LICENSE file in the root directory of this source tree.
+   *)
+
+lucide-react/dist/esm/icons/pencil.js:
   (**
    * @license lucide-react v0.453.0 - ISC
    *

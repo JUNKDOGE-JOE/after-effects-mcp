@@ -217,6 +217,8 @@ export function createOpenCodeBackend({
   let baseUrl = '';
   let configHome = '';
   let sessionId = null;
+  let adoptedSessionId = null;
+  let sessionWasAdopted = false;
   let serverPromise = null;
   let sessionPromise = null;
   let sseStarted = false;
@@ -592,7 +594,6 @@ export function createOpenCodeBackend({
   }
 
   async function ensureSession() {
-    if (sessionId) return sessionId;
     if (sessionPromise) return sessionPromise;
     sessionPromise = (async () => {
       await startServer();
@@ -600,6 +601,12 @@ export function createOpenCodeBackend({
         toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
       } catch (error) {
         throw taggedError(error, 'categoryCode', 'MCP_UNREACHABLE');
+      }
+      if (sessionId) return sessionId;
+      if (adoptedSessionId) {
+        sessionId = adoptedSessionId;
+        sessionWasAdopted = true;
+        return sessionId;
       }
       // OpenCode 1.17.x /session rejects unknown fields with a bare 400
       // (a permission field here broke session creation on the live round).
@@ -611,6 +618,9 @@ export function createOpenCodeBackend({
       });
       sessionId = String((result && (result.id || result.sessionID || result.sessionId)) || '');
       if (!sessionId) throw taggedError(new Error('OpenCode did not return a session id.'), 'fallbackCode', 'SESSION_START_FAILED');
+      adoptedSessionId = sessionId;
+      sessionWasAdopted = false;
+      emit({ type: 'session-ref', ref: { kind: 'opencode-session', id: sessionId } });
       return sessionId;
     })();
     try {
@@ -851,9 +861,17 @@ export function createOpenCodeBackend({
         activeTurnAccepted = true;
         emit({ type: 'turn-accepted', turnId: turn.turnId, transport: 'opencode-file-part' });
       }
-      await postJson('/session/' + encodeURIComponent(id) + '/message', {
-        parts: openCodeParts(turn),
-      });
+      const messageBody = { parts: openCodeParts(turn) };
+      try {
+        await postJson('/session/' + encodeURIComponent(id) + '/message', messageBody);
+      } catch (error) {
+        if (error?.httpStatus !== 404 || !sessionWasAdopted) throw error;
+        sessionId = null;
+        adoptedSessionId = null;
+        sessionWasAdopted = false;
+        const replacementId = await ensureSession();
+        await postJson('/session/' + encodeURIComponent(replacementId) + '/message', messageBody);
+      }
     } catch (e) {
       const httpStatus = extractHttpStatus(e?.httpStatus);
       const fallbackCode = e?.fallbackCode
@@ -924,6 +942,8 @@ export function createOpenCodeBackend({
     pendingApprovals.clear();
     sessionAllowedTools.clear();
     sessionId = null;
+    adoptedSessionId = null;
+    sessionWasAdopted = false;
     sessionPromise = null;
     activeResolve = null;
     activeRun = null;
@@ -965,5 +985,45 @@ export function createOpenCodeBackend({
     return transcript.slice();
   }
 
-  return { sendUser, approve, stop, reset, getMessages, getStderrTail: () => stderrTail, probeAccount };
+  function getSessionRef() {
+    const id = sessionId || adoptedSessionId;
+    return id ? { kind: 'opencode-session', id } : null;
+  }
+
+  function adoptSessionRef(ref) {
+    sessionId = null;
+    adoptedSessionId = ref && ref.kind === 'opencode-session' && ref.id
+      ? String(ref.id) : null;
+    sessionWasAdopted = Boolean(adoptedSessionId);
+  }
+
+  async function deleteSessionRef(ref) {
+    if (!ref || ref.kind !== 'opencode-session' || !ref.id) {
+      return { ok: false, detail: 'invalid opencode session reference' };
+    }
+    if (!baseUrl || !proc || sseClosed) {
+      return { ok: false, skipped: true, detail: 'opencode server not running' };
+    }
+    try {
+      await request('/session/' + encodeURIComponent(String(ref.id)), { method: 'DELETE' });
+      if (sessionId === ref.id) sessionId = null;
+      if (adoptedSessionId === ref.id) adoptedSessionId = null;
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, detail: error?.message || String(error) };
+    }
+  }
+
+  return {
+    sendUser,
+    approve,
+    stop,
+    reset,
+    getSessionRef,
+    adoptSessionRef,
+    deleteSessionRef,
+    getMessages,
+    getStderrTail: () => stderrTail,
+    probeAccount,
+  };
 }

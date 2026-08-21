@@ -225,7 +225,7 @@ test('createOpenCodeBackend sends official file parts and accepts at dispatch', 
       },
     ],
   });
-  assert.deepEqual(events[0], {
+  assert.deepEqual(events.find((event) => event.type === 'turn-accepted'), {
     type: 'turn-accepted',
     turnId: 'turn-1',
     transport: 'opencode-file-part',
@@ -497,7 +497,7 @@ test('createOpenCodeBackend maps text, reasoning, tool, and idle SSE events to p
   fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
   await pending;
 
-  assert.deepEqual(events, [
+  assert.deepEqual(events.filter((event) => event.type !== 'session-ref'), [
     { type: 'turn-start' },
     { type: 'thinking', active: true },
     { type: 'thinking', active: false },
@@ -798,4 +798,57 @@ test('probe then send reuse one opencode instance and one event stream', async (
   });
   await pending;
   assert.equal(spawned.calls.length, 1);
+});
+
+test('OpenCode adopts an existing session without creating a new one', async () => {
+  const h = makeBackend();
+  h.backend.adoptSessionRef({ kind: 'opencode-session', id: 'session_saved' });
+  h.backend.sendUser({ turnId: 'turn-adopt', text: 'continue', attachments: [] });
+  await flush();
+  assert.equal(h.fetched.calls.some((call) => call.method === 'POST' && call.path === '/session'), false);
+  assert.equal(h.fetched.calls.some((call) => call.path === '/session/session_saved/message'), true);
+  assert.deepEqual(h.backend.getSessionRef(), { kind: 'opencode-session', id: 'session_saved' });
+  h.backend.reset();
+});
+
+test('OpenCode recreates an adopted session once after a message 404', async () => {
+  const base = makeFetch();
+  const calls = [];
+  let missing = true;
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    calls.push({ method: options.method || 'GET', path: parsed.pathname });
+    if (parsed.pathname === '/session/session_missing/message' && missing) {
+      missing = false;
+      return jsonResponse({ error: 'missing' }, false, 404);
+    }
+    return base.fetchImpl(url, options);
+  };
+  const h = makeBackend({ fetchImpl });
+  h.backend.adoptSessionRef({ kind: 'opencode-session', id: 'session_missing' });
+  const run = h.backend.sendUser({ turnId: 'turn-rebuild', text: 'continue', attachments: [] });
+  await flush();
+  assert.equal(calls.filter((call) => call.path === '/session/session_missing/message').length, 1);
+  assert.equal(calls.filter((call) => call.method === 'POST' && call.path === '/session').length, 1);
+  assert.ok(h.events.some((event) => event.type === 'session-ref' && event.ref.id === 'session_1'));
+  base.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await run;
+});
+
+test('OpenCode deleteSessionRef deletes only while its server URL is live', async () => {
+  const stopped = makeBackend();
+  assert.deepEqual(await stopped.backend.deleteSessionRef({ kind: 'opencode-session', id: 'session_1' }), {
+    ok: false,
+    skipped: true,
+    detail: 'opencode server not running',
+  });
+
+  const live = makeBackend();
+  await live.backend.probeAccount();
+  assert.deepEqual(await live.backend.deleteSessionRef({ kind: 'opencode-session', id: 'session_1' }), { ok: true });
+  assert.ok(live.fetched.calls.some((call) => call.method === 'DELETE' && call.path === '/session/session_1'));
+  live.backend.reset();
 });
