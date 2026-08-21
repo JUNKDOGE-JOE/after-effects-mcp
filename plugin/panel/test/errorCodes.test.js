@@ -76,6 +76,8 @@ test('every error hint is available in Chinese and English', () => {
   assert.match(errorHint('CLI_MISSING', 'en'), /Settings.*Diagnostics/);
   assert.match(errorHint('UPSTREAM_HTTP_429', 'zh'), /状态码/);
   assert.match(errorHint('UPSTREAM_HTTP_429', 'en'), /status code/i);
+  assert.match(errorHint('AUTH_REQUIRED', 'zh'), /设置 → AI/);
+  assert.match(errorHint('AUTH_REQUIRED', 'en'), /Settings → AI/);
 });
 
 test('free-form process output requires HTTP context and authentication failure context', () => {

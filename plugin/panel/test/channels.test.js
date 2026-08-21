@@ -33,6 +33,67 @@ test('Codex exposes failed probe detail instead of only successful identity fiel
   assert.equal(channels[0].detail, 'probe timeout: account/read');
 });
 
+test('Codex logged-out guidance exposes the isolated Windows login command', () => {
+  const channel = codexChannels({
+    codexProbe: {
+      loggedIn: false,
+      runtimeOk: true,
+      codexHome: 'C:\\Users\\test\\.ae-mcp\\codex-home',
+      platformId: 'windows-x64',
+    },
+  })[0];
+  const command = "$env:CODEX_HOME='C:\\Users\\test\\.ae-mcp\\codex-home'; codex login";
+  assert.match(channel.fixHint.zh, /C:\\Users\\test\\\.ae-mcp\\codex-home/);
+  assert.match(channel.fixHint.zh, /\$env:CODEX_HOME/);
+  assert.match(channel.fixHint.en, /C:\\Users\\test\\\.ae-mcp\\codex-home/);
+  assert.match(channel.fixHint.en, /\$env:CODEX_HOME/);
+  assert.deepEqual(channel.copyAction, {
+    label: { zh: '复制登录命令', en: 'Copy login command' },
+    text: command,
+  });
+});
+
+test('Codex logged-out guidance uses POSIX syntax on macOS', () => {
+  const channel = codexChannels({
+    codexProbe: {
+      loggedIn: false,
+      runtimeOk: true,
+      codexHome: '/Users/t/.ae-mcp/codex-home',
+      platformId: 'macos-arm64',
+    },
+  })[0];
+  assert.equal(
+    channel.copyAction.text,
+    "CODEX_HOME='/Users/t/.ae-mcp/codex-home' codex login",
+  );
+});
+
+test('Codex runtime failures retain CLI setup guidance without a copy action', () => {
+  const channel = codexChannels({
+    codexProbe: {
+      loggedIn: false,
+      runtimeOk: false,
+      codexHome: 'C:\\Users\\test\\.ae-mcp\\codex-home',
+      platformId: 'windows-x64',
+    },
+  })[0];
+  assert.match(channel.fixHint.zh, /AE_MCP_CODEX_CLI/);
+  assert.match(channel.fixHint.en, /AE_MCP_CODEX_CLI/);
+  assert.equal(channel.copyAction, undefined);
+});
+
+test('Codex successful and pending probes do not expose copy actions', () => {
+  assert.equal(codexChannels({
+    codexProbe: {
+      loggedIn: true,
+      runtimeOk: true,
+      codexHome: 'C:\\Users\\test\\.ae-mcp\\codex-home',
+      platformId: 'windows-x64',
+    },
+  })[0].copyAction, undefined);
+  assert.equal(codexChannels({ codexProbe: null })[0].copyAction, undefined);
+});
+
 test('Claude probe timeout guidance is different from not-logged-in guidance', () => {
   const timeout = claudeChannels({
     probe: { loggedIn: false, cliOk: true, reason: 'probe-timeout' },

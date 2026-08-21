@@ -365,9 +365,13 @@ export function createCodexBackend({
     resetProviderStderrRedactor();
   }
 
+  function codexHomePath() {
+    return adapter.paths.join([adapter.paths.configRoot, 'codex-home']);
+  }
+
   function currentEnv() {
     const spawnEnv = adapter.completeSpawnEnv(env || {});
-    const codexHome = adapter.paths.join([adapter.paths.configRoot, 'codex-home']);
+    const codexHome = codexHomePath();
     adapter.fs.mkdirSync(codexHome, { recursive: true });
     return { ...spawnEnv, CODEX_HOME: codexHome };
   }
@@ -672,6 +676,7 @@ export function createCodexBackend({
           exitCode: code,
           ...(signal ? { signal } : {}),
           ...(tail ? { stderrTail: tail } : {}),
+          ...(classified.code === 'AUTH_REQUIRED' ? { codexHome: codexHomePath() } : {}),
         },
         ...activeTurnFailureFields(),
       });
@@ -936,6 +941,7 @@ export function createCodexBackend({
         ...(error?.resolution ? { resolution: error.resolution } : {}),
         ...(error?.code && error?.spawnError ? { spawnCode: error.code } : {}),
       };
+      if (classified.code === 'AUTH_REQUIRED') detail.codexHome = codexHomePath();
       providerDeltaRedactor.discard();
       // The turn is reaching its error terminal state; settle any approval that
       // is still awaiting the user so the card cannot outlive its turn (#220).
@@ -1094,7 +1100,12 @@ export function createCodexBackend({
       cliInfo = lastCliInfo || await resolveCli({ env: spawnEnv, platform: adapter });
       lastCliInfo = cliInfo;
     } catch (e) { /* diagnostics only, never blocks the probe */ }
-    const diag = { cliPath: cliInfo.cliPath || '', cliVersion: cliInfo.version || '' };
+    const diag = {
+      cliPath: cliInfo.cliPath || '',
+      cliVersion: cliInfo.version || '',
+      codexHome: codexHomePath(),
+      platformId: adapter.id || '',
+    };
     const probeSecrets = () => [];
     const failure = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
     if (!cliInfo.ok) {
