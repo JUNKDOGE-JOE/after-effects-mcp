@@ -307,6 +307,53 @@ async function main() {
                 }),
             two,
         );
+        const gridReply = await call('ae_previewFrame', {
+            comp_id: compId,
+            range: { start: 0, end: 2, count: 4 },
+            layout: 'grid',
+        });
+        const grid = value(gridReply);
+        check(
+            'preview range grid returns one image and four cells',
+            grid && grid.grid && grid.grid.cells.length === 4
+                && gridReply.content.filter(function (item) { return item.type === 'image'; }).length === 1,
+            grid,
+        );
+        const sameReply = await call('ae_previewFrame', {
+            comp_id: compId,
+            compare: { a: { time: 1 }, b: { time: 1 } },
+        });
+        const same = value(sameReply);
+        check(
+            'preview compare identical time has no changed pixels',
+            same && same.compare && same.compare.metrics.changedRatio === 0,
+            same,
+        );
+        try {
+            const hidden = parsedExecContent(await call('ae_exec', {
+                undo_group_name: 'live-preview-hide-red',
+                code: 'var l=AEMCP.compById(' + JSON.stringify(Number(compId)) + ').layer("Red"); l.property("ADBE Transform Group").property("ADBE Opacity").setValue(0); ({ok:true,opacity:l.property("ADBE Transform Group").property("ADBE Opacity").value})',
+            }));
+            check('preview compare hides Red', hidden && hidden.ok && hidden.opacity === 0, hidden);
+            const changed = value(await call('ae_previewFrame', {
+                comp_id: compId,
+                compare: {
+                    a: { capture_id: same.captureId, index: 0 },
+                    b: { time: 1 },
+                    mode: 'diff',
+                },
+            }));
+            const bbox = changed && changed.compare && changed.compare.metrics.bbox;
+            const intersectsRed = bbox && bbox.x < 275 && bbox.x + bbox.w > 175
+                && bbox.y < 175 && bbox.y + bbox.h > 75;
+            check('preview compare localizes the hidden Red layer', Boolean(intersectsRed), changed);
+        } finally {
+            const restored = parsedExecContent(await call('ae_exec', {
+                undo_group_name: 'live-preview-restore-red',
+                code: 'var l=AEMCP.compById(' + JSON.stringify(Number(compId)) + ').layer("Red"); l.property("ADBE Transform Group").property("ADBE Opacity").setValue(100); ({ok:true,opacity:l.property("ADBE Transform Group").property("ADBE Opacity").value})',
+            }));
+            check('preview compare restores Red opacity', restored && restored.ok && restored.opacity === 100, restored);
+        }
     });
     await section('checkpoint', async function () {
         const untitled = value(
