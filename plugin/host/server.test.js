@@ -683,10 +683,10 @@ test('default ExtendScript transport remains byte-identical to its fixed baselin
     const server = loadServer();
     const wrapped = server.wrapForEvalScriptTransport('1 + 1');
     assert.doesNotMatch(wrapped, /[^\x00-\x7f]/);
-    assert.equal(Buffer.byteLength(wrapped), 4852);
+    assert.equal(Buffer.byteLength(wrapped), 4963);
     assert.equal(
         crypto.createHash('sha256').update(wrapped).digest('hex'),
-        'f4cd0d21b05e5a6412a1f574514fc33c3a797507be465496e63cd6e26555ae7b',
+        'fb30f61841ee2fc9a55710498a70ca3e6ed8d302c373c4930eeb8ab635ed0b36',
     );
 });
 
@@ -700,14 +700,21 @@ test('ExtendScript quote fast and regexp paths remain byte-identical to the char
     for (let codePoint = 0x0080; codePoint <= 0x00ff; codePoint += 1) {
         latin1Range += String.fromCharCode(codePoint);
     }
+    const boundarySurrogate = 'a'.repeat(8191) + '\ud83d\ude00' + 'b';
+    const boundaryChinese = 'a'.repeat(8188) + ('中文').repeat(8) + 'b';
+    const denseUnit = 'abcdefghijklm"\\';
+    const quoteDense = denseUnit.repeat((600 * 1024) / denseUnit.length);
     const cases = [
         ['U+0000 through U+02FF', codePointRange],
         ['U+0080 through U+00FF', latin1Range],
         ['surrogate pair', '\ud83d\ude00'],
+        ['surrogate pair across 8192 boundary', boundarySurrogate],
+        ['Chinese run across 8192 boundary', boundaryChinese],
         ['mixed escapes', 'quote:" slash:\\ control:\u0001'],
         ['replacement tokens', '$& $1 $$ 100% \u4e2d'],
         ['300 KB ASCII', 'a'.repeat(300 * 1024)],
         ['300 KB with Chinese', ('中文').repeat(150 * 1024)],
+        ['600 KB quote-dense ASCII', quoteDense],
     ];
     function quoteByCharacter(value) {
         const text = String(value);

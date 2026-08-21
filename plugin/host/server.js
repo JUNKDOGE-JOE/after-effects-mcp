@@ -372,10 +372,18 @@ function quoteAsciiJsString(value) {
 }
 
 const EVAL_SCRIPT_QUOTE_SOURCE = (
-    'var __aemcp_quote_re=/[\\u0000-\\u001f"\\\\\\u007f-\\uffff]/g;' +
-    'var __aemcp_quote_run_re=/[\\u0000-\\u0007\\u000b\\u000e-\\u001f\\u007f-\\uffff]+/g;' +
-    'function __aemcp_quote_run(run){' +
-    'return escape(run).toLowerCase().replace(/%u/g,"\\\\u").replace(/%/g,"\\\\u00");' +
+    'var __aemcp_quote_probe_re=/[\\u0000-\\u001f"\\\\\\u007f-\\uffff]/;' +
+    'var __aemcp_quote_match_re=/[\\b\\t\\n\\f\\r"\\\\]|[\\u0000-\\u0007\\u000b\\u000e-\\u001f\\u007f-\\uffff]+/g;' +
+    'function __aemcp_quote_match(m){' +
+    'var n=m.charCodeAt(0);' +
+    'if(n===92){return "\\\\\\\\";}' +
+    'if(n===34){return "\\\\\\"";}' +
+    'if(n===8){return "\\\\b";}' +
+    'if(n===9){return "\\\\t";}' +
+    'if(n===10){return "\\\\n";}' +
+    'if(n===12){return "\\\\f";}' +
+    'if(n===13){return "\\\\r";}' +
+    'return escape(m).toLowerCase().replace(/%u/g,"\\\\u").replace(/%/g,"\\\\u00");' +
     '}' +
     'function __aemcp_quote_slow(v){' +
     'var s=String(v),out="\\"";' +
@@ -395,15 +403,12 @@ const EVAL_SCRIPT_QUOTE_SOURCE = (
     '}' +
     'function __aemcp_quote_fast(v){' +
     'var s=String(v);' +
-    '__aemcp_quote_re.lastIndex=0;' +
-    'if(!__aemcp_quote_re.test(s)){return "\\""+s+"\\"";}' +
-    '__aemcp_quote_run_re.lastIndex=0;' +
-    's=s.replace(/\\\\/g,"\\\\\\\\")' +
-    '.replace(/"/g,"\\\\\\"")' +
-    '.replace(/\\n/g,"\\\\n").replace(/\\r/g,"\\\\r").replace(/\\t/g,"\\\\t").replace(/\\f/g,"\\\\f")' +
-    '.replace(/[\\b]/g,"\\\\b")' +
-    '.replace(__aemcp_quote_run_re,__aemcp_quote_run);' +
-    'return "\\""+s+"\\"";' +
+    'if(!__aemcp_quote_probe_re.test(s)){return "\\""+s+"\\"";}' +
+    'var parts=[],step=8192;' +
+    'for(var i=0;i<s.length;i+=step){' +
+    'parts.push(s.slice(i,i+step).replace(__aemcp_quote_match_re,__aemcp_quote_match));' +
+    '}' +
+    'return "\\""+parts.join("")+"\\"";' +
     '}' +
     'var __aemcp_quote=(function(){' +
     'var probe="\\u0001\\b\\t\\n\\f\\r\\"\\\\\\u007f\\u00e9\\u4e2d\\ud83d\\ude00 ok";' +
