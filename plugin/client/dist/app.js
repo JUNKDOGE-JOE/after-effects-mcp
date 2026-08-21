@@ -14513,9 +14513,9 @@
         };
         var isFileSystemItem = function isFileSystemItem2(item2) {
           if (isEntry(item2)) {
-            var entry = getAsEntry(item2);
-            if (entry) {
-              return entry.isFile || entry.isDirectory;
+            var entry2 = getAsEntry(item2);
+            if (entry2) {
+              return entry2.isFile || entry2.isDirectory;
             }
           }
           return item2.kind === "file";
@@ -14529,7 +14529,7 @@
             resolve([item2.getAsFile()]);
           });
         };
-        var getFilesInDirectory = function getFilesInDirectory2(entry) {
+        var getFilesInDirectory = function getFilesInDirectory2(entry2) {
           return new Promise(function(resolve, reject) {
             var files = [];
             var dirCounter = 0;
@@ -14549,15 +14549,15 @@
                     resolveIfDone();
                     return;
                   }
-                  entries.forEach(function(entry2) {
-                    if (entry2.isDirectory) {
-                      readEntries2(entry2);
+                  entries.forEach(function(entry3) {
+                    if (entry3.isDirectory) {
+                      readEntries2(entry3);
                     } else {
                       fileCounter++;
-                      entry2.file(function(file2) {
+                      entry3.file(function(file2) {
                         var correctedFile = correctMissingFileType(file2);
-                        if (entry2.fullPath)
-                          correctedFile._relativePath = entry2.fullPath;
+                        if (entry3.fullPath)
+                          correctedFile._relativePath = entry3.fullPath;
                         files.push(correctedFile);
                         fileCounter--;
                         resolveIfDone();
@@ -14569,7 +14569,7 @@
               };
               readBatch();
             };
-            readEntries(entry);
+            readEntries(entry2);
           });
         };
         var correctMissingFileType = function correctMissingFileType2(file2) {
@@ -17807,10 +17807,10 @@
           return { x, y };
         };
         var getMarkupValue = function getMarkupValue2(value, size) {
-          var scalar2 = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : 1;
+          var scalar3 = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : 1;
           var axis = arguments.length > 3 ? arguments[3] : void 0;
           if (typeof value === "string") {
-            return parseFloat(value) * scalar2;
+            return parseFloat(value) * scalar3;
           }
           if (typeof value === "number") {
             return value * (axis ? size[axis] : Math.min(size.width, size.height));
@@ -17846,13 +17846,13 @@
           return value != null;
         };
         var getMarkupRect = function getMarkupRect2(rect, size) {
-          var scalar2 = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : 1;
-          var left = getMarkupValue(rect.x, size, scalar2, "width") || getMarkupValue(rect.left, size, scalar2, "width");
-          var top = getMarkupValue(rect.y, size, scalar2, "height") || getMarkupValue(rect.top, size, scalar2, "height");
-          var width = getMarkupValue(rect.width, size, scalar2, "width");
-          var height = getMarkupValue(rect.height, size, scalar2, "height");
-          var right = getMarkupValue(rect.right, size, scalar2, "width");
-          var bottom = getMarkupValue(rect.bottom, size, scalar2, "height");
+          var scalar3 = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : 1;
+          var left = getMarkupValue(rect.x, size, scalar3, "width") || getMarkupValue(rect.left, size, scalar3, "width");
+          var top = getMarkupValue(rect.y, size, scalar3, "height") || getMarkupValue(rect.top, size, scalar3, "height");
+          var width = getMarkupValue(rect.width, size, scalar3, "width");
+          var height = getMarkupValue(rect.height, size, scalar3, "height");
+          var right = getMarkupValue(rect.right, size, scalar3, "width");
+          var bottom = getMarkupValue(rect.bottom, size, scalar3, "height");
           if (!isDefined(top)) {
             if (isDefined(height) && isDefined(bottom)) {
               top = size.height - height - bottom;
@@ -18166,14 +18166,14 @@
                     cropWidth = outputWidth;
                     cropHeight = outputHeight;
                   } else {
-                    var scalar2;
+                    var scalar3;
                     if (outputFit === "cover") {
-                      scalar2 = Math.max(scalarWidth, scalarHeight);
+                      scalar3 = Math.max(scalarWidth, scalarHeight);
                     } else if (outputFit === "contain") {
-                      scalar2 = Math.min(scalarWidth, scalarHeight);
+                      scalar3 = Math.min(scalarWidth, scalarHeight);
                     }
-                    cropWidth = cropWidth * scalar2;
-                    cropHeight = cropHeight * scalar2;
+                    cropWidth = cropWidth * scalar3;
+                    cropHeight = cropHeight * scalar3;
                   }
                 }
               }
@@ -18254,8 +18254,8 @@
             imgHeight = canvasHeight;
             imgWidth = imgHeight / imageAspectRatio;
           }
-          var scalar2 = Math.max(canvasWidth / imgWidth, canvasHeight / imgHeight);
-          var width = image.width / (zoom * scalar2 * imgWidth);
+          var scalar3 = Math.max(canvasWidth / imgWidth, canvasHeight / imgHeight);
+          var width = image.width / (zoom * scalar3 * imgWidth);
           var height = width * canvasAspectRatio;
           return {
             width,
@@ -18745,11 +18745,11 @@
         var MAX_WIDTH = 10;
         var MAX_HEIGHT = 10;
         var calculateAverageColor = function calculateAverageColor2(image) {
-          var scalar2 = Math.min(MAX_WIDTH / image.width, MAX_HEIGHT / image.height);
+          var scalar3 = Math.min(MAX_WIDTH / image.width, MAX_HEIGHT / image.height);
           var canvas = document.createElement("canvas");
           var ctx = canvas.getContext("2d");
-          var width = canvas.width = Math.ceil(image.width * scalar2);
-          var height = canvas.height = Math.ceil(image.height * scalar2);
+          var width = canvas.width = Math.ceil(image.width * scalar3);
+          var height = canvas.height = Math.ceil(image.height * scalar3);
           ctx.drawImage(image, 0, 0, width, height);
           var data2 = null;
           try {
@@ -19195,9 +19195,9 @@
                 imageHeight = _ref2[1];
               }
               if (!isBitmap(item.file) || root.query("GET_IMAGE_PREVIEW_UPSCALE")) {
-                var scalar2 = 2048 / imageWidth;
-                imageWidth *= scalar2;
-                imageHeight *= scalar2;
+                var scalar3 = 2048 / imageWidth;
+                imageWidth *= scalar3;
+                imageHeight *= scalar3;
               }
               var imageAspectRatio = imageHeight / imageWidth;
               var previewAspectRatio = (item.getMetadata("crop") || {}).aspectRatio || imageAspectRatio;
@@ -20605,7 +20605,7 @@
           /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(ChannelDot, { token: channelDot(probe) }),
             /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Badge, { status: channelDot(probe), children: texts.source }),
-            texts.detail ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 10px/1.35 var(--font-mono)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: texts.detail }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { flex: 1 } }),
+            texts.detail ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { title: texts.detail, style: { flex: 1, minWidth: 0, font: "400 10px/1.35 var(--font-mono)", color: "var(--text-secondary)", overflow: "hidden", whiteSpace: "pre-wrap", wordBreak: "break-word", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 4 }, children: texts.detail }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { flex: 1 } }),
             !readOnly && onSelectChannel ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: choice.active ? "secondary" : "ghost", size: "sm", disabled: choice.active, onClick: () => onSelectChannel(probe.channel), children: choice.label }) : null
           ] }),
           texts.fixHint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)", whiteSpace: "pre-wrap" }, children: texts.fixHint }) : null,
@@ -23493,6 +23493,26 @@
       }
     );
   }
+  function DetailsBlock({ details }) {
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+      "pre",
+      {
+        style: {
+          margin: 0,
+          padding: "var(--space-2)",
+          background: "var(--gray-0)",
+          borderTop: "1px solid var(--border-subtle)",
+          font: `var(--weight-regular) var(--text-micro)/1.6 var(--font-mono)`,
+          color: "var(--text-secondary)",
+          maxHeight: 220,
+          overflow: "auto",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word"
+        },
+        children: details
+      }
+    );
+  }
   function HeaderRow({ status, verb, target, expandable, expanded, onToggle }) {
     const [hover, setHover] = import_react30.default.useState(false);
     return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
@@ -23549,6 +23569,9 @@
     status = "success",
     params,
     errorMessage: errorMessage2,
+    hint,
+    details,
+    detailsLabel = "\u8BE6\u60C5",
     onRetry,
     steps,
     groupLabel,
@@ -23558,7 +23581,8 @@
   }) {
     const [expanded, setExpanded] = import_react30.default.useState(defaultExpanded);
     const isGroup = Array.isArray(steps) && steps.length > 0;
-    const expandable = isGroup || params != null;
+    const hasDetails = details !== void 0 && details !== null && details !== "";
+    const expandable = isGroup || params != null || hasDetails;
     return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
       "div",
       {
@@ -23609,19 +23633,32 @@
             i
           )) }) : null,
           expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(ParamsBlock, { params }) : null,
+          expanded && !isGroup && hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(DetailsBlock, { details }) : null,
           status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
             "div",
             {
               style: {
                 display: "flex",
-                alignItems: "center",
+                alignItems: "flex-start",
                 gap: "var(--space-2)",
                 padding: "var(--space-15) var(--space-2)",
                 borderTop: "1px solid var(--border-subtle)",
                 background: "var(--error-bg)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
+                /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
+                  hint ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { font: `var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: hint }) : null,
+                  hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+                    "button",
+                    {
+                      type: "button",
+                      onClick: () => setExpanded(!expanded),
+                      style: { alignSelf: "flex-start", padding: 0, border: 0, background: "transparent", color: "var(--text-tertiary)", cursor: "pointer", font: `var(--weight-medium) var(--text-micro)/1.4 var(--font-ui)` },
+                      children: detailsLabel
+                    }
+                  ) : null
+                ] }),
                 onRetry ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
               ]
             }
@@ -25264,6 +25301,610 @@
     ] });
   }
 
+  // src/lib/errorCodes.js
+  init_cep_runtime_inject();
+  var DIAGNOSTIC_GUIDANCE = Object.freeze({
+    zh: "\u53EF\u5728\u201C\u8BBE\u7F6E \u2192 \u8BCA\u65AD\u201D\u67E5\u770B\u901A\u9053\u72B6\u6001\uFF1B\u5BFC\u51FA\u65E5\u5FD7\u65F6\u8BF7\u9644\u4E0A\u7C7B\u522B\u7801\u3002",
+    en: "Check Settings \u2192 Diagnostics for channel status, and include the category code with exported logs."
+  });
+  function entry(code, kind, zh, en) {
+    return Object.freeze({
+      code,
+      kind,
+      hint: Object.freeze({
+        zh: `${zh}${DIAGNOSTIC_GUIDANCE.zh}`,
+        en: `${en} ${DIAGNOSTIC_GUIDANCE.en}`
+      })
+    });
+  }
+  var ERROR_CODES = Object.freeze({
+    CLI_MISSING: entry("CLI_MISSING", "backend", "\u8BF7\u5B89\u88C5\u5BF9\u5E94 CLI\uFF0C\u5E76\u786E\u8BA4\u9762\u677F\u8FDB\u7A0B\u80FD\u4ECE PATH \u627E\u5230\u5B83\u3002", "Install the CLI and make sure it is visible on the panel PATH."),
+    CLI_TOO_OLD: entry("CLI_TOO_OLD", "backend", "\u8BF7\u5347\u7EA7\u5BF9\u5E94 CLI \u540E\u91CD\u65B0\u68C0\u6D4B\u3002", "Upgrade the CLI and re-check."),
+    CLI_ARCH_MISMATCH: entry("CLI_ARCH_MISMATCH", "backend", "\u8BF7\u5B89\u88C5\u4E0E\u5F53\u524D After Effects \u4E3B\u673A\u67B6\u6784\u4E00\u81F4\u7684 CLI\u3002", "Install a CLI build matching the After Effects host architecture."),
+    CLI_PROBE_FAILED: entry("CLI_PROBE_FAILED", "backend", "CLI \u5DF2\u627E\u5230\u4F46\u63A2\u9488\u5931\u8D25\uFF1B\u8BF7\u5728\u7EC8\u7AEF\u786E\u8BA4\u5B83\u80FD\u6B63\u5E38\u542F\u52A8\u3002", "The CLI was found but its probe failed; confirm it starts normally in a terminal."),
+    SPAWN_FAILED: entry("SPAWN_FAILED", "backend", "\u8BF7\u68C0\u67E5 CLI \u8DEF\u5F84\u3001\u6267\u884C\u6743\u9650\u548C\u5B89\u5168\u8F6F\u4EF6\u62E6\u622A\u3002", "Check the CLI path, execute permission, and security-software blocks."),
+    PROCESS_EXITED: entry("PROCESS_EXITED", "backend", "\u8BF7\u67E5\u770B\u6298\u53E0\u8BE6\u60C5\u4E2D\u7684\u9000\u51FA\u4FE1\u606F\u4E0E stderr \u5C3E\u90E8\u3002", "Inspect the exit information and stderr tail in the collapsed details."),
+    AUTH_REQUIRED: entry("AUTH_REQUIRED", "auth", "\u8BF7\u5728\u7EC8\u7AEF\u5B8C\u6210\u5BF9\u5E94 CLI \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", "Sign in with the corresponding CLI in a terminal, then re-check."),
+    MCP_UNREACHABLE: entry("MCP_UNREACHABLE", "mcp", "\u8BF7\u4FDD\u6301\u9762\u677F\u5BBF\u4E3B\u8FD0\u884C\uFF0C\u5E76\u68C0\u67E5\u672C\u673A\u4F1A\u8BDD MCP \u72B6\u6001\u3002", "Keep the panel host running and check the local conversation MCP status."),
+    SESSION_START_FAILED: entry("SESSION_START_FAILED", "backend", "\u4F1A\u8BDD\u5C1A\u672A\u521B\u5EFA\uFF1B\u53EF\u4FEE\u590D\u901A\u9053\u72B6\u6001\u540E\u5B89\u5168\u91CD\u8BD5\u3002", "The session was not created; retry after fixing the channel state."),
+    TURN_START_FAILED: entry("TURN_START_FAILED", "backend", "\u53D1\u9001\u53EF\u80FD\u5DF2\u7ECF\u5F00\u59CB\uFF1B\u8BF7\u5148\u6309\u8BE6\u60C5\u4E2D\u7684\u6D3E\u53D1\u72B6\u6001\u6838\u5BF9\u518D\u91CD\u8BD5\u3002", "Sending may have started; check the dispatch state before retrying."),
+    RPC_TIMEOUT: entry("RPC_TIMEOUT", "network", "\u8BF7\u6C42\u7B49\u5F85\u8D85\u65F6\uFF1B\u8BF7\u68C0\u67E5\u901A\u9053\u8FDB\u7A0B\u4E0E\u7F51\u7EDC\u540E\u518D\u8BD5\u3002", "The request timed out; check the channel process and network before retrying."),
+    UPSTREAM_HTTP: entry("UPSTREAM_HTTP_<status>", "network", "\u4E0A\u6E38\u8FD4\u56DE\u4E86 HTTP \u9519\u8BEF\uFF1B\u8BF7\u6309\u72B6\u6001\u7801\u68C0\u67E5\u767B\u5F55\u3001\u989D\u5EA6\u6216\u4E2D\u8F6C\u670D\u52A1\u3002", "The upstream returned an HTTP error; use the status code to check auth, quota, or relay service."),
+    UPSTREAM_ERROR: entry("UPSTREAM_ERROR", "model", "\u4E0A\u6E38\u6216\u6A21\u578B\u8FD4\u56DE\u5931\u8D25\uFF1B\u8BF7\u68C0\u67E5\u6A21\u578B\u53EF\u7528\u6027\u4E0E\u670D\u52A1\u72B6\u6001\u3002", "The upstream or model failed; check model availability and service status."),
+    EVENT_STREAM_FAILED: entry("EVENT_STREAM_FAILED", "network", "\u4E8B\u4EF6\u6D41\u5DF2\u65AD\u5F00\uFF1B\u8BF7\u68C0\u67E5 OpenCode \u8FDB\u7A0B\u4E0E\u672C\u5730\u7F51\u7EDC\u3002", "The event stream disconnected; check the OpenCode process and local network."),
+    TURN_INPUT_INVALID: entry("TURN_INPUT_INVALID", "attachment", "\u8BF7\u79FB\u9664\u4E0D\u53EF\u7528\u9644\u4EF6\u6216\u91CD\u65B0\u9009\u62E9\u6587\u4EF6\u3002", "Remove unavailable attachments or select the files again."),
+    TURN_ABORTED: entry("TURN_ABORTED", "aborted", "\u672C\u56DE\u5408\u5DF2\u505C\u6B62\uFF0C\u53EF\u5728\u786E\u8BA4\u6CA1\u6709\u672A\u51B3\u5199\u5165\u540E\u91CD\u65B0\u53D1\u9001\u3002", "The turn was stopped; resend after confirming there is no unresolved write."),
+    CANCELLED: entry("CANCELLED", "backend", "\u540E\u7AEF\u53D6\u6D88\u4E86\u8BF7\u6C42\uFF1B\u8BF7\u786E\u8BA4\u4F1A\u8BDD\u4ECD\u53EF\u7528\u540E\u91CD\u8BD5\u3002", "The backend cancelled the request; confirm the session is still usable before retrying."),
+    TRANSPORT_UNCERTAIN: entry("TRANSPORT_UNCERTAIN", "backend", "\u4F20\u8F93\u7ED3\u679C\u4E0D\u786E\u5B9A\uFF1B\u8BF7\u5148\u6838\u5BF9 AE \u72B6\u6001\uFF0C\u907F\u514D\u76F2\u76EE\u91CD\u8BD5\u3002", "The transport outcome is uncertain; inspect AE state before retrying."),
+    BACKEND_UNAVAILABLE: entry("BACKEND_UNAVAILABLE", "backend", "\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u542F\u7528\u4E00\u4E2A\u53EF\u7528\u804A\u5929\u901A\u9053\u3002", "Enable an available chat channel in Settings first."),
+    BACKEND_ERROR: entry("BACKEND_ERROR", "backend", "\u8BF7\u67E5\u770B\u6298\u53E0\u8BE6\u60C5\u4E0E\u5BFC\u51FA\u65E5\u5FD7\u5B9A\u4F4D\u540E\u7AEF\u9519\u8BEF\u3002", "Inspect the collapsed details and exported logs for the backend failure.")
+  });
+  var FIXED_CODES = new Map(
+    Object.values(ERROR_CODES).filter((item) => !item.code.includes("<status>")).map((item) => [item.code, item])
+  );
+  var RESOLUTION_CODES = Object.freeze({
+    NOT_FOUND: "CLI_MISSING",
+    VERSION_TOO_OLD: "CLI_TOO_OLD",
+    ARCH_MISMATCH: "CLI_ARCH_MISMATCH",
+    PROBE_FAILED: "CLI_PROBE_FAILED"
+  });
+  var SPAWN_CODES = /* @__PURE__ */ new Set([
+    "E2BIG",
+    "EACCES",
+    "EAGAIN",
+    "EFAULT",
+    "EISDIR",
+    "ELOOP",
+    "EMFILE",
+    "ENFILE",
+    "ENOENT",
+    "ENOEXEC",
+    "ENOMEM",
+    "ENOTDIR",
+    "EPERM",
+    "ETXTBSY",
+    "UNKNOWN"
+  ]);
+  function textOf(value) {
+    if (typeof value === "string") return value;
+    if (value && typeof value.message === "string") return value.message;
+    if (value === void 0 || value === null) return "";
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  function codeKind(code) {
+    var _a;
+    const status = String(code || "").match(/^UPSTREAM_HTTP_(\d{3})$/);
+    if (status) return ["401", "403"].includes(status[1]) ? "auth" : "network";
+    return ((_a = FIXED_CODES.get(String(code || ""))) == null ? void 0 : _a.kind) || null;
+  }
+  function extractHttpStatus(value, { allowStandalone = true } = {}) {
+    const direct = Number(value);
+    if (Number.isInteger(direct) && direct >= 100 && direct <= 599) return direct;
+    const text = textOf(value);
+    const contextual = text.match(/(?:unexpected\s+status|http(?:\s+status)?|status(?:\s+code)?)[^0-9]{0,12}([1-5]\d{2})/i);
+    if (contextual) return Number(contextual[1]);
+    if (!allowStandalone) return null;
+    const standalone = text.match(/(?:^|[^0-9])([45]\d{2})(?:[^0-9]|$)/);
+    return standalone ? Number(standalone[1]) : null;
+  }
+  function classifyErrorCode(input = {}) {
+    var _a;
+    const resolutionCode = input.resolutionCode || ((_a = input.resolution) == null ? void 0 : _a.code);
+    if (RESOLUTION_CODES[resolutionCode]) {
+      const code = RESOLUTION_CODES[resolutionCode];
+      return { code, kind: codeKind(code) };
+    }
+    const explicitCode = typeof input.code === "string" ? input.code : "";
+    if (codeKind(explicitCode)) return { code: explicitCode, kind: codeKind(explicitCode) };
+    const error = input.error;
+    const errorCode = error && error.code;
+    const combined = [
+      textOf(error),
+      textOf(input.stderrTail),
+      textOf(input.message)
+    ].filter(Boolean).join("\n");
+    const httpStatus = extractHttpStatus(input.httpStatus) || extractHttpStatus(input.upstreamText) || extractHttpStatus(combined, { allowStandalone: false });
+    if (httpStatus) {
+      const code = `UPSTREAM_HTTP_${httpStatus}`;
+      return { code, kind: codeKind(code) };
+    }
+    if (/\b(?:cancelled|canceled|interrupted)\b/i.test(String(errorCode || "")) || /\b(?:cancelled|canceled|interrupted)\b/i.test(combined)) {
+      return { code: "CANCELLED", kind: "backend" };
+    }
+    if (/(?:^|\s)\/login\b|not[- ]logged[- ]in|unauthori[sz]ed|authentication\s+(?:failed|required|error|expired)|auth required|invalid\s+(?:api[- ]?key|credential)|credential required/i.test(combined)) {
+      return { code: "AUTH_REQUIRED", kind: "auth" };
+    }
+    if (input.method && /timed out|timeout/i.test(combined)) {
+      return { code: "RPC_TIMEOUT", kind: "network" };
+    }
+    if (input.spawnError === true || SPAWN_CODES.has(String(errorCode || "").toUpperCase())) {
+      return { code: "SPAWN_FAILED", kind: "backend" };
+    }
+    if (input.exitCode !== void 0 || input.signal) {
+      return { code: "PROCESS_EXITED", kind: "backend" };
+    }
+    if (input.upstream === true) return { code: "UPSTREAM_ERROR", kind: "model" };
+    const fallbackCode = codeKind(input.fallbackCode) ? input.fallbackCode : "BACKEND_ERROR";
+    return { code: fallbackCode, kind: codeKind(fallbackCode) || "backend" };
+  }
+  function errorHint(code, lang = "zh") {
+    const key = /^UPSTREAM_HTTP_\d{3}$/.test(String(code || "")) ? "UPSTREAM_HTTP" : String(code || "BACKEND_ERROR");
+    const item = ERROR_CODES[key] || ERROR_CODES.BACKEND_ERROR;
+    return item.hint[lang] || item.hint.zh;
+  }
+  function trimStderrTail(value, { maxLines = 12, maxChars = 1500 } = {}) {
+    const lines = String(value || "").replace(/\r\n/g, "\n").split("\n").slice(-maxLines);
+    const text = lines.join("\n").trim();
+    return text.length > maxChars ? text.slice(text.length - maxChars) : text;
+  }
+  function boundedResolution(resolution) {
+    if (!resolution || typeof resolution !== "object") return null;
+    const attempts = Array.isArray(resolution.attempts) ? resolution.attempts.slice(0, 6).map((attempt) => ({
+      path: String((attempt == null ? void 0 : attempt.path) || "").slice(0, 500),
+      source: String((attempt == null ? void 0 : attempt.source) || "").slice(0, 100),
+      detail: String((attempt == null ? void 0 : attempt.detail) || "").slice(0, 500)
+    })) : [];
+    return {
+      code: String(resolution.code || ""),
+      attempts
+    };
+  }
+
+  // src/lib/errorDetail.js
+  init_cep_runtime_inject();
+
+  // src/lib/exactSecretRedaction.js
+  init_cep_runtime_inject();
+  function normalizedSecrets(values) {
+    const variants = [];
+    for (const value of values || []) {
+      if (typeof value !== "string" || !value) continue;
+      variants.push(value);
+      try {
+        const encoded = JSON.stringify(value);
+        if ((encoded == null ? void 0 : encoded.startsWith('"')) && encoded.endsWith('"')) variants.push(encoded.slice(1, -1));
+      } catch {
+      }
+    }
+    return Array.from(new Set(variants.filter(Boolean))).sort((a, b) => b.length - a.length);
+  }
+  var MAX_DECODE_CHARS = 1024 * 1024;
+  var MAX_DECODE_LAYERS = 3;
+  var MAX_STRUCTURE_CHARS = 16 * 1024 * 1024;
+  function decodePercentRuns(value) {
+    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+  }
+  function decodeUnicodeEscapes(value) {
+    return String(value).replace(/\\u([0-9a-f]{4})/gi, (_match, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+  }
+  function decodedTextLayers(value) {
+    let current = String(value);
+    const layers = [current];
+    for (let layer = 0; layer < MAX_DECODE_LAYERS; layer += 1) {
+      if (!current.includes("%") && !/\\u[0-9a-f]{4}/i.test(current)) break;
+      if (current.length > MAX_DECODE_CHARS) return null;
+      const decoded = decodeUnicodeEscapes(decodePercentRuns(current));
+      if (decoded === current) break;
+      layers.push(decoded);
+      current = decoded;
+    }
+    return layers;
+  }
+  function textContainsSecret(value, secrets) {
+    const layers = decodedTextLayers(value);
+    if (layers === null) return true;
+    return layers.some((layer) => secrets.some((secret) => layer.includes(secret)));
+  }
+  function containsExactSecret(value, values = []) {
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return false;
+    const visiting = /* @__PURE__ */ new WeakSet();
+    const valueParts = [];
+    const keyParts = [];
+    const keyValueParts = [];
+    const leafKeyValueParts = [];
+    let structureChars = 0;
+    const containsText = (candidate) => textContainsSecret(candidate, secrets);
+    const appendPart = (parts, candidate) => {
+      const text = String(candidate);
+      structureChars += text.length;
+      if (structureChars > MAX_STRUCTURE_CHARS) return true;
+      parts.push(text);
+      return false;
+    };
+    const visit = (candidate) => {
+      if (typeof candidate === "function") return true;
+      if (typeof candidate !== "object" || candidate === null) {
+        try {
+          if (appendPart(valueParts, candidate)) return true;
+          if (appendPart(keyValueParts, candidate)) return true;
+          return containsText(candidate);
+        } catch {
+          return true;
+        }
+      }
+      if (visiting.has(candidate)) return true;
+      let keys;
+      try {
+        keys = Reflect.ownKeys(candidate);
+      } catch {
+        return true;
+      }
+      visiting.add(candidate);
+      try {
+        for (const key of keys) {
+          try {
+            const item = Reflect.get(candidate, key);
+            if (appendPart(keyParts, key)) return true;
+            if (appendPart(keyValueParts, key)) return true;
+            if (containsText(key)) return true;
+            if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
+              if (appendPart(leafKeyValueParts, key)) return true;
+              if (appendPart(leafKeyValueParts, item)) return true;
+            }
+            if (visit(item)) return true;
+          } catch {
+            return true;
+          }
+        }
+        return false;
+      } finally {
+        visiting.delete(candidate);
+      }
+    };
+    if (visit(value)) return true;
+    return [valueParts, keyParts, keyValueParts, leafKeyValueParts].some((parts) => containsText(parts.join("")));
+  }
+  function redactText(value, values = []) {
+    let text = String(value == null ? "" : value);
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return text;
+    const marker = secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
+    const decodedLayers = decodedTextLayers(text);
+    if (decodedLayers === null) return marker;
+    if (decodedLayers.slice(1).some((layer) => secrets.some((secret) => layer.includes(secret)))) {
+      return marker;
+    }
+    const maximumPasses = Math.max(1, secrets.length * 4 + 8);
+    for (let pass = 0; pass < maximumPasses; pass += 1) {
+      let changed = false;
+      for (const secret of secrets) {
+        if (!text.includes(secret)) continue;
+        text = text.split(secret).join(marker);
+        changed = true;
+      }
+      if (!changed) return text;
+    }
+    return secrets.some((secret) => text.includes(secret)) ? "" : text;
+  }
+  function redactValueParts(value, values) {
+    if (typeof value === "string") return redactText(value, values);
+    if (value === null || ["number", "boolean", "bigint"].includes(typeof value)) {
+      const text = String(value);
+      const redacted = redactText(text, values);
+      return redacted === text ? value : redacted;
+    }
+    if (Array.isArray(value)) return value.map((item) => redactValueParts(item, values));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      redactText(key, values),
+      redactValueParts(item, values)
+    ]));
+  }
+  function redactValue(value, values = []) {
+    const redacted = redactValueParts(value, values);
+    if (!containsExactSecret(redacted, values)) return redacted;
+    const secrets = normalizedSecrets(values);
+    return secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
+  }
+  function createDeltaRedactor(values, emitText) {
+    const secrets = normalizedSecrets(values);
+    let buffer = "";
+    const keep = secrets.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
+    return {
+      feed(delta) {
+        if (!secrets.length) {
+          emitText(String(delta || ""));
+          return;
+        }
+        buffer = redactText(buffer + String(delta || ""), secrets);
+        if (buffer.length > keep) {
+          emitText(buffer.slice(0, buffer.length - keep));
+          buffer = buffer.slice(buffer.length - keep);
+        }
+      },
+      flush() {
+        if (buffer) emitText(redactText(buffer, secrets));
+        buffer = "";
+      },
+      discard() {
+        buffer = "";
+      }
+    };
+  }
+  function safeErrorMessage(error, values = []) {
+    return redactText(error && error.message ? error.message : "Agent loop failed.", values);
+  }
+
+  // src/lib/credentialTextRedaction.js
+  init_cep_runtime_inject();
+  var SENSITIVE_SEGMENTS = /* @__PURE__ */ new Set([
+    "api-key",
+    "apikey",
+    "auth",
+    "authentication",
+    "authorization",
+    "cookie",
+    "credential",
+    "credentials",
+    "key",
+    "oauth",
+    "passwd",
+    "password",
+    "secret",
+    "session",
+    "signature",
+    "token"
+  ]);
+  var STRONG_SENSITIVE_FRAGMENTS = [
+    "apikey",
+    "auth",
+    "cookie",
+    "credential",
+    "oauth",
+    "passwd",
+    "password",
+    "secret",
+    "session",
+    "signature",
+    "token"
+  ];
+  var KEY_SUFFIX_PREFIXES = /* @__PURE__ */ new Set([
+    "api",
+    "access",
+    "client",
+    "credential",
+    "private",
+    "provider",
+    "public",
+    "secret",
+    "x"
+  ]);
+  var SECRET_REFERENCE = /aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9_-]+\/v1/gi;
+  var HEADER_LINE = /^([ \t]*)([!#$%&'*+.^_`|~0-9A-Za-z-]+)([ \t]*:[ \t]*)([^\r\n]+)$/gm;
+  var QUOTED_PAIR = /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"'\r\n]+)\4/g;
+  var ASSIGNMENT = /(^|[\s?&,;])([A-Za-z][A-Za-z0-9_.-]*)(\s*=\s*)([^\s&,;]+)/gm;
+  var INLINE_HEADER = /(^|[\s{,;])([!#$%&'*+.^_`|~0-9A-Za-z-]+)(\s*:\s*)((?:Bearer|Basic)\s+[^\s,;}]+|[^\s,;}]+)/gim;
+  var PRIVATE_KEY = /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/g;
+  var JWT = /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])/g;
+  var PREFIXED_KEY = /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])/g;
+  var JSON_KEY = /"((?:\\.|[^"\\])*)"\s*:/g;
+  var SENSITIVE_ASSIGNMENT_START = /(^|[^A-Za-z0-9_.-])(["']?)([A-Za-z][A-Za-z0-9_.-]*)(\2)([ \t]*[:=][ \t]*)/g;
+  var MARKER = "[redacted]";
+  function isSensitiveCredentialName(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return false;
+    const separated = raw.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+    const segments = separated.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    if (segments.some((segment) => SENSITIVE_SEGMENTS.has(segment))) return true;
+    const compact = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    if (STRONG_SENSITIVE_FRAGMENTS.some((fragment) => compact.includes(fragment))) return true;
+    if (!compact.endsWith("key")) return false;
+    const prefix = compact.slice(0, -3);
+    return KEY_SUFFIX_PREFIXES.has(prefix) || Array.from(KEY_SUFFIX_PREFIXES).some((candidate) => prefix.endsWith(candidate));
+  }
+  function quotedValueEnd(text, start) {
+    const quote = text[start];
+    let escaped = false;
+    for (let index = start + 1; index < text.length; index += 1) {
+      const character = text[index];
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) return index + 1;
+    }
+    return -1;
+  }
+  function jsonContainerEnd(text, start) {
+    const stack = [text[start]];
+    let stringQuote = null;
+    let escaped = false;
+    for (let index = start + 1; index < text.length; index += 1) {
+      const character = text[index];
+      if (stringQuote) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === stringQuote) stringQuote = null;
+        continue;
+      }
+      if (character === '"' || character === "'" || character === "`") {
+        stringQuote = character;
+        continue;
+      }
+      if (character === "{" || character === "[") stack.push(character);
+      if (character !== "}" && character !== "]") continue;
+      const opening = stack.pop();
+      if (opening === "{" && character !== "}" || opening === "[" && character !== "]") return -1;
+      if (!stack.length) return index + 1;
+    }
+    return -1;
+  }
+  function jsonValueEnd(text, start) {
+    if (start >= text.length) return -1;
+    if (text[start] === '"') return quotedValueEnd(text, start);
+    if (text[start] === "{" || text[start] === "[") return jsonContainerEnd(text, start);
+    let end = start;
+    while (end < text.length && !/[\s,}\]]/.test(text[end])) end += 1;
+    return end > start ? end : -1;
+  }
+  function redactSensitiveJsonValues(value) {
+    let text = String(value == null ? "" : value);
+    let offset = 0;
+    while (offset < text.length) {
+      JSON_KEY.lastIndex = offset;
+      const match = JSON_KEY.exec(text);
+      if (!match) break;
+      let name = "";
+      try {
+        name = JSON.parse(`"${match[1]}"`);
+      } catch {
+        name = "";
+      }
+      if (!isSensitiveCredentialName(name)) {
+        offset = JSON_KEY.lastIndex;
+        continue;
+      }
+      let start = JSON_KEY.lastIndex;
+      while (start < text.length && /\s/.test(text[start])) start += 1;
+      const end = jsonValueEnd(text, start);
+      if (end < 0) {
+        offset = JSON_KEY.lastIndex;
+        continue;
+      }
+      const replacement = JSON.stringify(MARKER);
+      text = text.slice(0, start) + replacement + text.slice(end);
+      offset = start + replacement.length;
+    }
+    return text;
+  }
+  function redactSensitiveLineSuffixes(value) {
+    const text = String(value == null ? "" : value);
+    SENSITIVE_ASSIGNMENT_START.lastIndex = 0;
+    let match;
+    while ((match = SENSITIVE_ASSIGNMENT_START.exec(text)) !== null) {
+      if (!isSensitiveCredentialName(match[3])) continue;
+      return text.slice(0, match.index) + match[1] + match[2] + match[3] + match[4] + match[5] + MARKER;
+    }
+    return text;
+  }
+  function redactCredentialText(value, exactSecrets = []) {
+    let text = redactText(value, exactSecrets);
+    text = redactSensitiveJsonValues(text);
+    text = redactSensitiveLineSuffixes(text);
+    text = text.replace(SECRET_REFERENCE, "[secret-reference-redacted]");
+    text = text.replace(PRIVATE_KEY, MARKER);
+    text = text.replace(HEADER_LINE, (match, prefix, name, separator, headerValue) => isSensitiveCredentialName(name) && headerValue.trim() ? prefix + name + separator + MARKER : match);
+    text = text.replace(QUOTED_PAIR, (match, quote, name, separator) => isSensitiveCredentialName(name) ? quote + name + quote + separator + quote + MARKER + quote : match);
+    text = text.replace(ASSIGNMENT, (match, prefix, name, separator) => isSensitiveCredentialName(name) ? prefix + name + separator + MARKER : match);
+    text = text.replace(INLINE_HEADER, (match, prefix, name, separator) => isSensitiveCredentialName(name) ? prefix + name + separator + MARKER : match);
+    text = text.replace(PREFIXED_KEY, MARKER);
+    return text.replace(JWT, MARKER);
+  }
+
+  // src/lib/errorDetail.js
+  function scalar(value) {
+    if (value === void 0 || value === null || value === "") return "";
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return "[unserializable]";
+      }
+    }
+    return String(value);
+  }
+  function redactFreeText(value) {
+    return String(value != null ? value : "").replace(/\r\n/g, "\n").split("\n").map((line) => redactCredentialText(line.replace(/https?:\/\/\S+/gi, "[redacted-url]"))).join("\n");
+  }
+  function formatErrorDetail(detail) {
+    if (!detail || typeof detail !== "object" || Array.isArray(detail)) return "";
+    const lines = [];
+    const used = /* @__PURE__ */ new Set();
+    const hasExit = detail.exitCode !== void 0 && detail.exitCode !== null;
+    if (hasExit || detail.signal) {
+      const exit = hasExit ? `exit ${detail.exitCode}` : "process signal";
+      lines.push(detail.signal ? `${exit} (${detail.signal})` : exit);
+      used.add("exitCode");
+      used.add("signal");
+    }
+    if (detail.method) {
+      lines.push(`method: ${detail.method}`);
+      used.add("method");
+    }
+    if (detail.httpStatus || detail.endpoint) {
+      const status = detail.httpStatus ? `HTTP ${detail.httpStatus}` : "HTTP request";
+      lines.push(detail.endpoint ? `${status} ${detail.endpoint}` : status);
+      used.add("httpStatus");
+      used.add("endpoint");
+    }
+    if (detail.jsonRpcCode !== void 0 && detail.jsonRpcCode !== null) {
+      lines.push(`JSON-RPC code: ${detail.jsonRpcCode}`);
+      used.add("jsonRpcCode");
+    }
+    if (detail.jsonRpcData !== void 0) {
+      lines.push(`JSON-RPC data: ${scalar(detail.jsonRpcData)}`);
+      used.add("jsonRpcData");
+    }
+    if (detail.errorName) {
+      lines.push(`error: ${detail.errorName}`);
+      used.add("errorName");
+    }
+    if (detail.mcpStatus !== void 0 && detail.mcpStatus !== null && detail.mcpStatus !== "") {
+      lines.push(`MCP status: ${scalar(detail.mcpStatus)}`);
+      used.add("mcpStatus");
+    }
+    if (detail.lastError) {
+      lines.push(`last error: ${redactFreeText(scalar(detail.lastError))}`);
+      used.add("lastError");
+    }
+    for (const [key, label] of [
+      ["upstreamMessage", "upstream message"],
+      ["responseExcerpt", "response excerpt"]
+    ]) {
+      if (!detail[key]) continue;
+      lines.push(`${label}: ${redactFreeText(scalar(detail[key]))}`);
+      used.add(key);
+    }
+    if (detail.resolution && typeof detail.resolution === "object") {
+      const resolution = detail.resolution;
+      if (resolution.code) lines.push(`resolution: ${resolution.code}`);
+      const attempts = Array.isArray(resolution.attempts) ? resolution.attempts : [];
+      if (attempts.length) {
+        lines.push("attempts:");
+        for (const attempt of attempts) {
+          const source = (attempt == null ? void 0 : attempt.source) ? ` [${attempt.source}]` : "";
+          const suffix = (attempt == null ? void 0 : attempt.detail) ? `: ${attempt.detail}` : "";
+          lines.push(`- ${(attempt == null ? void 0 : attempt.path) || "-"}${source}${suffix}`);
+        }
+      }
+      used.add("resolution");
+    }
+    if (detail.stderrTail) {
+      lines.push("stderr:");
+      lines.push(redactFreeText(detail.stderrTail));
+      used.add("stderrTail");
+    }
+    for (const [key, value] of Object.entries(detail)) {
+      if (used.has(key) || value === void 0 || value === null || value === "") continue;
+      lines.push(`${key}: ${scalar(value)}`);
+    }
+    return lines.join("\n");
+  }
+  function serializeErrorDetail(detail, exactSecrets = [], maxChars = 2e3) {
+    if (!detail || typeof detail !== "object") return "";
+    let text;
+    try {
+      text = JSON.stringify(redactValue(detail, exactSecrets));
+    } catch {
+      text = "[unserializable]";
+    }
+    text = redactCredentialText(text, exactSecrets);
+    return text.length > maxChars ? text.slice(0, maxChars) : text;
+  }
+  function firstErrorDetailLine(detail, exactSecrets = []) {
+    const line = formatErrorDetail(redactValue(detail, exactSecrets)).split(/\r?\n/, 1)[0] || "";
+    return redactCredentialText(line, exactSecrets);
+  }
+
   // src/lib/composerOptions.js
   init_cep_runtime_inject();
   function costBadge(tier) {
@@ -25336,7 +25977,8 @@
       attachmentReady: "\u5DF2\u5C31\u7EEA",
       attachmentRetry: "\u91CD\u8BD5",
       attachmentRemove: "\u79FB\u9664",
-      uncertainTurn: "\u53D1\u9001\u7ED3\u679C\u4E0D\u786E\u5B9A\u3002\u8BF7\u65B0\u5EFA\u4F1A\u8BDD\u6838\u5BF9\u540E\u518D\u8BD5\u3002"
+      uncertainTurn: "\u53D1\u9001\u7ED3\u679C\u4E0D\u786E\u5B9A\u3002\u8BF7\u65B0\u5EFA\u4F1A\u8BDD\u6838\u5BF9\u540E\u518D\u8BD5\u3002",
+      details: "\u8BE6\u60C5"
     },
     en: {
       hello: "Hi! I can operate the open AE project directly. Try one of these:",
@@ -25363,7 +26005,8 @@
       attachmentReady: "Ready",
       attachmentRetry: "Retry",
       attachmentRemove: "Remove",
-      uncertainTurn: "Send outcome is uncertain. Start a new session before retrying."
+      uncertainTurn: "Send outcome is uncertain. Start a new session before retrying.",
+      details: "Details"
     }
   };
   var DEFAULT_PROMPTS = {
@@ -25390,68 +26033,80 @@
     if (state === "error" || state === "denied") return "error";
     return "success";
   }
-  function toolTarget(entry, t) {
-    if (entry.state === "awaiting-approval") return t.awaiting;
-    if (entry.state === "running") return t.running;
-    if (entry.state === "denied") return t.denied;
-    if (entry.state === "error") return t.failed;
+  function toolTarget(entry2, t) {
+    if (entry2.state === "awaiting-approval") return t.awaiting;
+    if (entry2.state === "running") return t.running;
+    if (entry2.state === "denied") return t.denied;
+    if (entry2.state === "error") return t.failed;
     return t.ok;
   }
-  function titleForTool(entry, lang) {
-    return eventTitle({ undoGroup: `MCP ${entry.name || ""}` }, lang);
+  function titleForTool(entry2, lang) {
+    return eventTitle({ undoGroup: `MCP ${entry2.name || ""}` }, lang);
   }
-  function Entry({ entry, lang, onApprove, onAnswerQuestion }) {
+  function Entry({ entry: entry2, lang, onApprove, onAnswerQuestion }) {
     const t = C[lang] || C.zh;
-    if (entry.type === "user-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ChatBubble, { role: "user", attachments: entry.attachments, children: entry.text });
+    if (entry2.type === "user-text") {
+      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ChatBubble, { role: "user", attachments: entry2.attachments, children: entry2.text });
     }
-    if (entry.type === "ai-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ChatBubble, { role: "ai", children: entry.text });
+    if (entry2.type === "ai-text") {
+      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ChatBubble, { role: "ai", children: entry2.text });
     }
-    if (entry.type === "question") {
+    if (entry2.type === "question") {
       return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         QuestionCard,
         {
           lang,
-          title: entry.title,
-          questions: entry.questions,
-          state: entry.state,
-          answers: entry.answers,
-          onSubmit: (values) => onAnswerQuestion && onAnswerQuestion(entry.toolUseId, { action: "submit", values }),
-          onCancel: () => onAnswerQuestion && onAnswerQuestion(entry.toolUseId, { action: "cancel" })
+          title: entry2.title,
+          questions: entry2.questions,
+          state: entry2.state,
+          answers: entry2.answers,
+          onSubmit: (values) => onAnswerQuestion && onAnswerQuestion(entry2.toolUseId, { action: "submit", values }),
+          onCancel: () => onAnswerQuestion && onAnswerQuestion(entry2.toolUseId, { action: "cancel" })
         }
       ) });
     }
-    if (entry.type === "tool-call") {
-      const highRisk = entry.risk === "destructive" || entry.risk === "external";
+    if (entry2.type === "tool-call") {
+      const highRisk = entry2.risk === "destructive" || entry2.risk === "external";
       return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
           ToolCallCard,
           {
-            verb: titleForTool(entry, lang),
-            target: toolTarget(entry, t),
-            status: statusForTool(entry.state),
-            params: entry.input,
-            errorMessage: entry.state === "error" ? entry.text : null
+            verb: titleForTool(entry2, lang),
+            target: toolTarget(entry2, t),
+            status: statusForTool(entry2.state),
+            params: entry2.input,
+            errorMessage: entry2.state === "error" ? entry2.text : null
           }
         ),
-        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+        entry2.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
           ApprovalCard,
           {
             risk: highRisk ? "high" : "normal",
             lang,
-            title: titleForTool(entry, lang),
-            description: entry.name,
-            params: entry.input,
-            onAllow: () => onApprove && onApprove(entry.toolUseId, "allow"),
-            onDeny: () => onApprove && onApprove(entry.toolUseId, "deny"),
-            onAllowSession: highRisk ? null : () => onApprove && onApprove(entry.toolUseId, "allow-session")
+            title: titleForTool(entry2, lang),
+            description: entry2.name,
+            params: entry2.input,
+            onAllow: () => onApprove && onApprove(entry2.toolUseId, "allow"),
+            onDeny: () => onApprove && onApprove(entry2.toolUseId, "deny"),
+            onAllowSession: highRisk ? null : () => onApprove && onApprove(entry2.toolUseId, "allow-session")
           }
         ) : null
       ] });
     }
-    if (entry.type === "error") {
-      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ToolCallCard, { verb: entry.kind === "model" ? t.modelErrorTitle : t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
+    if (entry2.type === "error") {
+      const details = formatErrorDetail(entry2.detail);
+      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+        ToolCallCard,
+        {
+          verb: entry2.kind === "model" ? t.modelErrorTitle : t.errorTitle,
+          target: entry2.code || entry2.kind,
+          status: "error",
+          errorMessage: entry2.message,
+          hint: errorHint(entry2.code || "BACKEND_ERROR", lang),
+          details: details || null,
+          detailsLabel: t.details
+        }
+      ) });
     }
     return null;
   }
@@ -25622,7 +26277,7 @@
             card.id || card.title
           ))
         ] }) : null,
-        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Entry, { entry, lang, onApprove, onAnswerQuestion }, entry.id)),
+        entries.map((entry2) => /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Entry, { entry: entry2, lang, onApprove, onAnswerQuestion }, entry2.id)),
         streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Spinner, { size: 12 }),
           /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { children: t.thinking })
@@ -26410,8 +27065,8 @@
     "native+manifest"
   ]);
   function assertAttachmentBackendRegistry(registry) {
-    for (const [id, entry] of Object.entries(registry)) {
-      if (!ATTACHMENT_TRANSPORTS.has(entry == null ? void 0 : entry.attachmentTransport)) {
+    for (const [id, entry2] of Object.entries(registry)) {
+      if (!ATTACHMENT_TRANSPORTS.has(entry2 == null ? void 0 : entry2.attachmentTransport)) {
         throw new TypeError(id + " is missing a valid attachment transport");
       }
     }
@@ -26420,8 +27075,8 @@
   assertAttachmentBackendRegistry(BACKENDS);
   var REAL_BACKENDS = Object.keys(BACKENDS);
   function baseDescriptorFor(backendId) {
-    const entry = BACKENDS[backendId];
-    if (entry) return entry.baseDescriptor();
+    const entry2 = BACKENDS[backendId];
+    if (entry2) return entry2.baseDescriptor();
     throw new Error(
       `Unknown backend id "${backendId}". Known backend ids: ${Object.keys(BACKENDS).join(", ")}`
     );
@@ -26489,182 +27144,6 @@
       target.addEventListener("beforeunload", dispose);
     }
     return dispose;
-  }
-
-  // src/lib/exactSecretRedaction.js
-  init_cep_runtime_inject();
-  function normalizedSecrets(values) {
-    const variants = [];
-    for (const value of values || []) {
-      if (typeof value !== "string" || !value) continue;
-      variants.push(value);
-      try {
-        const encoded = JSON.stringify(value);
-        if ((encoded == null ? void 0 : encoded.startsWith('"')) && encoded.endsWith('"')) variants.push(encoded.slice(1, -1));
-      } catch {
-      }
-    }
-    return Array.from(new Set(variants.filter(Boolean))).sort((a, b) => b.length - a.length);
-  }
-  var MAX_DECODE_CHARS = 1024 * 1024;
-  var MAX_DECODE_LAYERS = 3;
-  var MAX_STRUCTURE_CHARS = 16 * 1024 * 1024;
-  function decodePercentRuns(value) {
-    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
-      try {
-        return decodeURIComponent(run);
-      } catch {
-        return run;
-      }
-    });
-  }
-  function decodeUnicodeEscapes(value) {
-    return String(value).replace(/\\u([0-9a-f]{4})/gi, (_match, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
-  }
-  function decodedTextLayers(value) {
-    let current = String(value);
-    const layers = [current];
-    for (let layer = 0; layer < MAX_DECODE_LAYERS; layer += 1) {
-      if (!current.includes("%") && !/\\u[0-9a-f]{4}/i.test(current)) break;
-      if (current.length > MAX_DECODE_CHARS) return null;
-      const decoded = decodeUnicodeEscapes(decodePercentRuns(current));
-      if (decoded === current) break;
-      layers.push(decoded);
-      current = decoded;
-    }
-    return layers;
-  }
-  function textContainsSecret(value, secrets) {
-    const layers = decodedTextLayers(value);
-    if (layers === null) return true;
-    return layers.some((layer) => secrets.some((secret) => layer.includes(secret)));
-  }
-  function containsExactSecret(value, values = []) {
-    const secrets = normalizedSecrets(values);
-    if (!secrets.length) return false;
-    const visiting = /* @__PURE__ */ new WeakSet();
-    const valueParts = [];
-    const keyParts = [];
-    const keyValueParts = [];
-    const leafKeyValueParts = [];
-    let structureChars = 0;
-    const containsText = (candidate) => textContainsSecret(candidate, secrets);
-    const appendPart = (parts, candidate) => {
-      const text = String(candidate);
-      structureChars += text.length;
-      if (structureChars > MAX_STRUCTURE_CHARS) return true;
-      parts.push(text);
-      return false;
-    };
-    const visit = (candidate) => {
-      if (typeof candidate === "function") return true;
-      if (typeof candidate !== "object" || candidate === null) {
-        try {
-          if (appendPart(valueParts, candidate)) return true;
-          if (appendPart(keyValueParts, candidate)) return true;
-          return containsText(candidate);
-        } catch {
-          return true;
-        }
-      }
-      if (visiting.has(candidate)) return true;
-      let keys;
-      try {
-        keys = Reflect.ownKeys(candidate);
-      } catch {
-        return true;
-      }
-      visiting.add(candidate);
-      try {
-        for (const key of keys) {
-          try {
-            const item = Reflect.get(candidate, key);
-            if (appendPart(keyParts, key)) return true;
-            if (appendPart(keyValueParts, key)) return true;
-            if (containsText(key)) return true;
-            if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
-              if (appendPart(leafKeyValueParts, key)) return true;
-              if (appendPart(leafKeyValueParts, item)) return true;
-            }
-            if (visit(item)) return true;
-          } catch {
-            return true;
-          }
-        }
-        return false;
-      } finally {
-        visiting.delete(candidate);
-      }
-    };
-    if (visit(value)) return true;
-    return [valueParts, keyParts, keyValueParts, leafKeyValueParts].some((parts) => containsText(parts.join("")));
-  }
-  function redactText(value, values = []) {
-    let text = String(value == null ? "" : value);
-    const secrets = normalizedSecrets(values);
-    if (!secrets.length) return text;
-    const marker = secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
-    const decodedLayers = decodedTextLayers(text);
-    if (decodedLayers === null) return marker;
-    if (decodedLayers.slice(1).some((layer) => secrets.some((secret) => layer.includes(secret)))) {
-      return marker;
-    }
-    const maximumPasses = Math.max(1, secrets.length * 4 + 8);
-    for (let pass = 0; pass < maximumPasses; pass += 1) {
-      let changed = false;
-      for (const secret of secrets) {
-        if (!text.includes(secret)) continue;
-        text = text.split(secret).join(marker);
-        changed = true;
-      }
-      if (!changed) return text;
-    }
-    return secrets.some((secret) => text.includes(secret)) ? "" : text;
-  }
-  function redactValueParts(value, values) {
-    if (typeof value === "string") return redactText(value, values);
-    if (value === null || ["number", "boolean", "bigint"].includes(typeof value)) {
-      const text = String(value);
-      const redacted = redactText(text, values);
-      return redacted === text ? value : redacted;
-    }
-    if (Array.isArray(value)) return value.map((item) => redactValueParts(item, values));
-    if (!value || typeof value !== "object") return value;
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
-      redactText(key, values),
-      redactValueParts(item, values)
-    ]));
-  }
-  function redactValue(value, values = []) {
-    const redacted = redactValueParts(value, values);
-    if (!containsExactSecret(redacted, values)) return redacted;
-    const secrets = normalizedSecrets(values);
-    return secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
-  }
-  function createDeltaRedactor(values, emitText) {
-    const secrets = normalizedSecrets(values);
-    let buffer = "";
-    const keep = secrets.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
-    return {
-      feed(delta) {
-        if (!secrets.length) {
-          emitText(String(delta || ""));
-          return;
-        }
-        buffer = redactText(buffer + String(delta || ""), secrets);
-        if (buffer.length > keep) {
-          emitText(buffer.slice(0, buffer.length - keep));
-          buffer = buffer.slice(buffer.length - keep);
-        }
-      },
-      flush() {
-        if (buffer) emitText(redactText(buffer, secrets));
-        buffer = "";
-      },
-      discard() {
-        buffer = "";
-      }
-    };
   }
 
   // src/cep/mcpClient.js
@@ -26930,7 +27409,7 @@
   // src/cep/toolsApi.js
   init_cep_runtime_inject();
   function parseMcpPayload(result) {
-    const text = Array.isArray(result && result.content) ? result.content.filter((entry) => entry && entry.type === "text").map((entry) => String(entry.text || "")).join("") : "";
+    const text = Array.isArray(result && result.content) ? result.content.filter((entry2) => entry2 && entry2.type === "text").map((entry2) => String(entry2.text || "")).join("") : "";
     let payload;
     try {
       payload = JSON.parse(text);
@@ -27357,9 +27836,26 @@
     if (adapter.id === "windows-x64") return "x64";
     return void 0;
   }
-  function cliResolutionMessage(code, lang) {
+  function resolutionArchitecture(resolution) {
+    for (const attempt of (resolution == null ? void 0 : resolution.attempts) || []) {
+      const match = String((attempt == null ? void 0 : attempt.detail) || "").match(/architecture\s+(arm64|aarch64|x64|amd64|x86_64)\b/i);
+      if (match) return match[1];
+    }
+    return "";
+  }
+  function cliResolutionMessage(code, lang, resolution) {
     if (code === "VERSION_TOO_OLD") {
       return lang === "zh" ? "Claude CLI \u7248\u672C\u8FC7\u65E7\uFF0C\u8BF7\u5347\u7EA7 Claude CLI \u5230 2.x \u6216\u66F4\u9AD8\u7248\u672C\u3002" : "Claude CLI is too old. Upgrade Claude CLI to version 2.x or newer.";
+    }
+    if (code === "ARCH_MISMATCH") {
+      const found = resolutionArchitecture(resolution);
+      if (lang === "zh") {
+        return found ? `Claude CLI \u67B6\u6784\u4E0D\u5339\u914D\uFF1A\u627E\u5230\u7684\u662F ${found} \u67B6\u6784\u3002\u8BF7\u5B89\u88C5\u4E0E After Effects \u4E00\u81F4\u7684\u7248\u672C\u3002` : "Claude CLI \u67B6\u6784\u4E0D\u5339\u914D\u3002\u8BF7\u5B89\u88C5\u4E0E After Effects \u4E00\u81F4\u7684\u7248\u672C\u3002";
+      }
+      return found ? `Claude CLI architecture mismatch: the detected executable is ${found}. Install a build matching After Effects.` : "Claude CLI architecture mismatch. Install a build matching After Effects.";
+    }
+    if (code === "PROBE_FAILED") {
+      return lang === "zh" ? "\u5DF2\u627E\u5230 Claude CLI\uFF0C\u4F46\u7248\u672C\u63A2\u9488\u542F\u52A8\u5931\u8D25\u3002\u8BF7\u5728\u7EC8\u7AEF\u786E\u8BA4 claude --version \u53EF\u6B63\u5E38\u8FD0\u884C\u3002" : "Claude CLI was found, but its version probe failed. Confirm claude --version runs in a terminal.";
     }
     return lang === "zh" ? "\u672A\u627E\u5230 Claude CLI\u3002\u8BF7\u5B89\u88C5 Claude Code 2.x\uFF0C\u5E76\u786E\u4FDD claude \u5728 PATH \u4E2D\u3002" : "Claude CLI was not found. Install Claude Code 2.x and put claude on PATH.";
   }
@@ -27376,7 +27872,7 @@
       return {
         ok: false,
         code: resolved.code,
-        detail: cliResolutionMessage(resolved.code, lang),
+        detail: cliResolutionMessage(resolved.code, lang, resolved),
         resolution: resolved
       };
     }
@@ -27450,6 +27946,11 @@
       }
     }
     return String(detail || "").slice(0, 500);
+  }
+  function categorizedError(error, categoryCode) {
+    const result = error instanceof Error ? error : new Error((error == null ? void 0 : error.message) || String(error || categoryCode));
+    result.categoryCode = categoryCode;
+    return result;
   }
   function normalizedThinking(value) {
     if (value === "adaptive") return { type: "adaptive" };
@@ -27542,6 +28043,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getEffort,
     getThinking,
     onEvent,
+    getLang,
     lang = "zh",
     spawnImpl,
     fsImpl,
@@ -27556,6 +28058,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       [...executable.argsPrefix || [], ...args],
       options
     ) : (executable, args, options) => adapter.spawn(executable, args, options);
+    const currentLang = () => (typeof getLang === "function" ? getLang() : lang) || "zh";
     let proc = null;
     let startPromise = null;
     let stderrTail = "";
@@ -27579,6 +28082,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let thinkingActive = false;
     let providerDeltaRedactor = createDeltaRedactor([], () => {
     });
+    let stderrDeltaRedactor = createDeltaRedactor([], () => {
+    });
+    let processStderrAttachmentPaths = [];
     const pendingApprovals = /* @__PURE__ */ new Map();
     const pendingQuestions = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
@@ -27617,9 +28123,19 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         });
       });
     }
+    function resetStderrDeltaRedactor() {
+      stderrDeltaRedactor.discard();
+      stderrDeltaRedactor = createDeltaRedactor([
+        ...providerSensitiveValues,
+        ...processStderrAttachmentPaths
+      ], (text) => {
+        stderrTail = appendTail2(stderrTail, text);
+      });
+    }
     function setProviderSensitiveValues(values) {
       providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
       resetProviderDeltaRedactor();
+      resetStderrDeltaRedactor();
     }
     function clearProviderSensitiveValues() {
       providerDeltaRedactor.discard();
@@ -27627,11 +28143,19 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       providerDeltaPhase = void 0;
       providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {
       });
+      processStderrAttachmentPaths = [];
+      resetStderrDeltaRedactor();
     }
     function setActiveAttachmentPaths(values) {
       activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
       if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+      const previousPathCount = processStderrAttachmentPaths.length;
+      processStderrAttachmentPaths = Array.from(/* @__PURE__ */ new Set([
+        ...processStderrAttachmentPaths,
+        ...activeAttachmentPaths
+      ])).sort((left, right) => right.length - left.length);
       resetProviderDeltaRedactor();
+      if (processStderrAttachmentPaths.length !== previousPathCount) resetStderrDeltaRedactor();
     }
     function setThinking(active) {
       const next = Boolean(active);
@@ -27770,7 +28294,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (clearStderr) stderrTail = "";
       clearProviderSensitiveValues();
     }
-    function handleProcessFailure(target, generation, message) {
+    function handleProcessFailure(target, generation, { message, classificationInput, detail }) {
       if (generation !== runtimeGeneration || proc !== target) return;
       runtimeGeneration += 1;
       proc = null;
@@ -27781,10 +28305,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       cleanupConfig();
       if (activeRun) {
         providerDeltaRedactor.flush();
+        const classified = classifyErrorCode(classificationInput);
         emit({
           type: "error",
-          kind: "mcp",
-          message
+          kind: classified.kind,
+          code: classified.code,
+          message,
+          ...detail && Object.keys(detail).length ? { detail } : {}
         });
         finishActive();
       }
@@ -27792,13 +28319,29 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       clearProviderSensitiveValues();
     }
     function handleExit(target, generation, code, signal) {
-      const suffix = signal ? `${code} ${signal}` : String(code);
-      const detail = stderrTail ? `${suffix} ${stderrTail}` : suffix;
-      handleProcessFailure(target, generation, `Claude CLI exited: ${detail}`);
+      stderrDeltaRedactor.flush();
+      const tail = trimStderrTail(stderrTail);
+      handleProcessFailure(target, generation, {
+        message: "Claude CLI exited unexpectedly.",
+        classificationInput: { exitCode: code, signal, stderrTail: tail },
+        detail: {
+          exitCode: code,
+          ...signal ? { signal } : {},
+          ...tail ? { stderrTail: tail } : {}
+        }
+      });
     }
     function handleProcError(target, generation, error) {
-      const message = (error == null ? void 0 : error.message) || "Claude CLI process error";
-      handleProcessFailure(target, generation, message);
+      stderrDeltaRedactor.flush();
+      const tail = trimStderrTail(stderrTail);
+      handleProcessFailure(target, generation, {
+        message: "Claude CLI process could not continue.",
+        classificationInput: { error, spawnError: true, stderrTail: tail },
+        detail: {
+          ...(error == null ? void 0 : error.code) ? { spawnCode: error.code } : {},
+          ...tail ? { stderrTail: tail } : {}
+        }
+      });
     }
     function markTurnAccepted() {
       if (!activeTurn || activeTurnAccepted) return;
@@ -27989,10 +28532,29 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       setThinking(false);
       drainControls("Claude CLI turn ended.");
       if (message.is_error) {
+        const rawMessage = truncateDetail(message.result || message);
+        const safeMessage = safeErrorMessage({ message: rawMessage }, [
+          ...providerSensitiveValues,
+          ...activeAttachmentPaths
+        ]);
+        const httpStatus = extractHttpStatus(safeMessage);
+        const classified = classifyErrorCode({
+          error: { message: safeMessage },
+          upstream: true,
+          upstreamText: safeMessage
+        });
+        const kindReference = classifyError(safeMessage);
         emit({
           type: "error",
-          kind: classifyError(message.result || message),
-          message: apiSafeErrorMessage(truncateDetail(message.result || message))
+          kind: classified.code === "UPSTREAM_ERROR" && ["auth", "model"].includes(kindReference) ? kindReference : classified.kind,
+          code: classified.code,
+          message: httpStatus ? "Claude upstream request failed." : safeMessage,
+          ...httpStatus ? {
+            detail: {
+              httpStatus,
+              upstreamMessage: safeMessage.slice(0, 500)
+            }
+          } : {}
         });
         finishActive();
         return;
@@ -28106,7 +28668,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (allowedTools.length) args.push("--allowedTools", ...allowedTools);
       args.push(
         "--agents",
-        JSON.stringify(agentDefinition(meta, turn.attachments, lang)),
+        JSON.stringify(agentDefinition(meta, turn.attachments, currentLang())),
         "--agent",
         "ae"
       );
@@ -28120,19 +28682,28 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (startPromise) return startPromise;
       const pendingStart = (async () => {
         var _a, _b, _c, _d, _e, _f;
-        const resolved = await resolveClaude({ platform: adapter, env, lang });
+        const resolvedLang = currentLang();
+        const resolved = await resolveClaude({ platform: adapter, env, lang: resolvedLang });
         if (activeRun === null) throw cancelledStartError();
         if (!(resolved == null ? void 0 : resolved.ok)) {
+          const classification = classifyErrorCode({ resolutionCode: resolved == null ? void 0 : resolved.code });
+          const resolution = boundedResolution((resolved == null ? void 0 : resolved.resolution) || resolved);
           emit({
             type: "error",
-            kind: "mcp",
-            code: (resolved == null ? void 0 : resolved.code) || "NOT_FOUND",
-            message: (resolved == null ? void 0 : resolved.detail) || cliResolutionMessage(resolved == null ? void 0 : resolved.code, lang)
+            kind: classification.kind,
+            code: classification.code,
+            message: (resolved == null ? void 0 : resolved.detail) || cliResolutionMessage(resolved == null ? void 0 : resolved.code, resolvedLang, (resolved == null ? void 0 : resolved.resolution) || resolved),
+            ...resolution ? { detail: { resolution } } : {}
           });
           return false;
         }
         setProviderSensitiveValues([]);
-        const mcpPath = writeMcpConfig(mcpSpec);
+        let mcpPath;
+        try {
+          mcpPath = writeMcpConfig(mcpSpec);
+        } catch (error) {
+          throw categorizedError(error, "MCP_UNREACHABLE");
+        }
         let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}));
         stderrTail = "";
         processChannel = "subscription";
@@ -28148,11 +28719,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         const args = buildCliArgs(session, turn, meta, mcpPath);
         let spawnedProc;
         try {
-          spawnedProc = spawnProcess(executable, args, {
-            stdio: "pipe",
-            windowsHide: true,
-            env: spawnEnv
-          });
+          try {
+            spawnedProc = spawnProcess(executable, args, {
+              stdio: "pipe",
+              windowsHide: true,
+              env: spawnEnv
+            });
+          } catch (error) {
+            const failure = error instanceof Error ? error : new Error((error == null ? void 0 : error.message) || String(error || "Claude CLI spawn failed"));
+            failure.spawnError = true;
+            throw failure;
+          }
         } finally {
           if (spawnEnv) delete spawnEnv.ANTHROPIC_AUTH_TOKEN;
           spawnEnv = null;
@@ -28168,11 +28745,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         (_b = (_a = spawnedProc.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", reader);
         (_d = (_c = spawnedProc.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", (chunk) => {
           if (generation !== runtimeGeneration || proc !== spawnedProc) return;
-          const detail = redactValue(String(chunk), [
-            ...providerSensitiveValues,
-            ...activeAttachmentPaths
-          ]);
-          stderrTail = appendTail2(stderrTail, detail);
+          stderrDeltaRedactor.feed(chunk);
         });
         (_e = spawnedProc.on) == null ? void 0 : _e.call(spawnedProc, "exit", (code, signal) => {
           handleExit(spawnedProc, generation, code, signal);
@@ -28189,11 +28762,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         cleanupConfig();
         clearProviderSensitiveValues();
         if ((error == null ? void 0 : error.code) !== "CLAUDE_AGENT_START_CANCELLED") {
+          const classification = classifyErrorCode({
+            error,
+            code: error == null ? void 0 : error.categoryCode,
+            spawnError: (error == null ? void 0 : error.spawnError) === true,
+            fallbackCode: "BACKEND_ERROR"
+          });
+          let message = (error == null ? void 0 : error.message) || "Failed to start Claude CLI.";
+          if (classification.code === "SPAWN_FAILED") message = "Claude CLI process could not be started.";
+          else if (classification.code === "MCP_UNREACHABLE") message = "Claude could not prepare the panel MCP connection.";
           emit({
             type: "error",
-            kind: (error == null ? void 0 : error.kind) || "mcp",
-            ...(error == null ? void 0 : error.code) ? { code: error.code } : {},
-            message: (error == null ? void 0 : error.message) || "Failed to start Claude CLI."
+            kind: classification.kind,
+            code: classification.code,
+            message,
+            ...(error == null ? void 0 : error.code) && error.code !== "CLAUDE_AGENT_START_CANCELLED" ? { detail: { spawnCode: error.code } } : {}
           });
         }
         return false;
@@ -28205,12 +28788,22 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       try {
         const session = desiredSession();
         if (activeRun !== runToken) throw cancelledStartError();
-        const meta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+        let meta;
+        try {
+          meta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+        } catch (error) {
+          throw categorizedError(error, "MCP_UNREACHABLE");
+        }
         const normalizedMeta = {
           allowedTools: Array.isArray(meta == null ? void 0 : meta.allowedTools) ? meta.allowedTools : [],
           annotations: isPlainObject2(meta == null ? void 0 : meta.annotations) ? meta.annotations : {}
         };
-        const mcpSpec = await getMcpSpec2();
+        let mcpSpec;
+        try {
+          mcpSpec = await getMcpSpec2();
+        } catch (error) {
+          throw categorizedError(error, "MCP_UNREACHABLE");
+        }
         if (activeRun !== runToken) throw cancelledStartError();
         turn.toolMeta = normalizedMeta;
         const nextSettings = processSettingsIdentity({
@@ -28236,11 +28829,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           await discardRuntime({ clearStderr: true });
         }
         if ((error == null ? void 0 : error.code) !== "CLAUDE_AGENT_START_CANCELLED") {
+          const classification = classifyErrorCode({
+            error,
+            code: error == null ? void 0 : error.categoryCode,
+            fallbackCode: "BACKEND_ERROR"
+          });
+          const message = classification.code === "MCP_UNREACHABLE" ? "Claude could not prepare the panel MCP connection." : (error == null ? void 0 : error.message) || "Failed to start Claude CLI.";
           emit({
             type: "error",
-            kind: (error == null ? void 0 : error.kind) || "mcp",
-            ...(error == null ? void 0 : error.code) ? { code: error.code } : {},
-            message: (error == null ? void 0 : error.message) || "Failed to start Claude CLI."
+            kind: classification.kind,
+            code: classification.code,
+            message
           });
         }
         return false;
@@ -28296,7 +28895,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       providerDeltaRedactor.flush();
       setThinking(false);
       drainControls("Turn was stopped.");
-      emit({ type: "error", kind: "aborted", message: "Turn aborted." });
+      emit({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted." });
       finishActive();
       void discardRuntime();
     }
@@ -28488,27 +29087,27 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       writeLine(JSON.stringify(message) + "\n");
     }
     function rejectPending(id, error) {
-      const entry = pending.get(id);
-      if (!entry) return;
+      const entry2 = pending.get(id);
+      if (!entry2) return;
       pending.delete(id);
-      clearTimeout(entry.timer);
-      entry.reject(error);
+      clearTimeout(entry2.timer);
+      entry2.reject(error);
     }
     function handleMessage(message) {
       if (!message || typeof message !== "object") return;
       const hasId = message.id !== void 0 && message.id !== null;
       if (hasId && !message.method) {
-        const entry = pending.get(message.id);
-        if (!entry) return;
+        const entry2 = pending.get(message.id);
+        if (!entry2) return;
         pending.delete(message.id);
-        clearTimeout(entry.timer);
+        clearTimeout(entry2.timer);
         if (message.error) {
           const error = new Error(message.error.message || "JSON-RPC request failed");
           error.code = message.error.code;
           error.data = message.error.data;
-          entry.reject(error);
+          entry2.reject(error);
         } else {
-          entry.resolve(message.result);
+          entry2.resolve(message.result);
         }
         return;
       }
@@ -28524,7 +29123,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (params !== void 0) message.params = params;
       const limit = timeoutOverrideMs || timeoutMs;
       const promise = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + limit + "ms")), limit);
+        const timer = setTimeout(() => {
+          const error = new Error(method + " timed out after " + limit + "ms");
+          error.method = method;
+          error.timeoutMs = limit;
+          rejectPending(id, error);
+        }, limit);
         pending.set(id, { resolve, reject, timer });
       });
       writeMessage(message);
@@ -28584,12 +29188,47 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function threadIdFromResult(result) {
     return result && (result.threadId || result.id || result.thread && result.thread.id) || null;
   }
-  async function resolveCodexCli({ env, platform } = {}) {
+  function resolutionArchitecture2(resolution) {
+    for (const attempt of (resolution == null ? void 0 : resolution.attempts) || []) {
+      const match = String((attempt == null ? void 0 : attempt.detail) || "").match(/architecture\s+(arm64|aarch64|x64|amd64|x86_64)\b/i);
+      if (match) return match[1];
+    }
+    return "";
+  }
+  function codexResolutionMessage(code, lang, resolution) {
+    if (code === "VERSION_TOO_OLD") {
+      return lang === "zh" ? "Codex CLI \u7248\u672C\u8FC7\u65E7\uFF0C\u8BF7\u5347\u7EA7\u540E\u91CD\u65B0\u68C0\u6D4B\u3002" : "Codex CLI is too old. Upgrade it and re-check.";
+    }
+    if (code === "ARCH_MISMATCH") {
+      const found = resolutionArchitecture2(resolution);
+      if (lang === "zh") {
+        return found ? `Codex CLI \u67B6\u6784\u4E0D\u5339\u914D\uFF1A\u627E\u5230\u7684\u662F ${found} \u67B6\u6784\u3002\u8BF7\u5B89\u88C5\u4E0E After Effects \u4E00\u81F4\u7684\u7248\u672C\u3002` : "Codex CLI \u67B6\u6784\u4E0D\u5339\u914D\u3002\u8BF7\u5B89\u88C5\u4E0E After Effects \u4E00\u81F4\u7684\u7248\u672C\u3002";
+      }
+      return found ? `Codex CLI architecture mismatch: the detected executable is ${found}. Install a build matching After Effects.` : "Codex CLI architecture mismatch. Install a build matching After Effects.";
+    }
+    if (code === "PROBE_FAILED") {
+      return lang === "zh" ? "\u5DF2\u627E\u5230 Codex CLI\uFF0C\u4F46\u7248\u672C\u63A2\u9488\u542F\u52A8\u5931\u8D25\u3002\u8BF7\u5728\u7EC8\u7AEF\u786E\u8BA4 codex --version \u53EF\u6B63\u5E38\u8FD0\u884C\u3002" : "Codex CLI was found, but its version probe failed. Confirm codex --version runs in a terminal.";
+    }
+    return lang === "zh" ? "\u672A\u627E\u5230 Codex CLI\u3002\u8BF7\u5B89\u88C5 Codex CLI\uFF0C\u5E76\u786E\u4FDD codex \u5728 PATH \u4E2D\u3002" : "Codex CLI was not found. Install Codex CLI and put codex on PATH.";
+  }
+  function taggedError(error, property, value) {
+    const result = error instanceof Error ? error : new Error((error == null ? void 0 : error.message) || String(error || value));
+    result[property] = value;
+    return result;
+  }
+  async function resolveCodexCli({ env, platform, lang = "zh" } = {}) {
     const adapter = platform || createPlatformAdapter();
     const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
     const resolved = await adapter.resolveExecutable("codex", { env: env || {}, ...requiredArch ? { requiredArch } : {} });
     if (!resolved.ok) {
-      return { ok: false, cliPath: "", version: "", detail: "codex CLI resolution failed: " + resolved.code, resolution: resolved };
+      return {
+        ok: false,
+        code: resolved.code,
+        cliPath: "",
+        version: "",
+        detail: codexResolutionMessage(resolved.code, lang, resolved),
+        resolution: resolved
+      };
     }
     return { ok: true, cliPath: resolved.displayPath || resolved.path, version: resolved.version || "", executable: resolved };
   }
@@ -28604,10 +29243,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getServerInstructions = () => "",
     resolveCli = resolveCodexCli,
     onEvent,
+    getLang,
     lang = "zh",
-    env
+    env,
+    rpcTimeoutMs = RPC_TIMEOUT_MS,
+    turnTimeoutMs = 18e4
   }) {
     const adapter = platform || createPlatformAdapter();
+    const currentLang = () => (typeof getLang === "function" ? getLang() : lang) || "zh";
     let proc = null;
     let rpc = null;
     let startPromise = null;
@@ -28799,7 +29442,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (message.method === "turn/completed") {
         currentTurnId = null;
         const turn = params.turn && typeof params.turn === "object" ? params.turn : params;
-        const completionFailure = turn.error || params.error || (turn.status === "failed" || turn.status === "error" ? { code: turn.status, message: "Codex turn failed." } : null);
+        const cancelled = ["cancelled", "canceled", "interrupted"].includes(String(turn.status || "").toLowerCase());
+        const completionFailure = turn.error || params.error || (turn.status === "failed" || turn.status === "error" ? { code: turn.status, message: "Codex turn failed." } : cancelled ? { code: turn.status, message: `Codex turn ${turn.status}.` } : null);
         if (completionFailure) {
           providerDeltaRedactor.discard();
           void handleTurnFailure(completionFailure);
@@ -28925,8 +29569,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function handleExit(code, signal) {
       const wasStopping = stopping;
       providerStderrRedactor.flush();
-      const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
-      if (rpc) rpc.close(new Error("codex app-server exited: " + detail));
+      const tail = trimStderrTail(stderrTail);
+      if (rpc) rpc.close(new Error("codex app-server exited"));
       proc = null;
       rpc = null;
       startPromise = null;
@@ -28940,10 +29584,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return;
       }
       if (activeRun) {
+        const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
         emit({
           type: "error",
-          kind: "mcp",
-          message: "codex app-server exited: " + detail,
+          kind: classified.kind,
+          code: classified.code,
+          message: "Codex app-server exited unexpectedly.",
+          detail: {
+            exitCode: code,
+            ...signal ? { signal } : {},
+            ...tail ? { stderrTail: tail } : {}
+          },
           ...activeTurnFailureFields()
         });
         finishActive();
@@ -28952,6 +29603,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function handleError(error) {
       const err = error instanceof Error ? error : new Error("codex app-server error");
+      providerStderrRedactor.flush();
       if (rpc) rpc.close(err);
       proc = null;
       rpc = null;
@@ -28962,7 +29614,18 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       preambleSent = false;
       drainApprovals();
       if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: err.message, ...activeTurnFailureFields() });
+        const classified = classifyErrorCode({ error: err, spawnError: true });
+        emit({
+          type: "error",
+          kind: classified.kind,
+          code: classified.code,
+          message: "Codex app-server process could not continue.",
+          detail: {
+            ...err.code ? { spawnCode: err.code } : {},
+            ...trimStderrTail(stderrTail) ? { stderrTail: trimStderrTail(stderrTail) } : {}
+          },
+          ...activeTurnFailureFields()
+        });
         finishActive();
       }
       clearProcessStderrAttachmentPaths();
@@ -28975,12 +29638,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (startGeneration !== runtimeGeneration) throw new Error("Codex start was cancelled");
       };
       const pendingStart = (async () => {
+        var _a;
         const spawnEnv = currentEnv();
         stderrTail = "";
+        resetProviderStderrRedactor();
         stopping = false;
-        const cliInfo = await resolveCli({ env: spawnEnv, platform: adapter });
+        const resolvedLang = currentLang();
+        const cliInfo = await resolveCli({ env: spawnEnv, platform: adapter, lang: resolvedLang });
         assertCurrentStart();
-        if (!cliInfo || !cliInfo.ok) throw new Error(cliInfo && cliInfo.detail || "codex CLI is unavailable");
+        if (!cliInfo || !cliInfo.ok) {
+          const error = new Error(cliInfo && cliInfo.detail || codexResolutionMessage(cliInfo == null ? void 0 : cliInfo.code, resolvedLang, (cliInfo == null ? void 0 : cliInfo.resolution) || cliInfo));
+          const classified = classifyErrorCode({ resolutionCode: (cliInfo == null ? void 0 : cliInfo.code) || ((_a = cliInfo == null ? void 0 : cliInfo.resolution) == null ? void 0 : _a.code) });
+          error.categoryCode = classified.code;
+          error.resolution = boundedResolution((cliInfo == null ? void 0 : cliInfo.resolution) || cliInfo);
+          throw error;
+        }
         lastCliInfo = cliInfo;
         const executable = cliInfo.executable || {
           ok: true,
@@ -28997,18 +29669,24 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           "-c",
           "features.default_mode_request_user_input=true"
         ];
-        const spawnedProc = adapter.spawn(executable, appServerArgs, {
-          stdio: "pipe",
-          windowsHide: true,
-          env: spawnEnv
-        });
+        let spawnedProc;
+        try {
+          spawnedProc = adapter.spawn(executable, appServerArgs, {
+            stdio: "pipe",
+            windowsHide: true,
+            env: spawnEnv
+          });
+        } catch (error) {
+          throw taggedError(error, "spawnError", true);
+        }
         proc = spawnedProc;
         const generation = startGeneration + 1;
         runtimeGeneration = generation;
         const nextRpc = createRpc({
           writeLine: (line) => spawnedProc.stdin.write(line),
           onNotification: handleNotification,
-          onRequest: handleRequest
+          onRequest: handleRequest,
+          timeoutMs: rpcTimeoutMs
         });
         rpc = nextRpc;
         const reader = createNdjsonReader((message) => {
@@ -29070,29 +29748,42 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       await initialize();
       const threadRpc = rpc;
       const threadGeneration = runtimeGeneration;
-      const mcpSpec = await getMcpSpec2();
-      toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+      let mcpSpec;
+      try {
+        mcpSpec = await getMcpSpec2();
+        toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+      } catch (error) {
+        throw taggedError(error, "categoryCode", "MCP_UNREACHABLE");
+      }
       if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
         throw new Error("Codex thread start was cancelled");
       }
       const spawnEnv = currentEnv();
-      const result = await threadRpc.request("thread/start", {
-        ephemeral: true,
-        cwd: defaultCwd(spawnEnv, adapter),
-        model: getModel(),
-        approvalPolicy: APPROVAL_POLICY,
-        approvalsReviewer: "user",
-        sandboxPolicy: SANDBOX_POLICY,
-        config: {
-          mcp_servers: {
-            ae: { url: mcpSpec.url }
+      let result;
+      try {
+        result = await threadRpc.request("thread/start", {
+          ephemeral: true,
+          cwd: defaultCwd(spawnEnv, adapter),
+          model: getModel(),
+          approvalPolicy: APPROVAL_POLICY,
+          approvalsReviewer: "user",
+          sandboxPolicy: SANDBOX_POLICY,
+          config: {
+            mcp_servers: {
+              ae: { url: mcpSpec.url }
+            }
           }
-        }
-      });
+        });
+      } catch (error) {
+        throw taggedError(error, "fallbackCode", "SESSION_START_FAILED");
+      }
       if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
         throw new Error("Codex thread start was cancelled");
       }
       threadId = threadIdFromResult(result);
+      if (!threadId) {
+        throw taggedError(new Error("Codex did not return a thread id."), "fallbackCode", "SESSION_START_FAILED");
+      }
       return threadId;
     }
     function turnInput(turn, text) {
@@ -29135,7 +29826,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         preambleSent = true;
       }
       activeTurnDispatched = true;
-      rpc.request("turn/start", turnParams(activeTurn, turnText), 18e4).catch((error) => {
+      rpc.request("turn/start", turnParams(activeTurn, turnText), turnTimeoutMs).catch((error) => {
         void handleTurnFailure(error);
       });
     }
@@ -29143,23 +29834,48 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (!activeRun || turnFailureInFlight) return;
       turnFailureInFlight = true;
       try {
-        const failure = {
-          kind: error == null ? void 0 : error.kind,
-          code: error == null ? void 0 : error.code,
-          message: redactValue(
-            (error == null ? void 0 : error.message) || "Failed to start Codex turn.",
-            activeAttachmentPaths
-          )
+        const rawMessage = redactValue(
+          (error == null ? void 0 : error.message) || "Failed to start Codex turn.",
+          activeAttachmentPaths
+        );
+        const httpStatus = extractHttpStatus(error == null ? void 0 : error.httpStatus) || extractHttpStatus(rawMessage);
+        const fallbackCode = (error == null ? void 0 : error.fallbackCode) || (activeTurnDispatched ? "TURN_START_FAILED" : "SESSION_START_FAILED");
+        const classified = classifyErrorCode({
+          error,
+          code: error == null ? void 0 : error.categoryCode,
+          method: error == null ? void 0 : error.method,
+          httpStatus,
+          upstreamText: rawMessage,
+          spawnError: (error == null ? void 0 : error.spawnError) === true,
+          fallbackCode
+        });
+        const detail = {
+          ...(error == null ? void 0 : error.method) ? { method: error.method } : {},
+          ...httpStatus ? { httpStatus } : {},
+          ...typeof (error == null ? void 0 : error.code) === "number" ? { jsonRpcCode: error.code } : {},
+          ...(error == null ? void 0 : error.data) !== void 0 ? { jsonRpcData: error.data } : {},
+          ...(error == null ? void 0 : error.resolution) ? { resolution: error.resolution } : {},
+          ...(error == null ? void 0 : error.code) && (error == null ? void 0 : error.spawnError) ? { spawnCode: error.code } : {}
         };
         providerDeltaRedactor.discard();
         drainApprovals();
-        const message = (failure == null ? void 0 : failure.message) || "Failed to start Codex turn.";
-        const httpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
+        let message = rawMessage || "Failed to start Codex turn.";
+        if (classified.code.startsWith("UPSTREAM_HTTP_")) message = "Codex upstream request failed.";
+        else if (classified.code === "AUTH_REQUIRED") message = "Codex authentication is required.";
+        else if (classified.code === "CANCELLED") message = "Codex request was cancelled.";
+        else if (classified.code === "SPAWN_FAILED") message = "Codex app-server process could not be started.";
+        else if (classified.code === "MCP_UNREACHABLE") message = "Codex could not reach the panel MCP server.";
+        else if (classified.code === "SESSION_START_FAILED") message = "Codex session could not be started.";
+        else if (classified.code === "TURN_START_FAILED") message = "Codex turn could not be started.";
+        if (message !== rawMessage && rawMessage) {
+          detail.upstreamMessage = String(rawMessage).slice(0, 500);
+        }
         emit({
           type: "error",
-          kind: (failure == null ? void 0 : failure.kind) || (httpFailure || /model/i.test(message) ? "model" : "mcp"),
-          ...(failure == null ? void 0 : failure.code) ? { code: failure.code } : {},
+          kind: classified.kind,
+          code: classified.code,
           message,
+          ...Object.keys(detail).length ? { detail } : {},
           ...activeTurnFailureFields()
         });
         finishActive();
@@ -29230,7 +29946,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       drainApprovals();
       providerDeltaRedactor.discard();
       if (activeRun) {
-        emit({ type: "error", kind: "aborted", message: "Turn aborted.", ...activeTurnFailureFields() });
+        emit({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
       }
     }
@@ -29581,8 +30297,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return normalizeAuth(parseJsonFile(fs, authFile, {}, "OPENCODE_AUTH_UNAVAILABLE"));
     }
     function hasApiKey(providerId) {
-      const entry = auth()[normalizeOpenCodeProviderId(providerId)];
-      return (entry == null ? void 0 : entry.type) === "api" && typeof entry.key === "string" && entry.key.length > 0;
+      const entry2 = auth()[normalizeOpenCodeProviderId(providerId)];
+      return (entry2 == null ? void 0 : entry2.type) === "api" && typeof entry2.key === "string" && entry2.key.length > 0;
     }
     function writeAuthKey(providerId, key) {
       const value = String(key || "");
@@ -29596,13 +30312,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const wantedId = String(currentId || (draft == null ? void 0 : draft.id) || (draft == null ? void 0 : draft.name) || "").trim();
       const id = wantedId.startsWith("aemcp-") ? wantedId : normalizeOpenCodeProviderId(wantedId);
       const provider = normalizeProvider({ ...draft, id, needsApiKey: false });
-      const previous = current.providers.find((entry) => entry.id === id) || null;
+      const previous = current.providers.find((entry2) => entry2.id === id) || null;
       const key = String(apiKey || "");
       if (key) writeAuthKey(provider.id, key);
       else if (((previous == null ? void 0 : previous.needsApiKey) || !previous) && !hasApiKey(provider.id)) {
         throw storeError("OPENCODE_API_KEY_REQUIRED", "Re-enter this provider API key");
       }
-      const index = current.providers.findIndex((entry) => entry.id === provider.id);
+      const index = current.providers.findIndex((entry2) => entry2.id === provider.id);
       if (index === -1) current.providers.push(provider);
       else current.providers[index] = provider;
       writeAtomic(fs, file, current, nextSuffix());
@@ -29632,6 +30348,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   var READY_POLL_MS = 250;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "north-mini-code-free";
+  var STDERR_TAIL_LIMIT3 = 4096;
   function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -29650,7 +30367,39 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
   function appendTail4(tail, chunk) {
     const next = tail + String(chunk || "");
-    return next.length > 4096 ? next.slice(next.length - 4096) : next;
+    return next.length > STDERR_TAIL_LIMIT3 ? next.slice(next.length - STDERR_TAIL_LIMIT3) : next;
+  }
+  function endpointPath(value) {
+    const path = String(value || "").split(/[?#]/, 1)[0];
+    return path.startsWith("/") ? path : "/";
+  }
+  function resolutionArchitecture3(resolution) {
+    for (const attempt of (resolution == null ? void 0 : resolution.attempts) || []) {
+      const match = String((attempt == null ? void 0 : attempt.detail) || "").match(/architecture\s+(arm64|aarch64|x64|amd64|x86_64)\b/i);
+      if (match) return match[1];
+    }
+    return "";
+  }
+  function openCodeResolutionMessage(code, lang, resolution) {
+    if (code === "VERSION_TOO_OLD") {
+      return lang === "zh" ? "OpenCode CLI \u7248\u672C\u8FC7\u65E7\uFF0C\u8BF7\u5347\u7EA7\u540E\u91CD\u65B0\u68C0\u6D4B\u3002" : "OpenCode CLI is too old. Upgrade it and re-check.";
+    }
+    if (code === "ARCH_MISMATCH") {
+      const found = resolutionArchitecture3(resolution);
+      if (lang === "zh") {
+        return found ? `OpenCode CLI \u67B6\u6784\u4E0D\u5339\u914D\uFF1A\u627E\u5230\u7684\u662F ${found} \u67B6\u6784\u3002\u8BF7\u5B89\u88C5\u4E0E After Effects \u4E00\u81F4\u7684\u7248\u672C\u3002` : "OpenCode CLI \u67B6\u6784\u4E0D\u5339\u914D\u3002\u8BF7\u5B89\u88C5\u4E0E After Effects \u4E00\u81F4\u7684\u7248\u672C\u3002";
+      }
+      return found ? `OpenCode CLI architecture mismatch: the detected executable is ${found}. Install a build matching After Effects.` : "OpenCode CLI architecture mismatch. Install a build matching After Effects.";
+    }
+    if (code === "PROBE_FAILED") {
+      return lang === "zh" ? "\u5DF2\u627E\u5230 OpenCode CLI\uFF0C\u4F46\u7248\u672C\u63A2\u9488\u542F\u52A8\u5931\u8D25\u3002\u8BF7\u5728\u7EC8\u7AEF\u786E\u8BA4 opencode --version \u53EF\u6B63\u5E38\u8FD0\u884C\u3002" : "OpenCode CLI was found, but its version probe failed. Confirm opencode --version runs in a terminal.";
+    }
+    return lang === "zh" ? "\u672A\u627E\u5230 OpenCode CLI\u3002\u8BF7\u5B89\u88C5 OpenCode CLI\uFF0C\u5E76\u786E\u4FDD opencode \u5728 PATH \u4E2D\u3002" : "OpenCode CLI was not found. Install OpenCode CLI and put opencode on PATH.";
+  }
+  function taggedError2(error, property, value) {
+    const result = error instanceof Error ? error : new Error((error == null ? void 0 : error.message) || String(error || value));
+    result[property] = value;
+    return result;
   }
   function decodeChunk(value) {
     if (typeof value === "string") return value;
@@ -29740,9 +30489,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getProviders = () => [],
     getExpertGuidance = () => true,
     onEvent,
-    env
+    env,
+    getLang,
+    lang = "zh",
+    readyTimeoutMs = READY_TIMEOUT_MS,
+    readyPollMs = READY_POLL_MS,
+    sleepImpl = sleep
   } = {}) {
     const adapter = platform || createPlatformAdapter();
+    const currentLang = () => (typeof getLang === "function" ? getLang() : lang) || "zh";
     let proc = null;
     let port = null;
     let baseUrl = "";
@@ -29836,10 +30591,25 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       resolve();
     }
     async function request(path, options = {}) {
-      const response = await fetcher()(baseUrl + path, options);
+      const endpoint = endpointPath(path);
+      let response;
+      try {
+        response = await fetcher()(baseUrl + path, options);
+      } catch (error) {
+        throw taggedError2(error, "endpoint", endpoint);
+      }
       if (!response || !response.ok) {
-        const text = response && response.text ? await response.text().catch(() => "") : "";
-        throw new Error("OpenCode HTTP " + (response ? response.status : "error") + (text ? ": " + text : ""));
+        const error = new Error("OpenCode request failed.");
+        if (Number.isInteger(Number(response == null ? void 0 : response.status))) error.httpStatus = Number(response.status);
+        error.endpoint = endpoint;
+        if (response && typeof response.text === "function") {
+          try {
+            const excerpt = String(await response.text()).slice(0, 200);
+            if (excerpt) error.responseExcerpt = excerpt;
+          } catch {
+          }
+        }
+        throw error;
       }
       return response;
     }
@@ -29864,18 +30634,29 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
     }
     async function waitForMcp() {
-      const deadline = Date.now() + READY_TIMEOUT_MS;
+      var _a;
+      const deadline = Date.now() + readyTimeoutMs;
       let lastError = null;
+      let lastStatus = null;
       while (Date.now() < deadline) {
         try {
           const status = await requestJson("/mcp");
+          lastStatus = ((_a = status == null ? void 0 : status.ae) == null ? void 0 : _a.status) || status;
           if (status && status.ae && status.ae.status === "connected") return true;
         } catch (e) {
           lastError = e;
+          if (e == null ? void 0 : e.httpStatus) lastStatus = e.httpStatus;
         }
-        await sleep(READY_POLL_MS);
+        await sleepImpl(readyPollMs);
       }
-      throw lastError || new Error("OpenCode MCP server did not become ready.");
+      const error = new Error("OpenCode MCP server did not become ready.");
+      error.categoryCode = "MCP_UNREACHABLE";
+      error.endpoint = "/mcp";
+      error.mcpStatus = lastStatus;
+      error.lastError = (lastError == null ? void 0 : lastError.message) || "";
+      if (lastError == null ? void 0 : lastError.httpStatus) error.httpStatus = lastError.httpStatus;
+      if (lastError == null ? void 0 : lastError.responseExcerpt) error.responseExcerpt = lastError.responseExcerpt;
+      throw error;
     }
     function writeConfig(mcpSpec) {
       const fs = fsImpl || adapter.fs;
@@ -29898,6 +30679,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function handleExit(code, signal) {
       const wasStopping = stopping;
       stderrRedactor.flush();
+      const tail = trimStderrTail(stderrTail);
       proc = null;
       serverPromise = null;
       sessionPromise = null;
@@ -29909,11 +30691,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return;
       }
       if (activeRun) {
-        const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
+        const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
         emit({
           type: "error",
-          kind: "mcp",
-          message: "opencode serve exited: " + detail,
+          kind: classified.kind,
+          code: classified.code,
+          message: "OpenCode serve exited unexpectedly.",
+          detail: {
+            exitCode: code,
+            ...signal ? { signal } : {},
+            ...tail ? { stderrTail: tail } : {}
+          },
           ...activeTurnFailureFields()
         });
         finishActive();
@@ -29921,6 +30709,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       clearProcessStderrAttachmentPaths();
     }
     function handleError(error) {
+      stderrRedactor.flush();
       proc = null;
       serverPromise = null;
       sessionPromise = null;
@@ -29928,10 +30717,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       sseClosed = true;
       sseStarted = false;
       if (activeRun) {
+        const tail = trimStderrTail(stderrTail);
+        const classified = classifyErrorCode({ error, spawnError: true, stderrTail: tail });
         emit({
           type: "error",
-          kind: "mcp",
-          message: error && error.message ? error.message : "opencode serve error",
+          kind: classified.kind,
+          code: classified.code,
+          message: "OpenCode serve process could not continue.",
+          detail: {
+            ...(error == null ? void 0 : error.code) ? { spawnCode: error.code } : {},
+            ...tail ? { stderrTail: tail } : {}
+          },
           ...activeTurnFailureFields()
         });
         finishActive();
@@ -29943,26 +30739,45 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (serverPromise) return serverPromise;
       if (proc && baseUrl && !stopping && !sseClosed) return true;
       serverPromise = (async () => {
-        const mcpSpec = getMcpSpec2 ? await getMcpSpec2() : { command: "ae-mcp", args: [] };
-        writeConfig(mcpSpec);
+        let mcpSpec;
+        try {
+          mcpSpec = getMcpSpec2 ? await getMcpSpec2() : { command: "ae-mcp", args: [] };
+          writeConfig(mcpSpec);
+        } catch (error) {
+          throw taggedError2(error, "categoryCode", "MCP_UNREACHABLE");
+        }
         port = await getPort();
         baseUrl = "http://127.0.0.1:" + port;
         const spawnEnv = adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: configHome });
         const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
         const executable = await adapter.resolveExecutable("opencode", { env: spawnEnv, ...requiredArch ? { requiredArch } : {} });
-        if (!executable.ok) throw new Error("OpenCode CLI resolution failed: " + executable.code);
+        if (!executable.ok) {
+          const error = new Error(openCodeResolutionMessage(executable.code, currentLang(), executable));
+          const classified = classifyErrorCode({ resolutionCode: executable.code });
+          error.categoryCode = classified.code;
+          error.resolution = boundedResolution(executable);
+          throw error;
+        }
         stderrTail = "";
+        resetStderrRedactor();
         stopping = false;
         sseClosed = false;
-        proc = adapter.spawn(executable, ["serve", "--port", String(port)], {
-          stdio: "pipe",
-          windowsHide: true,
-          // OpenCode scopes its project context to the cwd. Inheriting the CEP
-          // process cwd (AE's Support Files, thousands of files) inflated every
-          // provider request until the relay-side WAF rejected it with a 403
-          // challenge page (live-debugged 2026-08-20); pin a tiny neutral dir.
-          cwd: configHome,
-          env: spawnEnv
+        try {
+          proc = adapter.spawn(executable, ["serve", "--port", String(port)], {
+            stdio: "pipe",
+            windowsHide: true,
+            // OpenCode scopes its project context to the cwd. Inheriting the CEP
+            // process cwd (AE's Support Files, thousands of files) inflated every
+            // provider request until the relay-side WAF rejected it with a 403
+            // challenge page (live-debugged 2026-08-20); pin a tiny neutral dir.
+            cwd: configHome,
+            env: spawnEnv
+          });
+        } catch (error) {
+          throw taggedError2(error, "spawnError", true);
+        }
+        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", (chunk) => {
+          stderrRedactor.feed(chunk);
         });
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
           stderrRedactor.feed(chunk);
@@ -30003,15 +30818,42 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (sseStarted) return;
       sseStarted = true;
       const parser = createSseParser(({ data: data2 }) => handleOpenCodeEvent(data2));
-      request("/event").then((response) => readSseBody(response.body, parser)).catch((e) => {
-        if (!sseClosed && activeRun) {
-          emit({
-            type: "error",
-            kind: "mcp",
-            message: e && e.message ? e.message : "OpenCode event stream failed.",
-            ...activeTurnFailureFields()
-          });
-          finishActive();
+      request("/event").then(async (response) => {
+        await readSseBody(response.body, parser);
+        if (!sseClosed) throw new Error("OpenCode event stream closed.");
+      }).catch((e) => {
+        var _a;
+        if (!sseClosed) {
+          sseStarted = false;
+          const wasActive = Boolean(activeRun);
+          sseClosed = true;
+          const failedProcess = proc;
+          proc = null;
+          sessionId = null;
+          sessionPromise = null;
+          baseUrl = "";
+          if (wasActive) {
+            emit({
+              type: "error",
+              kind: "network",
+              code: "EVENT_STREAM_FAILED",
+              message: "OpenCode event stream failed.",
+              detail: {
+                ...(e == null ? void 0 : e.httpStatus) ? { httpStatus: e.httpStatus } : {},
+                endpoint: (e == null ? void 0 : e.endpoint) || "/event",
+                ...(e == null ? void 0 : e.message) ? { lastError: e.message } : {},
+                ...(e == null ? void 0 : e.responseExcerpt) ? {
+                  responseExcerpt: redactValue(e.responseExcerpt, activeAttachmentPaths)
+                } : {}
+              },
+              ...activeTurnFailureFields()
+            });
+            finishActive();
+          }
+          try {
+            (_a = failedProcess == null ? void 0 : failedProcess.kill) == null ? void 0 : _a.call(failedProcess);
+          } catch {
+          }
         }
       });
     }
@@ -30020,13 +30862,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (sessionPromise) return sessionPromise;
       sessionPromise = (async () => {
         await startServer();
-        toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
+        try {
+          toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
+        } catch (error) {
+          throw taggedError2(error, "categoryCode", "MCP_UNREACHABLE");
+        }
         const result = await postJson("/session", {
           title: "After Effects MCP",
           model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID)
         });
         sessionId = String(result && (result.id || result.sessionID || result.sessionId) || "");
-        if (!sessionId) throw new Error("OpenCode did not return a session id.");
+        if (!sessionId) throw taggedError2(new Error("OpenCode did not return a session id."), "fallbackCode", "SESSION_START_FAILED");
         return sessionId;
       })();
       try {
@@ -30047,7 +30893,25 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       try {
         await replyPermission(permissionId, decision);
       } catch (e) {
-        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to reply to OpenCode permission request." });
+        const httpStatus = extractHttpStatus(e == null ? void 0 : e.httpStatus);
+        const classified = classifyErrorCode({
+          error: e,
+          httpStatus,
+          fallbackCode: "BACKEND_ERROR"
+        });
+        emit({
+          type: "error",
+          kind: classified.kind,
+          code: classified.code,
+          message: httpStatus ? "OpenCode permission reply failed upstream." : "Failed to reply to OpenCode permission request.",
+          detail: {
+            ...httpStatus ? { httpStatus } : {},
+            ...(e == null ? void 0 : e.endpoint) ? { endpoint: e.endpoint } : {},
+            ...(e == null ? void 0 : e.responseExcerpt) ? {
+              responseExcerpt: redactValue(e.responseExcerpt, activeAttachmentPaths)
+            } : {}
+          }
+        });
       }
     }
     function handlePermission(evt) {
@@ -30137,12 +31001,26 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         assistantDeltaRedactor.discard();
         const error = p.error || p;
         const detail = error && error.data && error.data.message || error && error.message || (typeof error === "string" ? error : "");
+        const httpStatus = extractHttpStatus(detail);
+        const classified = classifyErrorCode({
+          error: { message: detail },
+          upstream: true,
+          upstreamText: detail
+        });
         emit({
           type: "error",
-          kind: error.kind || "mcp",
+          kind: classified.kind,
+          code: classified.code,
           // OpenCode session errors arrive as {name, data:{message}} objects;
           // String() on that shape rendered "[object Object]" in the chat.
-          message: detail || error && error.name || "OpenCode session error",
+          message: httpStatus ? "OpenCode upstream request failed." : detail || error && error.name || "OpenCode session error",
+          detail: {
+            ...(error == null ? void 0 : error.name) ? { errorName: error.name } : {},
+            ...httpStatus ? { httpStatus } : {},
+            ...httpStatus && detail ? {
+              upstreamMessage: String(redactValue(detail, activeAttachmentPaths)).slice(0, 500)
+            } : {}
+          },
           ...activeTurnFailureFields()
         });
         finishActive();
@@ -30212,11 +31090,39 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           parts: openCodeParts(turn)
         });
       } catch (e) {
+        const httpStatus = extractHttpStatus(e == null ? void 0 : e.httpStatus);
+        const fallbackCode = (e == null ? void 0 : e.fallbackCode) || (messageDispatched ? "TURN_START_FAILED" : "SESSION_START_FAILED");
+        const classified = classifyErrorCode({
+          error: e,
+          code: e == null ? void 0 : e.categoryCode,
+          httpStatus,
+          spawnError: (e == null ? void 0 : e.spawnError) === true,
+          fallbackCode
+        });
+        let message = e && e.message ? e.message : "Failed to start OpenCode turn.";
+        if (classified.code.startsWith("UPSTREAM_HTTP_")) message = "OpenCode upstream request failed.";
+        else if (classified.code === "AUTH_REQUIRED") message = "OpenCode authentication is required.";
+        else if (classified.code === "SPAWN_FAILED") message = "OpenCode serve process could not be started.";
+        else if (classified.code === "MCP_UNREACHABLE") message = "OpenCode MCP server did not become ready.";
+        else if (classified.code === "SESSION_START_FAILED") message = "OpenCode session could not be started.";
+        else if (classified.code === "TURN_START_FAILED") message = "OpenCode turn could not be started.";
+        const detail = {
+          ...httpStatus ? { httpStatus } : {},
+          ...(e == null ? void 0 : e.endpoint) ? { endpoint: e.endpoint } : {},
+          ...(e == null ? void 0 : e.mcpStatus) !== void 0 && (e == null ? void 0 : e.mcpStatus) !== null ? { mcpStatus: e.mcpStatus } : {},
+          ...(e == null ? void 0 : e.lastError) ? { lastError: e.lastError } : {},
+          ...(e == null ? void 0 : e.responseExcerpt) ? { responseExcerpt: redactValue(e.responseExcerpt, activeAttachmentPaths) } : {},
+          ...(e == null ? void 0 : e.resolution) ? { resolution: e.resolution } : {},
+          ...(e == null ? void 0 : e.code) && (e == null ? void 0 : e.spawnError) ? { spawnCode: e.code } : {}
+        };
         emit({
           type: "error",
-          kind: "mcp",
-          message: e && e.message ? e.message : "Failed to start OpenCode turn.",
-          ...activeTurnFailureFields()
+          kind: classified.kind,
+          code: classified.code,
+          message,
+          ...Object.keys(detail).length ? { detail } : {},
+          ...activeTurnFailureFields(),
+          dispatchState: messageDispatched ? "uncertain" : "not-started"
         });
         finishActive();
       }
@@ -30239,7 +31145,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       await drainApprovals();
       if (activeRun) {
-        emit({ type: "error", kind: "aborted", message: "Turn aborted.", ...activeTurnFailureFields() });
+        emit({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
       }
     }
@@ -30291,13 +31197,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   // src/lib/channels.js
   init_cep_runtime_inject();
   function claudeChannels({ probe } = {}) {
+    const probeFailed = ["probe-timeout", "probe-failed"].includes(probe == null ? void 0 : probe.reason);
     return [{
       channel: "subscription",
       source: { zh: "\u8BA2\u9605\u767B\u5F55", en: "Subscription login" },
       checking: probe === null,
       ok: Boolean(probe && probe.cliOk !== false && probe.loggedIn),
       detail: (probe == null ? void 0 : probe.detail) || "",
-      fixHint: (probe == null ? void 0 : probe.reason) === "cli-too-old" ? {
+      fixHint: probeFailed ? {
+        zh: (probe == null ? void 0 : probe.reason) === "probe-timeout" ? "Claude \u767B\u5F55\u63A2\u9488\u8D85\u65F6\u3002\u8BF7\u5728\u300C\u8BBE\u7F6E \u2192 \u8BCA\u65AD\u300D\u67E5\u770B\u901A\u9053\u72B6\u6001\uFF0C\u5E76\u5BFC\u51FA\u65E5\u5FD7\u6392\u67E5\u3002" : "Claude \u767B\u5F55\u63A2\u9488\u5931\u8D25\u3002\u8BF7\u5728\u300C\u8BBE\u7F6E \u2192 \u8BCA\u65AD\u300D\u67E5\u770B\u901A\u9053\u72B6\u6001\uFF0C\u5E76\u5BFC\u51FA\u65E5\u5FD7\u6392\u67E5\u3002",
+        en: (probe == null ? void 0 : probe.reason) === "probe-timeout" ? "The Claude login probe timed out. Check Settings \u2192 Diagnostics and export logs for troubleshooting." : "The Claude login probe failed. Check Settings \u2192 Diagnostics and export logs for troubleshooting."
+      } : (probe == null ? void 0 : probe.reason) === "cli-too-old" ? {
         zh: "Claude CLI \u7248\u672C\u8FC7\u65E7\uFF1A\u8BF7\u5347\u7EA7 Claude CLI \u5230 2.x \u6216\u66F4\u9AD8\u7248\u672C\u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
         en: "Claude CLI is too old. Upgrade Claude CLI to version 2.x or newer, then re-check."
       } : (probe == null ? void 0 : probe.cliOk) === false ? {
@@ -30315,12 +31225,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       source: { zh: "Codex CLI \u767B\u5F55\u6001", en: "Codex CLI login" },
       checking: codexProbe === null,
       ok: Boolean(codexProbe == null ? void 0 : codexProbe.loggedIn),
-      detail: codexProbe ? [
+      detail: codexProbe ? codexProbe.loggedIn ? [
         codexProbe.email,
         codexProbe.planType,
         codexProbe.cliPath,
         codexProbe.cliVersion
-      ].filter(Boolean).join(" \xB7 ") : "",
+      ].filter(Boolean).join(" \xB7 ") : codexProbe.detail || "" : "",
       fixHint: {
         zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002",
         en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE."
@@ -30385,15 +31295,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       protocol: "anthropic"
     };
   }
-  function draftFromEntry(entry) {
+  function draftFromEntry(entry2) {
     return {
       ...emptyDraft(),
-      id: String((entry == null ? void 0 : entry.id) || ""),
-      name: String((entry == null ? void 0 : entry.name) || ""),
-      baseUrl: String((entry == null ? void 0 : entry.baseUrl) || ""),
-      allowInsecureHttp: (entry == null ? void 0 : entry.allowInsecureHttp) === true,
-      modelId: Array.isArray(entry == null ? void 0 : entry.modelIds) ? entry.modelIds.join(", ") : "",
-      protocol: (entry == null ? void 0 : entry.protocol) === "openai" ? "openai" : "anthropic"
+      id: String((entry2 == null ? void 0 : entry2.id) || ""),
+      name: String((entry2 == null ? void 0 : entry2.name) || ""),
+      baseUrl: String((entry2 == null ? void 0 : entry2.baseUrl) || ""),
+      allowInsecureHttp: (entry2 == null ? void 0 : entry2.allowInsecureHttp) === true,
+      modelId: Array.isArray(entry2 == null ? void 0 : entry2.modelIds) ? entry2.modelIds.join(", ") : "",
+      protocol: (entry2 == null ? void 0 : entry2.protocol) === "openai" ? "openai" : "anthropic"
     };
   }
   function validateDraft(draft) {
@@ -30711,9 +31621,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     return `${prefix}-${entries.length + 1}`;
   }
   function updateTool(entries, toolUseId, updater) {
-    return entries.map((entry) => {
-      if (entry.type !== "tool-call" || entry.toolUseId !== toolUseId) return entry;
-      return updater(entry);
+    return entries.map((entry2) => {
+      if (entry2.type !== "tool-call" || entry2.toolUseId !== toolUseId) return entry2;
+      return updater(entry2);
     });
   }
   function userTurnEntry(turn) {
@@ -30750,7 +31660,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           state: "running"
         });
       case "approval-required":
-        if (!current.some((entry) => entry.type === "tool-call" && entry.toolUseId === evt.toolUseId)) {
+        if (!current.some((entry2) => entry2.type === "tool-call" && entry2.toolUseId === evt.toolUseId)) {
           return current.concat({
             id: evt.toolUseId || nextId(current, "tool"),
             type: "tool-call",
@@ -30761,15 +31671,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             state: "awaiting-approval"
           });
         }
-        return updateTool(current, evt.toolUseId, (entry) => ({
-          ...entry,
-          name: evt.name || entry.name,
-          input: evt.input === void 0 ? entry.input : evt.input,
+        return updateTool(current, evt.toolUseId, (entry2) => ({
+          ...entry2,
+          name: evt.name || entry2.name,
+          input: evt.input === void 0 ? entry2.input : evt.input,
           risk: evt.risk,
           state: "awaiting-approval"
         }));
       case "tool-result":
-        if (!current.some((entry) => entry.type === "tool-call" && entry.toolUseId === evt.toolUseId)) {
+        if (!current.some((entry2) => entry2.type === "tool-call" && entry2.toolUseId === evt.toolUseId)) {
           return current.concat({
             id: evt.toolUseId || nextId(current, "tool"),
             type: "tool-call",
@@ -30781,21 +31691,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             durationMs: evt.durationMs
           });
         }
-        return updateTool(current, evt.toolUseId, (entry) => ({
-          ...entry,
+        return updateTool(current, evt.toolUseId, (entry2) => ({
+          ...entry2,
           state: evt.ok ? "ok" : "error",
           ok: !!evt.ok,
           text: evt.text || "",
           durationMs: evt.durationMs
         }));
       case "tool-denied":
-        return updateTool(current, evt.toolUseId, (entry) => ({
-          ...entry,
+        return updateTool(current, evt.toolUseId, (entry2) => ({
+          ...entry2,
           state: "denied"
         }));
       case "tool-allowed":
-        return updateTool(current, evt.toolUseId, (entry) => ({
-          ...entry,
+        return updateTool(current, evt.toolUseId, (entry2) => ({
+          ...entry2,
           state: "running"
         }));
       // Agent-to-user question form (#219): a dedicated entry type, NOT a
@@ -30810,16 +31720,16 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           questions: Array.isArray(evt.questions) ? evt.questions : [],
           state: "pending"
         };
-        if (current.some((entry) => entry.type === "question" && entry.toolUseId === evt.toolUseId)) {
-          return current.map((entry) => entry.type === "question" && entry.toolUseId === evt.toolUseId ? next : entry);
+        if (current.some((entry2) => entry2.type === "question" && entry2.toolUseId === evt.toolUseId)) {
+          return current.map((entry2) => entry2.type === "question" && entry2.toolUseId === evt.toolUseId ? next : entry2);
         }
         return current.concat(next);
       }
       case "question-resolved":
-        return current.map((entry) => {
-          if (entry.type !== "question" || entry.toolUseId !== evt.toolUseId) return entry;
+        return current.map((entry2) => {
+          if (entry2.type !== "question" || entry2.toolUseId !== evt.toolUseId) return entry2;
           return {
-            ...entry,
+            ...entry2,
             state: evt.outcome === "answered" ? "answered" : "cancelled",
             ...evt.answers ? { answers: evt.answers } : {}
           };
@@ -30831,7 +31741,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           id: nextId(current, "error"),
           type: "error",
           kind: evt.kind,
-          message: evt.message || ""
+          code: evt.code || null,
+          message: evt.message || "",
+          detail: evt.detail || null,
+          turnId: evt.turnId || null,
+          dispatchState: evt.dispatchState || null
         });
       default:
         return current;
@@ -31523,7 +32437,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       items.push({
         id,
         ok: result.ok,
-        detail: result.ok ? [result.version, result.path].filter(Boolean).join(" \xB7 ") : result.code,
+        detail: result.ok ? [result.version, result.path].filter(Boolean).join(" \xB7 ") : [
+          result.code,
+          Array.isArray(result.attempts) && result.attempts.length ? "tried: " + result.attempts.slice(0, 3).map((attempt) => attempt.path).filter(Boolean).join("; ") : ""
+        ].filter(Boolean).join("\n"),
         fixHint: HINTS[id],
         ...id === "opencode" ? {} : { action: { kind: "open-login-terminal", tool: id } }
       });
@@ -31803,172 +32720,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/lib/logExport.js
   init_cep_runtime_inject();
-
-  // src/lib/credentialTextRedaction.js
-  init_cep_runtime_inject();
-  var SENSITIVE_SEGMENTS = /* @__PURE__ */ new Set([
-    "api-key",
-    "apikey",
-    "auth",
-    "authentication",
-    "authorization",
-    "cookie",
-    "credential",
-    "credentials",
-    "key",
-    "oauth",
-    "passwd",
-    "password",
-    "secret",
-    "session",
-    "signature",
-    "token"
-  ]);
-  var STRONG_SENSITIVE_FRAGMENTS = [
-    "apikey",
-    "auth",
-    "cookie",
-    "credential",
-    "oauth",
-    "passwd",
-    "password",
-    "secret",
-    "session",
-    "signature",
-    "token"
-  ];
-  var KEY_SUFFIX_PREFIXES = /* @__PURE__ */ new Set([
-    "api",
-    "access",
-    "client",
-    "credential",
-    "private",
-    "provider",
-    "public",
-    "secret",
-    "x"
-  ]);
-  var SECRET_REFERENCE = /aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9_-]+\/v1/gi;
-  var HEADER_LINE = /^([ \t]*)([!#$%&'*+.^_`|~0-9A-Za-z-]+)([ \t]*:[ \t]*)([^\r\n]+)$/gm;
-  var QUOTED_PAIR = /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"'\r\n]+)\4/g;
-  var ASSIGNMENT = /(^|[\s?&,;])([A-Za-z][A-Za-z0-9_.-]*)(\s*=\s*)([^\s&,;]+)/gm;
-  var INLINE_HEADER = /(^|[\s{,;])([!#$%&'*+.^_`|~0-9A-Za-z-]+)(\s*:\s*)((?:Bearer|Basic)\s+[^\s,;}]+|[^\s,;}]+)/gim;
-  var PRIVATE_KEY = /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/g;
-  var JWT = /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])/g;
-  var PREFIXED_KEY = /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])/g;
-  var JSON_KEY = /"((?:\\.|[^"\\])*)"\s*:/g;
-  var SENSITIVE_ASSIGNMENT_START = /(^|[^A-Za-z0-9_.-])(["']?)([A-Za-z][A-Za-z0-9_.-]*)(\2)([ \t]*[:=][ \t]*)/g;
-  var MARKER = "[redacted]";
-  function isSensitiveCredentialName(value) {
-    const raw = String(value || "").trim();
-    if (!raw) return false;
-    const separated = raw.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
-    const segments = separated.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-    if (segments.some((segment) => SENSITIVE_SEGMENTS.has(segment))) return true;
-    const compact = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
-    if (STRONG_SENSITIVE_FRAGMENTS.some((fragment) => compact.includes(fragment))) return true;
-    if (!compact.endsWith("key")) return false;
-    const prefix = compact.slice(0, -3);
-    return KEY_SUFFIX_PREFIXES.has(prefix) || Array.from(KEY_SUFFIX_PREFIXES).some((candidate) => prefix.endsWith(candidate));
-  }
-  function quotedValueEnd(text, start) {
-    const quote = text[start];
-    let escaped = false;
-    for (let index = start + 1; index < text.length; index += 1) {
-      const character = text[index];
-      if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
-      else if (character === quote) return index + 1;
-    }
-    return -1;
-  }
-  function jsonContainerEnd(text, start) {
-    const stack = [text[start]];
-    let stringQuote = null;
-    let escaped = false;
-    for (let index = start + 1; index < text.length; index += 1) {
-      const character = text[index];
-      if (stringQuote) {
-        if (escaped) escaped = false;
-        else if (character === "\\") escaped = true;
-        else if (character === stringQuote) stringQuote = null;
-        continue;
-      }
-      if (character === '"' || character === "'" || character === "`") {
-        stringQuote = character;
-        continue;
-      }
-      if (character === "{" || character === "[") stack.push(character);
-      if (character !== "}" && character !== "]") continue;
-      const opening = stack.pop();
-      if (opening === "{" && character !== "}" || opening === "[" && character !== "]") return -1;
-      if (!stack.length) return index + 1;
-    }
-    return -1;
-  }
-  function jsonValueEnd(text, start) {
-    if (start >= text.length) return -1;
-    if (text[start] === '"') return quotedValueEnd(text, start);
-    if (text[start] === "{" || text[start] === "[") return jsonContainerEnd(text, start);
-    let end = start;
-    while (end < text.length && !/[\s,}\]]/.test(text[end])) end += 1;
-    return end > start ? end : -1;
-  }
-  function redactSensitiveJsonValues(value) {
-    let text = String(value == null ? "" : value);
-    let offset = 0;
-    while (offset < text.length) {
-      JSON_KEY.lastIndex = offset;
-      const match = JSON_KEY.exec(text);
-      if (!match) break;
-      let name = "";
-      try {
-        name = JSON.parse(`"${match[1]}"`);
-      } catch {
-        name = "";
-      }
-      if (!isSensitiveCredentialName(name)) {
-        offset = JSON_KEY.lastIndex;
-        continue;
-      }
-      let start = JSON_KEY.lastIndex;
-      while (start < text.length && /\s/.test(text[start])) start += 1;
-      const end = jsonValueEnd(text, start);
-      if (end < 0) {
-        offset = JSON_KEY.lastIndex;
-        continue;
-      }
-      const replacement = JSON.stringify(MARKER);
-      text = text.slice(0, start) + replacement + text.slice(end);
-      offset = start + replacement.length;
-    }
-    return text;
-  }
-  function redactSensitiveLineSuffixes(value) {
-    const text = String(value == null ? "" : value);
-    SENSITIVE_ASSIGNMENT_START.lastIndex = 0;
-    let match;
-    while ((match = SENSITIVE_ASSIGNMENT_START.exec(text)) !== null) {
-      if (!isSensitiveCredentialName(match[3])) continue;
-      return text.slice(0, match.index) + match[1] + match[2] + match[3] + match[4] + match[5] + MARKER;
-    }
-    return text;
-  }
-  function redactCredentialText(value, exactSecrets = []) {
-    let text = redactText(value, exactSecrets);
-    text = redactSensitiveJsonValues(text);
-    text = redactSensitiveLineSuffixes(text);
-    text = text.replace(SECRET_REFERENCE, "[secret-reference-redacted]");
-    text = text.replace(PRIVATE_KEY, MARKER);
-    text = text.replace(HEADER_LINE, (match, prefix, name, separator, headerValue) => isSensitiveCredentialName(name) && headerValue.trim() ? prefix + name + separator + MARKER : match);
-    text = text.replace(QUOTED_PAIR, (match, quote, name, separator) => isSensitiveCredentialName(name) ? quote + name + quote + separator + quote + MARKER + quote : match);
-    text = text.replace(ASSIGNMENT, (match, prefix, name, separator) => isSensitiveCredentialName(name) ? prefix + name + separator + MARKER : match);
-    text = text.replace(INLINE_HEADER, (match, prefix, name, separator) => isSensitiveCredentialName(name) ? prefix + name + separator + MARKER : match);
-    text = text.replace(PREFIXED_KEY, MARKER);
-    return text.replace(JWT, MARKER);
-  }
-
-  // src/lib/logExport.js
   function redactSecrets(text, exactSecrets = []) {
     return redactCredentialText(String(text != null ? text : ""), exactSecrets);
   }
@@ -31983,7 +32734,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     return [...new Set(paths)];
   }
-  function scalar(value) {
+  function scalar2(value) {
     if (value === void 0 || value === null || value === "") return "-";
     if (typeof value === "object") {
       try {
@@ -32004,42 +32755,95 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
   function formatObject(value) {
     if (!value || typeof value !== "object") return "-";
-    return Object.entries(value).map(([key, item]) => key + "=" + scalar(item)).join(" ") || "-";
+    return Object.entries(value).map(([key, item]) => key + "=" + scalar2(item)).join(" ") || "-";
   }
   function appendRedacted(lines, value, exactSecrets) {
     lines.push(redactSecrets(value, exactSecrets));
   }
+  function redactBackendStderrLine(value, exactSecrets) {
+    const text = String(value != null ? value : "");
+    const bounded = text.replace(/https?:\/\/\S+/gi, "[redacted-url]");
+    return redactSecrets(bounded, exactSecrets);
+  }
   function formatActivity(event) {
     if (!event || typeof event !== "object") return "-";
     return [
-      "#" + scalar(event.id),
+      "#" + scalar2(event.id),
       iso(event.ts),
-      "client=" + scalar(event.client),
-      "engine=" + scalar(event.engine),
-      "ok=" + scalar(event.ok),
-      event.denied !== void 0 ? "denied=" + scalar(event.denied) : null,
-      event.disposition !== void 0 ? "disposition=" + scalar(event.disposition) : null,
-      event.error !== void 0 ? "error=" + scalar(event.error) : null,
-      event.durationMs !== void 0 ? "durationMs=" + scalar(event.durationMs) : null,
-      event.undoGroup !== void 0 ? "undoGroup=" + scalar(event.undoGroup) : null
+      "client=" + scalar2(event.client),
+      "engine=" + scalar2(event.engine),
+      "ok=" + scalar2(event.ok),
+      event.denied !== void 0 ? "denied=" + scalar2(event.denied) : null,
+      event.disposition !== void 0 ? "disposition=" + scalar2(event.disposition) : null,
+      event.error !== void 0 ? "error=" + scalar2(event.error) : null,
+      event.durationMs !== void 0 ? "durationMs=" + scalar2(event.durationMs) : null,
+      event.undoGroup !== void 0 ? "undoGroup=" + scalar2(event.undoGroup) : null
     ].filter(Boolean).join(" ");
   }
-  function formatHostLog(event) {
+  function redactedField(value, exactSecrets) {
+    return redactCredentialText(
+      String(value != null ? value : "").replace(/https?:\/\/\S+/gi, "[redacted-url]"),
+      exactSecrets
+    );
+  }
+  function redactedBackendErrorField(value, exactSecrets) {
+    return redactBackendStderrLine(value, exactSecrets);
+  }
+  function redactedExtraValue(key, value, exactSecrets) {
+    let encoded;
+    try {
+      encoded = JSON.stringify({ [key]: value });
+    } catch {
+      return "[unserializable]";
+    }
+    const redacted = redactCredentialText(
+      encoded.replace(/https?:\/\/[^"\\\s]+/gi, "[redacted-url]"),
+      exactSecrets
+    );
+    try {
+      const parsed = JSON.parse(redacted);
+      return Object.prototype.hasOwnProperty.call(parsed, key) ? parsed[key] : "[redacted]";
+    } catch {
+      return "[redacted]";
+    }
+  }
+  function formatHostLog(event, exactSecrets = []) {
     if (!event || typeof event !== "object") return "-";
     const known = /* @__PURE__ */ new Set(["id", "ts", "pid", "level", "source", "message"]);
     const extra = {};
-    for (const [key, value] of Object.entries(event)) if (!known.has(key)) extra[key] = value;
+    for (const [key, value] of Object.entries(event)) {
+      if (!known.has(key)) extra[key] = redactedExtraValue(key, value, exactSecrets);
+    }
     const suffix = Object.keys(extra).length ? " " + JSON.stringify(extra) : "";
-    return [iso(event.ts), "pid=" + scalar(event.pid), scalar(event.level), scalar(event.source), scalar(event.message) + suffix].join(" ");
+    return [
+      iso(event.ts),
+      "pid=" + scalar2(redactedField(event.pid, exactSecrets)),
+      scalar2(redactedField(event.level, exactSecrets)),
+      scalar2(redactedField(event.source, exactSecrets)),
+      scalar2(redactedField(event.message, exactSecrets)) + suffix
+    ].join(" ");
   }
-  function section(lines, title, producer, exactSecrets) {
+  function formatBackendError(event, exactSecrets) {
+    if (!event || typeof event !== "object") return "-";
+    return [
+      iso(event.ts),
+      "backend=" + scalar2(redactedField(event.backend, exactSecrets)),
+      "code=" + scalar2(redactedField(event.code, exactSecrets)),
+      "kind=" + scalar2(redactedField(event.kind, exactSecrets)),
+      "message=" + scalar2(redactedBackendErrorField(event.message, exactSecrets)),
+      event.detail ? "detail=" + scalar2(redactedBackendErrorField(event.detail, exactSecrets)) : null
+    ].filter(Boolean).join(" ");
+  }
+  function section(lines, title, producer, exactSecrets, alreadyRedacted = false) {
     lines.push(title);
     try {
       const value = producer();
       if (Array.isArray(value)) {
         if (!value.length) appendRedacted(lines, "(empty)", exactSecrets);
+        else if (alreadyRedacted) value.forEach((item) => lines.push(String(item)));
         else value.forEach((item) => appendRedacted(lines, item, exactSecrets));
-      } else appendRedacted(lines, value, exactSecrets);
+      } else if (alreadyRedacted) lines.push(String(value));
+      else appendRedacted(lines, value, exactSecrets);
     } catch (error) {
       appendRedacted(lines, unavailable((error == null ? void 0 : error.message) || String(error)), exactSecrets);
     }
@@ -32099,6 +32903,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     panelLogs = [],
     hostInfo = {},
     backendStderrTails = null,
+    backendErrors = [],
     hostActivity,
     hostLogMemory,
     hostLogDisk,
@@ -32136,25 +32941,33 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }, exactSecrets);
     section(lines, "## host log (memory, last 500)", () => {
       if (!Array.isArray(hostLogMemory)) return unavailable("host memory log is unavailable");
-      return hostLogMemory.slice(-500).map(formatHostLog);
-    }, exactSecrets);
+      return hostLogMemory.slice(-500).map((event) => formatHostLog(event, exactSecrets));
+    }, exactSecrets, true);
     section(lines, "## host log (disk tail, 2 days, last 500)", () => {
       if (!Array.isArray(hostLogDisk)) return unavailable("host disk log is unavailable");
-      return hostLogDisk.slice(-500).map(formatHostLog);
-    }, exactSecrets);
+      return hostLogDisk.slice(-500).map((event) => formatHostLog(event, exactSecrets));
+    }, exactSecrets, true);
     section(lines, "## panel log (" + panelLogs.length + ")", () => panelLogs.map(String), exactSecrets);
+    section(lines, "## backend errors (last 50)", () => {
+      if (!Array.isArray(backendErrors)) return unavailable("backend error history is unavailable");
+      return backendErrors.slice(-50).map((event) => formatBackendError(event, exactSecrets));
+    }, exactSecrets, true);
     section(lines, "## backend stderr tails", () => {
       const tails = backendStderrTails;
       if (!tails || typeof tails !== "object" || !Object.keys(tails).length) return unavailable("no backend stderr tail is available");
       const result = [];
       for (const [name, tail] of Object.entries(tails)) {
         result.push("### " + name);
-        result.push(tail ? String(tail) : "(empty)");
+        if (!tail) {
+          result.push("(empty)");
+          continue;
+        }
+        result.push(...String(tail).replace(/\r\n/g, "\n").split("\n").map((line) => redactBackendStderrLine(line, exactSecrets)));
       }
       return result;
-    }, exactSecrets);
+    }, exactSecrets, true);
     section(lines, "## previewFrame branches", () => {
-      const previewSource = [hostLogMemory, hostLogDisk].filter(Array.isArray).flat().map(formatHostLog).join("\n");
+      const previewSource = [hostLogMemory, hostLogDisk].filter(Array.isArray).flat().map((event) => formatHostLog(event, exactSecrets)).join("\n");
       const summary = summarizePreviewFrameBranches(previewSource);
       const result = ["summary: " + summary.summary];
       result.push("fallbackReason counts:");
@@ -32278,51 +33091,51 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }
       }
     }
-    function removeEntry(entry, result) {
-      const index = entries.indexOf(entry);
+    function removeEntry(entry2, result) {
+      const index = entries.indexOf(entry2);
       if (index < 0) return false;
       entries.splice(index, 1);
-      if (entry.signal && entry.abortHandler) {
-        entry.signal.removeEventListener("abort", entry.abortHandler);
+      if (entry2.signal && entry2.abortHandler) {
+        entry2.signal.removeEventListener("abort", entry2.abortHandler);
       }
-      if (entry.externalSignal && entry.forwardAbort) {
-        entry.externalSignal.removeEventListener("abort", entry.forwardAbort);
+      if (entry2.externalSignal && entry2.forwardAbort) {
+        entry2.externalSignal.removeEventListener("abort", entry2.forwardAbort);
       }
-      entry.resolve(result);
+      entry2.resolve(result);
       if (index === 0) activateHead();
       return true;
     }
     function activateHead() {
-      const entry = entries[0];
-      if (!entry) {
+      const entry2 = entries[0];
+      if (!entry2) {
         publish();
         return;
       }
-      if (entry.activated) return;
-      entry.activated = true;
+      if (entry2.activated) return;
+      entry2.activated = true;
       publish();
-      if (entries[0] !== entry) return;
-      if (entry.plan || typeof presentGenericForm !== "function") return;
-      Promise.resolve().then(() => presentGenericForm(entry.record.request, {
-        ...entry.record.context,
-        signal: entry.signal
+      if (entries[0] !== entry2) return;
+      if (entry2.plan || typeof presentGenericForm !== "function") return;
+      Promise.resolve().then(() => presentGenericForm(entry2.record.request, {
+        ...entry2.record.context,
+        signal: entry2.signal
       })).then(
         (value) => {
           var _a;
-          if (!entries.includes(entry) || ((_a = entry.signal) == null ? void 0 : _a.aborted)) return;
+          if (!entries.includes(entry2) || ((_a = entry2.signal) == null ? void 0 : _a.aborted)) return;
           const direct = normalizeDirectResult(value);
           if (direct) {
-            removeEntry(entry, direct);
+            removeEntry(entry2, direct);
             return;
           }
-          entry.record = freezeVisible({
-            ...entry.record,
+          entry2.record = freezeVisible({
+            ...entry2.record,
             presentation: cloneVisible(value)
           });
-          if (entries[0] === entry) publish();
+          if (entries[0] === entry2) publish();
         },
         () => {
-          if (entries.includes(entry)) removeEntry(entry, declineResult());
+          if (entries.includes(entry2)) removeEntry(entry2, declineResult());
         }
       );
     }
@@ -32342,7 +33155,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
       return new Promise((resolve) => {
         const controller = new AbortController();
-        const entry = {
+        const entry2 = {
           record,
           policy: policy || {},
           resolve,
@@ -32354,14 +33167,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           plan,
           activated: false
         };
-        entry.abortHandler = () => removeEntry(entry, cancelResult());
-        entry.signal.addEventListener("abort", entry.abortHandler, { once: true });
-        if (entry.externalSignal) {
-          entry.forwardAbort = () => controller.abort();
-          entry.externalSignal.addEventListener("abort", entry.forwardAbort, { once: true });
+        entry2.abortHandler = () => removeEntry(entry2, cancelResult());
+        entry2.signal.addEventListener("abort", entry2.abortHandler, { once: true });
+        if (entry2.externalSignal) {
+          entry2.forwardAbort = () => controller.abort();
+          entry2.externalSignal.addEventListener("abort", entry2.forwardAbort, { once: true });
         }
         const wasEmpty = entries.length === 0;
-        entries.push(entry);
+        entries.push(entry2);
         if (wasEmpty) activateHead();
       });
     }
@@ -32449,15 +33262,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function resolveVisible(result) {
       var _a, _b;
       if (!entries.length || !isPlainObject3(result)) return false;
-      const entry = entries[0];
+      const entry2 = entries[0];
       const suppliedId = (_b = (_a = result.id) != null ? _a : result.requestId) != null ? _b : result.elicitationId;
-      if (suppliedId === void 0 || suppliedId !== entry.record.id) return false;
+      if (suppliedId === void 0 || suppliedId !== entry2.record.id) return false;
       let direct = normalizeDirectResult(result);
-      if (direct && entry.record.plan && direct.action === "accept") {
-        direct = approvalResult(direct.content.decision, entry.policy);
+      if (direct && entry2.record.plan && direct.action === "accept") {
+        direct = approvalResult(direct.content.decision, entry2.policy);
       }
-      const response = direct || decisionResult(result.decision, entry.policy);
-      return removeEntry(entry, response);
+      const response = direct || decisionResult(result.decision, entry2.policy);
+      return removeEntry(entry2, response);
     }
     function dispose() {
       if (disposed) return;
@@ -32465,15 +33278,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       disposeController.abort();
       const pending = entries.splice(0);
       listeners.clear();
-      for (const entry of pending) {
-        if (entry.signal && entry.abortHandler) {
-          entry.signal.removeEventListener("abort", entry.abortHandler);
+      for (const entry2 of pending) {
+        if (entry2.signal && entry2.abortHandler) {
+          entry2.signal.removeEventListener("abort", entry2.abortHandler);
         }
-        if (entry.externalSignal && entry.forwardAbort) {
-          entry.externalSignal.removeEventListener("abort", entry.forwardAbort);
+        if (entry2.externalSignal && entry2.forwardAbort) {
+          entry2.externalSignal.removeEventListener("abort", entry2.forwardAbort);
         }
-        entry.controller.abort();
-        entry.resolve(cancelResult());
+        entry2.controller.abort();
+        entry2.resolve(cancelResult());
       }
     }
     return { handle, snapshot, subscribe, resolveVisible, dispose };
@@ -32756,11 +33569,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
+    const langRef = import_react46.default.useRef(lang);
+    langRef.current = lang;
     const t = T[lang];
     const [tab, setTab] = import_react46.default.useState("chat");
     const [status, setStatus] = import_react46.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
     const [paused, setPaused] = import_react46.default.useState(false);
     const [logs, setLogs] = import_react46.default.useState([]);
+    const backendErrorsRef = import_react46.default.useRef([]);
     const ctrl = import_react46.default.useRef(null);
     const getHost = import_react46.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
     const hostConversation = import_react46.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
@@ -32946,6 +33762,8 @@ ${draft.baseUrl}`)) return;
       providers
     ]);
     const effective = pickBackend({ pref: backendPref, channels, channelChoices });
+    const effectiveBackendRef = import_react46.default.useRef(effective.backend);
+    effectiveBackendRef.current = effective.backend;
     const runtimeRef = import_react46.default.useRef({
       model: effectiveModel,
       permissionMode,
@@ -33026,6 +33844,37 @@ ${draft.baseUrl}`)) return;
     }, [addAttachment]);
     const handleChatEvent = import_react46.default.useCallback((evt) => {
       const pending = pendingTurnRef.current;
+      if (evt.type === "error") {
+        const exactSecrets = attachmentPathSecrets({ pendingTurn: pending });
+        const effectiveBackend = effectiveBackendRef.current;
+        const backend = effectiveBackend === "subscription" ? "claude" : effectiveBackend;
+        const message = redactCredentialText(evt.message || "Backend error", exactSecrets).slice(0, 2e3);
+        const detail = serializeErrorDetail(evt.detail, exactSecrets, 2e3);
+        const record = {
+          ts: (/* @__PURE__ */ new Date()).toISOString(),
+          backend: backend || "none",
+          code: evt.code || "BACKEND_ERROR",
+          kind: evt.kind || "backend",
+          message,
+          detail: firstErrorDetailLine(evt.detail, exactSecrets)
+        };
+        backendErrorsRef.current = [...backendErrorsRef.current.slice(-49), record];
+        try {
+          const host = getHost();
+          if ((host == null ? void 0 : host.hostLog) && typeof host.hostLog.record === "function") {
+            host.hostLog.record({
+              source: "chat",
+              level: "error",
+              backend: record.backend,
+              code: record.code,
+              kind: record.kind,
+              message,
+              detail
+            });
+          }
+        } catch (error) {
+        }
+      }
       if (evt.type === "turn-accepted") {
         if (!pending || evt.turnId !== pending.turnId) return;
         acceptedTurnRef.current = pending.turnId;
@@ -33075,7 +33924,7 @@ ${draft.baseUrl}`)) return;
       getEffort: () => runtimeRef.current.effort,
       getThinking: () => runtimeRef.current.thinking,
       getChannel: () => "subscription",
-      lang,
+      getLang: () => langRef.current,
       onEvent: handleChatEvent
     }), [
       getMcpSpec2,
@@ -33093,7 +33942,7 @@ ${draft.baseUrl}`)) return;
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
-      lang,
+      getLang: () => langRef.current,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
@@ -33110,6 +33959,7 @@ ${draft.baseUrl}`)) return;
       getProviders: () => providersRef.current,
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
+      getLang: () => langRef.current,
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
     runtimeRef.current = {
@@ -33413,6 +34263,7 @@ ${draft.baseUrl}`)) return;
           hostLogDisk: hostLog && typeof hostLog.readFileTail === "function" ? safeValue(() => hostLog.readFileTail({ days: 2, lines: 500 })) : void 0,
           diagnostics: diagnosticItems,
           diagnosticsError,
+          backendErrors: backendErrorsRef.current,
           backendStderrTails,
           version: pkgVersion,
           exactSecrets

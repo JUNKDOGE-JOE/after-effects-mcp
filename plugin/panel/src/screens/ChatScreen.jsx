@@ -11,6 +11,8 @@ import { Composer } from '../components/chat/Composer';
 import { ComposerChip } from '../components/chat/ComposerChip';
 import { AIAvatar } from '../components/chat/AIAvatar';
 import { eventTitle } from '../lib/activityModel';
+import { errorHint } from '../lib/errorCodes.js';
+import { formatErrorDetail } from '../lib/errorDetail.js';
 import { buildComposerChips } from '../lib/composerOptions';
 import {
   createAttachmentDraftState,
@@ -51,6 +53,7 @@ const C = {
     attachmentRetry: '重试',
     attachmentRemove: '移除',
     uncertainTurn: '发送结果不确定。请新建会话核对后再试。',
+    details: '详情',
   },
   en: {
     hello: 'Hi! I can operate the open AE project directly. Try one of these:',
@@ -78,6 +81,7 @@ const C = {
     attachmentRetry: 'Retry',
     attachmentRemove: 'Remove',
     uncertainTurn: 'Send outcome is uncertain. Start a new session before retrying.',
+    details: 'Details',
   },
 };
 
@@ -174,9 +178,18 @@ function Entry({ entry, lang, onApprove, onAnswerQuestion }) {
     );
   }
   if (entry.type === 'error') {
+    const details = formatErrorDetail(entry.detail);
     return (
       <div style={{ paddingLeft: 28 }}>
-        <ToolCallCard verb={entry.kind === 'model' ? t.modelErrorTitle : t.errorTitle} target={entry.kind} status="error" errorMessage={entry.message} />
+        <ToolCallCard
+          verb={entry.kind === 'model' ? t.modelErrorTitle : t.errorTitle}
+          target={entry.code || entry.kind}
+          status="error"
+          errorMessage={entry.message}
+          hint={errorHint(entry.code || 'BACKEND_ERROR', lang)}
+          details={details || null}
+          detailsLabel={t.details}
+        />
       </div>
     );
   }

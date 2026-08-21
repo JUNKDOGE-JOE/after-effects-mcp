@@ -1,6 +1,16 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { claudeChannelEnv } from '../lib/claudeChannel.js';
-import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
+import {
+  createDeltaRedactor,
+  redactValue,
+  safeErrorMessage,
+} from '../lib/exactSecretRedaction.js';
+import {
+  boundedResolution,
+  classifyErrorCode,
+  extractHttpStatus,
+  trimStderrTail,
+} from '../lib/errorCodes.js';
 import { createPlatformAdapter } from './platform/index.js';
 import {
   normalizeTurnInput,
@@ -93,11 +103,35 @@ function requiredArchitecture(adapter) {
   return undefined;
 }
 
-function cliResolutionMessage(code, lang) {
+function resolutionArchitecture(resolution) {
+  for (const attempt of resolution?.attempts || []) {
+    const match = String(attempt?.detail || '').match(/architecture\s+(arm64|aarch64|x64|amd64|x86_64)\b/i);
+    if (match) return match[1];
+  }
+  return '';
+}
+
+function cliResolutionMessage(code, lang, resolution) {
   if (code === 'VERSION_TOO_OLD') {
     return lang === 'zh'
       ? 'Claude CLI 版本过旧，请升级 Claude CLI 到 2.x 或更高版本。'
       : 'Claude CLI is too old. Upgrade Claude CLI to version 2.x or newer.';
+  }
+  if (code === 'ARCH_MISMATCH') {
+    const found = resolutionArchitecture(resolution);
+    if (lang === 'zh') {
+      return found
+        ? `Claude CLI 架构不匹配：找到的是 ${found} 架构。请安装与 After Effects 一致的版本。`
+        : 'Claude CLI 架构不匹配。请安装与 After Effects 一致的版本。';
+    }
+    return found
+      ? `Claude CLI architecture mismatch: the detected executable is ${found}. Install a build matching After Effects.`
+      : 'Claude CLI architecture mismatch. Install a build matching After Effects.';
+  }
+  if (code === 'PROBE_FAILED') {
+    return lang === 'zh'
+      ? '已找到 Claude CLI，但版本探针启动失败。请在终端确认 claude --version 可正常运行。'
+      : 'Claude CLI was found, but its version probe failed. Confirm claude --version runs in a terminal.';
   }
   return lang === 'zh'
     ? '未找到 Claude CLI。请安装 Claude Code 2.x，并确保 claude 在 PATH 中。'
@@ -117,7 +151,7 @@ export async function resolveClaudeCli({ platform, env, lang = 'zh' } = {}) {
     return {
       ok: false,
       code: resolved.code,
-      detail: cliResolutionMessage(resolved.code, lang),
+      detail: cliResolutionMessage(resolved.code, lang, resolved),
       resolution: resolved,
     };
   }
@@ -203,6 +237,14 @@ function truncateDetail(error) {
     try { detail = JSON.stringify(error); } catch { detail = String(error); }
   }
   return String(detail || '').slice(0, 500);
+}
+
+function categorizedError(error, categoryCode) {
+  const result = error instanceof Error
+    ? error
+    : new Error(error?.message || String(error || categoryCode));
+  result.categoryCode = categoryCode;
+  return result;
 }
 
 function normalizedThinking(value) {
@@ -298,6 +340,7 @@ export function createClaudeAgentBackend({
   getEffort,
   getThinking,
   onEvent,
+  getLang,
   lang = 'zh',
   spawnImpl,
   fsImpl,
@@ -314,6 +357,7 @@ export function createClaudeAgentBackend({
       options,
     )
     : (executable, args, options) => adapter.spawn(executable, args, options);
+  const currentLang = () => (typeof getLang === 'function' ? getLang() : lang) || 'zh';
 
   let proc = null;
   let startPromise = null;
@@ -337,6 +381,8 @@ export function createClaudeAgentBackend({
   let providerDeltaPhase;
   let thinkingActive = false;
   let providerDeltaRedactor = createDeltaRedactor([], () => {});
+  let stderrDeltaRedactor = createDeltaRedactor([], () => {});
+  let processStderrAttachmentPaths = [];
   const pendingApprovals = new Map();
   const pendingQuestions = new Map();
   const sessionAllowedTools = new Set();
@@ -378,11 +424,22 @@ export function createClaudeAgentBackend({
     });
   }
 
+  function resetStderrDeltaRedactor() {
+    stderrDeltaRedactor.discard();
+    stderrDeltaRedactor = createDeltaRedactor([
+      ...providerSensitiveValues,
+      ...processStderrAttachmentPaths,
+    ], (text) => {
+      stderrTail = appendTail(stderrTail, text);
+    });
+  }
+
   function setProviderSensitiveValues(values) {
     providerSensitiveValues = Array.from(new Set((values || [])
       .filter((value) => typeof value === 'string' && value)))
       .sort((left, right) => right.length - left.length);
     resetProviderDeltaRedactor();
+    resetStderrDeltaRedactor();
   }
 
   function clearProviderSensitiveValues() {
@@ -390,6 +447,8 @@ export function createClaudeAgentBackend({
     providerSensitiveValues = [];
     providerDeltaPhase = undefined;
     providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {});
+    processStderrAttachmentPaths = [];
+    resetStderrDeltaRedactor();
   }
 
   function setActiveAttachmentPaths(values) {
@@ -397,7 +456,13 @@ export function createClaudeAgentBackend({
       .filter((value) => typeof value === 'string' && value)))
       .sort((left, right) => right.length - left.length);
     if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+    const previousPathCount = processStderrAttachmentPaths.length;
+    processStderrAttachmentPaths = Array.from(new Set([
+      ...processStderrAttachmentPaths,
+      ...activeAttachmentPaths,
+    ])).sort((left, right) => right.length - left.length);
     resetProviderDeltaRedactor();
+    if (processStderrAttachmentPaths.length !== previousPathCount) resetStderrDeltaRedactor();
   }
 
   function setThinking(active) {
@@ -541,7 +606,7 @@ export function createClaudeAgentBackend({
     clearProviderSensitiveValues();
   }
 
-  function handleProcessFailure(target, generation, message) {
+  function handleProcessFailure(target, generation, { message, classificationInput, detail }) {
     if (generation !== runtimeGeneration || proc !== target) return;
     runtimeGeneration += 1;
     proc = null;
@@ -552,10 +617,13 @@ export function createClaudeAgentBackend({
     cleanupConfig();
     if (activeRun) {
       providerDeltaRedactor.flush();
+      const classified = classifyErrorCode(classificationInput);
       emit({
         type: 'error',
-        kind: 'mcp',
+        kind: classified.kind,
+        code: classified.code,
         message,
+        ...(detail && Object.keys(detail).length ? { detail } : {}),
       });
       finishActive();
     }
@@ -564,14 +632,30 @@ export function createClaudeAgentBackend({
   }
 
   function handleExit(target, generation, code, signal) {
-    const suffix = signal ? `${code} ${signal}` : String(code);
-    const detail = stderrTail ? `${suffix} ${stderrTail}` : suffix;
-    handleProcessFailure(target, generation, `Claude CLI exited: ${detail}`);
+    stderrDeltaRedactor.flush();
+    const tail = trimStderrTail(stderrTail);
+    handleProcessFailure(target, generation, {
+      message: 'Claude CLI exited unexpectedly.',
+      classificationInput: { exitCode: code, signal, stderrTail: tail },
+      detail: {
+        exitCode: code,
+        ...(signal ? { signal } : {}),
+        ...(tail ? { stderrTail: tail } : {}),
+      },
+    });
   }
 
   function handleProcError(target, generation, error) {
-    const message = error?.message || 'Claude CLI process error';
-    handleProcessFailure(target, generation, message);
+    stderrDeltaRedactor.flush();
+    const tail = trimStderrTail(stderrTail);
+    handleProcessFailure(target, generation, {
+      message: 'Claude CLI process could not continue.',
+      classificationInput: { error, spawnError: true, stderrTail: tail },
+      detail: {
+        ...(error?.code ? { spawnCode: error.code } : {}),
+        ...(tail ? { stderrTail: tail } : {}),
+      },
+    });
   }
 
   function markTurnAccepted() {
@@ -774,10 +858,31 @@ export function createClaudeAgentBackend({
     setThinking(false);
     drainControls('Claude CLI turn ended.');
     if (message.is_error) {
+      const rawMessage = truncateDetail(message.result || message);
+      const safeMessage = safeErrorMessage({ message: rawMessage }, [
+        ...providerSensitiveValues,
+        ...activeAttachmentPaths,
+      ]);
+      const httpStatus = extractHttpStatus(safeMessage);
+      const classified = classifyErrorCode({
+        error: { message: safeMessage },
+        upstream: true,
+        upstreamText: safeMessage,
+      });
+      const kindReference = classifyError(safeMessage);
       emit({
         type: 'error',
-        kind: classifyError(message.result || message),
-        message: apiSafeErrorMessage(truncateDetail(message.result || message)),
+        kind: classified.code === 'UPSTREAM_ERROR' && ['auth', 'model'].includes(kindReference)
+          ? kindReference
+          : classified.kind,
+        code: classified.code,
+        message: httpStatus ? 'Claude upstream request failed.' : safeMessage,
+        ...(httpStatus ? {
+          detail: {
+            httpStatus,
+            upstreamMessage: safeMessage.slice(0, 500),
+          },
+        } : {}),
       });
       finishActive();
       return;
@@ -893,7 +998,7 @@ export function createClaudeAgentBackend({
     if (allowedTools.length) args.push('--allowedTools', ...allowedTools);
     args.push(
       '--agents',
-      JSON.stringify(agentDefinition(meta, turn.attachments, lang)),
+      JSON.stringify(agentDefinition(meta, turn.attachments, currentLang())),
       '--agent',
       'ae',
     );
@@ -907,19 +1012,28 @@ export function createClaudeAgentBackend({
     if (proc && processSettings === settingsIdentity) return true;
     if (startPromise) return startPromise;
     const pendingStart = (async () => {
-      const resolved = await resolveClaude({ platform: adapter, env, lang });
+      const resolvedLang = currentLang();
+      const resolved = await resolveClaude({ platform: adapter, env, lang: resolvedLang });
       if (activeRun === null) throw cancelledStartError();
       if (!resolved?.ok) {
+        const classification = classifyErrorCode({ resolutionCode: resolved?.code });
+        const resolution = boundedResolution(resolved?.resolution || resolved);
         emit({
           type: 'error',
-          kind: 'mcp',
-          code: resolved?.code || 'NOT_FOUND',
-          message: resolved?.detail || cliResolutionMessage(resolved?.code, lang),
+          kind: classification.kind,
+          code: classification.code,
+          message: resolved?.detail || cliResolutionMessage(resolved?.code, resolvedLang, resolved?.resolution || resolved),
+          ...(resolution ? { detail: { resolution } } : {}),
         });
         return false;
       }
       setProviderSensitiveValues([]);
-      const mcpPath = writeMcpConfig(mcpSpec);
+      let mcpPath;
+      try {
+        mcpPath = writeMcpConfig(mcpSpec);
+      } catch (error) {
+        throw categorizedError(error, 'MCP_UNREACHABLE');
+      }
       let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}));
       stderrTail = '';
       processChannel = 'subscription';
@@ -935,11 +1049,19 @@ export function createClaudeAgentBackend({
       const args = buildCliArgs(session, turn, meta, mcpPath);
       let spawnedProc;
       try {
-        spawnedProc = spawnProcess(executable, args, {
-          stdio: 'pipe',
-          windowsHide: true,
-          env: spawnEnv,
-        });
+        try {
+          spawnedProc = spawnProcess(executable, args, {
+            stdio: 'pipe',
+            windowsHide: true,
+            env: spawnEnv,
+          });
+        } catch (error) {
+          const failure = error instanceof Error
+            ? error
+            : new Error(error?.message || String(error || 'Claude CLI spawn failed'));
+          failure.spawnError = true;
+          throw failure;
+        }
       } finally {
         if (spawnEnv) delete spawnEnv.ANTHROPIC_AUTH_TOKEN;
         spawnEnv = null;
@@ -955,11 +1077,7 @@ export function createClaudeAgentBackend({
       spawnedProc.stdout?.on?.('data', reader);
       spawnedProc.stderr?.on?.('data', (chunk) => {
         if (generation !== runtimeGeneration || proc !== spawnedProc) return;
-        const detail = redactValue(String(chunk), [
-          ...providerSensitiveValues,
-          ...activeAttachmentPaths,
-        ]);
-        stderrTail = appendTail(stderrTail, detail);
+        stderrDeltaRedactor.feed(chunk);
       });
       spawnedProc.on?.('exit', (code, signal) => {
         handleExit(spawnedProc, generation, code, signal);
@@ -976,11 +1094,23 @@ export function createClaudeAgentBackend({
       cleanupConfig();
       clearProviderSensitiveValues();
       if (error?.code !== 'CLAUDE_AGENT_START_CANCELLED') {
+        const classification = classifyErrorCode({
+          error,
+          code: error?.categoryCode,
+          spawnError: error?.spawnError === true,
+          fallbackCode: 'BACKEND_ERROR',
+        });
+        let message = error?.message || 'Failed to start Claude CLI.';
+        if (classification.code === 'SPAWN_FAILED') message = 'Claude CLI process could not be started.';
+        else if (classification.code === 'MCP_UNREACHABLE') message = 'Claude could not prepare the panel MCP connection.';
         emit({
           type: 'error',
-          kind: error?.kind || 'mcp',
-          ...(error?.code ? { code: error.code } : {}),
-          message: error?.message || 'Failed to start Claude CLI.',
+          kind: classification.kind,
+          code: classification.code,
+          message,
+          ...(error?.code && error.code !== 'CLAUDE_AGENT_START_CANCELLED'
+            ? { detail: { spawnCode: error.code } }
+            : {}),
         });
       }
       return false;
@@ -993,14 +1123,24 @@ export function createClaudeAgentBackend({
     try {
       const session = desiredSession();
       if (activeRun !== runToken) throw cancelledStartError();
-      const meta = getToolMeta
-        ? await getToolMeta()
-        : { allowedTools: [], annotations: {} };
+      let meta;
+      try {
+        meta = getToolMeta
+          ? await getToolMeta()
+          : { allowedTools: [], annotations: {} };
+      } catch (error) {
+        throw categorizedError(error, 'MCP_UNREACHABLE');
+      }
       const normalizedMeta = {
         allowedTools: Array.isArray(meta?.allowedTools) ? meta.allowedTools : [],
         annotations: isPlainObject(meta?.annotations) ? meta.annotations : {},
       };
-      const mcpSpec = await getMcpSpec();
+      let mcpSpec;
+      try {
+        mcpSpec = await getMcpSpec();
+      } catch (error) {
+        throw categorizedError(error, 'MCP_UNREACHABLE');
+      }
       if (activeRun !== runToken) throw cancelledStartError();
       turn.toolMeta = normalizedMeta;
       const nextSettings = processSettingsIdentity({
@@ -1029,11 +1169,19 @@ export function createClaudeAgentBackend({
         await discardRuntime({ clearStderr: true });
       }
       if (error?.code !== 'CLAUDE_AGENT_START_CANCELLED') {
+        const classification = classifyErrorCode({
+          error,
+          code: error?.categoryCode,
+          fallbackCode: 'BACKEND_ERROR',
+        });
+        const message = classification.code === 'MCP_UNREACHABLE'
+          ? 'Claude could not prepare the panel MCP connection.'
+          : (error?.message || 'Failed to start Claude CLI.');
         emit({
           type: 'error',
-          kind: error?.kind || 'mcp',
-          ...(error?.code ? { code: error.code } : {}),
-          message: error?.message || 'Failed to start Claude CLI.',
+          kind: classification.kind,
+          code: classification.code,
+          message,
         });
       }
       return false;
@@ -1089,7 +1237,7 @@ export function createClaudeAgentBackend({
     providerDeltaRedactor.flush();
     setThinking(false);
     drainControls('Turn was stopped.');
-    emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.' });
+    emit({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.' });
     finishActive();
     void discardRuntime();
   }

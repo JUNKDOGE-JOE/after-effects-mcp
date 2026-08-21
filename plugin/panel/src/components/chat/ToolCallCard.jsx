@@ -30,6 +30,27 @@ function ParamsBlock({ params }) {
   );
 }
 
+function DetailsBlock({ details }) {
+  return (
+    <pre
+      style={{
+        margin: 0,
+        padding: 'var(--space-2)',
+        background: 'var(--gray-0)',
+        borderTop: '1px solid var(--border-subtle)',
+        font: `var(--weight-regular) var(--text-micro)/1.6 var(--font-mono)`,
+        color: 'var(--text-secondary)',
+        maxHeight: 220,
+        overflow: 'auto',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+      }}
+    >
+      {details}
+    </pre>
+  );
+}
+
 function HeaderRow({ status, verb, target, expandable, expanded, onToggle }) {
   const [hover, setHover] = React.useState(false);
   return (
@@ -82,6 +103,9 @@ export function ToolCallCard({
   status = 'success',
   params,
   errorMessage,
+  hint,
+  details,
+  detailsLabel = '详情',
   onRetry,
   steps,
   groupLabel,
@@ -91,7 +115,8 @@ export function ToolCallCard({
 }) {
   const [expanded, setExpanded] = React.useState(defaultExpanded);
   const isGroup = Array.isArray(steps) && steps.length > 0;
-  const expandable = isGroup || params != null;
+  const hasDetails = details !== undefined && details !== null && details !== '';
+  const expandable = isGroup || params != null || hasDetails;
   return (
     <div
       style={{
@@ -138,20 +163,37 @@ export function ToolCallCard({
         </div>
       ) : null}
       {expanded && !isGroup && params != null ? <ParamsBlock params={params} /> : null}
+      {expanded && !isGroup && hasDetails ? <DetailsBlock details={details} /> : null}
       {status === 'error' && errorMessage ? (
         <div
           style={{
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             gap: 'var(--space-2)',
             padding: 'var(--space-15) var(--space-2)',
             borderTop: '1px solid var(--border-subtle)',
             background: 'var(--error-bg)',
           }}
         >
-          <span style={{ flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: 'var(--error)' }}>
-            {errorMessage}
-          </span>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <span style={{ font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: 'var(--error)' }}>
+              {errorMessage}
+            </span>
+            {hint ? (
+              <span style={{ font: `var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui)`, color: 'var(--text-secondary)' }}>
+                {hint}
+              </span>
+            ) : null}
+            {hasDetails ? (
+              <button
+                type="button"
+                onClick={() => setExpanded(!expanded)}
+                style={{ alignSelf: 'flex-start', padding: 0, border: 0, background: 'transparent', color: 'var(--text-tertiary)', cursor: 'pointer', font: `var(--weight-medium) var(--text-micro)/1.4 var(--font-ui)` }}
+              >
+                {detailsLabel}
+              </button>
+            ) : null}
+          </div>
           {onRetry ? (
             <Button size="sm" variant="secondary" icon="rotate-cw" onClick={onRetry}>
               {retryLabel}

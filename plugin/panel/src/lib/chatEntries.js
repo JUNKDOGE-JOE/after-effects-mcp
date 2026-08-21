@@ -140,7 +140,11 @@ export function reduceEvent(entries, evt) {
         id: nextId(current, 'error'),
         type: 'error',
         kind: evt.kind,
+        code: evt.code || null,
         message: evt.message || '',
+        detail: evt.detail || null,
+        turnId: evt.turnId || null,
+        dispatchState: evt.dispatchState || null,
       });
 
     default:

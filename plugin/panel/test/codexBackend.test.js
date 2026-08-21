@@ -41,9 +41,10 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function makeBackend() {
+function makeBackend(overrides = {}) {
   const spawned = [];
   const mkdirs = [];
+  const events = [];
   const platform = {
     id: 'windows-x64',
     paths: {
@@ -60,7 +61,7 @@ function makeBackend() {
       APPDATA: base.APPDATA || 'C:\\Users\\test\\AppData\\Roaming',
       ...additions,
     }),
-    resolveExecutable: async () => ({
+    resolveExecutable: overrides.resolveExecutable || (async () => ({
       ok: true,
       id: 'codex',
       path: 'C:\\Tools\\codex.exe',
@@ -69,8 +70,9 @@ function makeBackend() {
       source: 'path',
       version: '1.0.0',
       arch: 'x64',
-    }),
+    })),
     spawn(executable, args, options) {
+      if (overrides.spawnError) throw overrides.spawnError;
       const proc = createProcess();
       spawned.push({ executable, args, options, proc });
       return proc;
@@ -82,19 +84,24 @@ function makeBackend() {
     getEffort: () => 'high',
     getFast: () => true,
     getPermissionMode: () => 'manual',
-    getMcpSpec: async () => ({
+    getMcpSpec: overrides.getMcpSpec || (async () => ({
       kind: 'http',
       url: 'http://127.0.0.1:11488/mcp/c/codex-token',
       name: 'ae',
-    }),
-    getToolMeta: async () => ({ allowedTools: [], annotations: {} }),
+    })),
+    getToolMeta: overrides.getToolMeta || (async () => ({ allowedTools: [], annotations: {} })),
+    resolveCli: overrides.resolveCli,
+    getLang: overrides.getLang,
+    rpcTimeoutMs: overrides.rpcTimeoutMs,
+    turnTimeoutMs: overrides.turnTimeoutMs,
     env: { AE_MCP_PANEL_EXT_ROOT: 'C:\\Repo\\plugin\\panel' },
+    onEvent: (event) => events.push(event),
   });
-  return { backend, platform, spawned, mkdirs };
+  return { backend, platform, spawned, mkdirs, events };
 }
 
 async function startTurn(backend, spawned) {
-  const pending = backend.sendUser('hello');
+  const pending = backend.sendUser({ turnId: 'turn_1', text: 'hello', attachments: [] });
   await flush();
   const proc = spawned[0].proc;
   const initialize = parseWrites(proc)[0];
@@ -176,4 +183,117 @@ test('Codex account probes use the same isolated CLI environment', async () => {
   assert.deepEqual(result.models, [{ id: 'gpt-5.5' }]);
   assert.equal(spawned[0].options.env.CODEX_HOME, 'C:\\Users\\test\\.ae-mcp\\codex-home');
   assert.equal(mkdirs.length, 1);
+});
+
+test('Codex keeps JSON-RPC code and data in TURN_START_FAILED detail', async () => {
+  const { backend, spawned, events } = makeBackend();
+  try {
+    const { pending, proc, turn } = await startTurn(backend, spawned);
+    proc.emit({
+      id: turn.id,
+      error: { code: -32001, message: 'turn rejected', data: { reason: 'policy' } },
+    });
+    await pending;
+    const error = events.find((event) => event.type === 'error');
+    assert.equal(error.code, 'TURN_START_FAILED');
+    assert.equal(error.detail.jsonRpcCode, -32001);
+    assert.deepEqual(error.detail.jsonRpcData, { reason: 'policy' });
+    assert.equal(error.dispatchState, 'uncertain');
+  } finally {
+    backend.reset();
+  }
+});
+
+test('Codex initialize timeout reports RPC_TIMEOUT with the method', async () => {
+  const { backend, events } = makeBackend({ rpcTimeoutMs: 5 });
+  try {
+    await backend.sendUser({ turnId: 'turn-timeout', text: 'hello', attachments: [] });
+    const error = events.find((event) => event.type === 'error');
+    assert.equal(error.code, 'RPC_TIMEOUT');
+    assert.equal(error.detail.method, 'initialize');
+    assert.equal(error.dispatchState, 'not-started');
+  } finally {
+    backend.reset();
+  }
+});
+
+test('Codex relay status text becomes an URL-free upstream HTTP category', async () => {
+  const { backend, spawned, events } = makeBackend();
+  try {
+    const { pending, proc, turn } = await startTurn(backend, spawned);
+    proc.emit({
+      id: turn.id,
+      error: {
+        code: -32000,
+        message: 'unexpected status 502, url: https://relay.example/v1/messages?key=SECRET',
+      },
+    });
+    await pending;
+    const error = events.find((event) => event.type === 'error');
+    assert.equal(error.code, 'UPSTREAM_HTTP_502');
+    assert.equal(error.detail.httpStatus, 502);
+    assert.match(error.detail.upstreamMessage, /unexpected status 502/);
+    assert.equal(error.message.includes('https://'), false);
+  } finally {
+    backend.reset();
+  }
+});
+
+test('Codex reads getLang for each resolution failure without rebuilding the backend', async () => {
+  let currentLang = 'en';
+  const h = makeBackend({
+    getLang: () => currentLang,
+    resolveCli: async () => ({ ok: false, code: 'NOT_FOUND' }),
+  });
+
+  await h.backend.sendUser({ turnId: 'turn-en', text: 'hello', attachments: [] });
+  currentLang = 'zh';
+  await h.backend.sendUser({ turnId: 'turn-zh', text: 'hello', attachments: [] });
+
+  const errors = h.events.filter((event) => event.type === 'error');
+  assert.match(errors[0].message, /not found/i);
+  assert.match(errors[1].message, /未找到/);
+  assert.equal(h.spawned.length, 0);
+});
+
+test('Codex maps all app-server cancellation spellings to CANCELLED', async () => {
+  for (const status of ['cancelled', 'canceled', 'interrupted']) {
+    const { backend, spawned, events } = makeBackend();
+    try {
+      const { pending, proc } = await startTurn(backend, spawned);
+      proc.emit({ method: 'turn/completed', params: { turn: { status } } });
+      await pending;
+      assert.equal(events.find((event) => event.type === 'error')?.code, 'CANCELLED');
+    } finally {
+      backend.reset();
+    }
+  }
+});
+
+test('Codex distinguishes CLI resolution, spawn, and unauthenticated exits', async () => {
+  const missing = makeBackend({
+    resolveCli: async () => ({
+      ok: false,
+      code: 'ARCH_MISMATCH',
+      resolution: {
+        code: 'ARCH_MISMATCH',
+        attempts: [{ path: 'C:\\Tools\\codex.exe', source: 'path', detail: 'architecture arm64' }],
+      },
+    }),
+  });
+  await missing.backend.sendUser({ turnId: 'turn-arch', text: 'hello', attachments: [] });
+  assert.equal(missing.events.find((event) => event.type === 'error')?.code, 'CLI_ARCH_MISMATCH');
+
+  const spawnFailure = new Error('spawn EACCES');
+  spawnFailure.code = 'EACCES';
+  const spawning = makeBackend({ spawnError: spawnFailure });
+  await spawning.backend.sendUser({ turnId: 'turn-spawn', text: 'hello', attachments: [] });
+  assert.equal(spawning.events.find((event) => event.type === 'error')?.code, 'SPAWN_FAILED');
+
+  const exiting = makeBackend();
+  const { pending, proc } = await startTurn(exiting.backend, exiting.spawned);
+  proc.emitStderr('Not logged in. Run login first.');
+  proc.exit(1);
+  await pending;
+  assert.equal(exiting.events.find((event) => event.type === 'error')?.code, 'AUTH_REQUIRED');
 });

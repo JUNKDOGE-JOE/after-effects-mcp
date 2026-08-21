@@ -37,7 +37,7 @@ export function ChannelCard({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ChannelDot token={channelDot(probe)} />
               <Badge status={channelDot(probe)}>{texts.source}</Badge>
-              {texts.detail ? <span style={{ flex: 1, minWidth: 0, font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{texts.detail}</span> : <span style={{ flex: 1 }} />}
+              {texts.detail ? <span title={texts.detail} style={{ flex: 1, minWidth: 0, font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-secondary)', overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 4 }}>{texts.detail}</span> : <span style={{ flex: 1 }} />}
               {!readOnly && onSelectChannel ? (
                 <Button variant={choice.active ? 'secondary' : 'ghost'} size="sm" disabled={choice.active} onClick={() => onSelectChannel(probe.channel)}>
                   {choice.label}

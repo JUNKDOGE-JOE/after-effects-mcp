@@ -218,6 +218,66 @@ test('buildLogExport truncates generic multiline credential syntax at the entry 
   assert.equal((text.match(/\[redacted\]/g) || []).length, 3);
 });
 
+test('backend stderr is redacted line by line without losing later diagnostics', () => {
+  const text = buildLogExport({
+    backendStderrTails: {
+      claude: [
+        'sessionId: abc',
+        'Authorization: Bearer xyz',
+        'https://relay.example/v1?key=SECRET',
+        'plain relay https://relay.example/v1',
+        '{"sessionId":"abc","prompt":"request-body-must-not-survive"}',
+        'Error: ECONNREFUSED 127.0.0.1:443',
+        '    at connect (node:net:123:4)',
+      ].join('\n'),
+    },
+    backendErrors: [{
+      ts: '2026-08-22T10:00:00Z',
+      backend: 'claude',
+      code: 'AUTH_REQUIRED',
+      kind: 'auth',
+      message: 'Claude authentication is required at https://relay.example/v1.',
+      detail: 'exit 1; see https://relay.example/status',
+    }],
+    hostLogMemory: [{
+      ts: '2026-08-22T10:00:00Z',
+      level: 'error',
+      source: 'chat',
+      message: 'relay failed at https://relay.example/v1',
+      detail: { responseExcerpt: 'see https://relay.example/status' },
+    }],
+  });
+
+  assert.match(text, /## backend errors \(last 50\)/);
+  assert.match(text, /code=AUTH_REQUIRED/);
+  assert.match(text, /## backend stderr tails/);
+  assert.equal(text.includes('relay.example'), false);
+  assert.equal(text.includes('Bearer'), false);
+  assert.equal(text.includes('SECRET'), false);
+  assert.equal(text.includes('request-body-must-not-survive'), false);
+  assert.equal(text.includes('http'), false);
+  assert.match(text, /ECONNREFUSED 127\.0\.0\.1:443/);
+  assert.match(text, /at connect \(node:net:123:4\)/);
+});
+
+test('a sensitive host extra does not truncate sibling message and error fields', () => {
+  const text = buildLogExport({
+    hostLogMemory: [{
+      ts: '2026-08-22T10:00:00Z',
+      pid: 10,
+      level: 'error',
+      source: 'chat',
+      message: 'backend failed',
+      sessionId: 'private-session',
+      error: 'ECONNREFUSED',
+    }],
+  });
+
+  assert.match(text, /backend failed/);
+  assert.match(text, /ECONNREFUSED/);
+  assert.equal(text.includes('private-session'), false);
+});
+
 test('writeLogExport uses the platform log catalog and reveal delegates to the adapter', async () => {
   const writes = [];
   const reveals = [];

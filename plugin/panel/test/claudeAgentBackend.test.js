@@ -183,9 +183,11 @@ function makeHarness(overrides = {}) {
     getThinking: () => state.thinking,
     getChannel: () => state.channel,
     onEvent: (event) => events.push(event),
+    getLang: overrides.getLang,
     lang: overrides.lang || 'en',
     now: overrides.now || (() => 100),
     env: overrides.env,
+    spawnImpl: overrides.spawnImpl,
   });
   return { backend, events, fs, platform, processes, spawns, state };
 }
@@ -228,6 +230,8 @@ test('resolveClaudeCli gives install and upgrade guidance for probe failures', a
   for (const value of [
     ['NOT_FOUND', /not found/i],
     ['VERSION_TOO_OLD', /upgrade Claude CLI/i],
+    ['ARCH_MISMATCH', /architecture mismatch/i],
+    ['PROBE_FAILED', /probe failed/i],
   ]) {
     const result = await resolveClaudeCli({
       lang: 'en',
@@ -622,12 +626,145 @@ test('missing CLI fails before dispatch and never spawns', async () => {
   assert.equal(h.spawns.length, 0);
   assert.deepEqual(h.events.find((event) => event.type === 'error'), {
     type: 'error',
-    kind: 'mcp',
-    code: 'NOT_FOUND',
+    kind: 'backend',
+    code: 'CLI_MISSING',
     message: 'Install Claude CLI 2.x.',
+    detail: {
+      resolution: {
+        code: 'NOT_FOUND',
+        attempts: [],
+      },
+    },
     turnId: 'turn-missing',
     dispatchState: 'not-started',
   });
+});
+
+test('is_error emits one upstream error and settles the active turn', async () => {
+  const h = makeHarness();
+  const run = h.backend.sendUser({ turnId: 'turn-upstream', text: 'hello', attachments: [] });
+  await flush();
+  emitWire(h.processes[0], {
+    type: 'result',
+    is_error: true,
+    result: 'relay rejected the request with status 429',
+  });
+  await run;
+
+  const errors = h.events.filter((event) => event.type === 'error');
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].code, 'UPSTREAM_HTTP_429');
+  assert.equal(errors[0].detail.httpStatus, 429);
+  assert.equal(errors[0].detail.upstreamMessage, 'relay rejected the request with status 429');
+
+  const next = h.backend.sendUser({ turnId: 'turn-after-error', text: 'again', attachments: [] });
+  await flush();
+  assert.equal(written(h.processes[0]).filter((message) => message.type === 'user').length, 2);
+  finishTurn(h.processes[0]);
+  await next;
+});
+
+test('Claude reads getLang for each resolution failure without rebuilding the backend', async () => {
+  let currentLang = 'en';
+  const h = makeHarness({
+    getLang: () => currentLang,
+    resolveClaude: async () => ({ ok: false, code: 'NOT_FOUND' }),
+  });
+
+  await h.backend.sendUser({ turnId: 'turn-en', text: 'hello', attachments: [] });
+  currentLang = 'zh';
+  await h.backend.sendUser({ turnId: 'turn-zh', text: 'hello', attachments: [] });
+
+  const errors = h.events.filter((event) => event.type === 'error');
+  assert.match(errors[0].message, /not found/i);
+  assert.match(errors[1].message, /未找到/);
+  assert.equal(h.spawns.length, 0);
+});
+
+test('spawn ENOENT is classified separately from a later process exit', async () => {
+  const h = makeHarness({
+    spawnImpl() {
+      const error = new Error('spawn claude ENOENT');
+      error.code = 'ENOENT';
+      throw error;
+    },
+  });
+  await h.backend.sendUser({ turnId: 'turn-spawn', text: 'hello', attachments: [] });
+
+  const error = h.events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'SPAWN_FAILED');
+  assert.equal(error.detail.spawnCode, 'ENOENT');
+  assert.equal(error.dispatchState, 'not-started');
+});
+
+test('process exit stderr detects an unauthenticated Claude CLI', async () => {
+  const h = makeHarness();
+  const run = h.backend.sendUser({ turnId: 'turn-auth', text: 'hello', attachments: [] });
+  await flush();
+  h.processes[0].stderr.emit('data', 'Not logged ');
+  h.processes[0].stderr.emit('data', 'in. Please run /login.');
+  h.processes[0].emit('exit', 1, null);
+  await run;
+
+  const error = h.events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'AUTH_REQUIRED');
+  assert.equal(error.kind, 'auth');
+  assert.equal(error.detail.exitCode, 1);
+  assert.match(error.detail.stderrTail, /Not logged in/);
+});
+
+test('architecture resolution has dedicated guidance and bounded attempts', async () => {
+  const h = makeHarness({
+    resolveClaude: async () => ({
+      ok: false,
+      code: 'ARCH_MISMATCH',
+      resolution: {
+        code: 'ARCH_MISMATCH',
+        attempts: [{
+          path: 'C:\\Tools\\claude.exe',
+          source: 'path',
+          detail: 'architecture arm64 does not match x64',
+        }],
+      },
+    }),
+  });
+  await h.backend.sendUser({ turnId: 'turn-arch', text: 'hello', attachments: [] });
+
+  const error = h.events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'CLI_ARCH_MISMATCH');
+  assert.match(error.message, /arm64/);
+  assert.deepEqual(error.detail.resolution.attempts, [{
+    path: 'C:\\Tools\\claude.exe',
+    source: 'path',
+    detail: 'architecture arm64 does not match x64',
+  }]);
+});
+
+test('stderr delta redaction catches an attachment path split across chunks', async () => {
+  const h = makeHarness();
+  const selected = 'C:\\private\\customer.mov';
+  h.fs.files.add(selected);
+  const run = h.backend.sendUser({
+    turnId: 'turn-stderr-secret',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'customer.mov',
+      size: 10,
+      mediaType: 'video/quicktime',
+      temporary: false,
+      localPath: selected,
+    }],
+  });
+  await flush();
+  h.processes[0].stderr.emit('data', 'failed C:\\private\\');
+  h.processes[0].stderr.emit('data', 'customer.mov');
+  h.processes[0].emit('exit', 1, null);
+  await run;
+
+  const rendered = JSON.stringify(h.events);
+  assert.equal(rendered.includes(selected), false);
+  assert.match(rendered, /\[redacted\]/);
 });
 
 test('stop emits one aborted error, drains controls, and kills the process', async () => {

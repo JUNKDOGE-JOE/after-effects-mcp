@@ -103,3 +103,25 @@ test('App includes active attachment paths in exact log-export redaction', () =>
   assert.match(app, /attachmentPathSecrets\(\{\s*draft:\s*attachmentDraft,\s*pendingTurn:\s*pendingTurnRef\.current/s);
   assert.match(app, /exactSecrets\.push\(\.\.\.attachmentSecrets\)/);
 });
+
+test('App records every chat error before the unaccepted-turn early return', () => {
+  const app = source('../src/app/App.jsx');
+  const recordIndex = app.indexOf("source: 'chat'");
+  const earlyReturnIndex = app.indexOf("evt.type === 'error' && pending");
+  assert.ok(recordIndex >= 0);
+  assert.ok(earlyReturnIndex > recordIndex);
+  assert.match(app, /backendErrorsRef\.current = \[\.\.\.backendErrorsRef\.current\.slice\(-49\), record\]/);
+  assert.match(app, /backendErrors: backendErrorsRef\.current/);
+});
+
+test('App keeps backend instances stable across backend and language changes', () => {
+  const app = source('../src/app/App.jsx');
+  assert.equal((app.match(/getLang: \(\) => langRef\.current/g) || []).length, 3);
+  assert.match(app, /const effectiveBackend = effectiveBackendRef\.current/);
+  assert.match(app, /\}, \[releaseTurnAttachments\]\);/);
+  assert.equal(
+    (app.match(/\[extRoot, getMcpSpec, mcp, handleChatEvent, platform\]\);/g) || []).length,
+    2,
+  );
+  assert.doesNotMatch(app, /handleChatEvent, lang, platform/);
+});

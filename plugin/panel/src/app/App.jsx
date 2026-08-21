@@ -18,6 +18,8 @@ import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
 import { installBeforeUnloadReset } from '../lib/backendLifecycle.js';
 import { containsExactSecret } from '../lib/exactSecretRedaction.js';
+import { redactCredentialText } from '../lib/credentialTextRedaction.js';
+import { firstErrorDetailLine, serializeErrorDetail } from '../lib/errorDetail.js';
 import { createMcpClient } from '../cep/mcpClient';
 import { createToolsApi } from '../cep/toolsApi';
 import { probeClaudeLogin } from '../cep/claudeAuth';
@@ -147,11 +149,14 @@ function modelMetadataContainsCredential(models, credentials = []) {
 
 function Shell({ cs }) {
   const { lang, setLang } = useLang();
+  const langRef = React.useRef(lang);
+  langRef.current = lang;
   const t = T[lang];
   const [tab, setTab] = React.useState('chat');
   const [status, setStatus] = React.useState({ state: 'starting', port: DEFAULT_PORT, error: null });
   const [paused, setPaused] = React.useState(false);
   const [logs, setLogs] = React.useState([]);
+  const backendErrorsRef = React.useRef([]);
   const ctrl = React.useRef(null);
   const getHost = React.useCallback(() => (ctrl.current ? ctrl.current.getHost() : null), []);
   const hostConversation = React.useMemo(() => createHostConversation({ getHost }), [getHost]);
@@ -357,6 +362,8 @@ function Shell({ cs }) {
     providers,
   ]);
   const effective = pickBackend({ pref: backendPref, channels, channelChoices });
+  const effectiveBackendRef = React.useRef(effective.backend);
+  effectiveBackendRef.current = effective.backend;
   const runtimeRef = React.useRef({
     model: effectiveModel,
     permissionMode,
@@ -443,6 +450,38 @@ function Shell({ cs }) {
   }, [addAttachment]);
   const handleChatEvent = React.useCallback((evt) => {
     const pending = pendingTurnRef.current;
+    if (evt.type === 'error') {
+      const exactSecrets = attachmentPathSecrets({ pendingTurn: pending });
+      const effectiveBackend = effectiveBackendRef.current;
+      const backend = effectiveBackend === 'subscription' ? 'claude' : effectiveBackend;
+      const message = redactCredentialText(evt.message || 'Backend error', exactSecrets).slice(0, 2000);
+      const detail = serializeErrorDetail(evt.detail, exactSecrets, 2000);
+      const record = {
+        ts: new Date().toISOString(),
+        backend: backend || 'none',
+        code: evt.code || 'BACKEND_ERROR',
+        kind: evt.kind || 'backend',
+        message,
+        detail: firstErrorDetailLine(evt.detail, exactSecrets),
+      };
+      backendErrorsRef.current = [...backendErrorsRef.current.slice(-49), record];
+      try {
+        const host = getHost();
+        if (host?.hostLog && typeof host.hostLog.record === 'function') {
+          host.hostLog.record({
+            source: 'chat',
+            level: 'error',
+            backend: record.backend,
+            code: record.code,
+            kind: record.kind,
+            message,
+            detail,
+          });
+        }
+      } catch (error) {
+        // Logging must not change turn settlement or draft recovery.
+      }
+    }
     if (evt.type === 'turn-accepted') {
       if (!pending || evt.turnId !== pending.turnId) return;
       acceptedTurnRef.current = pending.turnId;
@@ -493,7 +532,7 @@ function Shell({ cs }) {
     getEffort: () => runtimeRef.current.effort,
     getThinking: () => runtimeRef.current.thinking,
     getChannel: () => 'subscription',
-    lang,
+    getLang: () => langRef.current,
     onEvent: handleChatEvent,
   }), [
     getMcpSpec,
@@ -512,7 +551,7 @@ function Shell({ cs }) {
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
-    lang,
+    getLang: () => langRef.current,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
   }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
@@ -531,6 +570,7 @@ function Shell({ cs }) {
     getProviders: () => providersRef.current,
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
+    getLang: () => langRef.current,
     onEvent: handleChatEvent,
   }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
 
@@ -861,6 +901,7 @@ function Shell({ cs }) {
           : undefined,
         diagnostics: diagnosticItems,
         diagnosticsError,
+        backendErrors: backendErrorsRef.current,
         backendStderrTails,
         version: pkgVersion,
         exactSecrets,

@@ -195,7 +195,12 @@ export async function runDiagnostics({
       ok: result.ok,
       detail: result.ok
         ? [result.version, result.path].filter(Boolean).join(' · ')
-        : result.code,
+        : [
+          result.code,
+          Array.isArray(result.attempts) && result.attempts.length
+            ? 'tried: ' + result.attempts.slice(0, 3).map((attempt) => attempt.path).filter(Boolean).join('; ')
+            : '',
+        ].filter(Boolean).join('\n'),
       fixHint: HINTS[id],
       ...(id === 'opencode'
         ? {}

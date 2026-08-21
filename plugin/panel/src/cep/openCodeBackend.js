@@ -1,6 +1,12 @@
 import { createSseParser } from '../lib/sse.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
+import {
+  boundedResolution,
+  classifyErrorCode,
+  extractHttpStatus,
+  trimStderrTail,
+} from '../lib/errorCodes.js';
 import { openCodeProviderDefinitions } from './openCodeProviderStore.js';
 import { attachmentFileUrl, normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
@@ -8,6 +14,7 @@ const READY_TIMEOUT_MS = 30000;
 const READY_POLL_MS = 250;
 const DEFAULT_PROVIDER_ID = 'opencode';
 const DEFAULT_MODEL_ID = 'north-mini-code-free';
+const STDERR_TAIL_LIMIT = 4096;
 
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
@@ -30,7 +37,57 @@ function sleep(ms) {
 
 function appendTail(tail, chunk) {
   const next = tail + String(chunk || '');
-  return next.length > 4096 ? next.slice(next.length - 4096) : next;
+  return next.length > STDERR_TAIL_LIMIT
+    ? next.slice(next.length - STDERR_TAIL_LIMIT)
+    : next;
+}
+
+function endpointPath(value) {
+  const path = String(value || '').split(/[?#]/, 1)[0];
+  return path.startsWith('/') ? path : '/';
+}
+
+function resolutionArchitecture(resolution) {
+  for (const attempt of resolution?.attempts || []) {
+    const match = String(attempt?.detail || '').match(/architecture\s+(arm64|aarch64|x64|amd64|x86_64)\b/i);
+    if (match) return match[1];
+  }
+  return '';
+}
+
+function openCodeResolutionMessage(code, lang, resolution) {
+  if (code === 'VERSION_TOO_OLD') {
+    return lang === 'zh'
+      ? 'OpenCode CLI 版本过旧，请升级后重新检测。'
+      : 'OpenCode CLI is too old. Upgrade it and re-check.';
+  }
+  if (code === 'ARCH_MISMATCH') {
+    const found = resolutionArchitecture(resolution);
+    if (lang === 'zh') {
+      return found
+        ? `OpenCode CLI 架构不匹配：找到的是 ${found} 架构。请安装与 After Effects 一致的版本。`
+        : 'OpenCode CLI 架构不匹配。请安装与 After Effects 一致的版本。';
+    }
+    return found
+      ? `OpenCode CLI architecture mismatch: the detected executable is ${found}. Install a build matching After Effects.`
+      : 'OpenCode CLI architecture mismatch. Install a build matching After Effects.';
+  }
+  if (code === 'PROBE_FAILED') {
+    return lang === 'zh'
+      ? '已找到 OpenCode CLI，但版本探针启动失败。请在终端确认 opencode --version 可正常运行。'
+      : 'OpenCode CLI was found, but its version probe failed. Confirm opencode --version runs in a terminal.';
+  }
+  return lang === 'zh'
+    ? '未找到 OpenCode CLI。请安装 OpenCode CLI，并确保 opencode 在 PATH 中。'
+    : 'OpenCode CLI was not found. Install OpenCode CLI and put opencode on PATH.';
+}
+
+function taggedError(error, property, value) {
+  const result = error instanceof Error
+    ? error
+    : new Error(error?.message || String(error || value));
+  result[property] = value;
+  return result;
 }
 
 function decodeChunk(value) {
@@ -147,8 +204,14 @@ export function createOpenCodeBackend({
   getExpertGuidance = () => true,
   onEvent,
   env,
+  getLang,
+  lang = 'zh',
+  readyTimeoutMs = READY_TIMEOUT_MS,
+  readyPollMs = READY_POLL_MS,
+  sleepImpl = sleep,
 } = {}) {
   const adapter = platform || createPlatformAdapter();
+  const currentLang = () => (typeof getLang === 'function' ? getLang() : lang) || 'zh';
   let proc = null;
   let port = null;
   let baseUrl = '';
@@ -251,10 +314,24 @@ export function createOpenCodeBackend({
   }
 
   async function request(path, options = {}) {
-    const response = await fetcher()(baseUrl + path, options);
+    const endpoint = endpointPath(path);
+    let response;
+    try {
+      response = await fetcher()(baseUrl + path, options);
+    } catch (error) {
+      throw taggedError(error, 'endpoint', endpoint);
+    }
     if (!response || !response.ok) {
-      const text = response && response.text ? await response.text().catch(() => '') : '';
-      throw new Error('OpenCode HTTP ' + (response ? response.status : 'error') + (text ? ': ' + text : ''));
+      const error = new Error('OpenCode request failed.');
+      if (Number.isInteger(Number(response?.status))) error.httpStatus = Number(response.status);
+      error.endpoint = endpoint;
+      if (response && typeof response.text === 'function') {
+        try {
+          const excerpt = String(await response.text()).slice(0, 200);
+          if (excerpt) error.responseExcerpt = excerpt;
+        } catch {}
+      }
+      throw error;
     }
     return response;
   }
@@ -283,18 +360,28 @@ export function createOpenCodeBackend({
   }
 
   async function waitForMcp() {
-    const deadline = Date.now() + READY_TIMEOUT_MS;
+    const deadline = Date.now() + readyTimeoutMs;
     let lastError = null;
+    let lastStatus = null;
     while (Date.now() < deadline) {
       try {
         const status = await requestJson('/mcp');
+        lastStatus = status?.ae?.status || status;
         if (status && status.ae && status.ae.status === 'connected') return true;
       } catch (e) {
         lastError = e;
+        if (e?.httpStatus) lastStatus = e.httpStatus;
       }
-      await sleep(READY_POLL_MS);
+      await sleepImpl(readyPollMs);
     }
-    throw lastError || new Error('OpenCode MCP server did not become ready.');
+    const error = new Error('OpenCode MCP server did not become ready.');
+    error.categoryCode = 'MCP_UNREACHABLE';
+    error.endpoint = '/mcp';
+    error.mcpStatus = lastStatus;
+    error.lastError = lastError?.message || '';
+    if (lastError?.httpStatus) error.httpStatus = lastError.httpStatus;
+    if (lastError?.responseExcerpt) error.responseExcerpt = lastError.responseExcerpt;
+    throw error;
   }
 
   function writeConfig(mcpSpec) {
@@ -319,6 +406,7 @@ export function createOpenCodeBackend({
   function handleExit(code, signal) {
     const wasStopping = stopping;
     stderrRedactor.flush();
+    const tail = trimStderrTail(stderrTail);
     proc = null;
     serverPromise = null;
     sessionPromise = null;
@@ -330,11 +418,17 @@ export function createOpenCodeBackend({
       return;
     }
     if (activeRun) {
-      const detail = stderrTail ? String(code) + (signal ? ' ' + signal : '') + ' ' + stderrTail : String(code) + (signal ? ' ' + signal : '');
+      const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
       emit({
         type: 'error',
-        kind: 'mcp',
-        message: 'opencode serve exited: ' + detail,
+        kind: classified.kind,
+        code: classified.code,
+        message: 'OpenCode serve exited unexpectedly.',
+        detail: {
+          exitCode: code,
+          ...(signal ? { signal } : {}),
+          ...(tail ? { stderrTail: tail } : {}),
+        },
         ...activeTurnFailureFields(),
       });
       finishActive();
@@ -343,6 +437,7 @@ export function createOpenCodeBackend({
   }
 
   function handleError(error) {
+    stderrRedactor.flush();
     proc = null;
     serverPromise = null;
     sessionPromise = null;
@@ -350,10 +445,17 @@ export function createOpenCodeBackend({
     sseClosed = true;
     sseStarted = false;
     if (activeRun) {
+      const tail = trimStderrTail(stderrTail);
+      const classified = classifyErrorCode({ error, spawnError: true, stderrTail: tail });
       emit({
         type: 'error',
-        kind: 'mcp',
-        message: error && error.message ? error.message : 'opencode serve error',
+        kind: classified.kind,
+        code: classified.code,
+        message: 'OpenCode serve process could not continue.',
+        detail: {
+          ...(error?.code ? { spawnCode: error.code } : {}),
+          ...(tail ? { stderrTail: tail } : {}),
+        },
         ...activeTurnFailureFields(),
       });
       finishActive();
@@ -372,26 +474,45 @@ export function createOpenCodeBackend({
     // rebuild with fresh state.
     if (proc && baseUrl && !stopping && !sseClosed) return true;
     serverPromise = (async () => {
-      const mcpSpec = getMcpSpec ? await getMcpSpec() : { command: 'ae-mcp', args: [] };
-      writeConfig(mcpSpec);
+      let mcpSpec;
+      try {
+        mcpSpec = getMcpSpec ? await getMcpSpec() : { command: 'ae-mcp', args: [] };
+        writeConfig(mcpSpec);
+      } catch (error) {
+        throw taggedError(error, 'categoryCode', 'MCP_UNREACHABLE');
+      }
       port = await getPort();
       baseUrl = 'http://127.0.0.1:' + port;
       const spawnEnv = adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: configHome });
       const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
       const executable = await adapter.resolveExecutable('opencode', { env: spawnEnv, ...(requiredArch ? { requiredArch } : {}) });
-      if (!executable.ok) throw new Error('OpenCode CLI resolution failed: ' + executable.code);
+      if (!executable.ok) {
+        const error = new Error(openCodeResolutionMessage(executable.code, currentLang(), executable));
+        const classified = classifyErrorCode({ resolutionCode: executable.code });
+        error.categoryCode = classified.code;
+        error.resolution = boundedResolution(executable);
+        throw error;
+      }
       stderrTail = '';
+      resetStderrRedactor();
       stopping = false;
       sseClosed = false;
-      proc = adapter.spawn(executable, ['serve', '--port', String(port)], {
-        stdio: 'pipe',
-        windowsHide: true,
-        // OpenCode scopes its project context to the cwd. Inheriting the CEP
-        // process cwd (AE's Support Files, thousands of files) inflated every
-        // provider request until the relay-side WAF rejected it with a 403
-        // challenge page (live-debugged 2026-08-20); pin a tiny neutral dir.
-        cwd: configHome,
-        env: spawnEnv,
+      try {
+        proc = adapter.spawn(executable, ['serve', '--port', String(port)], {
+          stdio: 'pipe',
+          windowsHide: true,
+          // OpenCode scopes its project context to the cwd. Inheriting the CEP
+          // process cwd (AE's Support Files, thousands of files) inflated every
+          // provider request until the relay-side WAF rejected it with a 403
+          // challenge page (live-debugged 2026-08-20); pin a tiny neutral dir.
+          cwd: configHome,
+          env: spawnEnv,
+        });
+      } catch (error) {
+        throw taggedError(error, 'spawnError', true);
+      }
+      if (proc.stdout && proc.stdout.on) proc.stdout.on('data', (chunk) => {
+        stderrRedactor.feed(chunk);
       });
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
         stderrRedactor.feed(chunk);
@@ -434,15 +555,38 @@ export function createOpenCodeBackend({
     if (sseStarted) return;
     sseStarted = true;
     const parser = createSseParser(({ data }) => handleOpenCodeEvent(data));
-    request('/event').then((response) => readSseBody(response.body, parser)).catch((e) => {
-      if (!sseClosed && activeRun) {
-        emit({
-          type: 'error',
-          kind: 'mcp',
-          message: e && e.message ? e.message : 'OpenCode event stream failed.',
-          ...activeTurnFailureFields(),
-        });
-        finishActive();
+    request('/event').then(async (response) => {
+      await readSseBody(response.body, parser);
+      if (!sseClosed) throw new Error('OpenCode event stream closed.');
+    }).catch((e) => {
+      if (!sseClosed) {
+        sseStarted = false;
+        const wasActive = Boolean(activeRun);
+        sseClosed = true;
+        const failedProcess = proc;
+        proc = null;
+        sessionId = null;
+        sessionPromise = null;
+        baseUrl = '';
+        if (wasActive) {
+          emit({
+            type: 'error',
+            kind: 'network',
+            code: 'EVENT_STREAM_FAILED',
+            message: 'OpenCode event stream failed.',
+            detail: {
+              ...(e?.httpStatus ? { httpStatus: e.httpStatus } : {}),
+              endpoint: e?.endpoint || '/event',
+              ...(e?.message ? { lastError: e.message } : {}),
+              ...(e?.responseExcerpt ? {
+                responseExcerpt: redactValue(e.responseExcerpt, activeAttachmentPaths),
+              } : {}),
+            },
+            ...activeTurnFailureFields(),
+          });
+          finishActive();
+        }
+        try { failedProcess?.kill?.(); } catch {}
       }
     });
   }
@@ -452,7 +596,11 @@ export function createOpenCodeBackend({
     if (sessionPromise) return sessionPromise;
     sessionPromise = (async () => {
       await startServer();
-      toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
+      try {
+        toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
+      } catch (error) {
+        throw taggedError(error, 'categoryCode', 'MCP_UNREACHABLE');
+      }
       // OpenCode 1.17.x /session rejects unknown fields with a bare 400
       // (a permission field here broke session creation on the live round).
       // Write approval is owned by the CEP host conversation gate, and the
@@ -462,7 +610,7 @@ export function createOpenCodeBackend({
         model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID),
       });
       sessionId = String((result && (result.id || result.sessionID || result.sessionId)) || '');
-      if (!sessionId) throw new Error('OpenCode did not return a session id.');
+      if (!sessionId) throw taggedError(new Error('OpenCode did not return a session id.'), 'fallbackCode', 'SESSION_START_FAILED');
       return sessionId;
     })();
     try {
@@ -486,7 +634,25 @@ export function createOpenCodeBackend({
     try {
       await replyPermission(permissionId, decision);
     } catch (e) {
-      emit({ type: 'error', kind: 'mcp', message: e && e.message ? e.message : 'Failed to reply to OpenCode permission request.' });
+      const httpStatus = extractHttpStatus(e?.httpStatus);
+      const classified = classifyErrorCode({
+        error: e,
+        httpStatus,
+        fallbackCode: 'BACKEND_ERROR',
+      });
+      emit({
+        type: 'error',
+        kind: classified.kind,
+        code: classified.code,
+        message: httpStatus ? 'OpenCode permission reply failed upstream.' : 'Failed to reply to OpenCode permission request.',
+        detail: {
+          ...(httpStatus ? { httpStatus } : {}),
+          ...(e?.endpoint ? { endpoint: e.endpoint } : {}),
+          ...(e?.responseExcerpt ? {
+            responseExcerpt: redactValue(e.responseExcerpt, activeAttachmentPaths),
+          } : {}),
+        },
+      });
     }
   }
 
@@ -587,12 +753,28 @@ export function createOpenCodeBackend({
       const detail = (error && error.data && error.data.message)
         || (error && error.message)
         || (typeof error === 'string' ? error : '');
+      const httpStatus = extractHttpStatus(detail);
+      const classified = classifyErrorCode({
+        error: { message: detail },
+        upstream: true,
+        upstreamText: detail,
+      });
       emit({
         type: 'error',
-        kind: error.kind || 'mcp',
+        kind: classified.kind,
+        code: classified.code,
         // OpenCode session errors arrive as {name, data:{message}} objects;
         // String() on that shape rendered "[object Object]" in the chat.
-        message: detail || (error && error.name) || 'OpenCode session error',
+        message: httpStatus
+          ? 'OpenCode upstream request failed.'
+          : (detail || (error && error.name) || 'OpenCode session error'),
+        detail: {
+          ...(error?.name ? { errorName: error.name } : {}),
+          ...(httpStatus ? { httpStatus } : {}),
+          ...(httpStatus && detail ? {
+            upstreamMessage: String(redactValue(detail, activeAttachmentPaths)).slice(0, 500),
+          } : {}),
+        },
         ...activeTurnFailureFields(),
       });
       finishActive();
@@ -673,11 +855,40 @@ export function createOpenCodeBackend({
         parts: openCodeParts(turn),
       });
     } catch (e) {
+      const httpStatus = extractHttpStatus(e?.httpStatus);
+      const fallbackCode = e?.fallbackCode
+        || (messageDispatched ? 'TURN_START_FAILED' : 'SESSION_START_FAILED');
+      const classified = classifyErrorCode({
+        error: e,
+        code: e?.categoryCode,
+        httpStatus,
+        spawnError: e?.spawnError === true,
+        fallbackCode,
+      });
+      let message = e && e.message ? e.message : 'Failed to start OpenCode turn.';
+      if (classified.code.startsWith('UPSTREAM_HTTP_')) message = 'OpenCode upstream request failed.';
+      else if (classified.code === 'AUTH_REQUIRED') message = 'OpenCode authentication is required.';
+      else if (classified.code === 'SPAWN_FAILED') message = 'OpenCode serve process could not be started.';
+      else if (classified.code === 'MCP_UNREACHABLE') message = 'OpenCode MCP server did not become ready.';
+      else if (classified.code === 'SESSION_START_FAILED') message = 'OpenCode session could not be started.';
+      else if (classified.code === 'TURN_START_FAILED') message = 'OpenCode turn could not be started.';
+      const detail = {
+        ...(httpStatus ? { httpStatus } : {}),
+        ...(e?.endpoint ? { endpoint: e.endpoint } : {}),
+        ...(e?.mcpStatus !== undefined && e?.mcpStatus !== null ? { mcpStatus: e.mcpStatus } : {}),
+        ...(e?.lastError ? { lastError: e.lastError } : {}),
+        ...(e?.responseExcerpt ? { responseExcerpt: redactValue(e.responseExcerpt, activeAttachmentPaths) } : {}),
+        ...(e?.resolution ? { resolution: e.resolution } : {}),
+        ...(e?.code && e?.spawnError ? { spawnCode: e.code } : {}),
+      };
       emit({
         type: 'error',
-        kind: 'mcp',
-        message: e && e.message ? e.message : 'Failed to start OpenCode turn.',
+        kind: classified.kind,
+        code: classified.code,
+        message,
+        ...(Object.keys(detail).length ? { detail } : {}),
         ...activeTurnFailureFields(),
+        dispatchState: messageDispatched ? 'uncertain' : 'not-started',
       });
       finishActive();
     }
@@ -701,7 +912,7 @@ export function createOpenCodeBackend({
     }
     await drainApprovals();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.', ...activeTurnFailureFields() });
+      emit({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }
