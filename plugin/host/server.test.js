@@ -683,10 +683,10 @@ test('default ExtendScript transport remains byte-identical to its fixed baselin
     const server = loadServer();
     const wrapped = server.wrapForEvalScriptTransport('1 + 1');
     assert.doesNotMatch(wrapped, /[^\x00-\x7f]/);
-    assert.equal(Buffer.byteLength(wrapped), 4519);
+    assert.equal(Buffer.byteLength(wrapped), 4852);
     assert.equal(
         crypto.createHash('sha256').update(wrapped).digest('hex'),
-        '6a36082a30c179f2858a7e6d033b72a96c5439b94c15be200f539e452c4424f4',
+        'f4cd0d21b05e5a6412a1f574514fc33c3a797507be465496e63cd6e26555ae7b',
     );
 });
 
@@ -696,10 +696,16 @@ test('ExtendScript quote fast and regexp paths remain byte-identical to the char
     for (let codePoint = 0; codePoint <= 0x02ff; codePoint += 1) {
         codePointRange += String.fromCharCode(codePoint);
     }
+    let latin1Range = '';
+    for (let codePoint = 0x0080; codePoint <= 0x00ff; codePoint += 1) {
+        latin1Range += String.fromCharCode(codePoint);
+    }
     const cases = [
         ['U+0000 through U+02FF', codePointRange],
+        ['U+0080 through U+00FF', latin1Range],
         ['surrogate pair', '\ud83d\ude00'],
         ['mixed escapes', 'quote:" slash:\\ control:\u0001'],
+        ['replacement tokens', '$& $1 $$ 100% \u4e2d'],
         ['300 KB ASCII', 'a'.repeat(300 * 1024)],
         ['300 KB with Chinese', ('中文').repeat(150 * 1024)],
     ];
@@ -751,6 +757,19 @@ test('ExtendScript quote fast and regexp paths remain byte-identical to the char
             '{"ok":true,"resultType":"string","result":"' + entry[1] + '"}',
         );
     });
+
+    const shortObjects = [];
+    for (let index = 0; index < 20000; index += 1) {
+        shortObjects.push({ i: index, name: 'x' });
+    }
+    const shortObjectsJson = JSON.stringify(shortObjects);
+    const evaluatedObjects = evaluateTransportEnvelope(server, shortObjectsJson);
+    assert.equal(
+        evaluatedObjects.encoded,
+        '{"ok":true,"resultType":"json","result":'
+            + quoteByCharacter(shortObjectsJson) + '}',
+    );
+    assert.deepEqual(JSON.parse(evaluatedObjects.payload.result), shortObjects);
 });
 
 test('ExtendScript quote self-check falls back when regexp replacement is unavailable', () => {
@@ -762,6 +781,22 @@ test('ExtendScript quote self-check falls back when regexp replacement is unavai
         'var __r=String.prototype.replace;'
         + 'String.prototype.replace=function(){throw new Error("no replace");};'
         + 'try{return ' + wrapped + ';}finally{String.prototype.replace=__r;}',
+    )();
+    assert.equal(fallback, normal);
+    assert.deepEqual(
+        server.decodeEvalScriptTransportResult(fallback),
+        { resultType: 'string', result: value },
+    );
+});
+
+test('ExtendScript quote self-check falls back when global escape is unavailable', () => {
+    const server = loadServer();
+    const value = 'ascii \u0001 \u00e9 \u4e2d \ud83d\ude00';
+    const wrapped = server.wrapForEvalScriptTransport(JSON.stringify(value));
+    const normal = Function('return ' + wrapped)();
+    const fallback = Function(
+        'var __e=escape;escape=undefined;'
+        + 'try{return ' + wrapped + ';}finally{escape=__e;}',
     )();
     assert.equal(fallback, normal);
     assert.deepEqual(
