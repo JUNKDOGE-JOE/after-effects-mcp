@@ -371,6 +371,49 @@ function quoteAsciiJsString(value) {
     return out + '"';
 }
 
+const EVAL_SCRIPT_QUOTE_SOURCE = (
+    'var __aemcp_quote_re=/[\\u0000-\\u001f"\\\\\\u007f-\\uffff]/g;' +
+    'function __aemcp_quote_char(c){' +
+    'var n=c.charCodeAt(0);' +
+    'if(n===8){return "\\\\b";}' +
+    'if(n===9){return "\\\\t";}' +
+    'if(n===10){return "\\\\n";}' +
+    'if(n===12){return "\\\\f";}' +
+    'if(n===13){return "\\\\r";}' +
+    'if(n===34){return "\\\\\\"";}' +
+    'if(n===92){return "\\\\\\\\";}' +
+    'return "\\\\u"+("0000"+n.toString(16)).slice(-4);' +
+    '}' +
+    'function __aemcp_quote_slow(v){' +
+    'var s=String(v),out="\\"";' +
+    'for(var i=0;i<s.length;i++){' +
+    'var c=s.charCodeAt(i);' +
+    'if(c===8){out+="\\\\b";}' +
+    'else if(c===9){out+="\\\\t";}' +
+    'else if(c===10){out+="\\\\n";}' +
+    'else if(c===12){out+="\\\\f";}' +
+    'else if(c===13){out+="\\\\r";}' +
+    'else if(c===34){out+="\\\\\\"";}' +
+    'else if(c===92){out+="\\\\\\\\";}' +
+    'else if(c<32||c>126){out+="\\\\u"+("0000"+c.toString(16)).slice(-4);}' +
+    'else{out+=s.charAt(i);}' +
+    '}' +
+    'return out+"\\"";' +
+    '}' +
+    'function __aemcp_quote_fast(v){' +
+    'var s=String(v);' +
+    '__aemcp_quote_re.lastIndex=0;' +
+    'if(!__aemcp_quote_re.test(s)){return "\\""+s+"\\"";}' +
+    '__aemcp_quote_re.lastIndex=0;' +
+    'return "\\""+s.replace(__aemcp_quote_re,__aemcp_quote_char)+"\\"";' +
+    '}' +
+    'var __aemcp_quote=(function(){' +
+    'var probe="\\u0001\\b\\t\\n\\f\\r\\"\\\\\\u007f\\u00e9\\u4e2d\\ud83d\\ude00 ok";' +
+    'try{if(__aemcp_quote_fast(probe)===__aemcp_quote_slow(probe)){return __aemcp_quote_fast;}}catch(ignore){}' +
+    'return __aemcp_quote_slow;' +
+    '})();'
+);
+
 // CEP can corrupt non-ASCII result text when CSInterface.evalScript crosses
 // the ExtendScript -> panel boundary on localized Windows installs. Return an
 // ASCII-only JSON envelope from JSX, then decode it in Node before HTTP JSON.
@@ -378,22 +421,7 @@ function wrapForEvalScriptTransportDefault(code) {
     return (
         '(function(){' +
         'var __aemcp_max_depth=12,__aemcp_max_length=1000000;' +
-        'function __aemcp_quote(v){' +
-        'var s=String(v),out="\\"";' +
-        'for(var i=0;i<s.length;i++){' +
-        'var c=s.charCodeAt(i);' +
-        'if(c===8){out+="\\\\b";}' +
-        'else if(c===9){out+="\\\\t";}' +
-        'else if(c===10){out+="\\\\n";}' +
-        'else if(c===12){out+="\\\\f";}' +
-        'else if(c===13){out+="\\\\r";}' +
-        'else if(c===34){out+="\\\\\\"";}' +
-        'else if(c===92){out+="\\\\\\\\";}' +
-        'else if(c<32||c>126){out+="\\\\u"+("0000"+c.toString(16)).slice(-4);}' +
-        'else{out+=s.charAt(i);}' +
-        '}' +
-        'return out+"\\"";' +
-        '}' +
+        EVAL_SCRIPT_QUOTE_SOURCE +
         'function __aemcp_projection_error(reason){' +
         'throw new Error("ae_exec result "+reason+"; return a smaller projection (for example, map to the fields you need)");' +
         '}' +
@@ -490,7 +518,7 @@ function wrapForEvalScriptTransportDiagnostics(code) {
         'var __aemcp_before=null,__aemcp_after=null;',
         'var __aemcp_dollar=null,__aemcp_writeln=null,__aemcp_writeln_own=false,__aemcp_writeln_replacement=null;',
         'function __aemcp_note(stage,err){try{if(__aemcp_notes.length<20){var text=stage;if(err!==undefined&&err!==null){text+=": "+String(err);}__aemcp_notes.push(String(text).slice(0,160));}}catch(ignore){}}',
-        'function __aemcp_quote(v){var s=String(v),out="\\\"";for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);if(c===8){out+="\\\\b";}else if(c===9){out+="\\\\t";}else if(c===10){out+="\\\\n";}else if(c===12){out+="\\\\f";}else if(c===13){out+="\\\\r";}else if(c===34){out+="\\\\\\\"";}else if(c===92){out+="\\\\\\\\";}else if(c<32||c>126){out+="\\\\u"+("0000"+c.toString(16)).slice(-4);}else{out+=s.charAt(i);}}return out+"\\\"";}',
+        EVAL_SCRIPT_QUOTE_SOURCE,
         'function __aemcp_projection_error(reason){throw new Error(reason);}',
         'function __aemcp_piece(state,piece){state.length+=piece.length;if(state.length>__aemcp_max_length){__aemcp_projection_error("diagnostics serialization limit exceeded");}return piece;}',
         'function __aemcp_seen(stack,value){for(var i=0;i<stack.length;i++){if(stack[i]===value){return true;}}return false;}',

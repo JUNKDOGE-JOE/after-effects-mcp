@@ -682,10 +682,91 @@ test('/exec fails closed when connected graph invalidation fails', async () => {
 test('default ExtendScript transport remains byte-identical to its fixed baseline', () => {
     const server = loadServer();
     const wrapped = server.wrapForEvalScriptTransport('1 + 1');
-    assert.equal(Buffer.byteLength(wrapped), 3730);
+    assert.doesNotMatch(wrapped, /[^\x00-\x7f]/);
+    assert.equal(Buffer.byteLength(wrapped), 4519);
     assert.equal(
         crypto.createHash('sha256').update(wrapped).digest('hex'),
-        'a9c18556f6daa331a68e1d7f9a313a6e7fc8bcdf34e5cab15f6faf8096b30b6f',
+        '6a36082a30c179f2858a7e6d033b72a96c5439b94c15be200f539e452c4424f4',
+    );
+});
+
+test('ExtendScript quote fast and regexp paths remain byte-identical to the character loop', () => {
+    const server = loadServer();
+    let codePointRange = '';
+    for (let codePoint = 0; codePoint <= 0x02ff; codePoint += 1) {
+        codePointRange += String.fromCharCode(codePoint);
+    }
+    const cases = [
+        ['U+0000 through U+02FF', codePointRange],
+        ['surrogate pair', '\ud83d\ude00'],
+        ['mixed escapes', 'quote:" slash:\\ control:\u0001'],
+        ['300 KB ASCII', 'a'.repeat(300 * 1024)],
+        ['300 KB with Chinese', ('中文').repeat(150 * 1024)],
+    ];
+    function quoteByCharacter(value) {
+        const text = String(value);
+        let output = '"';
+        for (let index = 0; index < text.length; index += 1) {
+            const code = text.charCodeAt(index);
+            if (code === 8) output += '\\b';
+            else if (code === 9) output += '\\t';
+            else if (code === 10) output += '\\n';
+            else if (code === 12) output += '\\f';
+            else if (code === 13) output += '\\r';
+            else if (code === 34) output += '\\"';
+            else if (code === 92) output += '\\\\';
+            else if (code < 32 || code > 126) {
+                output += '\\u' + ('0000' + code.toString(16)).slice(-4);
+            } else {
+                output += text.charAt(index);
+            }
+        }
+        return output + '"';
+    }
+    cases.forEach(function (entry) {
+        const evaluated = evaluateTransportEnvelope(server, JSON.stringify(entry[1]));
+        const expected = '{"ok":true,"resultType":"string","result":'
+            + quoteByCharacter(entry[1]) + '}';
+        assert.doesNotMatch(evaluated.wrapped, /[^\x00-\x7f]/, entry[0] + ' wrapper');
+        assert.doesNotMatch(evaluated.encoded, /[^\x00-\x7f]/, entry[0] + ' envelope');
+        assert.equal(evaluated.encoded, expected, entry[0] + ' encoded');
+        assert.deepEqual(
+            server.decodeEvalScriptTransportResult(evaluated.encoded),
+            { resultType: 'string', result: entry[1] },
+            entry[0] + ' decoded',
+        );
+    });
+
+    const escapedCases = [
+        ['\u0001', '\\u0001'],
+        ['\u007f', '\\u007f'],
+        ['\u4e2d', '\\u4e2d'],
+        ['\ud83d\ude00', '\\ud83d\\ude00'],
+        ['\b\t\n\f\r"\\', '\\b\\t\\n\\f\\r\\"\\\\'],
+    ];
+    escapedCases.forEach(function (entry) {
+        const evaluated = evaluateTransportEnvelope(server, JSON.stringify(entry[0]));
+        assert.equal(
+            evaluated.encoded,
+            '{"ok":true,"resultType":"string","result":"' + entry[1] + '"}',
+        );
+    });
+});
+
+test('ExtendScript quote self-check falls back when regexp replacement is unavailable', () => {
+    const server = loadServer();
+    const value = 'ascii \u0001 中文 \ud83d\ude00 " \\ \b\t\n\f\r';
+    const wrapped = server.wrapForEvalScriptTransport(JSON.stringify(value));
+    const normal = Function('return ' + wrapped)();
+    const fallback = Function(
+        'var __r=String.prototype.replace;'
+        + 'String.prototype.replace=function(){throw new Error("no replace");};'
+        + 'try{return ' + wrapped + ';}finally{String.prototype.replace=__r;}',
+    )();
+    assert.equal(fallback, normal);
+    assert.deepEqual(
+        server.decodeEvalScriptTransportResult(fallback),
+        { resultType: 'string', result: value },
     );
 });
 
@@ -699,6 +780,7 @@ test('diagnostic transport embeds string and JSON results without re-escaping th
             '$.writeln("success");' + JSON.stringify(expected),
             { diagnostics: true },
         );
+        assert.doesNotMatch(stringResult.wrapped, /[^\x00-\x7f]/);
         assert.equal(stringResult.outer.inner.resultType, 'string');
         assert.equal(stringResult.outer.inner.result, expected);
         assert.deepEqual(server.decodeEvalScriptTransportResult(stringResult.encoded), {
