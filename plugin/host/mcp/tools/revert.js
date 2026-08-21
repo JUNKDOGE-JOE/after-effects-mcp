@@ -65,62 +65,74 @@ async function branch(projectPath, checkpointId, context, deps) {
     }
 }
 
-async function call(args, context, deps) {
-    if (typeof args.checkpoint_id !== 'string' || !args.checkpoint_id)
-        return {
-            result: textResult({ ok: false, error: '`checkpoint_id` must be a non-empty string' }, true),
-        };
-    if (args.branch_before_revert !== undefined && typeof args.branch_before_revert !== 'boolean')
-        return { result: textResult({ ok: false, error: '`branch_before_revert` must be a boolean' }, true) };
-    const denied = await enforce('ae_revert', Object.assign({}, context, { arguments: args }), deps);
-    if (denied) return { result: textResult(denied, true) };
+function checkpointMeta(store, projectPath, checkpointId) {
+    if (typeof store.readMeta === 'function') return store.readMeta(projectPath, checkpointId);
+    if (typeof store.list !== 'function') return null;
+    const entries = store.list(projectPath, { limit: 10000 });
+    return entries.find(function (entry) { return entry.id === checkpointId; }) || null;
+}
+
+async function restoreViewer(meta, context, deps) {
+    if (!meta || meta.activeCompId === null || meta.activeCompId === undefined) return null;
+    const code = '(function(){try{var item=app.project.itemByID('
+        + JSON.stringify(Number(meta.activeCompId))
+        + ');if(typeof CompItem!=="undefined"&&item instanceof CompItem){item.openInViewer();item.time='
+        + JSON.stringify(Number(meta.currentTime) || 0)
+        + ';return JSON.stringify({ok:true,viewerRestored:true});}}catch(ignore){}'
+        + 'return JSON.stringify({ok:true,viewerRestored:false});})()';
     try {
-        const projectPath = await resolveProjectPath(context, deps);
+        const execution = await deps.executeJsx({
+            code,
+            timeoutMs: 10000,
+            client: context.session.clientName,
+            nativeProjectGraphEffect: 'preserve',
+        });
+        const parsed = parseJsxResult(requireSuccessfulExecution(execution));
+        return Boolean(parsed && parsed.ok === true && parsed.viewerRestored === true);
+    } catch (error) {
+        return false;
+    }
+}
+
+async function revertToCheckpoint(checkpointId, options, context, deps) {
+    const input = options || {};
+    try {
+        const projectPath = input.projectPath === undefined
+            ? await resolveProjectPath(context, deps) : input.projectPath;
         if (!projectPath)
             return {
-                result: textResult(
-                    {
-                        ok: false,
-                        reverted: false,
-                        error: 'cannot revert an unsaved/untitled project; save it first so there is a path to restore',
-                    },
-                    true,
-                ),
+                ok: false,
+                reverted: false,
+                error: 'cannot revert an unsaved/untitled project; save it first so there is a path to restore',
             };
         const store = deps.getCheckpointStore();
-        const checkpoint = store.lookupAep(projectPath, args.checkpoint_id);
+        const checkpoint = store.lookupAep(projectPath, checkpointId);
         if (!checkpoint)
             return {
-                result: textResult(
-                    { ok: false, reverted: false, error: 'checkpoint not found: ' + args.checkpoint_id },
-                    true,
-                ),
+                ok: false,
+                reverted: false,
+                error: 'checkpoint not found: ' + checkpointId,
             };
         if (!fs.existsSync(checkpoint))
             return {
-                result: textResult(
-                    { ok: false, reverted: false, error: 'checkpoint .aep missing: ' + checkpoint },
-                    true,
-                ),
+                ok: false,
+                reverted: false,
+                error: 'checkpoint .aep missing: ' + checkpoint,
             };
-        const branchedFromId = args.branch_before_revert
-            ? await branch(projectPath, args.checkpoint_id, context, deps)
+        const meta = checkpointMeta(store, projectPath, checkpointId);
+        const branchedFromId = input.branchBeforeRevert
+            ? await branch(projectPath, checkpointId, context, deps)
             : null;
         const close = await runTemplate(CLOSE_TEMPLATE, {}, context, deps);
         if (!close || close.ok !== true)
             return {
-                result: textResult(
-                    {
-                        ok: false,
-                        reverted: false,
-                        stage: 'close',
-                        error:
-                            'revert aborted: close failed: ' +
-                            ((close && close.error) || JSON.stringify(close)),
-                        branchedFromId,
-                    },
-                    true,
-                ),
+                ok: false,
+                reverted: false,
+                stage: 'close',
+                error:
+                    'revert aborted: close failed: ' +
+                    ((close && close.error) || JSON.stringify(close)),
+                branchedFromId,
             };
         const openVariables = { aep_path: JSON.stringify(String(projectPath).replace(/\\/g, '/')) };
         try {
@@ -134,59 +146,68 @@ async function call(args, context, deps) {
                 /* reporting below */
             }
             return {
-                result: textResult(
-                    {
-                        ok: false,
-                        reverted: false,
-                        stage: 'replace',
-                        error:
-                            'revert failed during restore: ' +
-                            (error && error.message ? error.message : String(error)),
-                        recoveredOriginal,
-                        branchedFromId,
-                    },
-                    true,
-                ),
+                ok: false,
+                reverted: false,
+                stage: 'replace',
+                error:
+                    'revert failed during restore: ' +
+                    (error && error.message ? error.message : String(error)),
+                recoveredOriginal,
+                branchedFromId,
             };
         }
         const opened = await runTemplate(OPEN_TEMPLATE, openVariables, context, deps);
         if (!opened || opened.ok !== true)
             return {
-                result: textResult(
-                    {
-                        ok: false,
-                        reverted: true,
-                        stage: 'reopen',
-                        error:
-                            'checkpoint restored but reopen failed: ' +
-                            ((opened && opened.error) || JSON.stringify(opened)),
-                        branchedFromId,
-                    },
-                    true,
-                ),
-            };
-        return {
-            result: textResult({
-                ok: true,
+                ok: false,
                 reverted: true,
-                openedPath: opened.openedPath,
-                restoredTo: projectPath,
+                stage: 'reopen',
+                error:
+                    'checkpoint restored but reopen failed: ' +
+                    ((opened && opened.error) || JSON.stringify(opened)),
                 branchedFromId,
-            }),
+            };
+        const result = {
+            ok: true,
+            reverted: true,
+            openedPath: opened.openedPath,
+            restoredTo: projectPath,
+            branchedFromId,
         };
+        const viewerRestored = await restoreViewer(meta, context, deps);
+        if (viewerRestored === false) result.viewerRestored = false;
+        return result;
     } catch (error) {
         return {
-            result: textResult(
-                {
-                    ok: false,
-                    reverted: false,
-                    stage: 'resolve',
-                    error: error && error.message ? error.message : String(error),
-                },
-                true,
-            ),
+            ok: false,
+            reverted: false,
+            stage: 'resolve',
+            error: error && error.message ? error.message : String(error),
         };
     }
 }
 
-module.exports = { definition, call, _atomicReplace: atomicReplace };
+async function call(args, context, deps) {
+    if (typeof args.checkpoint_id !== 'string' || !args.checkpoint_id)
+        return {
+            result: textResult({ ok: false, error: '`checkpoint_id` must be a non-empty string' }, true),
+        };
+    if (args.branch_before_revert !== undefined && typeof args.branch_before_revert !== 'boolean')
+        return { result: textResult({ ok: false, error: '`branch_before_revert` must be a boolean' }, true) };
+    const denied = await enforce('ae_revert', Object.assign({}, context, { arguments: args }), deps);
+    if (denied) return { result: textResult(denied, true) };
+    const result = await revertToCheckpoint(
+        args.checkpoint_id,
+        { branchBeforeRevert: args.branch_before_revert === true },
+        context,
+        deps,
+    );
+    return { result: textResult(result, result.ok !== true) };
+}
+
+module.exports = {
+    definition,
+    call,
+    revertToCheckpoint,
+    _atomicReplace: atomicReplace,
+};

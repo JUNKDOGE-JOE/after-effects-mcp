@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const test = require('node:test');
-const { call } = require('./revert');
+const { call, revertToCheckpoint } = require('./revert');
 function reply(value) {
     return { payload: { ok: true, result: JSON.stringify(value) } };
 }
@@ -163,5 +163,34 @@ test('ae_revert branches before close and reports missing, replace, reopen, and 
     });
     assert.equal(approved, true);
     assert.equal(manual.result.structuredContent.ok, true);
+    fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('revertToCheckpoint is the shared result path and viewer restoration stays best-effort', async function () {
+    const f = fixture();
+    f.store.readMeta = function () {
+        return { id: 'saved', activeCompId: '7', currentTime: 2.5 };
+    };
+    const codes = [];
+    const deps = {
+        getCheckpointStore: function () { return f.store; },
+        executeJsx: async function (input) {
+            codes.push(input.code);
+            if (/app\.project\.file/.test(input.code)) return reply({ ok: true, path: f.project });
+            if (/CloseOptions\.DO_NOT_SAVE_CHANGES/.test(input.code)) return reply({ ok: true, closed: true });
+            if (/app\.open\(f\)/.test(input.code)) return reply({ ok: true, openedPath: f.project });
+            if (/itemByID/.test(input.code)) throw new Error('viewer unavailable');
+            throw new Error('unexpected JSX');
+        },
+    };
+    const direct = await revertToCheckpoint('saved', {}, context(null), deps);
+    assert.equal(direct.ok, true);
+    assert.equal(direct.viewerRestored, false);
+    assert.ok(codes.some(function (code) { return /itemByID\(7\)/.test(code); }));
+
+    fs.writeFileSync(f.project, 'changed-again');
+    codes.length = 0;
+    const wrapped = await call({ checkpoint_id: 'saved' }, context(null), deps);
+    assert.deepEqual(wrapped.result.structuredContent, direct);
     fs.rmSync(f.root, { recursive: true, force: true });
 });

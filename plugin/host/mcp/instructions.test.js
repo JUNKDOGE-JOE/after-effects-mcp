@@ -7,6 +7,8 @@ test(
     + 'and appends dynamic tools',
   function () {
     assert.ok(BASE.length > 0);
+    assert.match(BASE, /recoveryId and editable scriptPath/);
+    assert.match(BASE, /checkpoint_label is required for a restore point/);
     assert.ok(EXPERT.length > 0);
     const enabled = buildInstructions({ expertGuidance: true, tools: ['ae_status', 'ae_checkpoint'] });
     const disabled = buildInstructions({ expertGuidance: false, tools: ['ae_status'] });

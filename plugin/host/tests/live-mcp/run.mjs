@@ -11,6 +11,7 @@ const sections = [
     'read',
     'previewFrame',
     'checkpoint',
+    'recovery',
     'validateExpressions',
     'toolLibrary',
     'conversation',
@@ -222,7 +223,7 @@ async function main() {
     if (
         !compId &&
         selected.some(function (name) {
-            return ['read', 'previewFrame', 'checkpoint', 'validateExpressions', 'perf'].indexOf(name) >= 0;
+            return ['read', 'previewFrame', 'checkpoint', 'recovery', 'validateExpressions', 'perf'].indexOf(name) >= 0;
         })
     )
         await prepareComp();
@@ -350,6 +351,93 @@ async function main() {
                 }),
             state,
         );
+    });
+    await section('recovery', async function () {
+        if (!savedPath) {
+            savedPath = path.join(os.tmpdir(), 'ae-mcp-live', 'recovery-' + Date.now() + '.aep');
+            fs.mkdirSync(path.dirname(savedPath), { recursive: true });
+            const saved = parsedExecContent(
+                await call('ae_exec', {
+                    code: 'app.project.save(new File(' + JSON.stringify(savedPath)
+                        + '));({ok:true,path:app.project.file.fsName})',
+                }),
+            );
+            check('recovery saves disposable project', saved && saved.ok && saved.path, saved);
+        }
+        const explicit = value(await call('ae_checkpoint', { action: 'create', label: 'recovery-live' }));
+        check('recovery explicit checkpoint', explicit && explicit.ok, explicit);
+        const before = value(await call('ae_read', { target: 'layers', comp: { id: compId } }));
+        const baseLayers = before && before.total;
+        const script = [
+            'var c=AEMCP.compById(' + JSON.stringify(Number(compId)) + '),l=c.layers.addSolid([0,1,0],"Recovery Solid",80,80,1);',
+            'l.property("ADBE Transform Group").property("ADBE Opacity").setValue(42);({ok:true,layers:c.numLayers});',
+            'throw new Error("recovery-live");',
+        ].join('\n');
+        const firstReply = await call('ae_exec', {
+            code: script,
+            checkpoint_label: 'before-recovery-live',
+            undo_group_name: 'Recovery live',
+        });
+        const first = value(firstReply);
+        const touchedLayer = first && first.touched && first.touched.layersAdded
+            && first.touched.layersAdded.some(function (layer) {
+                return layer.name === 'Recovery Solid';
+            });
+        check('recovery failure envelope', firstReply.isError
+            && /^[a-z0-9]{6}$/.test(first.recoveryId)
+            && fs.existsSync(first.scriptPath)
+            && fs.readFileSync(first.scriptPath, 'utf8') === script
+            && first.errorLine === 3
+            && first.errorSource === 'throw new Error("recovery-live");'
+            && first.touched
+            && first.touched.level === 'layer_diff'
+            && touchedLayer, first);
+        const fixed = script.split('\n').slice(0, 2).join('\n');
+        fs.writeFileSync(first.scriptPath, fixed, 'utf8');
+        const restored = value(await call('ae_exec', { recoveryId: first.recoveryId }));
+        const restoredLayers = value(await call('ae_read', { target: 'layers', comp: { id: compId } }));
+        check('recovery default restores before retry', restored && restored.ok
+            && restored.restored === 'checkpoint'
+            && restoredLayers && restoredLayers.total === baseLayers + 1,
+        { restored, layers: restoredLayers && restoredLayers.total, baseLayers });
+
+        const secondReply = await call('ae_exec', {
+            code: script,
+            checkpoint_label: 'before-recovery-continue',
+            undo_group_name: 'Recovery continue live',
+        });
+        const second = value(secondReply);
+        fs.writeFileSync(second.scriptPath, fixed, 'utf8');
+        const continued = value(await call('ae_exec', {
+            recoveryId: second.recoveryId,
+            retryMode: 'continue',
+        }));
+        const continuedLayers = value(await call('ae_read', { target: 'layers', comp: { id: compId } }));
+        check('recovery continue preserves failed state', continued && continued.ok
+            && continued.restored === 'skipped'
+            && continuedLayers && continuedLayers.total === baseLayers + 3,
+        { continued, layers: continuedLayers && continuedLayers.total, baseLayers });
+
+        for (let i = 0; i < 20; i += 1) {
+            await call('ae_exec', { code: '"snapshot-clean-' + i + '"' });
+        }
+        const token = fs.readFileSync(path.join(os.homedir(), '.ae-mcp', 'auth-token'), 'utf8').trim();
+        const cleanupResponse = await fetch(hostUrl + '/exec', {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                'x-ae-mcp-token': token,
+                'x-ae-mcp-client': 'ae-mcp-live',
+            },
+            body: JSON.stringify({
+                code: 'JSON.stringify({writelnNative:String($.writeln).indexOf("[native code]")>=0&&String($.writeln).indexOf("__aemcp")<0})',
+            }),
+        });
+        const cleanupEnvelope = await cleanupResponse.json();
+        const cleanup = cleanupEnvelope.ok && cleanupEnvelope.resultType === 'string'
+            ? JSON.parse(cleanupEnvelope.result) : null;
+        check('recovery diagnostics restore writeln', cleanupResponse.ok
+            && cleanup && cleanup.writelnNative === true, { cleanupEnvelope, cleanup });
     });
     await section('validateExpressions', async function () {
         const setup = parsedExecContent(

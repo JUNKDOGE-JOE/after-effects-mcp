@@ -69,7 +69,10 @@ test('createCheckpoint and autoCheckpoint share the same successful persistence 
     };
     const ctx = { session: { clientName: 'test' } };
     assert.equal((await createCheckpoint({ label: 'one' }, ctx, deps)).ok, true);
-    assert.equal(await autoCheckpoint({ checkpoint_label: 'two' }, ctx, deps), null);
+    const automatic = await autoCheckpoint({ checkpoint_label: 'two' }, ctx, deps);
+    assert.equal(automatic.skipped, null);
+    assert.equal(automatic.checkpoint.ok, true);
+    assert.equal(automatic.checkpoint.id, 'id2');
     assert.equal(writes.length, 2);
     fs.rmSync(root, { recursive: true, force: true });
 });

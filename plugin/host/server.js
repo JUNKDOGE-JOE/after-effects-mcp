@@ -374,7 +374,7 @@ function quoteAsciiJsString(value) {
 // CEP can corrupt non-ASCII result text when CSInterface.evalScript crosses
 // the ExtendScript -> panel boundary on localized Windows installs. Return an
 // ASCII-only JSON envelope from JSX, then decode it in Node before HTTP JSON.
-function wrapForEvalScriptTransport(code) {
+function wrapForEvalScriptTransportDefault(code) {
     return (
         '(function(){' +
         'var __aemcp_max_depth=12,__aemcp_max_length=1000000;' +
@@ -478,6 +478,66 @@ function wrapForEvalScriptTransport(code) {
     );
 }
 
+// Host methods do not dispatch through JS prototypes, so attribution uses bounded snapshots.
+// Keep the inner transport JSON opaque so large user results are never escaped twice.
+function wrapForEvalScriptTransportDiagnostics(code) {
+    const transported = wrapForEvalScriptTransportDefault(code);
+    return [
+        '(function(){',
+        'var __aemcp_max_depth=12,__aemcp_max_length=1000000;',
+        'var __aemcp_logs=[],__aemcp_log_length=0,__aemcp_logs_truncated=false,__aemcp_notes=[];',
+        'var __aemcp_revision_before=null,__aemcp_revision_after=null,__aemcp_project_path=null;',
+        'var __aemcp_before=null,__aemcp_after=null;',
+        'var __aemcp_dollar=null,__aemcp_writeln=null,__aemcp_writeln_own=false,__aemcp_writeln_replacement=null;',
+        'function __aemcp_note(stage,err){try{if(__aemcp_notes.length<20){var text=stage;if(err!==undefined&&err!==null){text+=": "+String(err);}__aemcp_notes.push(String(text).slice(0,160));}}catch(ignore){}}',
+        'function __aemcp_quote(v){var s=String(v),out="\\\"";for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);if(c===8){out+="\\\\b";}else if(c===9){out+="\\\\t";}else if(c===10){out+="\\\\n";}else if(c===12){out+="\\\\f";}else if(c===13){out+="\\\\r";}else if(c===34){out+="\\\\\\\"";}else if(c===92){out+="\\\\\\\\";}else if(c<32||c>126){out+="\\\\u"+("0000"+c.toString(16)).slice(-4);}else{out+=s.charAt(i);}}return out+"\\\"";}',
+        'function __aemcp_projection_error(reason){throw new Error(reason);}',
+        'function __aemcp_piece(state,piece){state.length+=piece.length;if(state.length>__aemcp_max_length){__aemcp_projection_error("diagnostics serialization limit exceeded");}return piece;}',
+        'function __aemcp_seen(stack,value){for(var i=0;i<stack.length;i++){if(stack[i]===value){return true;}}return false;}',
+        'function __aemcp_kind(value){var tag;try{tag=Object.prototype.toString.call(value);}catch(ignore){return "leaf";}if(tag==="[object Array]"){return "array";}if(tag!=="[object Object]"){return "leaf";}var constructorValue;try{constructorValue=value.constructor;}catch(ignoreConstructor){return "leaf";}return constructorValue===Object?"object":"leaf";}',
+        'function __aemcp_json(value,depth,seen,state){if(arguments.length===1){depth=0;seen=[];state={length:0};}if(value===null){return __aemcp_piece(state,"null");}var valueType=typeof value;if(valueType==="string"){return __aemcp_piece(state,__aemcp_quote(value));}if(valueType==="number"){return __aemcp_piece(state,isFinite(value)?String(value):"null");}if(valueType==="boolean"){return __aemcp_piece(state,value?"true":"false");}if(valueType==="undefined"||valueType==="function"){return null;}if(valueType!=="object"){return __aemcp_piece(state,__aemcp_quote(String(value)));}var kind=__aemcp_kind(value);if(kind==="leaf"){return __aemcp_piece(state,__aemcp_quote(String(value)));}if(depth>=__aemcp_max_depth){__aemcp_projection_error("diagnostics maximum depth exceeded");}if(__aemcp_seen(seen,value)){__aemcp_projection_error("diagnostics contain a cycle");}seen.push(value);try{var out,child,childValue,readable,i,key,own,first=true;if(kind==="array"){out=__aemcp_piece(state,"[");var arrayLength=0;try{arrayLength=value.length;}catch(ignoreLength){arrayLength=0;}for(i=0;i<arrayLength;i++){if(i>0){out+=__aemcp_piece(state,",");}readable=true;try{childValue=value[i];}catch(ignoreArrayProperty){readable=false;}child=readable?__aemcp_json(childValue,depth+1,seen,state):null;if(child===null){child=__aemcp_piece(state,"null");}out+=child;}return out+__aemcp_piece(state,"]");}out=__aemcp_piece(state,"{");for(key in value){own=false;try{own=Object.prototype.hasOwnProperty.call(value,key);}catch(ignoreOwn){own=false;}if(!own){continue;}readable=true;try{childValue=value[key];}catch(ignoreObjectProperty){readable=false;}if(!readable){continue;}child=__aemcp_json(childValue,depth+1,seen,state);if(child===null){continue;}if(!first){out+=__aemcp_piece(state,",");}first=false;out+=__aemcp_piece(state,__aemcp_quote(key))+__aemcp_piece(state,":")+child;}return out+__aemcp_piece(state,"}");}finally{seen.pop();}}',
+        'function __aemcp_read_revision(){try{if(typeof app!=="undefined"&&app&&app.project){var v=app.project.revision;return typeof v==="number"&&isFinite(v)?v:null;}}catch(ignore){}return null;}',
+        'function __aemcp_read_project_path(){try{if(typeof app!=="undefined"&&app&&app.project&&app.project.file){return app.project.file.fsName?String(app.project.file.fsName):null;}}catch(ignore){}return null;}',
+        'function __aemcp_read(o,n,stage){try{var v=o?o[n]:null;return v===undefined?null:v;}catch(err){__aemcp_note(stage,err);return null;}}',
+        'function __aemcp_is_comp(item){try{return typeof CompItem!=="undefined"&&item instanceof CompItem;}catch(err){__aemcp_note("comp type",err);return false;}}',
+        'function __aemcp_item_at(items,index){try{if(items&&typeof items.item==="function"){return items.item(index);}return items?items[index]:null;}catch(err){__aemcp_note("project item "+index,err);return null;}}',
+        'function __aemcp_comp_info(comp){if(!comp){return null;}return {id:__aemcp_read(comp,"id","comp id"),name:__aemcp_read(comp,"name","comp name"),numLayers:__aemcp_read(comp,"numLayers","comp layers")};}',
+        'function __aemcp_active_comp(){try{if(typeof app!=="undefined"&&app&&app.project){var item=app.project.activeItem;return __aemcp_is_comp(item)?item:null;}}catch(err){__aemcp_note("active comp",err);}return null;}',
+        'function __aemcp_layer_at(comp,index){try{if(comp&&typeof comp.layer==="function"){return comp.layer(index);}return comp&&comp.layers?comp.layers[index]:null;}catch(err){__aemcp_note("layer "+index,err);return null;}}',
+        'function __aemcp_group(layer,name,stage){try{return layer&&typeof layer.property==="function"?layer.property(name):null;}catch(err){__aemcp_note(stage,err);return null;}}',
+        'function __aemcp_property_value(group,name,stage){try{var prop=group&&typeof group.property==="function"?group.property(name):null;return prop?String(prop.value):null;}catch(err){__aemcp_note(stage,err);return null;}}',
+        'function __aemcp_group_count(layer,name,stage){try{var group=layer&&typeof layer.property==="function"?layer.property(name):null;var count=group?group.numProperties:null;return count===undefined?null:count;}catch(err){__aemcp_note(stage,err);return null;}}',
+        'function __aemcp_layer_fingerprint(layer){if(!layer){return null;}var transform=__aemcp_group(layer,"ADBE Transform Group","transform group");var out={id:__aemcp_read(layer,"id","layer id"),index:__aemcp_read(layer,"index","layer index"),name:__aemcp_read(layer,"name","layer name"),enabled:__aemcp_read(layer,"enabled","layer enabled"),solo:__aemcp_read(layer,"solo","layer solo"),shy:__aemcp_read(layer,"shy","layer shy"),locked:__aemcp_read(layer,"locked","layer locked"),label:__aemcp_read(layer,"label","layer label"),inPoint:__aemcp_read(layer,"inPoint","layer inPoint"),outPoint:__aemcp_read(layer,"outPoint","layer outPoint"),startTime:__aemcp_read(layer,"startTime","layer startTime"),stretch:__aemcp_read(layer,"stretch","layer stretch"),parentId:null,blendingMode:null,numEffects:__aemcp_group_count(layer,"ADBE Effect Parade","layer effects"),numMasks:__aemcp_group_count(layer,"ADBE Mask Parade","layer masks"),threeD:__aemcp_read(layer,"threeDLayer","layer 3D"),transform:{anchor:__aemcp_property_value(transform,"ADBE Anchor Point","transform anchor"),position:__aemcp_property_value(transform,"ADBE Position","transform position"),scale:__aemcp_property_value(transform,"ADBE Scale","transform scale"),rotation:__aemcp_property_value(transform,"ADBE Rotate Z","transform rotation"),opacity:__aemcp_property_value(transform,"ADBE Opacity","transform opacity")}};try{var parent=layer.parent;if(parent){var stableParentId=__aemcp_read(parent,"id","layer parent id");if(stableParentId!==null){out.parentId=stableParentId;}else{var parentName=__aemcp_read(parent,"name","layer parent name");out.parentId=parentName===null?null:"name:"+String(parentName);}}}catch(errParent){__aemcp_note("layer parent",errParent);}try{var blend=layer.blendingMode;out.blendingMode=blend===undefined||blend===null?null:String(blend);}catch(errBlend){__aemcp_note("layer blendingMode",errBlend);}try{var textGroup=layer&&typeof layer.property==="function"?layer.property("ADBE Text Properties"):null;var source=textGroup&&typeof textGroup.property==="function"?textGroup.property("ADBE Text Document"):null;if(source){var documentValue=source.value;out.text=documentValue&&documentValue.text!==undefined?String(documentValue.text).slice(0,64):null;}}catch(errText){__aemcp_note("layer text",errText);}return out;}',
+        'function __aemcp_snapshot(targetCompId,useTarget){var result={items:[],activeComp:null,layers:[],truncated:false};try{if(typeof app==="undefined"||!app||!app.project){return result;}var project=app.project,items=project.items,count=0;try{count=typeof project.numItems==="number"?project.numItems:(items&&typeof items.length==="number"?items.length:0);}catch(errCount){__aemcp_note("project item count",errCount);}if(count>500){result.truncated=true;count=500;}for(var i=1;i<=count;i++){var item=__aemcp_item_at(items,i);if(!item){continue;}var entry={id:__aemcp_read(item,"id","item id"),name:__aemcp_read(item,"name","item name"),type:__aemcp_read(item,"typeName","item type")};if(__aemcp_is_comp(item)){entry.numLayers=__aemcp_read(item,"numLayers","item layers");}result.items.push(entry);}var comp=null;if(useTarget){if(targetCompId!==null&&targetCompId!==undefined){try{var target=project.itemByID(targetCompId);if(__aemcp_is_comp(target)){comp=target;}}catch(errTarget){__aemcp_note("target comp",errTarget);}}}else{comp=__aemcp_active_comp();}result.activeComp=__aemcp_comp_info(comp);if(comp){var layerCount=__aemcp_read(comp,"numLayers","active comp layers");layerCount=typeof layerCount==="number"?layerCount:0;if(layerCount>200){result.truncated=true;layerCount=200;}for(var li=1;li<=layerCount;li++){var fingerprint=__aemcp_layer_fingerprint(__aemcp_layer_at(comp,li));if(fingerprint){result.layers.push(fingerprint);}}}}catch(err){__aemcp_note("snapshot",err);}return result;}',
+        'function __aemcp_key(entry,layer){if(!entry){return "missing";}if(entry.id!==null&&entry.id!==undefined){return "id:"+String(entry.id);}return layer?("fallback:"+String(entry.index)+"|"+String(entry.name)):("fallback:"+String(entry.name)+"|"+String(entry.type));}',
+        'function __aemcp_index(list,layer){var out={};for(var i=0;i<list.length;i++){out["$"+__aemcp_key(list[i],layer)]=list[i];}return out;}',
+        'function __aemcp_layer_ref(layer){return {index:layer.index,name:layer.name,id:layer.id};}',
+        'function __aemcp_item_ref(item){return {id:item.id,name:item.name,type:item.type};}',
+        'function __aemcp_change(changes,field,before,after,state){if(before===after){return;}if(changes.length>=20){state.truncated=true;return;}changes.push({field:field,before:before,after:after});}',
+        'function __aemcp_diff(before,after,currentActive){var state={truncated:!!(before.truncated||after.truncated),itemsAdded:[],itemsRemoved:[],layersAdded:[],layersRemoved:[],layersChanged:[]};var beforeItems=__aemcp_index(before.items,false),afterItems=__aemcp_index(after.items,false),key;for(key in afterItems){if(Object.prototype.hasOwnProperty.call(afterItems,key)&&!Object.prototype.hasOwnProperty.call(beforeItems,key)){state.itemsAdded.push(__aemcp_item_ref(afterItems[key]));}}for(key in beforeItems){if(Object.prototype.hasOwnProperty.call(beforeItems,key)&&!Object.prototype.hasOwnProperty.call(afterItems,key)){state.itemsRemoved.push(__aemcp_item_ref(beforeItems[key]));}}var beforeLayers=__aemcp_index(before.layers,true),afterLayers=__aemcp_index(after.layers,true);for(key in afterLayers){if(Object.prototype.hasOwnProperty.call(afterLayers,key)&&!Object.prototype.hasOwnProperty.call(beforeLayers,key)){state.layersAdded.push(__aemcp_layer_ref(afterLayers[key]));}}for(key in beforeLayers){if(Object.prototype.hasOwnProperty.call(beforeLayers,key)&&!Object.prototype.hasOwnProperty.call(afterLayers,key)){state.layersRemoved.push(__aemcp_layer_ref(beforeLayers[key]));}}var fields=["name","enabled","solo","shy","locked","label","inPoint","outPoint","startTime","stretch","parentId","blendingMode","numEffects","numMasks","threeD","text"];var transforms=["anchor","position","scale","rotation","opacity"];for(key in beforeLayers){if(!Object.prototype.hasOwnProperty.call(beforeLayers,key)||!Object.prototype.hasOwnProperty.call(afterLayers,key)){continue;}var b=beforeLayers[key],a=afterLayers[key],changes=[];for(var fi=0;fi<fields.length;fi++){var field=fields[fi];__aemcp_change(changes,field,b[field],a[field],state);}for(var ti=0;ti<transforms.length;ti++){var transformField=transforms[ti];__aemcp_change(changes,"transform."+transformField,b.transform?b.transform[transformField]:null,a.transform?a.transform[transformField]:null,state);}if(changes.length){if(state.layersChanged.length>=50){state.truncated=true;}else{state.layersChanged.push({layer:__aemcp_layer_ref(a),changes:changes});}}}var from=before.activeComp?{id:before.activeComp.id,name:before.activeComp.name}:null;var to=currentActive?{id:currentActive.id,name:currentActive.name}:null;var fromKey=from?__aemcp_key(from,false):"none",toKey=to?__aemcp_key(to,false):"none";var activeChanged=fromKey===toKey?null:{from:from,to:to};var level=state.layersAdded.length||state.layersRemoved.length||state.layersChanged.length?"layer_diff":(state.itemsAdded.length||state.itemsRemoved.length?"item_diff":"none");return {level:level,method:"snapshot-diff",comp:from,activeCompChanged:activeChanged,layersAdded:state.layersAdded,layersRemoved:state.layersRemoved,layersChanged:state.layersChanged,itemsAdded:state.itemsAdded,itemsRemoved:state.itemsRemoved,truncated:state.truncated,notes:__aemcp_notes.slice(0)};}',
+        'function __aemcp_log(args){try{var values=[];for(var i=0;i<args.length;i++){values.push(String(args[i]));}var lines=values.join(" ").split(/\\r?\\n/);for(var j=0;j<lines.length;j++){if(__aemcp_logs.length>=200||__aemcp_log_length>=16000){__aemcp_logs_truncated=true;return;}var remaining=16000-__aemcp_log_length;var line=String(lines[j]);if(line.length>remaining){line=line.slice(0,remaining);__aemcp_logs_truncated=true;}__aemcp_logs.push(line);__aemcp_log_length+=line.length;}}catch(ignore){}}',
+        'function __aemcp_install_writeln(){try{if(typeof $==="undefined"||!$||typeof $.writeln!=="function"){return;}__aemcp_dollar=$;__aemcp_writeln=$.writeln;__aemcp_writeln_own=Object.prototype.hasOwnProperty.call($,"writeln");__aemcp_writeln_replacement=function(){__aemcp_log(arguments);return __aemcp_writeln.apply(__aemcp_dollar,arguments);};try{$.writeln=__aemcp_writeln_replacement;}catch(ignoreAssign){return;}if($.writeln!==__aemcp_writeln_replacement){return;}}catch(ignore){}}',
+        'function __aemcp_uninstall_writeln(){try{if(__aemcp_dollar&&__aemcp_writeln_replacement){if(__aemcp_writeln_own){__aemcp_dollar.writeln=__aemcp_writeln;}else{delete __aemcp_dollar.writeln;}}}catch(ignore){}}',
+        '__aemcp_revision_before=__aemcp_read_revision();__aemcp_project_path=__aemcp_read_project_path();__aemcp_before=__aemcp_snapshot(null,false);',
+        'var __aemcp_inner=null,__aemcp_outer_error=null;',
+        'try{try{__aemcp_install_writeln();}catch(ignoreInstall){}try{__aemcp_inner=eval(',
+        quoteAsciiJsString(transported),
+        ');}catch(fatal){__aemcp_outer_error=fatal;}}finally{try{__aemcp_uninstall_writeln();}catch(ignoreUninstall){}__aemcp_revision_after=__aemcp_read_revision();}',
+        'var __aemcp_diag={projectPath:__aemcp_project_path,revision:{before:__aemcp_revision_before,after:__aemcp_revision_after}};if(__aemcp_logs.length){__aemcp_diag.logs=__aemcp_logs;}if(__aemcp_logs_truncated){__aemcp_diag.logsTruncated=true;}',
+        'if(__aemcp_outer_error){__aemcp_diag.fatal=String(__aemcp_outer_error);return "{\\\"inner\\\":null,\\\"diag\\\":"+__aemcp_json(__aemcp_diag)+"}";}',
+        'if(typeof __aemcp_inner!=="string"){__aemcp_diag.fatal="invalid evalScript transport envelope shape";return "{\\\"inner\\\":null,\\\"diag\\\":"+__aemcp_json(__aemcp_diag)+"}";}',
+        'if(__aemcp_inner.slice(0,10)==="{\\\"ok\\\":true"){return "{\\\"inner\\\":"+__aemcp_inner+",\\\"diag\\\":"+__aemcp_json(__aemcp_diag)+"}";}',
+        'var __aemcp_error="invalid evalScript transport envelope shape",__aemcp_line=null;try{var __aemcp_failure=JSON.parse(__aemcp_inner);if(__aemcp_failure&&typeof __aemcp_failure.error==="string"){__aemcp_error=__aemcp_failure.error;}var __aemcp_match=/\\(line ([0-9]+)\\)$/.exec(__aemcp_error);if(__aemcp_match){__aemcp_line=Number(__aemcp_match[1]);}}catch(ignoreFailure){}__aemcp_diag.line=__aemcp_line;__aemcp_diag.touched=null;try{var __aemcp_target_id=__aemcp_before&&__aemcp_before.activeComp?__aemcp_before.activeComp.id:null;__aemcp_after=__aemcp_snapshot(__aemcp_target_id,true);__aemcp_diag.touched=__aemcp_diff(__aemcp_before,__aemcp_after,__aemcp_comp_info(__aemcp_active_comp()));if(__aemcp_logs_truncated&&__aemcp_diag.touched){__aemcp_diag.touched.truncated=true;}}catch(ignoreTouched){__aemcp_diag.touched=null;}return "{\\\"inner\\\":"+__aemcp_inner+",\\\"diag\\\":"+__aemcp_json(__aemcp_diag)+"}";',
+        '})()',
+    ].join('');
+}
+
+function wrapForEvalScriptTransport(code, options) {
+    return options && options.diagnostics === true
+        ? wrapForEvalScriptTransportDiagnostics(code)
+        : wrapForEvalScriptTransportDefault(code);
+}
+
 function decodeEvalScriptTransportResult(text) {
     let payload = null;
     if (String(text || '').trim() === '') {
@@ -488,6 +548,26 @@ function decodeEvalScriptTransportResult(text) {
     } catch (e) {
         throw new Error('invalid evalScript transport envelope: ' + String(text || '').slice(0, 120));
     }
+    if (payload && Object.prototype.hasOwnProperty.call(payload, 'inner')
+        && payload.diag && typeof payload.diag === 'object') {
+        const outer = payload;
+        const diag = outer.diag;
+        if (outer.inner === null && typeof diag.fatal === 'string') {
+            payload = { ok: false, error: diag.fatal };
+        } else {
+            payload = outer.inner;
+        }
+        if (payload && typeof payload === 'object') {
+            ['projectPath', 'revision', 'logs', 'logsTruncated'].forEach(function (field) {
+                if (Object.prototype.hasOwnProperty.call(diag, field)) payload[field] = diag[field];
+            });
+            if (payload.ok !== true) {
+                ['line', 'touched'].forEach(function (field) {
+                    if (Object.prototype.hasOwnProperty.call(diag, field)) payload[field] = diag[field];
+                });
+            }
+        }
+    }
     if (payload && payload.ok === false && typeof payload.error === 'string') {
         // The envelope ran to completion and reported a definite ExtendScript
         // error: the script executed, so this is `failed`, not `uncertain`
@@ -495,6 +575,14 @@ function decodeEvalScriptTransportResult(text) {
         // and is classified as uncertain by the caller.
         const error = new Error('ExtendScript error: ' + payload.error);
         error.disposition = 'failed';
+        if (Object.prototype.hasOwnProperty.call(payload, 'line')) error.line = payload.line;
+        if (Object.prototype.hasOwnProperty.call(payload, 'touched')) error.touched = payload.touched;
+        if (Object.prototype.hasOwnProperty.call(payload, 'logs')) error.logs = payload.logs;
+        if (Object.prototype.hasOwnProperty.call(payload, 'logsTruncated')) {
+            error.logsTruncated = payload.logsTruncated;
+        }
+        if (Object.prototype.hasOwnProperty.call(payload, 'revision')) error.revision = payload.revision;
+        if (Object.prototype.hasOwnProperty.call(payload, 'projectPath')) error.projectPath = payload.projectPath;
         throw error;
     }
     if (!payload || payload.ok !== true || typeof payload.result !== 'string') {
@@ -503,7 +591,14 @@ function decodeEvalScriptTransportResult(text) {
     if (payload.resultType !== 'string' && payload.resultType !== 'json') {
         throw new Error('invalid evalScript transport envelope resultType');
     }
-    return { resultType: payload.resultType, result: payload.result };
+    const decoded = { resultType: payload.resultType, result: payload.result };
+    if (Object.prototype.hasOwnProperty.call(payload, 'logs')) decoded.logs = payload.logs;
+    if (Object.prototype.hasOwnProperty.call(payload, 'logsTruncated')) {
+        decoded.logsTruncated = payload.logsTruncated;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'revision')) decoded.revision = payload.revision;
+    if (Object.prototype.hasOwnProperty.call(payload, 'projectPath')) decoded.projectPath = payload.projectPath;
+    return decoded;
 }
 
 // Shared /exec and MCP ae_exec execution path. Both surfaces receive the
@@ -537,7 +632,9 @@ async function executeJsx(request) {
     }
     const t = Number.isFinite(input.timeoutMs) && input.timeoutMs > 0 ? input.timeoutMs : 30000;
     const wrapped = undoGroup ? wrapWithUndoGroup(code, undoGroup) : code;
-    const transported = wrapForEvalScriptTransport(wrapped);
+    const transported = wrapForEvalScriptTransport(wrapped, {
+        diagnostics: input.diagnostics === true,
+    });
     const startedAt = Date.now();
     let dispatched = false;
     try {
@@ -558,13 +655,17 @@ async function executeJsx(request) {
             durationMs: Date.now() - startedAt,
             ...(decoded.result === '' ? { emptyResult: true } : {}),
         });
+        const payload = {
+            ok: true,
+            resultType: decoded.resultType,
+            result: decoded.result || '',
+        };
+        ['projectPath', 'revision', 'logs', 'logsTruncated'].forEach(function (field) {
+            if (Object.prototype.hasOwnProperty.call(decoded, field)) payload[field] = decoded[field];
+        });
         return {
             status: 200,
-            payload: {
-                ok: true,
-                resultType: decoded.resultType,
-                result: decoded.result || '',
-            },
+            payload,
         };
     } catch (e) {
         // Closed three-value disposition (#260): the bridge tags its own
@@ -582,14 +683,19 @@ async function executeJsx(request) {
             disposition,
             durationMs: Date.now() - startedAt,
         });
+        const payload = {
+            ok: false,
+            error: e.message,
+            disposition,
+            jsxBridge: bridgeState,
+        };
+        if (Object.prototype.hasOwnProperty.call(e, 'line')) payload.errorLine = e.line;
+        ['touched', 'logs', 'logsTruncated', 'revision', 'projectPath'].forEach(function (field) {
+            if (Object.prototype.hasOwnProperty.call(e, field)) payload[field] = e[field];
+        });
         return {
             status: 200,
-            payload: {
-                ok: false,
-                error: e.message,
-                disposition,
-                jsxBridge: bridgeState,
-            },
+            payload,
             disposition,
         };
     }

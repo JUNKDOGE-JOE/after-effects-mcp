@@ -66,8 +66,12 @@ class CheckpointStore {
         fs.mkdirSync(this.root, { recursive: true });
     }
 
-    _dirFor(sourcePath) {
+    dirFor(sourcePath) {
         return path.join(this.root, projectDirKey(sourcePath));
+    }
+
+    _dirFor(sourcePath) {
+        return this.dirFor(sourcePath);
     }
 
     _canonicalSourcePath(sourcePath) {
@@ -96,6 +100,16 @@ class CheckpointStore {
 
     meta_path(sourcePath, id) {
         return this.metaPath(sourcePath, id);
+    }
+
+    readMeta(sourcePath, id) {
+        const candidate = this.metaPath(this._canonicalSourcePath(sourcePath), id);
+        if (!fs.existsSync(candidate)) return null;
+        try {
+            return JSON.parse(fs.readFileSync(candidate, 'utf8'));
+        } catch (error) {
+            return null;
+        }
     }
 
     makeId() {

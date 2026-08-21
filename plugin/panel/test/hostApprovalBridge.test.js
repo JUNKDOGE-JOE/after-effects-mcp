@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createElicitationCoordinator } from '../src/lib/elicitationCoordinator.js';
-import { createHostApprovalBridge } from '../src/lib/hostApprovalBridge.js';
+import { approvalRequestFor, createHostApprovalBridge } from '../src/lib/hostApprovalBridge.js';
 
 async function tick() {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -39,6 +39,9 @@ function request(id) {
       code: 'app.project.item(1).remove();',
       undo_group_name: 'Remove layer',
       checkpoint_label: 'before-remove',
+      recoveryId: 'abc123',
+      retryMode: 'restore',
+      restoreCheckpointId: 'checkpoint-7',
     },
     createdAt: Date.now(),
   };
@@ -54,6 +57,7 @@ test('host approval request enters the elicitation card queue and accept resolve
   assert.equal(visible.context.approvalId, 'approval-1');
   assert.match(visible.request.message, /Approve After Effects tool action ae_exec \(destructive\)\?/);
   assert.match(visible.request.message, /Code: app\.project\.item\(1\)\.remove\(\);/);
+  assert.match(visible.request.message, /Retry: abc123 \(restore checkpoint checkpoint-7\)/);
   assert.equal(visible.request.requestedSchema.properties.approve.type, 'boolean');
   coordinator.resolveVisible({ id: visible.id, action: 'accept', content: { approve: true } });
   await tick();
@@ -87,4 +91,13 @@ test('host approval false or decline resolves decline and other conversations ar
   ]);
   bridge.detach();
   coordinator.dispose();
+});
+
+test('host approval retry summary renders continue without a checkpoint label', () => {
+  const approval = approvalRequestFor({
+    tool: 'ae_exec',
+    risk: 'destructive',
+    summary: { recoveryId: 'xyz789', retryMode: 'continue', restoreCheckpointId: 'ignored' },
+  });
+  assert.match(approval.message, /Retry: xyz789 \(continue\)/);
 });

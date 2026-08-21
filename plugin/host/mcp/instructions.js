@@ -10,6 +10,8 @@ For every AE execution route choice, use builtin:skill:ae-execution-guide,
 including simple edits. It defines program composition, readback, Undo,
 uncertain-write reconciliation, visual verification, and the generated native
 primitive reference. Read state before writing and prove the result afterward.
+Failed ae_exec calls return a recoveryId and editable scriptPath; edit the file
+and call ae_exec({recoveryId}) to restore and retry. checkpoint_label is required for a restore point.
 `;
 const EXPERT = `
 EXTENDSCRIPT EXPERT GUARDRAILS — high-frequency AE traps (toggle via AE_MCP_EXPERT_GUIDANCE):
