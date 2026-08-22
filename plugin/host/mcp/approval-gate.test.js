@@ -62,7 +62,9 @@ test('enforce allows null and none policies and denies readonly writes', async (
     });
 });
 
-test('enforce reports missing prompt API, accepted approval, and exact decline text', async () => {
+test('enforce reports missing prompt API, accepted approval, and exact decline text', async (t) => {
+    // The approval timer is unref'd, so the test drives it with mock time.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     assert.deepEqual(await enforce('ae_exec', context('manual'), {}), {
         ok: false, error: NO_PROMPT_API,
     });
@@ -81,7 +83,9 @@ test('enforce reports missing prompt API, accepted approval, and exact decline t
     });
 
     const timedOut = new ApprovalQueue({ timeoutMs: 5 });
-    assert.deepEqual(await enforce('ae_exec', context('manual'), { approvals: timedOut }), {
+    const timeoutResult = enforce('ae_exec', context('manual'), { approvals: timedOut });
+    t.mock.timers.tick(5);
+    assert.deepEqual(await timeoutResult, {
         ok: false, error: 'User denied this action.',
     });
 });
