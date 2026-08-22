@@ -162,6 +162,41 @@ test('Codex starts its CLI app-server with an isolated pre-created CODEX_HOME', 
   }
 });
 
+test('Codex reports cold-start stages before output and omits spawn on a warm turn', async () => {
+  const { backend, spawned, events } = makeBackend();
+  try {
+    const first = await startTurn(backend, spawned);
+    const coldStages = events.filter((event) => event.type === 'turn-progress');
+    assert.deepEqual(coldStages.map((event) => event.stage), ['spawn', 'session', 'dispatch']);
+    assert.ok(coldStages.every((event) => event.turnId === 'turn_1'));
+
+    first.proc.emit({ method: 'turn/started', params: { turn: { id: 'remote_1' } } });
+    first.proc.emit({ method: 'item/agentMessage/delta', params: { delta: 'hello' } });
+    first.proc.emit({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+    await first.pending;
+    const acceptedIndex = events.findIndex((event) => event.type === 'turn-accepted');
+    const textIndex = events.findIndex((event) => event.type === 'text-delta');
+    assert.ok(coldStages.every((event) => events.indexOf(event) < acceptedIndex));
+    assert.ok(coldStages.every((event) => events.indexOf(event) < textIndex));
+
+    const boundary = events.length;
+    const secondPending = backend.sendUser({ turnId: 'turn_2', text: 'again', attachments: [] });
+    await flush();
+    const secondTurn = parseWrites(first.proc).at(-1);
+    assert.equal(secondTurn.method, 'turn/start');
+    first.proc.emit({ method: 'turn/started', params: { turn: { id: 'remote_2' } } });
+    first.proc.emit({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+    await secondPending;
+    assert.deepEqual(
+      events.slice(boundary).filter((event) => event.type === 'turn-progress').map((event) => event.stage),
+      ['dispatch'],
+    );
+    assert.equal(spawned.length, 1);
+  } finally {
+    backend.reset();
+  }
+});
+
 test('Codex account probes use the same isolated CLI environment', async () => {
   const { backend, spawned, mkdirs } = makeBackend();
   const pending = backend.probeAccount();

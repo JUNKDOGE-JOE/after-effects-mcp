@@ -71,3 +71,17 @@ test('beforeunload flushes session state before resetting the backend', () => {
   target.listeners.get('beforeunload')();
   assert.deepEqual(calls, ['flush', 'reset']);
 });
+
+test('beforeunload resets every backend and isolates reset failures', () => {
+  const calls = [];
+  const target = makeTarget();
+  installBeforeUnloadReset(target, [
+    { reset: () => calls.push('first') },
+    { reset() { calls.push('second'); throw new Error('reset failed'); } },
+    { reset: () => calls.push('third') },
+  ], () => calls.push('flush'));
+
+  target.listeners.get('beforeunload')();
+
+  assert.deepEqual(calls, ['flush', 'first', 'second', 'third']);
+});

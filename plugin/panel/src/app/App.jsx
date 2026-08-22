@@ -64,6 +64,8 @@ import { createHostConversation } from '../lib/hostConversation.js';
 import { createHostApprovalBridge } from '../lib/hostApprovalBridge.js';
 import { createSessionController } from '../lib/sessionController.js';
 import { createSessionStore } from '../cep/sessionStore.js';
+import { displayTitle } from '../lib/sessionList.js';
+import { reduceTurnStage } from '../lib/turnProgress.js';
 import { getMcpSpec as resolveChatMcpSpec } from '../lib/mcpEngine.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
@@ -122,6 +124,7 @@ const T = {
 };
 
 const pkgVersion = pkg.version;
+const PROBE_PENDING_GRACE_MS = 8000;
 
 function readPref(key, fallback) {
   try {
@@ -310,12 +313,16 @@ function Shell({ cs }) {
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(null);
   const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
+  const [openCodeProbeStale, setOpenCodeProbeStale] = React.useState(false);
+  const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = React.useState(0);
+  const openCodeProbeRunRef = React.useRef(0);
   const [chatEntries, setChatEntries] = React.useState([]);
   const chatEntriesRef = React.useRef(chatEntries);
   chatEntriesRef.current = chatEntries;
   const sessionControllerRef = React.useRef(null);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
+  const [turnStage, setTurnStage] = React.useState(null);
   const baseDescriptor = React.useMemo(
     () => baseDescriptorFor(backendPref),
     [backendPref],
@@ -475,11 +482,14 @@ function Shell({ cs }) {
     sessionControllerRef.current?.recordEntries(chatEntriesRef.current, event);
   }, []);
   const handleChatEvent = React.useCallback((evt) => {
+    const pending = pendingTurnRef.current;
+    setTurnStage((current) => reduceTurnStage(current, evt, {
+      pendingTurnId: pending?.turnId,
+    }));
     if (evt.type === 'session-ref') {
       sessionControllerRef.current?.recordBackendRef(evt.ref);
       return;
     }
-    const pending = pendingTurnRef.current;
     if (evt.type === 'error') {
       const exactSecrets = attachmentPathSecrets({ pendingTurn: pending });
       const effectiveBackend = effectiveBackendRef.current;
@@ -524,6 +534,7 @@ function Shell({ cs }) {
       if (evt.turnId !== pending.turnId) return;
       setChatStreaming(false);
       setThinkingActive(false);
+      setTurnStage(null);
       if (evt.dispatchState === 'not-started') {
         dispatchAttachmentDraft({
           type: 'rejected',
@@ -549,6 +560,7 @@ function Shell({ cs }) {
       }
       setChatStreaming(false);
       setThinkingActive(false);
+      setTurnStage(null);
     }
     commitChatEntries((entries) => reduceEvent(entries, evt), evt);
   }, [commitChatEntries, releaseTurnAttachments]);
@@ -686,8 +698,12 @@ function Shell({ cs }) {
     ));
   }, [effective.backend, sessionController, status.state]);
   React.useEffect(
-    () => installBeforeUnloadReset(window, codexBackend, () => sessionController.flush()),
-    [codexBackend, sessionController],
+    () => installBeforeUnloadReset(
+      window,
+      [codexBackend, openCodeBackend, claudeBackend],
+      () => sessionController.flush(),
+    ),
+    [claudeBackend, codexBackend, openCodeBackend, sessionController],
   );
 
   // Descriptor selection is keyed on the effective backend from pickBackend.
@@ -777,14 +793,29 @@ function Shell({ cs }) {
 
   const runOpenCodeProbe = React.useCallback(() => {
     let alive = true;
+    const runId = openCodeProbeRunRef.current + 1;
+    openCodeProbeRunRef.current = runId;
+    setOpenCodeProbeStale(false);
+    setOpenCodeProbeAttempt((value) => value + 1);
     setOpenCodeProbe(null);
     openCodeBackend.probeAccount().then((result) => {
-      if (alive) setOpenCodeProbe(result);
+      if (alive && openCodeProbeRunRef.current === runId) setOpenCodeProbe(result);
     }).catch((error) => {
-      if (alive) setOpenCodeProbe({ loggedIn: false, detail: error?.message || String(error) });
+      if (alive && openCodeProbeRunRef.current === runId) {
+        setOpenCodeProbe({ loggedIn: false, detail: error?.message || String(error) });
+      }
     });
     return () => { alive = false; };
   }, [openCodeBackend]);
+
+  React.useEffect(() => {
+    if (backendPref !== 'opencode' || openCodeProbe !== null) {
+      setOpenCodeProbeStale(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setOpenCodeProbeStale(true), PROBE_PENDING_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [backendPref, openCodeProbe, openCodeProbeAttempt]);
 
   React.useEffect(() => {
     if (backendPref !== 'opencode') return undefined;
@@ -807,6 +838,7 @@ function Shell({ cs }) {
     resetAttachmentDraftSession();
     setChatStreaming(false);
     setThinkingActive(false);
+    setTurnStage(null);
     if (pendingSessionLoadRef.current) return;
     setSessionModel(null);
     setSessionEffort(null);
@@ -849,6 +881,7 @@ function Shell({ cs }) {
       return;
     }
     try {
+      setTurnStage('connect');
       const result = activeBackend.sendUser(turn);
       Promise.resolve(result).catch((error) => {
         if (pendingTurnRef.current?.turnId !== turn.turnId) return;
@@ -877,6 +910,7 @@ function Shell({ cs }) {
     await sessionController.createSession();
     setChatStreaming(false);
     setThinkingActive(false);
+    setTurnStage(null);
   };
 
   // Note: the log-level filter is intentionally applied at append time only; existing buffered lines are unaffected by later level changes.
@@ -910,6 +944,7 @@ function Shell({ cs }) {
       await sessionController.switchTo(id);
       setChatStreaming(false);
       setThinkingActive(false);
+      setTurnStage(null);
     } catch (error) {
       pushLog('Session switch failed: ' + (error?.message || String(error)));
     } finally {
@@ -1208,6 +1243,10 @@ function Shell({ cs }) {
       : '');
   const composerDisabled = paused || effective.backend === 'none';
   const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
+  const activeSessionMeta = sessionSnapshot.sessions.find(
+    (meta) => meta.id === sessionSnapshot.activeId,
+  ) || null;
+  const sessionTitle = displayTitle(activeSessionMeta, lang);
 
   return (
     <React.Fragment>
@@ -1230,6 +1269,10 @@ function Shell({ cs }) {
             entries={chatEntries}
             streaming={chatStreaming}
             thinking={thinkingActive}
+            turnStage={turnStage}
+            turnBackend={effective.backend}
+            sessionTitle={sessionTitle}
+            onOpenSessions={() => setSessionsOpen(true)}
             composerDisabled={composerDisabled}
             disabledHint={paused ? t.pausedHint : composerDisabled ? backendDisabledHint : ''}
             noticeActionLabel={paused ? t.resume : t.goSettings}
@@ -1330,12 +1373,17 @@ function Shell({ cs }) {
             }}
             onRecheckBackend={() => {
               if (backendPref === 'codex') runCodexProbe();
-              else if (backendPref === 'opencode') runOpenCodeProbe();
+              else if (backendPref === 'opencode') {
+                if (openCodeProbe === null && openCodeProbeStale && !chatStreaming) {
+                  openCodeBackend.reset();
+                }
+                runOpenCodeProbe();
+              }
               else runClaudeProbe();
             }}
             recheckDisabled={backendPref === 'codex'
               ? codexProbe === null : backendPref === 'opencode'
-                ? openCodeProbe === null : probe === null}
+                ? openCodeProbe === null && !openCodeProbeStale : probe === null}
             providers={providers}
             providerManager={providerManager}
             providerInit={providerInit}

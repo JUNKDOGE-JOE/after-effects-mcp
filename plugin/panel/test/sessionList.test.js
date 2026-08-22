@@ -35,6 +35,8 @@ test('relativeTime and empty titles are localized', () => {
   assert.match(relativeTime(now - 8 * 86_400_000, now, 'zh'), /2026/);
   assert.match(displayTitle({ title: null, createdAt: now }, 'zh'), /^新会话 · /);
   assert.match(displayTitle({ title: '', createdAt: now }, 'en'), /^New session · /);
+  assert.equal(displayTitle(null, 'zh'), '新会话');
+  assert.equal(displayTitle({ title: null }, 'en'), 'New session');
   assert.equal(backendLabel('subscription', 'zh'), 'Claude');
   assert.equal(backendLabel('opencode', 'en'), 'OpenCode');
 });

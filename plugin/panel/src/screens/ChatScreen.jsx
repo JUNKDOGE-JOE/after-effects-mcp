@@ -14,6 +14,7 @@ import { eventTitle } from '../lib/activityModel';
 import { errorHint } from '../lib/errorCodes.js';
 import { formatErrorDetail } from '../lib/errorDetail.js';
 import { buildComposerChips } from '../lib/composerOptions';
+import { turnProgressText } from '../lib/turnProgress.js';
 import {
   createAttachmentDraftState,
   draftCanSend,
@@ -211,6 +212,10 @@ export function ChatScreen({
   entries = [],
   streaming = false,
   thinking = false,
+  turnStage = null,
+  turnBackend = 'subscription',
+  sessionTitle = '',
+  onOpenSessions,
   composerDisabled = false,
   disabledHint = '',
   onSend,
@@ -289,7 +294,7 @@ export function ChatScreen({
   React.useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [entries, streaming, thinking]);
+  }, [entries, streaming, thinking, turnStage]);
 
   React.useEffect(() => {
     if (typeof ResizeObserver !== 'function') return undefined;
@@ -345,6 +350,23 @@ export function ChatScreen({
 
   return (
     <div ref={layoutRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {sessionTitle ? (
+        <div style={{ flex: 'none', height: 28, display: 'flex', alignItems: 'center', gap: 'var(--space-1)', padding: '0 var(--space-2)', borderBottom: '1px solid var(--border-subtle)' }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon="history"
+              title={sessionTitle}
+              onClick={onOpenSessions}
+              style={{ maxWidth: '100%', minWidth: 0 }}
+            >
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sessionTitle}</span>
+            </Button>
+          </div>
+          <Button variant="ghost" size="sm" icon="plus" onClick={onNewSession}>{t.newSession}</Button>
+        </div>
+      ) : null}
       <div ref={logRef} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         {!hasEntries && composerDisabled ? (
           <React.Fragment>
@@ -385,6 +407,11 @@ export function ChatScreen({
           <div style={{ paddingLeft: 28, display: 'flex', alignItems: 'center', gap: 6, font: '400 11px/1.4 var(--font-ui)', color: 'var(--text-tertiary)' }}>
             <Spinner size={12} />
             <span>{t.thinking}</span>
+          </div>
+        ) : turnStage ? (
+          <div style={{ paddingLeft: 28, display: 'flex', alignItems: 'center', gap: 6, font: '400 11px/1.4 var(--font-ui)', color: 'var(--text-tertiary)' }}>
+            <Spinner size={12} />
+            <span>{turnProgressText(turnStage, turnBackend, lang)}</span>
           </div>
         ) : null}
       </div>
