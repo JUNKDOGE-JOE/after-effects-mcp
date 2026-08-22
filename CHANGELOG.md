@@ -12,6 +12,12 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### Unreleased
 
+### [0.10.1] — 2026-08-23
+
+#### 🐛 修复 / 改进
+
+- **首跑向导的「连接外部客户端」改成一段可复制的提示词**——原来要先在 Claude Desktop / Claude Code / Cursor 三者里单选，再照抄对应的配置块，每支持一个新客户端就多一份配置要维护，用户拿到 JSON 后还得自己判断该放进哪个文件。现在只给一段话，粘给你正在用的 AI 客户端，由它自己完成 MCP 注册；提示词里的地址与 stdio shim 路径取自**本次安装的真实端口与扩展目录**，不是占位符。下方保留一行裸 URL 作为手工出口，可选的系统 Node 检测改为常驻（只有 Claude Desktop 这类只支持 stdio 的客户端需要）。设置页的逐客户端配置作为高级入口保持不变。
+
 ### [0.10.0] — 2026-08-22
 
 #### ✨ 新增
@@ -326,6 +332,12 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ## English
 
 ### Unreleased
+
+### [0.10.1] — 2026-08-23
+
+#### 🐛 Fixed / Improved
+
+- **The wizard's "connect an external client" page is now one copyable prompt** — it used to make the reader pick between Claude Desktop, Claude Code and Cursor and then copy the matching config blob, so every additional client meant another config to maintain and the reader still had to work out which file it belonged in. It now shows a single prompt to paste into whichever AI client the reader already uses, letting that client perform the MCP registration; the address and stdio shim path inside it come from **this install's real port and extension directory**, not placeholders. The bare URL stays below it as a manual exit, and the optional system-Node check is always visible now that no client is selected (only stdio-only clients such as Claude Desktop need it). The Settings page keeps its per-client configs as the advanced entry point.
 
 ### [0.10.0] — 2026-08-22
 
