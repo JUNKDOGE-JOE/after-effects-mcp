@@ -37,6 +37,8 @@ export function defaultPlatformDependencies() {
     temp: os.tmpdir(),
     env,
     fs: require('fs'),
+    httpImpl: require('http'),
+    httpsImpl: require('https'),
     spawnImpl: require('child_process').spawn,
     now: () => Date.now(),
   };

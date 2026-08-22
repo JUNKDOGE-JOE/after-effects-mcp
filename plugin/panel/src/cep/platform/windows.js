@@ -1,5 +1,6 @@
 import { createPathCatalog } from './paths.js';
 import { createProcessBoundary } from './process.js';
+import { createHttpJsonRequester } from './http-json.js';
 
 function envValue(environment, name) {
   const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
@@ -27,6 +28,7 @@ export function createWindowsAdapter(deps) {
     pid: deps.pid,
     paths,
     fs: deps.fs,
+    requestJson: createHttpJsonRequester(deps),
     ...boundary,
     async processAlive({ pid } = {}) {
       const processId = Number(pid);

@@ -135,19 +135,23 @@ function normalizeAuth(value) {
   return value;
 }
 
+export function canonicalOpenCodeBaseUrl(value) {
+  const root = String(value || '').replace(/\/+$/, '');
+  return root.endsWith('/v1') ? root : root + '/v1';
+}
+
 export function openCodeProviderDefinitions(providers) {
   const definitions = {};
   for (const raw of providers || []) {
     const provider = normalizeProvider(raw);
     if (provider.needsApiKey) continue;
-    const root = provider.baseUrl.replace(/\/+$/, '');
     definitions[provider.id] = {
       npm: provider.protocol === 'openai' ? '@ai-sdk/openai-compatible' : '@ai-sdk/anthropic',
       name: provider.name,
       // Both loaders append their endpoint path ("/messages" or
       // "/chat/completions") directly to baseURL, so the injected URL must
       // carry the "/v1" segment relay endpoints expect.
-      options: { baseURL: root.endsWith('/v1') ? root : root + '/v1' },
+      options: { baseURL: canonicalOpenCodeBaseUrl(provider.baseUrl) },
       models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }])),
     };
   }
@@ -180,6 +184,12 @@ export function createOpenCodeProviderStore({ platform, fsImpl, tempSuffix } = {
   function hasApiKey(providerId) {
     const entry = auth()[normalizeOpenCodeProviderId(providerId)];
     return entry?.type === 'api' && typeof entry.key === 'string' && entry.key.length > 0;
+  }
+
+  function readApiKey(providerId) {
+    if (!String(providerId || '').trim()) return '';
+    const entry = auth()[normalizeOpenCodeProviderId(providerId)];
+    return entry?.type === 'api' && typeof entry.key === 'string' ? entry.key : '';
   }
 
   function writeAuthKey(providerId, key) {
@@ -223,6 +233,7 @@ export function createOpenCodeProviderStore({ platform, fsImpl, tempSuffix } = {
     filePath: () => file,
     hasApiKey,
     list,
+    readApiKey,
     remove,
     save,
   });

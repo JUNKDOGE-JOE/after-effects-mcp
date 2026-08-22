@@ -11889,17 +11889,17 @@
           return function() {
             var _ref = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
             var query = _ref.query, _ref$success = _ref.success, success = _ref$success === void 0 ? function() {
-            } : _ref$success, _ref$failure = _ref.failure, failure = _ref$failure === void 0 ? function() {
+            } : _ref$success, _ref$failure = _ref.failure, failure2 = _ref$failure === void 0 ? function() {
             } : _ref$failure, options = _objectWithoutProperties(_ref, ["query", "success", "failure"]);
             var item2 = getItemByQuery(state2.items, query);
             if (!item2) {
-              failure({
+              failure2({
                 error: createResponse("error", 0, "Item not found"),
                 file: null
               });
               return;
             }
-            itemHandler(item2, success, failure, options || {});
+            itemHandler(item2, success, failure2, options || {});
           };
         };
         var actions = function actions2(dispatch2, query, state2) {
@@ -12035,7 +12035,7 @@
             },
             ADD_ITEMS: function ADD_ITEMS(_ref6) {
               var items = _ref6.items, index = _ref6.index, interactionMethod = _ref6.interactionMethod, _ref6$success = _ref6.success, success = _ref6$success === void 0 ? function() {
-              } : _ref6$success, _ref6$failure = _ref6.failure, failure = _ref6$failure === void 0 ? function() {
+              } : _ref6$success, _ref6$failure = _ref6.failure, failure2 = _ref6$failure === void 0 ? function() {
               } : _ref6$failure;
               var currentIndex = index;
               if (index === -1 || typeof index === "undefined") {
@@ -12060,7 +12060,7 @@
                   });
                 });
               });
-              Promise.all(promises).then(success).catch(failure);
+              Promise.all(promises).then(success).catch(failure2);
             },
             /**
              * @param source
@@ -12069,10 +12069,10 @@
              */
             ADD_ITEM: function ADD_ITEM(_ref7) {
               var source = _ref7.source, _ref7$index = _ref7.index, index = _ref7$index === void 0 ? -1 : _ref7$index, interactionMethod = _ref7.interactionMethod, _ref7$success = _ref7.success, success = _ref7$success === void 0 ? function() {
-              } : _ref7$success, _ref7$failure = _ref7.failure, failure = _ref7$failure === void 0 ? function() {
+              } : _ref7$success, _ref7$failure = _ref7.failure, failure2 = _ref7$failure === void 0 ? function() {
               } : _ref7$failure, _ref7$options = _ref7.options, options = _ref7$options === void 0 ? {} : _ref7$options;
               if (isEmpty(source)) {
-                failure({
+                failure2({
                   error: createResponse("error", 0, "No source"),
                   file: null
                 });
@@ -12088,7 +12088,7 @@
                     source,
                     error: error2
                   });
-                  failure({ error: error2, file: null });
+                  failure2({ error: error2, file: null });
                   return;
                 }
                 var _item = getActiveItems(state2.items)[0];
@@ -12107,7 +12107,7 @@
                       index,
                       interactionMethod,
                       success,
-                      failure,
+                      failure: failure2,
                       options
                     });
                   }).catch(function() {
@@ -12161,7 +12161,7 @@
                       sub: error3.code + " (" + error3.body + ")"
                     }
                   });
-                  failure({ error: error3, file: createItemAPI(item2) });
+                  failure2({ error: error3, file: createItemAPI(item2) });
                   return;
                 }
                 dispatch2("DID_THROW_ITEM_LOAD_ERROR", {
@@ -12179,7 +12179,7 @@
                   error: error3.status,
                   status: error3.status
                 });
-                failure({ error: error3.status, file: createItemAPI(item2) });
+                failure2({ error: error3.status, file: createItemAPI(item2) });
               });
               item2.on("load-abort", function() {
                 dispatch2("REMOVE_ITEM", { query: id2 });
@@ -12326,20 +12326,20 @@
               );
             },
             REQUEST_PREPARE_OUTPUT: function REQUEST_PREPARE_OUTPUT(_ref9) {
-              var item2 = _ref9.item, success = _ref9.success, _ref9$failure = _ref9.failure, failure = _ref9$failure === void 0 ? function() {
+              var item2 = _ref9.item, success = _ref9.success, _ref9$failure = _ref9.failure, failure2 = _ref9$failure === void 0 ? function() {
               } : _ref9$failure;
               var err = {
                 error: createResponse("error", 0, "Item not found"),
                 file: null
               };
-              if (item2.archived) return failure(err);
+              if (item2.archived) return failure2(err);
               applyFilterChain("PREPARE_OUTPUT", item2.file, { query, item: item2 }).then(
                 function(result) {
                   applyFilterChain("COMPLETE_PREPARE_OUTPUT", result, {
                     query,
                     item: item2
                   }).then(function(result2) {
-                    if (item2.archived) return failure(err);
+                    if (item2.archived) return failure2(err);
                     success(result2);
                   });
                 }
@@ -12381,7 +12381,7 @@
             RETRY_ITEM_LOAD: getItemByQueryFromState(state2, function(item2) {
               item2.retryLoad();
             }),
-            REQUEST_ITEM_PREPARE: getItemByQueryFromState(state2, function(item2, _success, failure) {
+            REQUEST_ITEM_PREPARE: getItemByQueryFromState(state2, function(item2, _success, failure2) {
               dispatch2(
                 "REQUEST_PREPARE_OUTPUT",
                 {
@@ -12394,12 +12394,12 @@
                       output: file2
                     });
                   },
-                  failure
+                  failure: failure2
                 },
                 true
               );
             }),
-            REQUEST_ITEM_PROCESSING: getItemByQueryFromState(state2, function(item2, success, failure) {
+            REQUEST_ITEM_PROCESSING: getItemByQueryFromState(state2, function(item2, success, failure2) {
               var itemCanBeQueuedForProcessing = (
                 // waiting for something
                 item2.status === ItemStatus.IDLE || // processing went wrong earlier
@@ -12410,7 +12410,7 @@
                   return dispatch2("REQUEST_ITEM_PROCESSING", {
                     query: item2,
                     success,
-                    failure
+                    failure: failure2
                   });
                 };
                 var process2 = function process3() {
@@ -12433,16 +12433,16 @@
               if (item2.status === ItemStatus.PROCESSING_QUEUED) return;
               item2.requestProcessing();
               dispatch2("DID_REQUEST_ITEM_PROCESSING", { id: item2.id });
-              dispatch2("PROCESS_ITEM", { query: item2, success, failure }, true);
+              dispatch2("PROCESS_ITEM", { query: item2, success, failure: failure2 }, true);
             }),
-            PROCESS_ITEM: getItemByQueryFromState(state2, function(item2, success, failure) {
+            PROCESS_ITEM: getItemByQueryFromState(state2, function(item2, success, failure2) {
               var maxParallelUploads = query("GET_MAX_PARALLEL_UPLOADS");
               var totalCurrentUploads = query("GET_ITEMS_BY_STATUS", ItemStatus.PROCESSING).length;
               if (totalCurrentUploads === maxParallelUploads) {
                 state2.processingQueue.push({
                   id: item2.id,
                   success,
-                  failure
+                  failure: failure2
                 });
                 return;
               }
@@ -12450,7 +12450,7 @@
               var processNext = function processNext2() {
                 var queueEntry = state2.processingQueue.shift();
                 if (!queueEntry) return;
-                var id2 = queueEntry.id, success2 = queueEntry.success, failure2 = queueEntry.failure;
+                var id2 = queueEntry.id, success2 = queueEntry.success, failure3 = queueEntry.failure;
                 var itemReference = getItemByQuery(state2.items, id2);
                 if (!itemReference || itemReference.archived) {
                   processNext2();
@@ -12458,7 +12458,7 @@
                 }
                 dispatch2(
                   "PROCESS_ITEM",
-                  { query: id2, success: success2, failure: failure2 },
+                  { query: id2, success: success2, failure: failure3 },
                   true
                 );
               };
@@ -12479,7 +12479,7 @@
                 }
               });
               item2.onOnce("process-error", function(error2) {
-                failure({ error: error2, file: createItemAPI(item2) });
+                failure2({ error: error2, file: createItemAPI(item2) });
                 processNext();
               });
               item2.onOnce("process-abort", function() {
@@ -12528,7 +12528,7 @@
             RELEASE_ITEM: getItemByQueryFromState(state2, function(item2) {
               item2.release();
             }),
-            REMOVE_ITEM: getItemByQueryFromState(state2, function(item2, success, failure, options) {
+            REMOVE_ITEM: getItemByQueryFromState(state2, function(item2, success, failure2, options) {
               var removeFromView = function removeFromView2() {
                 var id2 = item2.id;
                 getItemById(state2.items, id2).archive();
@@ -15719,7 +15719,7 @@
                 success: function success(item2) {
                   resolve(item2);
                 },
-                failure: function failure(error2) {
+                failure: function failure2(error2) {
                   reject(error2);
                 }
               });
@@ -15780,7 +15780,7 @@
                 success: function success(item2) {
                   resolve(item2);
                 },
-                failure: function failure(error2) {
+                failure: function failure2(error2) {
                   reject(error2);
                 }
               });
@@ -21794,6 +21794,53 @@
     return { completeSpawnEnv, resolveExecutable, run, spawn };
   }
 
+  // src/cep/platform/http-json.js
+  init_cep_runtime_inject();
+  function createHttpJsonRequester({ httpImpl, httpsImpl }) {
+    return function requestJson({ url, headers = {}, timeoutMs = 8e3 }) {
+      return new Promise((resolve, reject) => {
+        const target = url instanceof URL ? url : new URL(String(url));
+        const transport = target.protocol === "https:" ? httpsImpl : target.protocol === "http:" ? httpImpl : null;
+        if (!(transport == null ? void 0 : transport.request)) {
+          reject(new Error("HTTP transport is unavailable"));
+          return;
+        }
+        let settled = false;
+        const finish = (callback, value) => {
+          if (settled) return;
+          settled = true;
+          callback(value);
+        };
+        const req = transport.request(target.toString(), { method: "GET", headers }, (res) => {
+          var _a;
+          let text = "";
+          (_a = res.setEncoding) == null ? void 0 : _a.call(res, "utf8");
+          res.on("data", (chunk) => {
+            text += String(chunk);
+          });
+          res.on("error", (error) => finish(reject, error));
+          res.on("end", () => {
+            let json = null;
+            try {
+              json = JSON.parse(text);
+            } catch {
+            }
+            const status = Number(res.statusCode || 0);
+            finish(resolve, { ok: status >= 200 && status < 300, status, json, text });
+          });
+        });
+        req.on("error", (error) => finish(reject, error));
+        req.setTimeout(timeoutMs, () => {
+          const error = new Error("Request timed out");
+          error.code = "ETIMEDOUT";
+          req.destroy(error);
+          finish(reject, error);
+        });
+        req.end();
+      });
+    };
+  }
+
   // src/cep/platform/macos.js
   function normalizedExecutableName(value) {
     return String(value || "").trim().split("/").at(-1).replace(/\.exe$/i, "").toLowerCase();
@@ -21808,6 +21855,7 @@
       pid: deps.pid,
       paths,
       fs: deps.fs,
+      requestJson: createHttpJsonRequester(deps),
       ...boundary,
       async processAlive({ pid } = {}) {
         const processId = Number(pid);
@@ -21903,6 +21951,7 @@
       pid: deps.pid,
       paths,
       fs: deps.fs,
+      requestJson: createHttpJsonRequester(deps),
       ...boundary,
       async processAlive({ pid } = {}) {
         const processId = Number(pid);
@@ -22013,6 +22062,8 @@
       temp: os.tmpdir(),
       env,
       fs: require2("fs"),
+      httpImpl: require2("http"),
+      httpsImpl: require2("https"),
       spawnImpl: require2("child_process").spawn,
       now: () => Date.now()
     };
@@ -29304,9 +29355,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
               env: spawnEnv
             });
           } catch (error) {
-            const failure = error instanceof Error ? error : new Error((error == null ? void 0 : error.message) || String(error || "Claude CLI spawn failed"));
-            failure.spawnError = true;
-            throw failure;
+            const failure2 = error instanceof Error ? error : new Error((error == null ? void 0 : error.message) || String(error || "Claude CLI spawn failed"));
+            failure2.spawnError = true;
+            throw failure2;
           }
         } finally {
           if (spawnEnv) delete spawnEnv.ANTHROPIC_AUTH_TOKEN;
@@ -30682,9 +30733,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         platformId: adapter.id || ""
       };
       const probeSecrets = () => [];
-      const failure = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
+      const failure2 = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
       if (!cliInfo.ok) {
-        return failure(redactText(cliInfo.detail || "codex CLI is unavailable", probeSecrets()));
+        return failure2(redactText(cliInfo.detail || "codex CLI is unavailable", probeSecrets()));
       }
       const executable = cliInfo.executable || {
         ok: true,
@@ -30703,7 +30754,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           env: spawnEnv
         });
       } catch (error) {
-        return failure(redactText(error && error.message ? error.message : String(error), probeSecrets()));
+        return failure2(redactText(error && error.message ? error.message : String(error), probeSecrets()));
       }
       const probeRpc = createRpc({ writeLine: (line) => probeProc.stdin.write(line) });
       const reader = createNdjsonReader((message) => probeRpc.handleMessage(message));
@@ -30743,15 +30794,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           ...diag
         };
         if (containsExactSecret(result, probeSecrets())) {
-          return failure("Provider probe metadata was rejected");
+          return failure2("Provider probe metadata was rejected");
         }
         return result;
       } catch (e) {
         const detail = redactText(e && e.message ? e.message : String(e), probeSecrets());
         if (e && e.probeTimeout) {
-          return failure("probe timeout: " + e.probeTimeout + (detail ? " | " + detail : ""));
+          return failure2("probe timeout: " + e.probeTimeout + (detail ? " | " + detail : ""));
         }
-        return failure(detail);
+        return failure2(detail);
       } finally {
         try {
           probeProc.kill();
@@ -31005,19 +31056,22 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     return value;
   }
+  function canonicalOpenCodeBaseUrl(value) {
+    const root = String(value || "").replace(/\/+$/, "");
+    return root.endsWith("/v1") ? root : root + "/v1";
+  }
   function openCodeProviderDefinitions(providers) {
     const definitions = {};
     for (const raw of providers || []) {
       const provider = normalizeProvider(raw);
       if (provider.needsApiKey) continue;
-      const root = provider.baseUrl.replace(/\/+$/, "");
       definitions[provider.id] = {
         npm: provider.protocol === "openai" ? "@ai-sdk/openai-compatible" : "@ai-sdk/anthropic",
         name: provider.name,
         // Both loaders append their endpoint path ("/messages" or
         // "/chat/completions") directly to baseURL, so the injected URL must
         // carry the "/v1" segment relay endpoints expect.
-        options: { baseURL: root.endsWith("/v1") ? root : root + "/v1" },
+        options: { baseURL: canonicalOpenCodeBaseUrl(provider.baseUrl) },
         models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }]))
       };
     }
@@ -31046,6 +31100,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function hasApiKey(providerId) {
       const entry2 = auth()[normalizeOpenCodeProviderId(providerId)];
       return (entry2 == null ? void 0 : entry2.type) === "api" && typeof entry2.key === "string" && entry2.key.length > 0;
+    }
+    function readApiKey(providerId) {
+      if (!String(providerId || "").trim()) return "";
+      const entry2 = auth()[normalizeOpenCodeProviderId(providerId)];
+      return (entry2 == null ? void 0 : entry2.type) === "api" && typeof entry2.key === "string" ? entry2.key : "";
     }
     function writeAuthKey(providerId, key) {
       const value = String(key || "");
@@ -31085,6 +31144,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       filePath: () => file,
       hasApiKey,
       list,
+      readApiKey,
       remove,
       save
     });
@@ -32455,6 +32515,68 @@ ${command}`
     return { pref, channelChoices };
   }
 
+  // src/cep/openCodeModelProbe.js
+  init_cep_runtime_inject();
+  function failure(detail, apiKey) {
+    return { ok: false, detail: redactCredentialText(detail, [apiKey]) };
+  }
+  function modelIds(value) {
+    const rows = Array.isArray(value) ? value : Array.isArray(value == null ? void 0 : value.data) ? value.data : null;
+    if (!rows) return null;
+    const seen = /* @__PURE__ */ new Set();
+    const models = [];
+    for (const row of rows) {
+      const id = String(typeof row === "string" ? row : (row == null ? void 0 : row.id) || "").trim();
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        models.push(id);
+      }
+    }
+    return models;
+  }
+  async function probeOpenCodeProviderModels({
+    draft,
+    apiKey = "",
+    adapter,
+    timeoutMs = 8e3
+  }) {
+    const key = String(apiKey || "");
+    let url;
+    try {
+      url = new URL(canonicalOpenCodeBaseUrl(String((draft == null ? void 0 : draft.baseUrl) || "").trim()) + "/models");
+    } catch {
+      return failure("Provider models URL is invalid", key);
+    }
+    if (url.protocol === "http:" && (draft == null ? void 0 : draft.allowInsecureHttp) !== true) {
+      return failure("Insecure HTTP requires confirmation", key);
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return failure("Provider models URL must use HTTP or HTTPS", key);
+    }
+    const headers = { accept: "application/json" };
+    if ((draft == null ? void 0 : draft.protocol) === "openai") {
+      if (key) headers.Authorization = `Bearer ${key}`;
+    } else {
+      if (key) headers["x-api-key"] = key;
+      headers["anthropic-version"] = "2023-06-01";
+      url.searchParams.set("limit", "1000");
+    }
+    let response;
+    try {
+      response = await adapter.requestJson({ url: url.toString(), headers, timeoutMs });
+    } catch (error) {
+      return failure((error == null ? void 0 : error.message) || "Provider models request failed", key);
+    }
+    if (!(response == null ? void 0 : response.ok)) {
+      const snippet = String((response == null ? void 0 : response.text) || "").slice(0, 120).trim();
+      return failure(`HTTP ${(response == null ? void 0 : response.status) || 0}${snippet ? `: ${snippet}` : ""}`, key);
+    }
+    if (response.json === null) return failure("Provider returned a non-JSON response", key);
+    const models = modelIds(response.json);
+    if (!models) return failure("Provider models response has an unsupported shape", key);
+    return { ok: true, models, total: models.length };
+  }
+
   // src/components/settings/ProviderManagerSection.jsx
   init_cep_runtime_inject();
   var import_react44 = __toESM(require_react(), 1);
@@ -32503,6 +32625,11 @@ ${command}`
       name
     };
   }
+  function mergeProbedModelIds(current, discovered) {
+    const existing = String(current || "").split(/[\s,]+/).map((id) => id.trim()).filter(Boolean);
+    const merged = Array.from(/* @__PURE__ */ new Set([...existing, ...(discovered || []).map((id) => String(id).trim())]));
+    return { modelId: merged.filter(Boolean).join(", "), added: merged.length - new Set(existing).size };
+  }
 
   // src/components/settings/ProviderManagerSection.jsx
   var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
@@ -32525,6 +32652,9 @@ ${command}`
       openCodeKeyCap: "\u5BC6\u94A5\u5199\u5165 OpenCode auth.json\uFF1B\u4ECE\u65E7\u7248\u672C\u5347\u7EA7\u7684 Provider \u5FC5\u987B\u91CD\u65B0\u586B\u5199\u3002",
       needsApiKey: "\u9700\u91CD\u586B key",
       insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09",
+      probe: "\u63A2\u6D4B\u6A21\u578B",
+      probing: "\u63A2\u6D4B\u4E2D\u2026",
+      probeFilled: (added, total) => `\u5DF2\u586B\u5165 ${added} \u4E2A\u6A21\u578B\uFF08\u5171 ${total}\uFF09`,
       models: (count) => `${count} \u4E2A\u6A21\u578B`,
       selected: "\u5DF2\u9009"
     },
@@ -32546,6 +32676,9 @@ ${command}`
       openCodeKeyCap: "The key is written to OpenCode auth.json. Older providers must be entered again.",
       needsApiKey: "API key required",
       insecure: "Allow non-loopback HTTP (confirmed again on save)",
+      probe: "Probe models",
+      probing: "Probing\u2026",
+      probeFilled: (added, total) => `Filled ${added} models (${total} found)`,
       models: (count) => `${count} models`,
       selected: "selected"
     }
@@ -32580,11 +32713,14 @@ ${command}`
     activeProviderId = "",
     onUpsert,
     onRemove,
+    onProbe,
     disabled = false
   }) {
     const t = L4[lang] || L4.zh;
     const [draft, setDraft] = import_react44.default.useState(null);
     const [error, setError] = import_react44.default.useState("");
+    const [note, setNote] = import_react44.default.useState("");
+    const [probing, setProbing] = import_react44.default.useState(false);
     const save = async (event) => {
       var _a, _b;
       event.preventDefault();
@@ -32630,6 +32766,7 @@ ${command}`
             onClick: (event) => {
               event.preventDefault();
               setDraft(emptyDraft());
+              setNote("");
             },
             children: t.add
           }
@@ -32679,6 +32816,7 @@ ${command}`
                   onClick: () => {
                     setDraft(draftFromEntry(provider));
                     setError("");
+                    setNote("");
                   },
                   children: t.edit
                 }
@@ -32726,15 +32864,6 @@ ${command}`
               ]
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
-            Input,
-            {
-              mono: true,
-              value: draft.modelId,
-              onChange: (value) => setDraft({ ...draft, modelId: value }),
-              placeholder: "claude-sonnet-4"
-            }
-          ) }),
           /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("label", { style: {
             display: "flex",
             gap: 6,
@@ -32755,10 +32884,58 @@ ${command}`
             t.insecure
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+              Input,
+              {
+                mono: true,
+                value: draft.modelId,
+                onChange: (value) => setDraft({ ...draft, modelId: value }),
+                placeholder: "claude-sonnet-4"
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+              Button,
+              {
+                type: "button",
+                variant: "secondary",
+                size: "sm",
+                disabled: disabled || probing || !String(draft.baseUrl || "").trim(),
+                onClick: async (event) => {
+                  const form = event.currentTarget.closest("form");
+                  const apiKey = String(new FormData(form).get("modelAuthSecret") || "");
+                  setProbing(true);
+                  setError("");
+                  setNote("");
+                  try {
+                    const result = await onProbe(draft, { apiKey });
+                    if (!result.ok) setError(result.detail);
+                    else {
+                      const merged = mergeProbedModelIds(draft.modelId, result.models);
+                      setDraft({ ...draft, modelId: merged.modelId });
+                      setNote(t.probeFilled(merged.added, result.total));
+                    }
+                  } catch (probeError) {
+                    setError(redactCredentialText(
+                      (probeError == null ? void 0 : probeError.message) || "Provider model probe failed",
+                      [apiKey]
+                    ));
+                  } finally {
+                    setProbing(false);
+                  }
+                },
+                children: probing ? t.probing : t.probe
+              }
+            )
+          ] }) }),
           error ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
             font: "400 10px/1.4 var(--font-ui)",
             color: "var(--warn)"
           }, children: error }) : null,
+          note ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
+            font: "400 10px/1.4 var(--font-ui)",
+            color: "var(--text-tertiary)"
+          }, children: note }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
               Button,
@@ -32768,6 +32945,7 @@ ${command}`
                 onClick: () => {
                   setDraft(null);
                   setError("");
+                  setNote("");
                 },
                 children: t.cancel
               }
@@ -35521,6 +35699,11 @@ ${command}`
         lang,
         providers,
         disabled: providerInit.state !== "ready",
+        onProbe: async (draft, { apiKey }) => probeOpenCodeProviderModels({
+          draft,
+          apiKey: apiKey || openCodeProviderStore.readApiKey(draft.id || ""),
+          adapter: platform
+        }),
         onUpsert: async (event, draft) => {
           var _a;
           const formElement = event.currentTarget;

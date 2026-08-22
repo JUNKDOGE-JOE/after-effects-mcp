@@ -45,3 +45,9 @@ export function draftToEntry(draft) {
     name,
   };
 }
+
+export function mergeProbedModelIds(current, discovered) {
+  const existing = String(current || '').split(/[\s,]+/).map((id) => id.trim()).filter(Boolean);
+  const merged = Array.from(new Set([...existing, ...(discovered || []).map((id) => String(id).trim())]));
+  return { modelId: merged.filter(Boolean).join(', '), added: merged.length - new Set(existing).size };
+}

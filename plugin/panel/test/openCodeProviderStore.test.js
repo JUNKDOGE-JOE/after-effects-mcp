@@ -47,6 +47,9 @@ test('OpenCode provider store merge-writes auth.json and preserves existing prov
       opencode: { type: 'api', key: 'keep-me' },
       'aemcp-acme-relay': { type: 'api', key: 'new-key' },
     });
+    assert.equal(store.readApiKey(provider.id), 'new-key');
+    assert.equal(store.readApiKey('missing-provider'), '');
+    assert.equal(store.readApiKey(''), '');
     if (process.platform !== 'win32') assert.equal(fs.statSync(authFile).mode & 0o077, 0);
     assert.deepEqual(openCodeProviderDefinitions(store.list()), {
       'aemcp-acme-relay': {
