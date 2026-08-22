@@ -32864,6 +32864,26 @@ ${command}`
               ]
             }
           ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("label", { style: {
+            display: "flex",
+            gap: 6,
+            alignItems: "center",
+            font: "400 11px/1.35 var(--font-ui)"
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+              "input",
+              {
+                type: "checkbox",
+                checked: draft.allowInsecureHttp,
+                onChange: (event) => setDraft({
+                  ...draft,
+                  allowInsecureHttp: event.target.checked
+                })
+              }
+            ),
+            t.insecure
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) }),
           /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
               Input,
@@ -32908,26 +32928,6 @@ ${command}`
               }
             )
           ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("label", { style: {
-            display: "flex",
-            gap: 6,
-            alignItems: "center",
-            font: "400 11px/1.35 var(--font-ui)"
-          }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
-              "input",
-              {
-                type: "checkbox",
-                checked: draft.allowInsecureHttp,
-                onChange: (event) => setDraft({
-                  ...draft,
-                  allowInsecureHttp: event.target.checked
-                })
-              }
-            ),
-            t.insecure
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) }),
           error ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
             font: "400 10px/1.4 var(--font-ui)",
             color: "var(--warn)"

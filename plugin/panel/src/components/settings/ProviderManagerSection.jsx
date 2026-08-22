@@ -200,6 +200,22 @@ export function ProviderManagerSection({
                 ]}
               />
             </Field>
+            <label style={{
+              display: 'flex', gap: 6, alignItems: 'center', font: '400 11px/1.35 var(--font-ui)',
+            }}>
+              <input
+                type="checkbox"
+                checked={draft.allowInsecureHttp}
+                onChange={(event) => setDraft({
+                  ...draft,
+                  allowInsecureHttp: event.target.checked,
+                })}
+              />
+              {t.insecure}
+            </label>
+            <Field label={t.apiKey} caption={t.openCodeKeyCap}>
+              <SecretInput name="modelAuthSecret" disabled={disabled} />
+            </Field>
             <Field label={t.model}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <Input
@@ -239,22 +255,6 @@ export function ProviderManagerSection({
                   {probing ? t.probing : t.probe}
                 </Button>
               </div>
-            </Field>
-            <label style={{
-              display: 'flex', gap: 6, alignItems: 'center', font: '400 11px/1.35 var(--font-ui)',
-            }}>
-              <input
-                type="checkbox"
-                checked={draft.allowInsecureHttp}
-                onChange={(event) => setDraft({
-                  ...draft,
-                  allowInsecureHttp: event.target.checked,
-                })}
-              />
-              {t.insecure}
-            </label>
-            <Field label={t.apiKey} caption={t.openCodeKeyCap}>
-              <SecretInput name="modelAuthSecret" disabled={disabled} />
             </Field>
             {error ? <div style={{
               font: '400 10px/1.4 var(--font-ui)', color: 'var(--warn)',
