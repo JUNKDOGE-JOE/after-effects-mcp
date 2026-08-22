@@ -5,7 +5,8 @@
 **一行安装提示词——复制给 Claude Code 或其它 AI agent：**
 
 ```text
-请从 v0.10.0-rc.1 预发布页安装 ae-mcp 的 ZXP 和 AEX，在 After Effects 中打开
+请从 v0.10.0 发布页安装 ae-mcp 的 ZXP 和对应平台的原生插件，在 After Effects
+中打开
 Window > Extensions > ae-mcp，然后用 `claude mcp add --transport http ae
 http://127.0.0.1:11488/mcp` 接入 Claude Code；Claude Desktop 则使用系统 Node
 执行扩展目录里的 `host/stdio-shim.js`，并在测试 `ae_ping` 前提醒我重新启动
@@ -19,7 +20,9 @@ After Effects 状态通过 ExtendScript 和冻结的原生 AEGP 平面访问。
 ## 安装和首次启动
 
 1. 在 After Effects 中安装签名 ZXP。
-2. 把同一版本的 `.aex` 安装到该 After Effects 宿主使用的插件目录。
+2. 把同一版本的原生插件装到该 After Effects 宿主使用的插件目录——Windows 用
+   `.aex`，macOS 用 `AeMcpNative.plugin` 包。ZXP 不含任何平台二进制，两个系统
+   通用；只有原生插件按平台分别构建，`ae_nativeExec` 是唯一需要它的工具。
 3. 启动 After Effects，打开 **Window > Extensions > ae-mcp**。外部客户端
    使用 MCP 时保持面板打开。
 4. 按下面两种接入方式之一配置客户端。

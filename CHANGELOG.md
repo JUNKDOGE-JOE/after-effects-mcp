@@ -12,10 +12,11 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### Unreleased
 
-### [0.10.0-rc.1] — 2026-08-22
+### [0.10.0] — 2026-08-22
 
 #### ✨ 新增
 
+- **Provider 管理器一键探测模型（#306）**——填好 Base URL 与 API Key 后，「探测模型」按钮对 `<baseURL>/v1/models` 发一次请求（Anthropic 方言用 `x-api-key` + `anthropic-version`，OpenAI 兼容方言用 `Authorization: Bearer`），把返回的模型 id 去重后追加到已填内容之后。请求由 CEP 的 Node 侧发出——面板是 `file://` 页面而 provider 主机不给 CORS 头，浏览器 `fetch` 走不通；`http://` 需显式确认，所有可见错误按 key 脱敏。Phase 3 拆除 legacy provider 机制时一并删掉的模型发现能力就此补回。
 - **`ae_previewFrame` 区间拼图与 A/B 像素差分**——新增 `range:{start,end,count}` 等距采样、`layout:'grid'` 带时间码对比表，以及可引用本次时刻或最近 50 次进程内捕获的 `compare`；差分返回热力图、并排图、变化比例 / 像素数 / 均值 / 最大差值与外接框，所有合成、重采样和缩放均由 CEP 宿主的零依赖 PNG 路径完成，不依赖 Chromium canvas。
 - **`ae_exec` 失败恢复信封与快照差分归因**——已派发的脚本失败时会把可编辑 `.jsx` 与元数据写入 `~/.ae-mcp/checkpoints/<project>/recovery/`，返回 `recoveryId`、绝对 `scriptPath`、`errorLine`、对应的 `errorSource`、`$.writeln` 输出、工程 revision 前后值，以及通过失败前后快照识别新增 / 删除 / 改动图层和工程项的有上限 `touched`；改文件或内联传入修正后的 `code` 后用 `ae_exec({recoveryId})` 重跑，默认先还原到本次失败前由 `checkpoint_label` 创建的 checkpoint，`retryMode:'continue'` 可明确保留当前失败状态。`$.writeln` 捕获每次调用安装并在 `finally` 拆除；旧 `/exec` HTTP 路由不开 diagnostics，形状不变。
 - **面板会话管理（#231）**——内嵌聊天现可新建会话、搜索和按最近活动查看历史、切换后恢复完整转录与真实后端上下文（Codex 持久 thread、Claude `--resume`、OpenCode session）、改名、归档 / 还原并经二次确认永久删除；本地索引与转录原子保存于 `~/.ae-mcp/sessions`。面板重载或 AE 重启后只恢复已落盘历史，审批 / 提问等中断状态会取消，绝不自动续跑进行中的回合。删除会话会同步清理本地文件并 best-effort 删除 Codex / OpenCode 后端会话；Claude CLI 没有对应删除 API，因此不会删除其自管会话文件。
@@ -44,7 +45,8 @@ Format based on Keep a Changelog; versioning follows SemVer.
 - **ExtendScript 超时不再提前放行串行锁（#260）**——调用方仍会按原期限收到超时，但 Bridge 会等迟到回调或排空哨兵返回后才继续，期间 `/health`、`/exec`、`ae.status` 与 `ae.diagnose` 报告 `degraded`；错误 disposition 收敛为三值：从未进入 AE、可安全重试的 `not_dispatched`，已派发但结果未知的 `uncertain`，以及已执行并明确报错的 `failed`。
 - **依赖清扫：`npm audit` 归零**——`plugin/sidecar` 锁文件把 `fast-uri` 升到 3.1.5（修 CVE-2026-13676 / GHSA-4c8g-83qw-93j6 以及其后的 GHSA-v2hh-gcrm-f6hx、GHSA-7p8r-x3mc-p8w7，仍在 ajv 声明的 `^3.0.1` 范围内，不引入 `overrides`），同批升级 `ip-address` 10.5.0、`hono` 4.13.3、`@hono/node-server` 1.19.17、`body-parser` 2.3.0；`plugin/host` 的 `express` 4.22.1→4.22.2（连带 `qs` 6.15.3、`body-parser` 1.20.6）。两个工作区 `npm audit` 均为 0；这些包只在本机回环路径上工作，属扫描器噪音清理而非已确认可达的漏洞。由 #271（@anupamme / OrbisAI 扫描报告）触发。
 - **`ae_exec` 非字符串结果不再被摧毁（#254）**——ExtendScript 侧新增 ES3 安全序列化器：数字 / 布尔 / `null` / 纯 Object / 纯 Array 结果在 AE 内序列化为规范 JSON 文本原样带回（`structuredContent.contentType: "json"`，`content` 恒为字符串），字符串结果保持原语义（`contentType: "text"`）。此前对象变成 `"[object Object]"` 解析错误、数组变成 `ok:true` 的 `"1,two,[object Object]"` 静默损毁。宿主对象（CompItem / Layer 等）不做深遍历、保持 `String(v)` 叶节点；循环引用 / 深度超 12 / 序列化超 1,000,000 字符按确定性错误返回并提示改用更小的投影；`ae_exec` 路径彻底移除「结果看着像 JSON 就尝试解析」的猜测逻辑，其余工具的结果解析不受影响。
-
+- **一个 ZXP 通吃 Windows 与 macOS**——Python 运行时与 platform-helper 退役后，签名 ZXP 里已不含任何平台二进制（842 个条目、零 `.node` / `.dll` / `.dylib` / `.exe`，宿主依赖树也没有任何 `os` / `cpu` 限定包），因此本版起只发一个不带平台后缀的 ZXP，两个系统共用。按平台分别构建的只剩原生插件——Windows 的 `.aex` 与 macOS 的 `AeMcpNative.plugin`——而它只被 `ae_nativeExec` 一个工具使用，其余十个工具没有它照常工作。
+- **工程**——两处只在 macOS 上暴露的测试环境依赖已修：审批超时用例改用 mock timers 推进（计时器是有意 `unref()` 的，Node 20 的 runner 此前会先行退出，#303）；Windows dev-install 夹具先 `realpath` 系统临时目录再建树（macOS 的 `/var` 是符号链接，安装守卫按设计拒绝，#302）。两处都只动测试，不动被测代码。
 
 ### [0.9.6] — 2026-08-19
 
@@ -325,10 +327,11 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ### Unreleased
 
-### [0.10.0-rc.1] — 2026-08-22
+### [0.10.0] — 2026-08-22
 
 #### ✨ Added
 
+- **One-click model discovery in the Provider Manager (#306)** — with a Base URL and API key in the form, "Probe models" issues a single request to `<baseURL>/v1/models` (`x-api-key` plus `anthropic-version` for the Anthropic dialect, `Authorization: Bearer` for the OpenAI-compatible one) and appends the returned ids, deduplicated, after whatever is already typed. The request leaves from the CEP Node side because the panel is a `file://` page and provider hosts send no CORS headers, so browser `fetch` cannot reach them; `http://` requires explicit confirmation, and every visible error is redacted against the key. This restores the model discovery that was removed together with the legacy provider machinery in Phase 3.
 - **`ae_previewFrame` interval grids and A/B pixel diffs** — adds evenly spaced `range:{start,end,count}` sampling, labeled `layout:'grid'` contact sheets, and `compare` selectors for current times or the 50 most recent in-process captures; comparisons return heatmap and side-by-side artifacts plus changed ratio/pixels, mean/max difference, and a bounding box, with all composition, resampling, and scaling handled by the CEP host's dependency-free PNG path rather than Chromium canvas.
 - **`ae_exec` failure-recovery envelopes and snapshot-diff attribution** — dispatched script failures now persist an editable `.jsx` plus metadata under `~/.ae-mcp/checkpoints/<project>/recovery/` and return a `recoveryId`, absolute `scriptPath`, `errorLine` with its `errorSource`, captured `$.writeln` output, before/after project revisions, and bounded `touched` evidence identifying added, removed, or changed layers and project items from before/after snapshots. Edit the file or provide corrected inline `code`, then retry with `ae_exec({recoveryId})`; the default restores the checkpoint created by `checkpoint_label` before the failed call, while `retryMode:'continue'` explicitly preserves the failed state. Per-call `$.writeln` capture is always removed in `finally`; the legacy HTTP `/exec` route does not enable diagnostics and keeps its existing shape.
 - **Panel session management (#231)** — embedded chat can now create sessions, search and sort history by recent activity, switch back into the full transcript and real backend context (persistent Codex threads, Claude `--resume`, and OpenCode sessions), rename, archive / restore, and permanently delete after inline confirmation. The local index and transcripts are written atomically under `~/.ae-mcp/sessions`. Panel reloads and AE restarts restore only persisted history: interrupted approvals and questions are cancelled, and an in-progress turn is never redispatched automatically. Deletion removes the local transcript and best-effort deletes Codex / OpenCode backend sessions; Claude CLI has no matching delete API, so its CLI-owned session files remain.
@@ -354,6 +357,9 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 - **`ae.skillUse(execute=true)` restores the v0.9.0 pass-through response shape** — The skill script's own JSON result is returned unchanged at the top level instead of being wrapped in `{ok,name,template_type,result}`, eliminating contradictory outer `ok:true` / inner `ok:false` responses. Callers that read `result.*` in v0.9.2–v0.9.6 must switch back to top-level fields. Execution still uses the approval engine, and `execute=false` is unchanged. (#269)
 - **ExtendScript timeouts no longer release the serialization lock early (#260)** — Callers still receive a timeout on schedule, while the bridge waits for a late callback or drain sentinel before proceeding and reports `degraded` through `/health`, `/exec`, `ae.status`, and `ae.diagnose`. Error dispositions are a closed three-value set: `not_dispatched` for scripts that never entered AE and are safe to retry, `uncertain` for dispatched scripts whose result is unknown, and `failed` for scripts that executed and returned a definite error.
 - **Dependency sweep: `npm audit` clean** — the `plugin/sidecar` lockfile moves `fast-uri` to 3.1.5 (fixes CVE-2026-13676 / GHSA-4c8g-83qw-93j6 plus the later GHSA-v2hh-gcrm-f6hx and GHSA-7p8r-x3mc-p8w7, staying inside ajv's declared `^3.0.1` range with no `overrides`), alongside `ip-address` 10.5.0, `hono` 4.13.3, `@hono/node-server` 1.19.17 and `body-parser` 2.3.0; `plugin/host` bumps `express` 4.22.1→4.22.2 (with `qs` 6.15.3 and `body-parser` 1.20.6). Both workspaces now audit at 0. These packages only ever see loopback traffic here, so this is scanner-noise cleanup rather than a confirmed reachable vulnerability. Prompted by #271 (@anupamme / OrbisAI scan report).
+
+- **One ZXP for Windows and macOS** — with the Python runtime and the platform helper retired, the signed ZXP holds no platform binaries at all (842 entries, zero `.node` / `.dll` / `.dylib` / `.exe`, and no `os`- or `cpu`-constrained package anywhere in the host dependency tree), so this release ships a single ZXP without a platform suffix for both systems. Only the native plug-in is still built per platform — the `.aex` on Windows and the `AeMcpNative.plugin` bundle on macOS — and `ae_nativeExec` is the one tool that uses it; the other ten work without it.
+- **Engineering** — two test-environment dependencies that only surfaced on macOS are fixed: the approval-timeout cases now drive the deliberately `unref()`'d timer with mock timers, so the Node 20 runner no longer exits first (#303), and the Windows dev-install fixture resolves the system temp directory with `realpath` before building its tree, because macOS `/var` is a symlink that the installer guard rejects by design (#302). Both changes touch tests only, never the code under test.
 
 ### [0.9.6] — 2026-08-19
 

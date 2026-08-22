@@ -5,7 +5,8 @@ English | [简体中文](README.zh-CN.md)
 **One-line setup prompt — paste this into Claude Code or another AI agent:**
 
 ```text
-Install the ae-mcp ZXP and AEX from the v0.10.0-rc.1 pre-release, open Window > Extensions
+Install the ae-mcp ZXP and the native plug-in for my platform from the v0.10.0
+release, open Window > Extensions
 > ae-mcp in After Effects, then connect Claude Code with `claude mcp add
 --transport http ae http://127.0.0.1:11488/mcp`; for Claude Desktop, configure
 the extension's `host/stdio-shim.js` with the system Node executable and ask me
@@ -20,8 +21,12 @@ through ExtendScript and the frozen native AEGP plane.
 ## Install and first run
 
 1. Install the signed ZXP in After Effects.
-2. Install the matching `.aex` beside the After Effects plug-ins selected for
-   the host. Keep the version pair from the same release.
+2. Install the matching native plug-in beside the After Effects plug-ins
+   selected for the host — the `.aex` on Windows, the `AeMcpNative.plugin`
+   bundle on macOS. Keep the version pair from the same release. The ZXP
+   carries no platform binaries and installs on both systems; only this
+   native plug-in is built per platform, and `ae_nativeExec` is the one tool
+   that needs it.
 3. Start After Effects and open **Window > Extensions > ae-mcp**. Keep the panel
    open while an external client uses MCP.
 4. Configure one of the two supported external connection forms below.
