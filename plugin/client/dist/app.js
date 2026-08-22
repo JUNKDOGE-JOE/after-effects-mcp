@@ -20562,11 +20562,18 @@
   }
   function channelTexts(probe, lang = "zh") {
     const pick = (obj) => obj ? obj[lang] || obj.zh || "" : "";
+    const copyAction = probe && !probe.ok && !probe.checking ? probe.copyAction : null;
     return {
       source: pick(probe && probe.source),
       detail: probe && probe.detail || "",
-      fixHint: probe && !probe.ok && !probe.checking ? pick(probe.fixHint) : ""
+      fixHint: probe && !probe.ok && !probe.checking ? pick(probe.fixHint) : "",
+      copyLabel: pick(copyAction && copyAction.label),
+      copyText: copyAction && copyAction.text || ""
     };
+  }
+  var COPIED_TEXTS = { zh: "\u5DF2\u590D\u5236", en: "Copied" };
+  function channelCopiedLabel(lang = "zh") {
+    return COPIED_TEXTS[lang] || COPIED_TEXTS.zh;
   }
   var CHOICE_TEXTS = {
     active: { zh: "\u4F7F\u7528\u4E2D", en: "In use" },
@@ -20576,6 +20583,31 @@
     const active = channel === selectedChannel;
     const texts = active ? CHOICE_TEXTS.active : CHOICE_TEXTS.choose;
     return { label: texts[lang] || texts.zh, active };
+  }
+
+  // src/lib/clipboard.js
+  init_cep_runtime_inject();
+  function copyTextLegacy(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch (e) {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    return ok ? Promise.resolve() : Promise.reject(new Error("execCommand copy failed"));
+  }
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(() => copyTextLegacy(text));
+    }
+    return copyTextLegacy(text);
   }
 
   // src/components/settings/ChannelCard.jsx
@@ -20596,6 +20628,28 @@
     readOnly = false,
     renderChannelBody
   }) {
+    const [copied, setCopied] = import_react15.default.useState("");
+    const copyTimerRef = import_react15.default.useRef(null);
+    const mountedRef = import_react15.default.useRef(true);
+    import_react15.default.useEffect(() => {
+      mountedRef.current = true;
+      return () => {
+        mountedRef.current = false;
+        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      };
+    }, []);
+    const copyLoginCommand = (channel, text) => {
+      copyText(text).then(() => {
+        if (!mountedRef.current) return;
+        setCopied(channel);
+        if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = setTimeout(() => {
+          copyTimerRef.current = null;
+          if (mountedRef.current) setCopied("");
+        }, 1200);
+      }).catch(() => {
+      });
+    };
     return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
       channels.map((probe) => {
         const texts = channelTexts(probe, lang);
@@ -20609,6 +20663,7 @@
             !readOnly && onSelectChannel ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: choice.active ? "secondary" : "ghost", size: "sm", disabled: choice.active, onClick: () => onSelectChannel(probe.channel), children: choice.label }) : null
           ] }),
           texts.fixHint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)", whiteSpace: "pre-wrap" }, children: texts.fixHint }) : null,
+          !readOnly && texts.copyText ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyLoginCommand(probe.channel, texts.copyText), children: copied === probe.channel ? channelCopiedLabel(lang) : texts.copyLabel }) }) : null,
           !readOnly && renderChannelBody ? renderChannelBody(probe.channel) : null
         ] }, probe.channel);
       }),
@@ -20835,31 +20890,6 @@
   } = {}) {
     const config = httpConfigFor(client, port, extensionRoot);
     return typeof config === "string" ? config : JSON.stringify(config, null, 2);
-  }
-
-  // src/lib/clipboard.js
-  init_cep_runtime_inject();
-  function copyTextLegacy(text) {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    let ok = false;
-    try {
-      ok = document.execCommand("copy");
-    } catch (e) {
-      ok = false;
-    }
-    document.body.removeChild(ta);
-    return ok ? Promise.resolve() : Promise.reject(new Error("execCommand copy failed"));
-  }
-  function copyText(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text).catch(() => copyTextLegacy(text));
-    }
-    return copyTextLegacy(text);
   }
 
   // src/lib/settingsSections.js
@@ -25324,7 +25354,7 @@
     CLI_PROBE_FAILED: entry("CLI_PROBE_FAILED", "backend", "CLI \u5DF2\u627E\u5230\u4F46\u63A2\u9488\u5931\u8D25\uFF1B\u8BF7\u5728\u7EC8\u7AEF\u786E\u8BA4\u5B83\u80FD\u6B63\u5E38\u542F\u52A8\u3002", "The CLI was found but its probe failed; confirm it starts normally in a terminal."),
     SPAWN_FAILED: entry("SPAWN_FAILED", "backend", "\u8BF7\u68C0\u67E5 CLI \u8DEF\u5F84\u3001\u6267\u884C\u6743\u9650\u548C\u5B89\u5168\u8F6F\u4EF6\u62E6\u622A\u3002", "Check the CLI path, execute permission, and security-software blocks."),
     PROCESS_EXITED: entry("PROCESS_EXITED", "backend", "\u8BF7\u67E5\u770B\u6298\u53E0\u8BE6\u60C5\u4E2D\u7684\u9000\u51FA\u4FE1\u606F\u4E0E stderr \u5C3E\u90E8\u3002", "Inspect the exit information and stderr tail in the collapsed details."),
-    AUTH_REQUIRED: entry("AUTH_REQUIRED", "auth", "\u8BF7\u5728\u7EC8\u7AEF\u5B8C\u6210\u5BF9\u5E94 CLI \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", "Sign in with the corresponding CLI in a terminal, then re-check."),
+    AUTH_REQUIRED: entry("AUTH_REQUIRED", "auth", "\u8BF7\u6309\u300C\u8BBE\u7F6E \u2192 AI\u300D\u901A\u9053\u5361\u4E0A\u7684\u767B\u5F55\u6307\u5F15\u5B8C\u6210\u5BF9\u5E94 CLI \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", "Follow the sign-in guidance on the channel card under Settings \u2192 AI for this CLI, then re-check."),
     MCP_UNREACHABLE: entry("MCP_UNREACHABLE", "mcp", "\u8BF7\u4FDD\u6301\u9762\u677F\u5BBF\u4E3B\u8FD0\u884C\uFF0C\u5E76\u68C0\u67E5\u672C\u673A\u4F1A\u8BDD MCP \u72B6\u6001\u3002", "Keep the panel host running and check the local conversation MCP status."),
     SESSION_START_FAILED: entry("SESSION_START_FAILED", "backend", "\u4F1A\u8BDD\u5C1A\u672A\u521B\u5EFA\uFF1B\u53EF\u4FEE\u590D\u901A\u9053\u72B6\u6001\u540E\u5B89\u5168\u91CD\u8BD5\u3002", "The session was not created; retry after fixing the channel state."),
     TURN_START_FAILED: entry("TURN_START_FAILED", "backend", "\u53D1\u9001\u53EF\u80FD\u5DF2\u7ECF\u5F00\u59CB\uFF1B\u8BF7\u5148\u6309\u8BE6\u60C5\u4E2D\u7684\u6D3E\u53D1\u72B6\u6001\u6838\u5BF9\u518D\u91CD\u8BD5\u3002", "Sending may have started; check the dispatch state before retrying."),
@@ -29325,9 +29355,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       processStderrAttachmentPaths = preserveActive ? activeAttachmentPaths.slice() : [];
       resetProviderStderrRedactor();
     }
+    function codexHomePath() {
+      return adapter.paths.join([adapter.paths.configRoot, "codex-home"]);
+    }
     function currentEnv() {
       const spawnEnv = adapter.completeSpawnEnv(env || {});
-      const codexHome = adapter.paths.join([adapter.paths.configRoot, "codex-home"]);
+      const codexHome = codexHomePath();
       adapter.fs.mkdirSync(codexHome, { recursive: true });
       return { ...spawnEnv, CODEX_HOME: codexHome };
     }
@@ -29593,7 +29626,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           detail: {
             exitCode: code,
             ...signal ? { signal } : {},
-            ...tail ? { stderrTail: tail } : {}
+            ...tail ? { stderrTail: tail } : {},
+            ...classified.code === "AUTH_REQUIRED" ? { codexHome: codexHomePath() } : {}
           },
           ...activeTurnFailureFields()
         });
@@ -29857,6 +29891,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           ...(error == null ? void 0 : error.resolution) ? { resolution: error.resolution } : {},
           ...(error == null ? void 0 : error.code) && (error == null ? void 0 : error.spawnError) ? { spawnCode: error.code } : {}
         };
+        if (classified.code === "AUTH_REQUIRED") detail.codexHome = codexHomePath();
         providerDeltaRedactor.discard();
         drainApprovals();
         let message = rawMessage || "Failed to start Codex turn.";
@@ -29999,7 +30034,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         lastCliInfo = cliInfo;
       } catch (e) {
       }
-      const diag = { cliPath: cliInfo.cliPath || "", cliVersion: cliInfo.version || "" };
+      const diag = {
+        cliPath: cliInfo.cliPath || "",
+        cliVersion: cliInfo.version || "",
+        codexHome: codexHomePath(),
+        platformId: adapter.id || ""
+      };
       const probeSecrets = () => [];
       const failure = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
       if (!cliInfo.ok) {
@@ -31196,6 +31236,24 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/lib/channels.js
   init_cep_runtime_inject();
+
+  // src/lib/codexLogin.js
+  init_cep_runtime_inject();
+  function codexLoginCommands({ codexHome } = {}) {
+    if (!codexHome) return { powershell: "", posix: "" };
+    const path = String(codexHome);
+    return {
+      powershell: `$env:CODEX_HOME='${path.replace(/'/g, "''")}'; codex login`,
+      posix: `CODEX_HOME='${path.replace(/'/g, "'\\''")}' codex login`
+    };
+  }
+  function codexLoginCommand({ codexHome, platformId } = {}) {
+    if (!codexHome) return "";
+    const commands = codexLoginCommands({ codexHome });
+    return String(platformId || "").startsWith("windows") ? commands.powershell : commands.posix;
+  }
+
+  // src/lib/channels.js
   function claudeChannels({ probe } = {}) {
     const probeFailed = ["probe-timeout", "probe-failed"].includes(probe == null ? void 0 : probe.reason);
     return [{
@@ -31220,7 +31278,18 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }];
   }
   function codexChannels({ codexProbe } = {}) {
-    return [{
+    const cliFixHint = {
+      zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002",
+      en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE."
+    };
+    const needsIsolatedLogin = Boolean(
+      codexProbe && !codexProbe.loggedIn && codexProbe.runtimeOk !== false && codexProbe.codexHome
+    );
+    const command = needsIsolatedLogin ? codexLoginCommand({
+      codexHome: codexProbe.codexHome,
+      platformId: codexProbe.platformId
+    }) : "";
+    const channel = {
       channel: "cli",
       source: { zh: "Codex CLI \u767B\u5F55\u6001", en: "Codex CLI login" },
       checking: codexProbe === null,
@@ -31231,11 +31300,20 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         codexProbe.cliPath,
         codexProbe.cliVersion
       ].filter(Boolean).join(" \xB7 ") : codexProbe.detail || "" : "",
-      fixHint: {
-        zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002",
-        en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE."
-      }
-    }];
+      fixHint: needsIsolatedLogin ? {
+        zh: `\u9762\u677F\u7684 Codex \u8FD0\u884C\u5728\u9694\u79BB\u76EE\u5F55 ${codexProbe.codexHome}\uFF08\u4E0D\u8BFB\u53D6 ~/.codex\uFF09\uFF0C\u7CFB\u7EDF\u91CC\u5DF2\u767B\u5F55\u7684 codex \u5BF9\u9762\u677F\u65E0\u6548\u3002\u5728\u7EC8\u7AEF\u8FD0\u884C\u4E0B\u9762\u547D\u4EE4\u5B8C\u6210\u767B\u5F55\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\uFF1A
+${command}`,
+        en: `The panel runs Codex with its own CODEX_HOME at ${codexProbe.codexHome} (it never reads ~/.codex), so a system-wide codex login does not apply here. Run this in a terminal, then re-check:
+${command}`
+      } : cliFixHint,
+      ...needsIsolatedLogin ? {
+        copyAction: {
+          label: { zh: "\u590D\u5236\u767B\u5F55\u547D\u4EE4", en: "Copy login command" },
+          text: command
+        }
+      } : {}
+    };
+    return [channel];
   }
   function openCodeChannels({ probe, providers = [] } = {}) {
     const configured = providers.some((provider) => (provider == null ? void 0 : provider.needsApiKey) !== true);

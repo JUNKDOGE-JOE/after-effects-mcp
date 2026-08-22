@@ -1,7 +1,13 @@
 import React from 'react';
 import { Badge } from '../core/Badge';
 import { Button } from '../core/Button';
-import { channelChoiceState, channelDot, channelTexts } from '../../lib/channelCard';
+import {
+  channelChoiceState,
+  channelCopiedLabel,
+  channelDot,
+  channelTexts,
+} from '../../lib/channelCard';
+import { copyText } from '../../lib/clipboard';
 
 const DOT_COLOR = { ok: 'var(--ok)', warn: 'var(--warn)', neutral: 'var(--text-tertiary)' };
 
@@ -26,6 +32,30 @@ export function ChannelCard({
   readOnly = false,
   renderChannelBody,
 }) {
+  const [copied, setCopied] = React.useState('');
+  const copyTimerRef = React.useRef(null);
+  const mountedRef = React.useRef(true);
+
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const copyLoginCommand = (channel, text) => {
+    copyText(text).then(() => {
+      if (!mountedRef.current) return;
+      setCopied(channel);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = null;
+        if (mountedRef.current) setCopied('');
+      }, 1200);
+    }).catch(() => {});
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {channels.map((probe) => {
@@ -45,6 +75,13 @@ export function ChannelCard({
               ) : null}
             </div>
             {texts.fixHint ? <div style={{ font: '400 10px/1.5 var(--font-ui)', color: 'var(--text-tertiary)', whiteSpace: 'pre-wrap' }}>{texts.fixHint}</div> : null}
+            {!readOnly && texts.copyText ? (
+              <div>
+                <Button variant="secondary" size="sm" icon="copy" onClick={() => copyLoginCommand(probe.channel, texts.copyText)}>
+                  {copied === probe.channel ? channelCopiedLabel(lang) : texts.copyLabel}
+                </Button>
+              </div>
+            ) : null}
             {!readOnly && renderChannelBody ? renderChannelBody(probe.channel) : null}
           </div>
         );

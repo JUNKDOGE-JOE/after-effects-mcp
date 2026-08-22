@@ -181,8 +181,46 @@ test('Codex account probes use the same isolated CLI environment', async () => {
   const result = await pending;
   assert.equal(result.loggedIn, true);
   assert.deepEqual(result.models, [{ id: 'gpt-5.5' }]);
+  assert.equal(result.codexHome, 'C:\\Users\\test\\.ae-mcp\\codex-home');
+  assert.equal(result.platformId, 'windows-x64');
   assert.equal(spawned[0].options.env.CODEX_HOME, 'C:\\Users\\test\\.ae-mcp\\codex-home');
   assert.equal(mkdirs.length, 1);
+});
+
+test('Codex account probes return isolated-home diagnostics when login is required', async () => {
+  const { backend, spawned } = makeBackend();
+  const pending = backend.probeAccount();
+  await flush();
+  const proc = spawned[0].proc;
+  const initialize = parseWrites(proc)[0];
+  proc.emit({ id: initialize.id, result: {} });
+  await flush();
+  const account = parseWrites(proc)[1];
+  proc.emit({
+    id: account.id,
+    result: { account: null, requiresOpenaiAuth: true },
+  });
+  await flush();
+  const models = parseWrites(proc)[2];
+  proc.emit({ id: models.id, result: { models: [] } });
+
+  const result = await pending;
+  assert.equal(result.loggedIn, false);
+  assert.equal(result.runtimeOk, true);
+  assert.equal(result.detail, 'OpenAI auth required');
+  assert.equal(result.codexHome, 'C:\\Users\\test\\.ae-mcp\\codex-home');
+  assert.equal(result.platformId, 'windows-x64');
+});
+
+test('Codex account probe failures retain isolated-home diagnostics', async () => {
+  const { backend } = makeBackend({
+    resolveCli: async () => ({ ok: false, code: 'NOT_FOUND' }),
+  });
+  const result = await backend.probeAccount();
+  assert.equal(result.loggedIn, false);
+  assert.equal(result.runtimeOk, false);
+  assert.equal(result.codexHome, 'C:\\Users\\test\\.ae-mcp\\codex-home');
+  assert.equal(result.platformId, 'windows-x64');
 });
 
 test('Codex keeps JSON-RPC code and data in TURN_START_FAILED detail', async () => {
@@ -295,5 +333,7 @@ test('Codex distinguishes CLI resolution, spawn, and unauthenticated exits', asy
   proc.emitStderr('Not logged in. Run login first.');
   proc.exit(1);
   await pending;
-  assert.equal(exiting.events.find((event) => event.type === 'error')?.code, 'AUTH_REQUIRED');
+  const authError = exiting.events.find((event) => event.type === 'error');
+  assert.equal(authError?.code, 'AUTH_REQUIRED');
+  assert.equal(authError?.detail.codexHome, 'C:\\Users\\test\\.ae-mcp\\codex-home');
 });

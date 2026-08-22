@@ -1,5 +1,7 @@
 // Credential channels share one shape so backend selection can compare them.
-// ChannelProbe: { channel, source:{zh,en}, checking, ok, detail, fixHint:{zh,en} }
+// ChannelProbe: { channel, source:{zh,en}, checking, ok, detail, fixHint:{zh,en}, copyAction?:{label:{zh,en},text} }
+
+import { codexLoginCommand } from './codexLogin.js';
 
 export function claudeChannels({ probe } = {}) {
   const probeFailed = ['probe-timeout', 'probe-failed'].includes(probe?.reason);
@@ -39,7 +41,23 @@ export function claudeChannels({ probe } = {}) {
 }
 
 export function codexChannels({ codexProbe } = {}) {
-  return [{
+  const cliFixHint = {
+    zh: '在终端完成 codex 登录后重新检测；若 codex 不在面板 PATH 上，设置环境变量 '
+      + 'AE_MCP_CODEX_CLI 指向 codex 可执行文件后重启 AE。',
+    en: 'Sign in with codex in a terminal and re-check; if codex is not on the panel '
+      + 'PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE.',
+  };
+  const needsIsolatedLogin = Boolean(
+    codexProbe
+    && !codexProbe.loggedIn
+    && codexProbe.runtimeOk !== false
+    && codexProbe.codexHome,
+  );
+  const command = needsIsolatedLogin ? codexLoginCommand({
+    codexHome: codexProbe.codexHome,
+    platformId: codexProbe.platformId,
+  }) : '';
+  const channel = {
     channel: 'cli',
     source: { zh: 'Codex CLI 登录态', en: 'Codex CLI login' },
     checking: codexProbe === null,
@@ -52,13 +70,18 @@ export function codexChannels({ codexProbe } = {}) {
         codexProbe.cliVersion,
       ].filter(Boolean).join(' · ') : (codexProbe.detail || ''))
       : '',
-    fixHint: {
-      zh: '在终端完成 codex 登录后重新检测；若 codex 不在面板 PATH 上，设置环境变量 '
-        + 'AE_MCP_CODEX_CLI 指向 codex 可执行文件后重启 AE。',
-      en: 'Sign in with codex in a terminal and re-check; if codex is not on the panel '
-        + 'PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE.',
-    },
-  }];
+    fixHint: needsIsolatedLogin ? {
+      zh: `面板的 Codex 运行在隔离目录 ${codexProbe.codexHome}（不读取 ~/.codex），系统里已登录的 codex 对面板无效。在终端运行下面命令完成登录后点「重新检测」：\n${command}`,
+      en: `The panel runs Codex with its own CODEX_HOME at ${codexProbe.codexHome} (it never reads ~/.codex), so a system-wide codex login does not apply here. Run this in a terminal, then re-check:\n${command}`,
+    } : cliFixHint,
+    ...(needsIsolatedLogin ? {
+      copyAction: {
+        label: { zh: '复制登录命令', en: 'Copy login command' },
+        text: command,
+      },
+    } : {}),
+  };
+  return [channel];
 }
 
 export function openCodeChannels({ probe, providers = [] } = {}) {

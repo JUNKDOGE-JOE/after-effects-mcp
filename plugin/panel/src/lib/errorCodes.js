@@ -21,7 +21,7 @@ export const ERROR_CODES = Object.freeze({
   CLI_PROBE_FAILED: entry('CLI_PROBE_FAILED', 'backend', 'CLI 已找到但探针失败；请在终端确认它能正常启动。', 'The CLI was found but its probe failed; confirm it starts normally in a terminal.'),
   SPAWN_FAILED: entry('SPAWN_FAILED', 'backend', '请检查 CLI 路径、执行权限和安全软件拦截。', 'Check the CLI path, execute permission, and security-software blocks.'),
   PROCESS_EXITED: entry('PROCESS_EXITED', 'backend', '请查看折叠详情中的退出信息与 stderr 尾部。', 'Inspect the exit information and stderr tail in the collapsed details.'),
-  AUTH_REQUIRED: entry('AUTH_REQUIRED', 'auth', '请在终端完成对应 CLI 登录后重新检测。', 'Sign in with the corresponding CLI in a terminal, then re-check.'),
+  AUTH_REQUIRED: entry('AUTH_REQUIRED', 'auth', '请按「设置 → AI」通道卡上的登录指引完成对应 CLI 登录后重新检测。', 'Follow the sign-in guidance on the channel card under Settings → AI for this CLI, then re-check.'),
   MCP_UNREACHABLE: entry('MCP_UNREACHABLE', 'mcp', '请保持面板宿主运行，并检查本机会话 MCP 状态。', 'Keep the panel host running and check the local conversation MCP status.'),
   SESSION_START_FAILED: entry('SESSION_START_FAILED', 'backend', '会话尚未创建；可修复通道状态后安全重试。', 'The session was not created; retry after fixing the channel state.'),
   TURN_START_FAILED: entry('TURN_START_FAILED', 'backend', '发送可能已经开始；请先按详情中的派发状态核对再重试。', 'Sending may have started; check the dispatch state before retrying.'),

@@ -7,11 +7,20 @@ export function channelDot(probe) {
 
 export function channelTexts(probe, lang = 'zh') {
   const pick = (obj) => (obj ? (obj[lang] || obj.zh || '') : '');
+  const copyAction = probe && !probe.ok && !probe.checking ? probe.copyAction : null;
   return {
     source: pick(probe && probe.source),
     detail: (probe && probe.detail) || '',
     fixHint: probe && !probe.ok && !probe.checking ? pick(probe.fixHint) : '',
+    copyLabel: pick(copyAction && copyAction.label),
+    copyText: (copyAction && copyAction.text) || '',
   };
+}
+
+const COPIED_TEXTS = { zh: '已复制', en: 'Copied' };
+
+export function channelCopiedLabel(lang = 'zh') {
+  return COPIED_TEXTS[lang] || COPIED_TEXTS.zh;
 }
 
 const CHOICE_TEXTS = {
