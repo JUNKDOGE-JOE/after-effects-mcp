@@ -177,7 +177,6 @@ function Shell({ cs }) {
   // First-run wizard
   const [wizardDone, setWizardDone] = React.useState(() => isWizardDone(window.localStorage));
   const [wizStep, setWizStep] = React.useState(1);
-  const [wizClient, setWizClient] = React.useState('claude-desktop');
 
   // Connection drawer + diagnostics
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -1221,8 +1220,6 @@ function Shell({ cs }) {
         step={wizStep}
         lang={lang}
         onLangChange={setLang}
-        client={wizClient}
-        onClient={setWizClient}
         extensionRoot={extRoot}
         mcpReady={externalMcpReady}
         port={status.port}

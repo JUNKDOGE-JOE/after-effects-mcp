@@ -22860,6 +22860,35 @@
     );
   }
 
+  // src/lib/externalClientPrompt.js
+  init_cep_runtime_inject();
+  var PROMPTS = {
+    zh: ({ url, shimPath }) => `\u5E2E\u6211\u628A After Effects \u63A5\u8FDB\u6765\u3002ae-mcp \u9762\u677F\u5DF2\u7ECF\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\u8FD0\u884C\uFF0CMCP \u670D\u52A1\u5730\u5740\u662F ${url}\u3002
+
+\u8BF7\u6309\u4F60\u81EA\u5DF1\u652F\u6301\u7684\u63A5\u5165\u65B9\u5F0F\u4E8C\u9009\u4E00\uFF1A
+- \u652F\u6301 Streamable HTTP MCP server \u7684\u5BA2\u6237\u7AEF\uFF08Claude Code\u3001Cursor \u7B49\uFF09\uFF1A\u628A\u4E0A\u9762\u8FD9\u4E2A\u5730\u5740\u52A0\u6210\u540D\u4E3A ae \u7684\u670D\u52A1\u5668\uFF1B\u5982\u679C\u4F60\u7684\u5BA2\u6237\u7AEF\u6709\u4F5C\u7528\u57DF\u6982\u5FF5\uFF0C\u6CE8\u518C\u5230\u7528\u6237\u7EA7\uFF1B\u4E0D\u8981\u6539\u52A8\u6211\u5DF2\u6709\u7684\u5176\u5B83 MCP \u6761\u76EE\uFF1B\u6539\u5B8C\u628A\u6700\u7EC8\u914D\u7F6E\u56DE\u663E\u7ED9\u6211\u3002
+- \u53EA\u652F\u6301 stdio \u7684\u5BA2\u6237\u7AEF\uFF08Claude Desktop \u7B49\uFF09\uFF1A\u7528\u7CFB\u7EDF Node\uFF0818 \u4EE5\u4E0A\uFF09\u6267\u884C ${shimPath}\uFF0C\u5E76\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_HTTP_URL=${url}\u3002
+
+\u5B8C\u6210\u540E\u63D0\u9192\u6211\u4E24\u4EF6\u4E8B\uFF1AMCP \u5DE5\u5177\u53EA\u5728\u65B0\u4F1A\u8BDD\u91CC\u52A0\u8F7D\uFF0C\u8981\u65B0\u5F00\u4E00\u4E2A\u4F1A\u8BDD\u518D\u8C03\u7528 ae_ping \u9A8C\u8BC1\uFF1Bae-mcp \u9762\u677F\u5FC5\u987B\u4FDD\u6301\u6253\u5F00\uFF0C\u5173\u6389\u6216\u91CD\u8F7D\u9762\u677F\u4E4B\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002`,
+    en: ({ url, shimPath }) => `Connect After Effects for me. The ae-mcp panel is already running on this machine and serves MCP at ${url}.
+
+Use whichever form your client supports:
+- Clients that accept a Streamable HTTP MCP server (Claude Code, Cursor, and similar): add that URL as a server named ae; register it at user scope if your client has scopes; leave my other MCP entries untouched; print the final configuration back to me.
+- stdio-only clients (Claude Desktop and similar): run ${shimPath} with system Node 18 or newer and set the environment variable AE_MCP_HTTP_URL=${url}.
+
+When you are done, remind me of two things: MCP tools load only in a new session, so start a fresh session and call ae_ping to verify; and the ae-mcp panel must stay open \u2014 clients need to reconnect after it closes or reloads.`
+  };
+  function externalClientSetupPrompt({
+    lang = "zh",
+    port = 11488,
+    extensionRoot = "<extension root>"
+  } = {}) {
+    const url = `http://127.0.0.1:${port}/mcp`;
+    const shimPath = String(extensionRoot).replace(/[\\/]+$/, "") + "/host/stdio-shim.js";
+    const renderPrompt = PROMPTS[lang] || PROMPTS.zh;
+    return renderPrompt({ url, shimPath });
+  }
+
   // src/lib/wizardSteps.js
   init_cep_runtime_inject();
   var HOST_STEPS = ["host"];
@@ -22931,16 +22960,15 @@
       t2: "\u68C0\u67E5 AI CLI",
       b2: "\u5185\u7F6E\u5BF9\u8BDD\u53EF\u4F7F\u7528 Claude\u3001Codex \u6216 opencode\uFF1B\u6309\u9700\u5B89\u88C5\u5176\u4E2D\u4EFB\u610F\u4E00\u4E2A\u3002",
       t3: "\u8FDE\u63A5\u5916\u90E8\u5BA2\u6237\u7AEF",
-      b3: "Claude Code \u4E0E Cursor \u76F4\u63A5\u4F7F\u7528\u5BBF\u4E3B URL\uFF1BClaude Desktop \u4F7F\u7528\u968F\u63D2\u4EF6\u63D0\u4F9B\u7684 shim\u3002",
+      b3: "\u590D\u5236\u4E0B\u9762\u8FD9\u6BB5\u8BDD\uFF0C\u7C98\u7ED9\u4F60\u6B63\u5728\u4F7F\u7528\u7684 AI \u5BA2\u6237\u7AEF\uFF0C\u8BA9\u5B83\u81EA\u5DF1\u5B8C\u6210\u63A5\u5165\u3002",
       copy: "\u590D\u5236",
       recheck: "\u590D\u68C0",
       install: "\u5B89\u88C5",
       copyLog: "\u590D\u5236\u65E5\u5FD7",
-      optionalNode: "\u7CFB\u7EDF Node\uFF08\u4EC5 Claude Desktop shim\uFF0C\u53EF\u9009\uFF09",
-      optionalNodeHint: "Claude Code\u3001Cursor \u548C\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD\u4E0D\u9700\u8981\u6B64 Node \u6B65\u9AA4\u3002",
+      optionalNode: "\u7CFB\u7EDF Node\uFF08stdio \u5BA2\u6237\u7AEF\u53EF\u9009\uFF09",
+      optionalNodeHint: "\u53EA\u6709 Claude Desktop \u8FD9\u7C7B\u53EA\u652F\u6301 stdio \u7684\u5BA2\u6237\u7AEF\u624D\u9700\u8981\u3002",
       panelOpenNote: "\u9762\u677F\u5F00\u7740\u624D\u80FD\u8FDE\u63A5\uFF1B\u5173\u95ED\u6216\u91CD\u8F7D\u9762\u677F\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002",
-      http: "MCP HTTP",
-      shim: "Node shim"
+      directUrl: "\u6216\u76F4\u63A5\u4F7F\u7528\u8FD9\u4E2A\u5730\u5740"
     },
     en: {
       stepOf: (n) => `Step ${n} of 3`,
@@ -22954,16 +22982,15 @@
       t2: "Check AI CLIs",
       b2: "Built-in chat can use Claude, Codex, or opencode. Install any CLI you need.",
       t3: "Connect an external client",
-      b3: "Claude Code and Cursor use the host URL; Claude Desktop uses the bundled shim.",
+      b3: "Copy the prompt below and paste it into the AI client you use so it can set up the connection.",
       copy: "Copy",
       recheck: "Re-check",
       install: "Install",
       copyLog: "Copy log",
-      optionalNode: "System Node (optional, Claude Desktop shim only)",
-      optionalNodeHint: "Claude Code, Cursor, and built-in chat do not need this Node step.",
+      optionalNode: "System Node (optional for stdio clients)",
+      optionalNodeHint: "Only stdio-only clients such as Claude Desktop need this step.",
       panelOpenNote: "The panel must stay open. Clients reconnect after it closes or reloads.",
-      http: "MCP HTTP",
-      shim: "Node shim"
+      directUrl: "Or use this address directly"
     }
   };
   var EMPTY_STEPS = initialStepStates();
@@ -22979,7 +23006,7 @@
     if (clipboard && clipboard.writeText) clipboard.writeText(text || "").catch(() => {
     });
   }
-  function CodeBlock({ code, copyLabel, onCopy }) {
+  function CodeBlock({ code, copyLabel, onCopy, wrap = false }) {
     return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
       "div",
       {
@@ -22999,8 +23026,9 @@
                 font: "400 11px/1.7 var(--font-mono)",
                 color: "var(--text-primary)",
                 overflow: "auto",
-                maxHeight: 150,
-                whiteSpace: "pre"
+                maxHeight: wrap ? 260 : 150,
+                whiteSpace: wrap ? "pre-wrap" : "pre",
+                overflowWrap: wrap ? "anywhere" : "normal"
               },
               children: code
             }
@@ -23015,56 +23043,6 @@
               style: { position: "absolute", top: 6, right: 6, background: "var(--bg-panel)" }
             }
           )
-        ]
-      }
-    );
-  }
-  function ClientRow2({ client, selected, label, onSelect }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
-      "button",
-      {
-        type: "button",
-        className: "ds-focusable",
-        onClick: onSelect,
-        style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          width: "100%",
-          minHeight: 40,
-          padding: "5px 10px",
-          textAlign: "left",
-          background: selected ? "var(--bg-selected)" : "transparent",
-          border: "1px solid var(--border-default)",
-          borderRadius: "var(--radius-md)",
-          cursor: "pointer"
-        },
-        children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
-              "span",
-              {
-                style: {
-                  display: "block",
-                  font: "500 12px/1.35 var(--font-ui)",
-                  color: "var(--text-primary)"
-                },
-                children: client.name
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
-              "span",
-              {
-                style: {
-                  display: "block",
-                  font: "400 10px/1.35 var(--font-ui)",
-                  color: "var(--text-tertiary)"
-                },
-                children: label
-              }
-            )
-          ] }),
-          selected ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: "check", size: 13, strokeWidth: 2.5 }) : null
         ]
       }
     );
@@ -23144,8 +23122,6 @@
     step = 1,
     lang = "zh",
     onLangChange,
-    client = "claude-desktop",
-    onClient,
     extensionRoot = "<extension root>",
     mcpReady = true,
     port = 11488,
@@ -23160,12 +23136,12 @@
     commandPreviews = {}
   }) {
     const t = W[lang] || W.zh;
-    const selectedClient = EXTERNAL_CLIENTS.find((item) => item.id === client) || EXTERNAL_CLIENTS[0];
-    const config = mcpReady ? externalClientConfigText({
-      client: selectedClient,
+    const promptText = mcpReady ? externalClientSetupPrompt({
+      lang,
       port,
       extensionRoot
     }) : "";
+    const mcpUrl = `http://127.0.0.1:${port}/mcp`;
     return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
       "div",
       {
@@ -23263,26 +23239,28 @@
                 step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
                   /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t3 }),
                   /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
-                  EXTERNAL_CLIENTS.map((item) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
-                    ClientRow2,
-                    {
-                      client: item,
-                      selected: selectedClient.id === item.id,
-                      label: item.kind === "mcp-shim" ? t.shim : t.http,
-                      onSelect: () => onClient && onClient(item.id)
-                    },
-                    item.id
-                  )),
-                  config ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
-                    CodeBlock,
-                    {
-                      code: config,
-                      copyLabel: t.copy,
-                      onCopy: () => onCopy ? onCopy(config) : copyText2(config)
-                    }
-                  ) : null,
+                  promptText ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                      CodeBlock,
+                      {
+                        wrap: true,
+                        code: promptText,
+                        copyLabel: t.copy,
+                        onCopy: () => onCopy ? onCopy(promptText) : copyText2(promptText)
+                      }
+                    ),
+                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.directUrl }),
+                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                      CodeBlock,
+                      {
+                        code: mcpUrl,
+                        copyLabel: t.copy,
+                        onCopy: () => onCopy ? onCopy(mcpUrl) : copyText2(mcpUrl)
+                      }
+                    )
+                  ] }) : null,
                   /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.panelOpenNote }),
-                  selectedClient.id === "claude-desktop" ? OPTIONAL_CLIENT_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                  OPTIONAL_CLIENT_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
                     CheckRow,
                     {
                       label: t.optionalNode,
@@ -23294,7 +23272,7 @@
                       onInstall: () => onInstall && onInstall(id)
                     },
                     id
-                  )) : null
+                  ))
                 ] }) : null
               ]
             }
@@ -35544,7 +35522,6 @@ ${command}`
     const hostApprovalBridge = import_react47.default.useMemo(() => createHostApprovalBridge(), []);
     const [wizardDone, setWizardDone] = import_react47.default.useState(() => isWizardDone(window.localStorage));
     const [wizStep, setWizStep] = import_react47.default.useState(1);
-    const [wizClient, setWizClient] = import_react47.default.useState("claude-desktop");
     const [drawerOpen, setDrawerOpen] = import_react47.default.useState(false);
     const [sessionsOpen, setSessionsOpen] = import_react47.default.useState(false);
     const [connInfo, setConnInfo] = import_react47.default.useState(null);
@@ -36541,8 +36518,6 @@ ${draft.baseUrl}`)) return;
           step: wizStep,
           lang,
           onLangChange: setLang,
-          client: wizClient,
-          onClient: setWizClient,
           extensionRoot: extRoot,
           mcpReady: externalMcpReady,
           port: status.port,

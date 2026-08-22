@@ -4,7 +4,7 @@ import { Button } from '../components/core/Button';
 import { IconButton } from '../components/core/IconButton';
 import { Segmented } from '../components/core/Segmented';
 import { Spinner } from '../components/core/Spinner';
-import { EXTERNAL_CLIENTS, externalClientConfigText } from '../cep/externalClients';
+import { externalClientSetupPrompt } from '../lib/externalClientPrompt';
 import {
   CLI_STEPS,
   HOST_STEPS,
@@ -25,16 +25,15 @@ const W = {
     t2: '检查 AI CLI',
     b2: '内置对话可使用 Claude、Codex 或 opencode；按需安装其中任意一个。',
     t3: '连接外部客户端',
-    b3: 'Claude Code 与 Cursor 直接使用宿主 URL；Claude Desktop 使用随插件提供的 shim。',
+    b3: '复制下面这段话，粘给你正在使用的 AI 客户端，让它自己完成接入。',
     copy: '复制',
     recheck: '复检',
     install: '安装',
     copyLog: '复制日志',
-    optionalNode: '系统 Node（仅 Claude Desktop shim，可选）',
-    optionalNodeHint: 'Claude Code、Cursor 和面板内置对话不需要此 Node 步骤。',
+    optionalNode: '系统 Node（stdio 客户端可选）',
+    optionalNodeHint: '只有 Claude Desktop 这类只支持 stdio 的客户端才需要。',
     panelOpenNote: '面板开着才能连接；关闭或重载面板后客户端需要重连。',
-    http: 'MCP HTTP',
-    shim: 'Node shim',
+    directUrl: '或直接使用这个地址',
   },
   en: {
     stepOf: (n) => `Step ${n} of 3`,
@@ -48,16 +47,15 @@ const W = {
     t2: 'Check AI CLIs',
     b2: 'Built-in chat can use Claude, Codex, or opencode. Install any CLI you need.',
     t3: 'Connect an external client',
-    b3: 'Claude Code and Cursor use the host URL; Claude Desktop uses the bundled shim.',
+    b3: 'Copy the prompt below and paste it into the AI client you use so it can set up the connection.',
     copy: 'Copy',
     recheck: 'Re-check',
     install: 'Install',
     copyLog: 'Copy log',
-    optionalNode: 'System Node (optional, Claude Desktop shim only)',
-    optionalNodeHint: 'Claude Code, Cursor, and built-in chat do not need this Node step.',
+    optionalNode: 'System Node (optional for stdio clients)',
+    optionalNodeHint: 'Only stdio-only clients such as Claude Desktop need this step.',
     panelOpenNote: 'The panel must stay open. Clients reconnect after it closes or reloads.',
-    http: 'MCP HTTP',
-    shim: 'Node shim',
+    directUrl: 'Or use this address directly',
   },
 };
 
@@ -76,7 +74,7 @@ function copyText(text) {
   if (clipboard && clipboard.writeText) clipboard.writeText(text || '').catch(() => {});
 }
 
-function CodeBlock({ code, copyLabel, onCopy }) {
+function CodeBlock({ code, copyLabel, onCopy, wrap = false }) {
   return (
     <div
       style={{
@@ -93,8 +91,9 @@ function CodeBlock({ code, copyLabel, onCopy }) {
           font: '400 11px/1.7 var(--font-mono)',
           color: 'var(--text-primary)',
           overflow: 'auto',
-          maxHeight: 150,
-          whiteSpace: 'pre',
+          maxHeight: wrap ? 260 : 150,
+          whiteSpace: wrap ? 'pre-wrap' : 'pre',
+          overflowWrap: wrap ? 'anywhere' : 'normal',
         }}
       >
         {code}
@@ -107,51 +106,6 @@ function CodeBlock({ code, copyLabel, onCopy }) {
         style={{ position: 'absolute', top: 6, right: 6, background: 'var(--bg-panel)' }}
       />
     </div>
-  );
-}
-
-function ClientRow({ client, selected, label, onSelect }) {
-  return (
-    <button
-      type="button"
-      className="ds-focusable"
-      onClick={onSelect}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        width: '100%',
-        minHeight: 40,
-        padding: '5px 10px',
-        textAlign: 'left',
-        background: selected ? 'var(--bg-selected)' : 'transparent',
-        border: '1px solid var(--border-default)',
-        borderRadius: 'var(--radius-md)',
-        cursor: 'pointer',
-      }}
-    >
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span
-          style={{
-            display: 'block',
-            font: '500 12px/1.35 var(--font-ui)',
-            color: 'var(--text-primary)',
-          }}
-        >
-          {client.name}
-        </span>
-        <span
-          style={{
-            display: 'block',
-            font: '400 10px/1.35 var(--font-ui)',
-            color: 'var(--text-tertiary)',
-          }}
-        >
-          {label}
-        </span>
-      </span>
-      {selected ? <Icon name="check" size={13} strokeWidth={2.5} /> : null}
-    </button>
   );
 }
 
@@ -238,8 +192,6 @@ export function WizardScreen({
   step = 1,
   lang = 'zh',
   onLangChange,
-  client = 'claude-desktop',
-  onClient,
   extensionRoot = '<extension root>',
   mcpReady = true,
   port = 11488,
@@ -254,13 +206,12 @@ export function WizardScreen({
   commandPreviews = {},
 }) {
   const t = W[lang] || W.zh;
-  const selectedClient = EXTERNAL_CLIENTS.find((item) => item.id === client)
-    || EXTERNAL_CLIENTS[0];
-  const config = mcpReady ? externalClientConfigText({
-    client: selectedClient,
+  const promptText = mcpReady ? externalClientSetupPrompt({
+    lang,
     port,
     extensionRoot,
   }) : '';
+  const mcpUrl = `http://127.0.0.1:${port}/mcp`;
   return (
     <div
       style={{
@@ -369,26 +320,28 @@ export function WizardScreen({
             <div style={{ font: '400 12px/1.55 var(--font-ui)', color: 'var(--text-secondary)' }}>
               {t.b3}
             </div>
-            {EXTERNAL_CLIENTS.map((item) => (
-              <ClientRow
-                key={item.id}
-                client={item}
-                selected={selectedClient.id === item.id}
-                label={item.kind === 'mcp-shim' ? t.shim : t.http}
-                onSelect={() => onClient && onClient(item.id)}
-              />
-            ))}
-            {config ? (
-              <CodeBlock
-                code={config}
-                copyLabel={t.copy}
-                onCopy={() => (onCopy ? onCopy(config) : copyText(config))}
-              />
+            {promptText ? (
+              <React.Fragment>
+                <CodeBlock
+                  wrap
+                  code={promptText}
+                  copyLabel={t.copy}
+                  onCopy={() => (onCopy ? onCopy(promptText) : copyText(promptText))}
+                />
+                <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>
+                  {t.directUrl}
+                </div>
+                <CodeBlock
+                  code={mcpUrl}
+                  copyLabel={t.copy}
+                  onCopy={() => (onCopy ? onCopy(mcpUrl) : copyText(mcpUrl))}
+                />
+              </React.Fragment>
             ) : null}
             <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>
               {t.panelOpenNote}
             </div>
-            {selectedClient.id === 'claude-desktop' ? OPTIONAL_CLIENT_STEPS.map((id) => (
+            {OPTIONAL_CLIENT_STEPS.map((id) => (
               <CheckRow
                 key={id}
                 label={t.optionalNode}
@@ -399,7 +352,7 @@ export function WizardScreen({
                 onDetect={() => onDetect && onDetect(id)}
                 onInstall={() => onInstall && onInstall(id)}
               />
-            )) : null}
+            ))}
           </React.Fragment>
         ) : null}
       </div>
