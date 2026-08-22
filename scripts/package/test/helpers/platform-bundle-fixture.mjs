@@ -6,7 +6,7 @@ import path from 'node:path';
 import { canonicalJson } from '../../lib/manifest.mjs';
 
 export const SOURCE_COMMIT_SHA = '0123456789abcdef0123456789abcdef01234567';
-export const PRODUCT_VERSION = '0.9.6';
+export const PRODUCT_VERSION = '0.10.0';
 
 export function sha256Bytes(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -69,8 +69,8 @@ async function writePlugin(repoRoot) {
   const plugin = path.join(repoRoot, 'plugin');
   await writeFixtureFile(plugin, 'CSXS/manifest.xml', [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<ExtensionManifest ExtensionBundleId="com.aemcp.panel" ExtensionBundleVersion="0.9.6">',
-    '  <ExtensionList><Extension Id="com.aemcp.panel" Version="0.9.6" /></ExtensionList>',
+    '<ExtensionManifest ExtensionBundleId="com.aemcp.panel" ExtensionBundleVersion="0.10.0">',
+    '  <ExtensionList><Extension Id="com.aemcp.panel" Version="0.10.0" /></ExtensionList>',
     '  <ExecutionEnvironment><HostList><Host Name="AEFT" Version="[23.0,26.9]" />',
     '  </HostList></ExecutionEnvironment>',
     '</ExtensionManifest>',

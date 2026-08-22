@@ -21,7 +21,7 @@ async function signingInput(t, platform) {
   t.after(() => rm(root, { recursive: true, force: true }));
   const input = {
     platform,
-    version: '0.9.6',
+    version: '0.10.0',
     candidateSha: CANDIDATE_SHA,
     stageRoot: path.join(root, 'stage'),
     signingRoot: path.join(root, 'signing'),

@@ -5,7 +5,7 @@ English | [简体中文](README.zh-CN.md)
 **One-line setup prompt — paste this into Claude Code or another AI agent:**
 
 ```text
-Install the ae-mcp ZXP and AEX from the v0.9.6 release, open Window > Extensions
+Install the ae-mcp ZXP and AEX from the v0.10.0-rc.1 pre-release, open Window > Extensions
 > ae-mcp in After Effects, then connect Claude Code with `claude mcp add
 --transport http ae http://127.0.0.1:11488/mcp`; for Claude Desktop, configure
 the extension's `host/stdio-shim.js` with the system Node executable and ask me

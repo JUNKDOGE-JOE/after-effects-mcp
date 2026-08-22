@@ -12,6 +12,8 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### Unreleased
 
+### [0.10.0-rc.1] — 2026-08-22
+
 #### ✨ 新增
 
 - **`ae_previewFrame` 区间拼图与 A/B 像素差分**——新增 `range:{start,end,count}` 等距采样、`layout:'grid'` 带时间码对比表，以及可引用本次时刻或最近 50 次进程内捕获的 `compare`；差分返回热力图、并排图、变化比例 / 像素数 / 均值 / 最大差值与外接框，所有合成、重采样和缩放均由 CEP 宿主的零依赖 PNG 路径完成，不依赖 Chromium canvas。
@@ -322,6 +324,8 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ## English
 
 ### Unreleased
+
+### [0.10.0-rc.1] — 2026-08-22
 
 #### ✨ Added
 

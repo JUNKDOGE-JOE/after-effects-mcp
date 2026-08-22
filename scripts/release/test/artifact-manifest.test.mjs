@@ -12,7 +12,7 @@ import { makeArtifactManifestFixture } from './helpers/artifact-manifest-fixture
 test('artifact manifest binds direct ZXP/DMG outputs and dual-platform evidence', async (t) => {
   const fixture = await makeArtifactManifestFixture(t);
   const manifest = await buildArtifactManifest({
-    version: '0.9.6',
+    version: '0.10.0',
     candidateSha: fixture.candidateSha,
     workflowRunId: '42',
     artifacts: fixture.artifacts,
@@ -32,7 +32,7 @@ test('artifact manifest binds direct ZXP/DMG outputs and dual-platform evidence'
 test('artifact manifest rejects an unsupported artifact role and malformed evidence', async (t) => {
   const fixture = await makeArtifactManifestFixture(t);
   const manifest = await buildArtifactManifest({
-    version: '0.9.6',
+    version: '0.10.0',
     candidateSha: fixture.candidateSha,
     workflowRunId: '42',
     artifacts: fixture.artifacts,
