@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BACKEND_EVENTS } from '../src/cep/backends/contract.js';
+import { createClaudeAgentBackend } from '../src/cep/claudeAgentBackend.js';
+import { createCodexBackend } from '../src/cep/codexBackend.js';
+import { createOpenCodeBackend } from '../src/cep/openCodeBackend.js';
 import {
   BACKENDS,
   REAL_BACKENDS,
@@ -50,6 +53,7 @@ test('contract event vocabulary retains the public backend events', () => {
   assert.deepEqual(BACKEND_EVENTS, [
     'turn-start',
     'turn-accepted',
+    'session-ref',
     'text-delta',
     'tool-start',
     'tool-result',
@@ -62,4 +66,29 @@ test('contract event vocabulary retains the public backend events', () => {
     'turn-end',
     'error',
   ]);
+});
+
+test('all embedded backends expose the session reference lifecycle', () => {
+  const platform = {
+    id: 'windows-x64',
+    fs: {},
+    paths: {
+      configRoot: 'C:\\Users\\test\\.ae-mcp',
+      tempRoot: 'C:\\Temp',
+      join: (parts) => parts.join('\\'),
+      isAbsolute: () => true,
+    },
+    completeSpawnEnv: (value = {}) => value,
+  };
+  const factories = [
+    () => createClaudeAgentBackend({ platform }),
+    () => createCodexBackend({ platform }),
+    () => createOpenCodeBackend({ platform }),
+  ];
+  for (const factory of factories) {
+    const backend = factory();
+    assert.equal(typeof backend.getSessionRef, 'function');
+    assert.equal(typeof backend.adoptSessionRef, 'function');
+    assert.equal(typeof backend.deleteSessionRef, 'function');
+  }
 });

@@ -1,4 +1,4 @@
-export function installBeforeUnloadReset(target, backend) {
+export function installBeforeUnloadReset(target, backend, onBeforeUnload) {
   if (!backend || typeof backend.reset !== 'function') {
     throw new TypeError('A backend with reset() is required');
   }
@@ -10,6 +10,7 @@ export function installBeforeUnloadReset(target, backend) {
     if (target && typeof target.removeEventListener === 'function') {
       target.removeEventListener('beforeunload', dispose);
     }
+    if (typeof onBeforeUnload === 'function') onBeforeUnload();
     backend.reset();
   };
 

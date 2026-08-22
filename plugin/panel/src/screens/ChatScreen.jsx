@@ -378,7 +378,7 @@ export function ChatScreen({
         ) : null}
 
         {entries.map((entry) => (
-          <Entry key={entry.id} entry={entry} lang={lang} onApprove={onApprove} onAnswerQuestion={onAnswerQuestion} />
+          <Entry key={entry.sid || entry.id} entry={entry} lang={lang} onApprove={onApprove} onAnswerQuestion={onAnswerQuestion} />
         ))}
 
         {streaming && thinking ? (

@@ -12,9 +12,14 @@ export function Input({
   disabled = false,
   error = false,
   size = 'md',
+  icon,
   suffix,
   full = true,
   style,
+  onKeyDown,
+  onBlur,
+  autoFocus = false,
+  ariaLabel,
 }) {
   const [focus, setFocus] = React.useState(false);
   const [revealed, setRevealed] = React.useState(false);
@@ -36,6 +41,7 @@ export function Input({
         ...style,
       }}
     >
+      {icon ? <Icon name={icon} size={13} color="var(--text-tertiary)" /> : null}
       <input
         type={secret && !revealed ? 'password' : type === 'password' ? 'text' : type}
         value={value}
@@ -43,7 +49,13 @@ export function Input({
         disabled={disabled}
         onChange={(e) => onChange && onChange(e.target.value)}
         onFocus={() => setFocus(true)}
-        onBlur={() => setFocus(false)}
+        onBlur={(event) => {
+          setFocus(false);
+          if (onBlur) onBlur(event);
+        }}
+        onKeyDown={onKeyDown}
+        autoFocus={autoFocus}
+        aria-label={ariaLabel}
         style={{
           flex: 1,
           minWidth: 0,

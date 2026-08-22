@@ -118,7 +118,7 @@ test('App keeps backend instances stable across backend and language changes', (
   const app = source('../src/app/App.jsx');
   assert.equal((app.match(/getLang: \(\) => langRef\.current/g) || []).length, 3);
   assert.match(app, /const effectiveBackend = effectiveBackendRef\.current/);
-  assert.match(app, /\}, \[releaseTurnAttachments\]\);/);
+  assert.match(app, /\}, \[commitChatEntries, releaseTurnAttachments\]\);/);
   assert.equal(
     (app.match(/\[extRoot, getMcpSpec, mcp, handleChatEvent, platform\]\);/g) || []).length,
     2,

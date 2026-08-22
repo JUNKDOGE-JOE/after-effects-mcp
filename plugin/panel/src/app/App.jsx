@@ -8,6 +8,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { ActivityScreen } from '../screens/ActivityScreen';
 import { WizardScreen } from '../screens/WizardScreen';
 import { ConnectionDrawer } from '../screens/ConnectionDrawer';
+import { SessionDrawer } from '../screens/SessionDrawer';
 import { ChatScreen } from '../screens/ChatScreen';
 import { ToolsScreen } from '../screens/ToolsScreen';
 import { ToolApprovalDialog } from '../components/tools/ToolApprovalDialog';
@@ -61,6 +62,8 @@ import { readCepSystemPath } from '../cep/platform/paths.js';
 import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
 import { createHostConversation } from '../lib/hostConversation.js';
 import { createHostApprovalBridge } from '../lib/hostApprovalBridge.js';
+import { createSessionController } from '../lib/sessionController.js';
+import { createSessionStore } from '../cep/sessionStore.js';
 import { getMcpSpec as resolveChatMcpSpec } from '../lib/mcpEngine.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
@@ -91,6 +94,7 @@ const T = {
     cancel: '取消',
     pausedHint: '已暂停 — 恢复后才能发送',
     goSettings: '去设置',
+    sessions: '会话历史',
   },
   en: {
     connected: 'Service running',
@@ -113,6 +117,7 @@ const T = {
     cancel: 'Cancel',
     pausedHint: 'Paused — resume to send',
     goSettings: 'Open Settings',
+    sessions: 'Session history',
   },
 };
 
@@ -154,9 +159,12 @@ function Shell({ cs }) {
   const t = T[lang];
   const [tab, setTab] = React.useState('chat');
   const [status, setStatus] = React.useState({ state: 'starting', port: DEFAULT_PORT, error: null });
+  const statusRef = React.useRef(status);
+  statusRef.current = status;
   const [paused, setPaused] = React.useState(false);
   const [logs, setLogs] = React.useState([]);
   const backendErrorsRef = React.useRef([]);
+  const panelLogRef = React.useRef(null);
   const ctrl = React.useRef(null);
   const getHost = React.useCallback(() => (ctrl.current ? ctrl.current.getHost() : null), []);
   const hostConversation = React.useMemo(() => createHostConversation({ getHost }), [getHost]);
@@ -169,6 +177,7 @@ function Shell({ cs }) {
 
   // Connection drawer + diagnostics
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [sessionsOpen, setSessionsOpen] = React.useState(false);
   const [connInfo, setConnInfo] = React.useState(null);
   const [diagnostics, setDiagnostics] = React.useState(null);
 
@@ -184,6 +193,10 @@ function Shell({ cs }) {
   // Embedded chat: provider references, model/permission prefs, entry feed.
   // Resolved provider values exist only inside a request/probe/spawn call.
   const platform = React.useMemo(() => createPlatformAdapter(), []);
+  const sessionStore = React.useMemo(() => createSessionStore({
+    platform,
+    log: (message) => panelLogRef.current?.(message),
+  }), [platform]);
   const attachmentStore = React.useMemo(() => createAttachmentStore({
     platform,
     randomUUID: randomProviderCredentialId,
@@ -298,6 +311,9 @@ function Shell({ cs }) {
   const [codexModels, setCodexModels] = React.useState(null);
   const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
   const [chatEntries, setChatEntries] = React.useState([]);
+  const chatEntriesRef = React.useRef(chatEntries);
+  chatEntriesRef.current = chatEntries;
+  const sessionControllerRef = React.useRef(null);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
   const baseDescriptor = React.useMemo(
@@ -364,6 +380,8 @@ function Shell({ cs }) {
   const effective = pickBackend({ pref: backendPref, channels, channelChoices });
   const effectiveBackendRef = React.useRef(effective.backend);
   effectiveBackendRef.current = effective.backend;
+  const effectiveChannelRef = React.useRef(effective.channel);
+  effectiveChannelRef.current = effective.channel;
   const runtimeRef = React.useRef({
     model: effectiveModel,
     permissionMode,
@@ -398,15 +416,16 @@ function Shell({ cs }) {
       attachmentStore.release(attachment.id);
     }
   }, [attachmentStore]);
-  const resetAttachmentDraftSession = React.useCallback(() => {
+  const resetAttachmentDraftSession = React.useCallback((nextSessionId = null) => {
     attachmentStore.releaseSession(chatSessionIdRef.current);
     attachmentOperationsRef.current.clear();
     pendingTurnRef.current = null;
     acceptedTurnRef.current = null;
     dispatchAttachmentDraft({ type: 'reset' });
-    const nextSessionId = 'chat-' + randomProviderCredentialId();
-    chatSessionIdRef.current = nextSessionId;
-    setChatSessionId(nextSessionId);
+    if (nextSessionId) {
+      chatSessionIdRef.current = nextSessionId;
+      setChatSessionId(nextSessionId);
+    }
   }, [attachmentStore]);
   const addAttachment = React.useCallback(async ({ pondId, file }) => {
     const operation = {};
@@ -448,7 +467,18 @@ function Shell({ cs }) {
   const retryAttachment = React.useCallback((item) => {
     addAttachment({ pondId: item.pondId, file: item.file });
   }, [addAttachment]);
+  const commitChatEntries = React.useCallback((updater, event) => {
+    const current = chatEntriesRef.current;
+    const next = typeof updater === 'function' ? updater(current) : updater;
+    chatEntriesRef.current = Array.isArray(next) ? next : current;
+    setChatEntries(chatEntriesRef.current);
+    sessionControllerRef.current?.recordEntries(chatEntriesRef.current, event);
+  }, []);
   const handleChatEvent = React.useCallback((evt) => {
+    if (evt.type === 'session-ref') {
+      sessionControllerRef.current?.recordBackendRef(evt.ref);
+      return;
+    }
     const pending = pendingTurnRef.current;
     if (evt.type === 'error') {
       const exactSecrets = attachmentPathSecrets({ pendingTurn: pending });
@@ -485,7 +515,7 @@ function Shell({ cs }) {
     if (evt.type === 'turn-accepted') {
       if (!pending || evt.turnId !== pending.turnId) return;
       acceptedTurnRef.current = pending.turnId;
-      setChatEntries((entries) => entries.concat(userTurnEntry(pending)));
+      commitChatEntries((entries) => entries.concat(userTurnEntry(pending)), evt);
       dispatchAttachmentDraft({ type: 'accepted', turnId: pending.turnId });
       setChatStreaming(true);
       return;
@@ -520,8 +550,8 @@ function Shell({ cs }) {
       setChatStreaming(false);
       setThinkingActive(false);
     }
-    setChatEntries((entries) => reduceEvent(entries, evt));
-  }, [releaseTurnAttachments]);
+    commitChatEntries((entries) => reduceEvent(entries, evt), evt);
+  }, [commitChatEntries, releaseTurnAttachments]);
 
   const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
     platform,
@@ -555,11 +585,6 @@ function Shell({ cs }) {
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
   }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
-
-  React.useEffect(
-    () => installBeforeUnloadReset(window, codexBackend),
-    [codexBackend],
-  );
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
     platform,
@@ -596,6 +621,74 @@ function Shell({ cs }) {
       `Unknown backend id "${effective.backend}". Known backend ids: ${knownBackendIds}`,
     );
   })();
+  const backendInstancesRef = React.useRef(backendInstances);
+  backendInstancesRef.current = backendInstances;
+  const activeBackendInstanceRef = React.useRef(activeBackend);
+  activeBackendInstanceRef.current = activeBackend;
+  const pendingSessionLoadRef = React.useRef(null);
+  const [sessionSnapshot, setSessionSnapshot] = React.useState({ sessions: [], activeId: null });
+  const sessionController = React.useMemo(() => createSessionController({
+    store: sessionStore,
+    now: () => Date.now(),
+    uuid: randomProviderCredentialId,
+    deps: {
+      stopActiveTurn: () => activeBackendInstanceRef.current?.stop?.(),
+      resetActiveBackend: () => activeBackendInstanceRef.current?.reset?.(),
+      cancelPendingUi: () => elicitationCoordinator.cancelAll(),
+      rotateHostConversation: (sessionId) => {
+        resetAttachmentDraftSession(sessionId);
+        hostConversation.closeConversation();
+        if (statusRef.current.state === 'ok') {
+          hostConversation.ensureConversation({
+            label: sessionId,
+            approvalTier: permissionModeRef.current,
+            expertGuidance: expertGuidanceRef.current,
+          });
+        }
+      },
+      adoptBackendRef: (backend, ref) => {
+        backendInstancesRef.current[backend]?.adoptSessionRef?.(ref);
+      },
+      getBackendRef: () => activeBackendInstanceRef.current?.getSessionRef?.() || null,
+      setEntries: (entries) => {
+        chatEntriesRef.current = entries;
+        setChatEntries(entries);
+      },
+      getEntries: () => chatEntriesRef.current,
+      selectBackend: async (backend) => {
+        setBackendPref(backend);
+        writePref('ae_mcp_backend', backend);
+        await new Promise((resolve) => {
+          const afterPaint = () => setTimeout(resolve, 0);
+          if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(afterPaint);
+          else afterPaint();
+        });
+      },
+      currentBackend: () => effectiveBackendRef.current,
+      currentModel: () => runtimeRef.current.model,
+      currentChannel: () => effectiveChannelRef.current,
+      log: (message) => panelLogRef.current?.(message),
+    },
+  }), [
+    elicitationCoordinator,
+    hostConversation,
+    resetAttachmentDraftSession,
+    sessionStore,
+  ]);
+  sessionControllerRef.current = sessionController;
+  React.useEffect(() => sessionController.subscribe(setSessionSnapshot), [sessionController]);
+  const sessionBootStartedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (status.state !== 'ok' || effective.backend === 'none' || sessionBootStartedRef.current) return;
+    sessionBootStartedRef.current = true;
+    sessionController.boot().catch((error) => panelLogRef.current?.(
+      'Session restore failed: ' + (error?.message || String(error)),
+    ));
+  }, [effective.backend, sessionController, status.state]);
+  React.useEffect(
+    () => installBeforeUnloadReset(window, codexBackend, () => sessionController.flush()),
+    [codexBackend, sessionController],
+  );
 
   // Descriptor selection is keyed on the effective backend from pickBackend.
   React.useEffect(() => {
@@ -630,7 +723,7 @@ function Shell({ cs }) {
     providers,
     providerInit.state,
   ]);
-  const activeBackendRef = React.useRef(null);
+  const lastRealBackendRef = React.useRef(null);
 
   const runClaudeProbe = React.useCallback(() => {
     let alive = true;
@@ -705,24 +798,27 @@ function Shell({ cs }) {
   }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
 
   React.useEffect(() => {
-    const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
-    activeBackendRef.current = decision.nextReal;
+    const decision = shouldResetOnBackendChange(lastRealBackendRef.current, effective.backend);
+    lastRealBackendRef.current = decision.nextReal;
     if (!decision.reset) return;
     claudeBackend.reset();
     codexBackend.reset();
     openCodeBackend.reset();
     resetAttachmentDraftSession();
-    setChatEntries([]);
     setChatStreaming(false);
+    setThinkingActive(false);
+    if (pendingSessionLoadRef.current) return;
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
+    void sessionController.createSession();
   }, [
     effective.backend,
     claudeBackend,
     codexBackend,
     openCodeBackend,
     resetAttachmentDraftSession,
+    sessionController,
   ]);
 
   const sendChat = (input) => {
@@ -777,20 +873,10 @@ function Shell({ cs }) {
     }
   };
 
-  const newChatSession = () => {
-    hostConversation.closeConversation();
-    if (activeBackend) activeBackend.reset();
-    resetAttachmentDraftSession();
-    if (status.state === 'ok') {
-      hostConversation.ensureConversation({
-        label: chatSessionIdRef.current,
-        approvalTier: permissionModeRef.current,
-        expertGuidance: expertGuidanceRef.current,
-      });
-    }
+  const newChatSession = async () => {
+    await sessionController.createSession();
     setChatStreaming(false);
     setThinkingActive(false);
-    setChatEntries([]);
   };
 
   // Note: the log-level filter is intentionally applied at append time only; existing buffered lines are unaffected by later level changes.
@@ -810,6 +896,39 @@ function Shell({ cs }) {
     if (!keepLogLine(logLevelRef.current, message)) return;
     setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, [getHost]);
+  panelLogRef.current = pushLog;
+
+  const switchChatSession = React.useCallback(async (id) => {
+    const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
+    pendingSessionLoadRef.current = id;
+    if (target) {
+      setSessionModel(target.model || null);
+      setSessionEffort(null);
+      setSessionFast(null);
+    }
+    try {
+      await sessionController.switchTo(id);
+      setChatStreaming(false);
+      setThinkingActive(false);
+    } catch (error) {
+      pushLog('Session switch failed: ' + (error?.message || String(error)));
+    } finally {
+      pendingSessionLoadRef.current = null;
+    }
+  }, [pushLog, sessionController]);
+
+  const deleteChatSession = React.useCallback(async (id) => {
+    const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
+    try {
+      const ref = await sessionController.remove(id);
+      if (!target || !ref) return;
+      const backend = backendInstancesRef.current[target.backend];
+      const result = await backend?.deleteSessionRef?.(ref);
+      pushLog(`Session backend delete (${target.backend}): ${JSON.stringify(result || { ok: false })}`);
+    } catch (error) {
+      pushLog('Session delete failed: ' + (error?.message || String(error)));
+    }
+  }, [pushLog, sessionController]);
 
   const exportLogs = React.useCallback(async () => {
     try {
@@ -1096,10 +1215,12 @@ function Shell({ cs }) {
         status={statusForBar}
         label={paused ? t.paused : status.state === 'ok' ? `${t.connected} · 127.0.0.1:${status.port}` : status.state === 'error' ? `${t.error} · ${status.error || ''}` : t.starting}
         onStatusClick={() => { setDrawerOpen(true); }}
+        onSessions={() => setSessionsOpen(true)}
         onTogglePause={togglePause}
         onSettings={() => setTab('settings')}
         pauseTitle={t.pauseAll}
         resumeTitle={t.resume}
+        sessionsTitle={t.sessions}
         settingsTitle={t.settings}
       />
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -1223,7 +1344,11 @@ function Shell({ cs }) {
             modelSwitchable={descriptor.perTurnModelSwitch !== false}
             onModelChange={(m) => { setModel(m); writePref('ae_mcp_model', m); }}
             backend={backendPref}
-            onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
+            onBackendChange={(m) => {
+              sessionController.flush();
+              setBackendPref(m);
+              writePref('ae_mcp_backend', m);
+            }}
             expertGuidance={expertGuidance}
             onExpertGuidance={(v) => { setExpertGuidance(v); saveExpertGuidance(window.localStorage, v); }}
             logLevel={logLevel}
@@ -1248,6 +1373,19 @@ function Shell({ cs }) {
         onDiagnose={runDiag}
         onCopyConfig={() => copyText(mcpConfigStr)}
         onRestart={() => applyPort(status.port)}
+      />
+      <SessionDrawer
+        open={sessionsOpen}
+        onClose={() => setSessionsOpen(false)}
+        lang={lang}
+        sessions={sessionSnapshot.sessions}
+        activeId={sessionSnapshot.activeId}
+        onNew={newChatSession}
+        onSwitch={switchChatSession}
+        onRename={(id, title) => sessionController.rename(id, title)}
+        onArchive={(id) => sessionController.archive(id)}
+        onUnarchive={(id) => sessionController.unarchive(id)}
+        onDelete={deleteChatSession}
       />
       <ConfirmDialog
         open={confirmRegen}

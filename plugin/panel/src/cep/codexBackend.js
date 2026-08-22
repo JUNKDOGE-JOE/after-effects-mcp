@@ -288,6 +288,7 @@ export function createCodexBackend({
   let initializePromise = null;
   let initialized = false;
   let threadId = null;
+  let adoptedThreadId = null;
   // Codex does not forward the ae-mcp server `instructions` to the model, so we
   // inject them once as a preamble on the first turn of each (re)started thread.
   // Reset alongside every threadId reset so a fresh thread re-sends it.
@@ -655,6 +656,7 @@ export function createCodexBackend({
     startPromise = null;
     initializePromise = null;
     initialized = false;
+    if (threadId) adoptedThreadId = threadId;
     threadId = null;
     preambleSent = false;
     // Settle pending approvals now that the RPC peer is gone: without this the
@@ -694,6 +696,7 @@ export function createCodexBackend({
     startPromise = null;
     initializePromise = null;
     initialized = false;
+    if (threadId) adoptedThreadId = threadId;
     threadId = null;
     preambleSent = false;
     drainApprovals();
@@ -838,23 +841,40 @@ export function createCodexBackend({
       throw new Error('Codex thread start was cancelled');
     }
     const spawnEnv = currentEnv();
-    let result;
-    try {
-      result = await threadRpc.request('thread/start', {
-        ephemeral: true,
-        cwd: defaultCwd(spawnEnv, adapter),
-        model: getModel(),
-        approvalPolicy: APPROVAL_POLICY,
-        approvalsReviewer: 'user',
-        sandboxPolicy: SANDBOX_POLICY,
-        config: {
-          mcp_servers: {
-            ae: { url: mcpSpec.url },
-          },
+    const params = {
+      cwd: defaultCwd(spawnEnv, adapter),
+      model: getModel(),
+      approvalPolicy: APPROVAL_POLICY,
+      approvalsReviewer: 'user',
+      sandboxPolicy: SANDBOX_POLICY,
+      config: {
+        mcp_servers: {
+          ae: { url: mcpSpec.url },
         },
-      });
-    } catch (error) {
-      throw taggedError(error, 'fallbackCode', 'SESSION_START_FAILED');
+      },
+    };
+    let result;
+    if (adoptedThreadId) {
+      try {
+        result = await threadRpc.request('thread/resume', {
+          threadId: adoptedThreadId,
+          ...params,
+        });
+        preambleSent = true;
+      } catch (error) {
+        adoptedThreadId = null;
+        preambleSent = false;
+      }
+    }
+    if (!result) {
+      try {
+        result = await threadRpc.request('thread/start', {
+          ephemeral: false,
+          ...params,
+        });
+      } catch (error) {
+        throw taggedError(error, 'fallbackCode', 'SESSION_START_FAILED');
+      }
     }
     if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
       throw new Error('Codex thread start was cancelled');
@@ -863,6 +883,8 @@ export function createCodexBackend({
     if (!threadId) {
       throw taggedError(new Error('Codex did not return a thread id.'), 'fallbackCode', 'SESSION_START_FAILED');
     }
+    adoptedThreadId = threadId;
+    emit({ type: 'session-ref', ref: { kind: 'codex-thread', id: threadId } });
     return threadId;
   }
 
@@ -1061,6 +1083,7 @@ export function createCodexBackend({
     initializePromise = null;
     initialized = false;
     threadId = null;
+    adoptedThreadId = null;
     preambleSent = false;
     currentTurnId = null;
     transcript = [];
@@ -1183,12 +1206,76 @@ export function createCodexBackend({
     }
   }
 
+  function getSessionRef() {
+    const id = threadId || adoptedThreadId;
+    return id ? { kind: 'codex-thread', id } : null;
+  }
+
+  function adoptSessionRef(ref) {
+    const valid = ref && ref.kind === 'codex-thread' && ref.id;
+    threadId = null;
+    adoptedThreadId = valid ? String(ref.id) : null;
+    preambleSent = Boolean(adoptedThreadId);
+  }
+
+  async function deleteSessionRef(ref) {
+    if (!ref || ref.kind !== 'codex-thread' || !ref.id) {
+      return { ok: false, detail: 'invalid codex thread reference' };
+    }
+    let deleteProc = null;
+    let deleteRpc = null;
+    try {
+      const spawnEnv = currentEnv();
+      const cliInfo = lastCliInfo || await resolveCli({
+        env: spawnEnv,
+        platform: adapter,
+        lang: currentLang(),
+      });
+      if (!cliInfo?.ok) return { ok: false, detail: cliInfo?.detail || 'codex CLI is unavailable' };
+      lastCliInfo = cliInfo;
+      const executable = cliInfo.executable || {
+        ok: true,
+        id: 'codex',
+        path: cliInfo.cliPath,
+        argsPrefix: [],
+        source: 'path',
+        version: cliInfo.version || null,
+        arch: null,
+      };
+      deleteProc = adapter.spawn(executable, ['app-server'], {
+        stdio: 'pipe',
+        windowsHide: true,
+        env: spawnEnv,
+      });
+      deleteRpc = createRpc({ writeLine: (line) => deleteProc.stdin.write(line) });
+      const reader = createNdjsonReader((message) => deleteRpc.handleMessage(message));
+      deleteProc.stdout?.on?.('data', reader);
+      deleteProc.stderr?.on?.('data', () => {});
+      deleteProc.on?.('exit', () => deleteRpc.close(new Error('codex app-server exited during thread delete')));
+      deleteProc.on?.('error', (error) => deleteRpc.close(error));
+      await deleteRpc.request('initialize', {
+        clientInfo: { name: 'ae-mcp-panel', version: PANEL_VERSION },
+        capabilities: { experimentalApi: true },
+      });
+      await deleteRpc.request('thread/delete', { threadId: String(ref.id) });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, detail: error?.message || String(error) };
+    } finally {
+      try { deleteProc?.kill?.(); } catch {}
+      if (deleteRpc) deleteRpc.close(new Error('codex thread delete finished'));
+    }
+  }
+
   return {
     sendUser,
     approve,
     answerQuestion,
     stop,
     reset,
+    getSessionRef,
+    adoptSessionRef,
+    deleteSessionRef,
     getMessages: () => clone(transcript),
     getStderrTail: () => stderrTail,
     probeAccount,

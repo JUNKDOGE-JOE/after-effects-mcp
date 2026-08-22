@@ -8,6 +8,7 @@ function createProcess() {
   const exits = [];
   const errors = [];
   const writes = [];
+  let killCount = 0;
   return {
     stdin: { write: (line) => writes.push(line) },
     stdout: { on: (event, handler) => event === 'data' && stdout.push(handler) },
@@ -16,7 +17,8 @@ function createProcess() {
       if (event === 'exit') exits.push(handler);
       if (event === 'error') errors.push(handler);
     },
-    kill() {},
+    kill() { killCount += 1; },
+    get killCount() { return killCount; },
     writes,
     emit(message) {
       for (const handler of stdout) handler(`${JSON.stringify(message)}\n`);
@@ -152,6 +154,7 @@ test('Codex starts its CLI app-server with an isolated pre-created CODEX_HOME', 
     assert.deepEqual(thread.params.config.mcp_servers.ae, {
       url: 'http://127.0.0.1:11488/mcp/c/codex-token',
     });
+    assert.equal(thread.params.ephemeral, false);
     assert.equal(thread.params.cwd, 'C:\\Repo\\plugin');
     assert.deepEqual(turn.params.input, [{ type: 'text', text: 'hello' }]);
   } finally {
@@ -336,4 +339,68 @@ test('Codex distinguishes CLI resolution, spawn, and unauthenticated exits', asy
   const authError = exiting.events.find((event) => event.type === 'error');
   assert.equal(authError?.code, 'AUTH_REQUIRED');
   assert.equal(authError?.detail.codexHome, 'C:\\Users\\test\\.ae-mcp\\codex-home');
+});
+
+test('Codex adopts and resumes a persisted thread with the current MCP URL', async () => {
+  const { backend, spawned, events } = makeBackend();
+  backend.adoptSessionRef({ kind: 'codex-thread', id: 'thread_saved' });
+  assert.deepEqual(backend.getSessionRef(), { kind: 'codex-thread', id: 'thread_saved' });
+  const pending = backend.sendUser({ turnId: 'turn-resume', text: 'continue', attachments: [] });
+  await flush();
+  const proc = spawned[0].proc;
+  const initialize = parseWrites(proc)[0];
+  proc.emit({ id: initialize.id, result: {} });
+  await flush();
+  const resume = parseWrites(proc)[1];
+  assert.equal(resume.method, 'thread/resume');
+  assert.equal(resume.params.threadId, 'thread_saved');
+  assert.equal(resume.params.config.mcp_servers.ae.url, 'http://127.0.0.1:11488/mcp/c/codex-token');
+  proc.emit({ id: resume.id, result: { thread: { id: 'thread_saved' } } });
+  await flush();
+  assert.deepEqual(events.find((event) => event.type === 'session-ref'), {
+    type: 'session-ref',
+    ref: { kind: 'codex-thread', id: 'thread_saved' },
+  });
+  backend.reset();
+  await pending;
+});
+
+test('Codex resume failure falls back to a persistent new thread and emits its reference', async () => {
+  const { backend, spawned, events } = makeBackend();
+  backend.adoptSessionRef({ kind: 'codex-thread', id: 'thread_empty' });
+  const pending = backend.sendUser({ turnId: 'turn-fallback', text: 'hello', attachments: [] });
+  await flush();
+  const proc = spawned[0].proc;
+  const initialize = parseWrites(proc)[0];
+  proc.emit({ id: initialize.id, result: {} });
+  await flush();
+  const resume = parseWrites(proc)[1];
+  proc.emit({ id: resume.id, error: { code: -32600, message: 'no rollout found for thread id thread_empty' } });
+  await flush();
+  const start = parseWrites(proc)[2];
+  assert.equal(start.method, 'thread/start');
+  assert.equal(start.params.ephemeral, false);
+  proc.emit({ id: start.id, result: { thread: { id: 'thread_new' } } });
+  await flush();
+  assert.deepEqual(backend.getSessionRef(), { kind: 'codex-thread', id: 'thread_new' });
+  assert.ok(events.some((event) => event.type === 'session-ref' && event.ref.id === 'thread_new'));
+  backend.reset();
+  await pending;
+});
+
+test('Codex deletes a thread through a dedicated short-lived app-server', async () => {
+  const { backend, spawned } = makeBackend();
+  const pending = backend.deleteSessionRef({ kind: 'codex-thread', id: 'thread_delete' });
+  await flush();
+  const proc = spawned[0].proc;
+  const initialize = parseWrites(proc)[0];
+  assert.equal(initialize.method, 'initialize');
+  proc.emit({ id: initialize.id, result: {} });
+  await flush();
+  const deletion = parseWrites(proc)[1];
+  assert.equal(deletion.method, 'thread/delete');
+  assert.deepEqual(deletion.params, { threadId: 'thread_delete' });
+  proc.emit({ id: deletion.id, result: {} });
+  assert.deepEqual(await pending, { ok: true });
+  assert.equal(proc.killCount, 1);
 });

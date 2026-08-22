@@ -214,3 +214,25 @@ test('dispose aborts a request still resolving policy', async () => {
   assert.equal(observedSignal.aborted, true);
   assert.equal(coordinator.snapshot(), null);
 });
+
+test('cancelAll settles every queued request and the coordinator remains reusable', async () => {
+  const coordinator = createElicitationCoordinator({
+    presentGenericForm: () => ({ kind: 'question-form' }),
+  });
+  const first = coordinator.handle({ message: 'first', requestedSchema: {} });
+  const second = coordinator.handle({ message: 'second', requestedSchema: {} });
+  await Promise.resolve();
+  await Promise.resolve();
+  coordinator.cancelAll();
+  assert.deepEqual(await first, { action: 'cancel', content: {} });
+  assert.deepEqual(await second, { action: 'cancel', content: {} });
+
+  const third = coordinator.handle({ message: 'third', requestedSchema: {} });
+  await Promise.resolve();
+  await Promise.resolve();
+  const visible = coordinator.snapshot();
+  assert.equal(visible.request.message, 'third');
+  assert.equal(coordinator.resolveVisible({ id: visible.id, action: 'cancel', content: {} }), true);
+  assert.deepEqual(await third, { action: 'cancel', content: {} });
+  coordinator.dispose();
+});

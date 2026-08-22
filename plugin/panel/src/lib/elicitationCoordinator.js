@@ -275,6 +275,21 @@ export function createElicitationCoordinator({
     return removeEntry(entry, response);
   }
 
+  function cancelAll() {
+    const pending = entries.splice(0);
+    for (const entry of pending) {
+      if (entry.signal && entry.abortHandler) {
+        entry.signal.removeEventListener('abort', entry.abortHandler);
+      }
+      if (entry.externalSignal && entry.forwardAbort) {
+        entry.externalSignal.removeEventListener('abort', entry.forwardAbort);
+      }
+      entry.controller.abort();
+      entry.resolve(cancelResult());
+    }
+    publish();
+  }
+
   function dispose() {
     if (disposed) return;
     disposed = true;
@@ -293,5 +308,5 @@ export function createElicitationCoordinator({
     }
   }
 
-  return { handle, snapshot, subscribe, resolveVisible, dispose };
+  return { handle, snapshot, subscribe, resolveVisible, cancelAll, dispose };
 }

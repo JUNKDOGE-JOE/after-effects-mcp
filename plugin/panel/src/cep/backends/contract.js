@@ -8,6 +8,9 @@
 //   answerQuestion?(toolUseId, result) // {action:'submit', values} | {action:'cancel'}
 //   stop()                         // interrupt; MUST drain pending approvals
 //   reset()                        // kill process/session, clear conversation
+//   getSessionRef(): {kind,id}|null
+//   adoptSessionRef(ref|null)      // record only; the next send performs resume
+//   deleteSessionRef(ref): Promise<{ok,skipped?,detail?}> // never throws
 //   getMessages(): {role,text}[]
 // }
 // (Login/readiness probing is backend-specific: probeClaudeLogin uses
@@ -16,6 +19,7 @@
 // onEvent emission contract (order within a turn):
 //   turn-start
 //   turn-accepted{turnId,transport}
+//   session-ref{ref} may appear before or after turn-accepted
 //   ( text-delta{text,phase?}
 //   | tool-start{toolUseId,name,input}
 //   | tool-result{toolUseId,ok,text,durationMs}
@@ -44,6 +48,7 @@
 export const BACKEND_EVENTS = Object.freeze([
   'turn-start',
   'turn-accepted',
+  'session-ref',
   'text-delta',
   'tool-start',
   'tool-result',

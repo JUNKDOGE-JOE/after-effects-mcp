@@ -63,3 +63,11 @@ test('cleanup still resets when an event target is unavailable', () => {
   dispose();
   assert.equal(resets, 1);
 });
+
+test('beforeunload flushes session state before resetting the backend', () => {
+  const calls = [];
+  const target = makeTarget();
+  installBeforeUnloadReset(target, { reset: () => calls.push('reset') }, () => calls.push('flush'));
+  target.listeners.get('beforeunload')();
+  assert.deepEqual(calls, ['flush', 'reset']);
+});
