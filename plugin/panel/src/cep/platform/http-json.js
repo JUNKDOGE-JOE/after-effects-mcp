@@ -14,7 +14,8 @@ export function createHttpJsonRequester({ httpImpl, httpsImpl }) {
         settled = true;
         callback(value);
       };
-      const req = transport.request(target, { method: 'GET', headers }, (res) => {
+      // CEP mixed context: Node http.request only recognizes its own URL class.
+      const req = transport.request(target.toString(), { method: 'GET', headers }, (res) => {
         let text = '';
         res.setEncoding?.('utf8');
         res.on('data', (chunk) => { text += String(chunk); });

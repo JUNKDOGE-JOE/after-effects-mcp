@@ -5,7 +5,7 @@ import { createHttpJsonRequester } from '../src/cep/platform/http-json.js';
 
 function transport(step, calls) {
   return { request(url, options, onResponse) {
-    calls.push({ url: url.toString(), options });
+    calls.push({ target: url, url: url.toString(), options });
     const requestListeners = {};
     const req = {
       on(event, handler) { requestListeners[event] = handler; return req; },
@@ -40,7 +40,26 @@ test('requestJson selects HTTPS and parses JSON without hiding HTTP status', asy
     ok: true, status: 200, json: { data: [] }, text: '{"data":[]}',
   });
   assert.equal(httpCalls.length, 0);
+  assert.equal(typeof httpsCalls[0].target, 'string');
+  assert.equal(httpsCalls[0].target, 'https://relay.test/v1/models');
   assert.equal(httpsCalls[0].options.method, 'GET');
+});
+
+test('requestJson satisfies a Node-like transport that rejects foreign URL objects', async () => {
+  const calls = [];
+  const fake = transport({ status: 200, body: '{}' }, calls);
+  const request = fake.request;
+  fake.request = (target, ...args) => {
+    if (typeof target !== 'string') {
+      const error = new TypeError('The listener argument must be of type function');
+      error.code = 'ERR_INVALID_ARG_TYPE';
+      throw error;
+    }
+    return request(target, ...args);
+  };
+  const requestJson = createHttpJsonRequester({ httpsImpl: fake });
+  await assert.doesNotReject(requestJson({ url: 'https://relay.test/models' }));
+  assert.equal(calls[0].target, 'https://relay.test/models');
 });
 
 test('requestJson returns non-2xx bodies and rejects timeout/socket errors', async () => {

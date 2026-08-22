@@ -21811,7 +21811,7 @@
           settled = true;
           callback(value);
         };
-        const req = transport.request(target, { method: "GET", headers }, (res) => {
+        const req = transport.request(target.toString(), { method: "GET", headers }, (res) => {
           var _a;
           let text = "";
           (_a = res.setEncoding) == null ? void 0 : _a.call(res, "utf8");
