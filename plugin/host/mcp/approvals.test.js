@@ -37,9 +37,13 @@ test('approval request resolves decline and rejects invalid resolutions', async 
     assert.equal(await pending, 'decline');
 });
 
-test('approval timeout is a decline', async () => {
+test('approval timeout is a decline', async (t) => {
+    // The approval timer is unref'd, so the test drives it with mock time.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
     const approvals = new ApprovalQueue({ timeoutMs: 5 });
-    const result = await approvals.request(details());
+    const pending = approvals.request(details());
+    t.mock.timers.tick(5);
+    const result = await pending;
     assert.equal(result, 'decline');
     assert.deepEqual(approvals.list(), []);
 });
