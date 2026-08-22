@@ -18,8 +18,10 @@ const SOURCE_COMMIT = 'a'.repeat(40);
 const PRODUCT_VERSION = '0.9.2';
 
 async function makeFixture(t) {
+  // macOS places its temp directory below /var, a symlink rejected by the install guard.
+  const temporaryRoot = await fs.promises.realpath(os.tmpdir());
   const root = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), 'ae-mcp-install-windows-'),
+    path.join(temporaryRoot, 'ae-mcp-install-windows-'),
   );
   t.after(() => fs.promises.rm(root, { force: true, recursive: true }));
   const artifactDirectory = path.join(root, 'build');
