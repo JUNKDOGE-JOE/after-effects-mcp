@@ -6,15 +6,20 @@ supported client connections.
 
 ## 1. Install the After Effects assets
 
-1. Download the ZXP and matching `.aex` from the same release.
-2. Install the ZXP with a supported ZXP installer.
-3. With After Effects closed, install the `.aex` in the native plug-in
-   directory used by the selected After Effects host.
+1. Download the ZXP and the native plug-in for your platform from the same
+   release — `AeMcpNative-<version>-windows-x64.aex` on Windows,
+   `AeMcpNative-<version>-macos-arm64.plugin.zip` on macOS.
+2. Install the ZXP with a supported ZXP installer. One ZXP serves both
+   Windows and macOS because it contains no platform binaries.
+3. With After Effects closed, install the native plug-in in the plug-in
+   directory used by the selected After Effects host. `ae_nativeExec` is the
+   only tool that needs it, so a release that has not yet published the
+   native plug-in for your platform is still usable through the other ten.
 4. Start After Effects and open **Window > Extensions > ae-mcp**.
 
 The panel must remain open because it owns the local service at
-`http://127.0.0.1:11488/mcp`. Verify release checksums before installing both
-files.
+`http://127.0.0.1:11488/mcp`. Verify release checksums before installing the
+files you downloaded.
 
 ## 2. Claude Code
 
