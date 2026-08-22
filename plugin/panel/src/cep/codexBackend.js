@@ -323,6 +323,15 @@ export function createCodexBackend({
     if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
   }
 
+  function emitTurnProgress(stage) {
+    if (!activeRun || !activeTurn) return;
+    emit({
+      type: 'turn-progress',
+      ...(activeTurn.turnId ? { turnId: activeTurn.turnId } : {}),
+      stage,
+    });
+  }
+
   function resetProviderDeltaRedactor() {
     providerDeltaRedactor.discard();
     providerDeltaPhase = undefined;
@@ -751,6 +760,7 @@ export function createCodexBackend({
       ];
       let spawnedProc;
       try {
+        emitTurnProgress('spawn');
         spawnedProc = adapter.spawn(executable, appServerArgs, {
           stdio: 'pipe',
           windowsHide: true,
@@ -856,6 +866,7 @@ export function createCodexBackend({
     let result;
     if (adoptedThreadId) {
       try {
+        emitTurnProgress('session');
         result = await threadRpc.request('thread/resume', {
           threadId: adoptedThreadId,
           ...params,
@@ -868,6 +879,7 @@ export function createCodexBackend({
     }
     if (!result) {
       try {
+        emitTurnProgress('session');
         result = await threadRpc.request('thread/start', {
           ephemeral: false,
           ...params,
@@ -930,7 +942,9 @@ export function createCodexBackend({
       preambleSent = true;
     }
     activeTurnDispatched = true;
-    rpc.request('turn/start', turnParams(activeTurn, turnText), turnTimeoutMs).catch((error) => {
+    const turnRequest = rpc.request('turn/start', turnParams(activeTurn, turnText), turnTimeoutMs);
+    emitTurnProgress('dispatch');
+    turnRequest.catch((error) => {
       void handleTurnFailure(error);
     });
   }

@@ -295,6 +295,39 @@ test('turn round-trip uses real stream-json wire and keeps one process', async (
   await second;
 });
 
+test('Claude reports spawn and dispatch before output and omits spawn on a warm turn', async () => {
+  const h = makeHarness();
+  const first = h.backend.sendUser({ turnId: 'turn-progress-1', text: 'hello', attachments: [] });
+  await flush();
+  const coldStages = h.events.filter((event) => event.type === 'turn-progress');
+  assert.deepEqual(coldStages.map((event) => event.stage), ['spawn', 'dispatch']);
+  assert.ok(coldStages.every((event) => event.turnId === 'turn-progress-1'));
+
+  emitWire(h.processes[0], wire('B', 3));
+  emitWire(h.processes[0], wire('B', 6));
+  emitWire(h.processes[0], wire('B', 84));
+  emitWire(h.processes[0], wire('B', 94));
+  finishTurn(h.processes[0], 99);
+  await first;
+  const acceptedIndex = h.events.findIndex((event) => event.type === 'turn-accepted');
+  const textIndex = h.events.findIndex((event) => event.type === 'text-delta');
+  assert.ok(coldStages.every((event) => h.events.indexOf(event) < acceptedIndex));
+  assert.ok(coldStages.every((event) => h.events.indexOf(event) < textIndex));
+
+  const boundary = h.events.length;
+  const second = h.backend.sendUser({ turnId: 'turn-progress-2', text: 'again', attachments: [] });
+  await flush();
+  emitWire(h.processes[0], wire('B', 101));
+  emitWire(h.processes[0], wire('B', 137));
+  finishTurn(h.processes[0], 142);
+  await second;
+  assert.deepEqual(
+    h.events.slice(boundary).filter((event) => event.type === 'turn-progress').map((event) => event.stage),
+    ['dispatch'],
+  );
+  assert.equal(h.processes.length, 1);
+});
+
 test('spawn argv carries isolation, agents, approvals, effort, and MCP config', async () => {
   const h = makeHarness({
     state: { thinking: 'adaptive' },

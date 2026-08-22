@@ -20,6 +20,10 @@
 //   turn-start
 //   turn-accepted{turnId,transport}
 //   session-ref{ref} may appear before or after turn-accepted
+//   turn-progress{turnId?,stage}, where stage is spawn, session, or dispatch,
+//     may repeat after sendUser and before the first text-delta, tool-start,
+//     approval-required, or question-required event. Thinking does not end
+//     progress, and progress never appears after turn-end.
 //   ( text-delta{text,phase?}
 //   | tool-start{toolUseId,name,input}
 //   | tool-result{toolUseId,ok,text,durationMs}
@@ -49,6 +53,7 @@ export const BACKEND_EVENTS = Object.freeze([
   'turn-start',
   'turn-accepted',
   'session-ref',
+  'turn-progress',
   'text-delta',
   'tool-start',
   'tool-result',

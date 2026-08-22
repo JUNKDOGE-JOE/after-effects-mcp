@@ -21795,6 +21795,9 @@
   }
 
   // src/cep/platform/macos.js
+  function normalizedExecutableName(value) {
+    return String(value || "").trim().split("/").at(-1).replace(/\.exe$/i, "").toLowerCase();
+  }
   function createMacosAdapter(deps) {
     if (!deps || deps.platform !== "darwin" || deps.arch !== "arm64") throw new Error("macOS arm64 dependencies are required");
     const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
@@ -21802,9 +21805,58 @@
     const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "arm64" });
     return Object.freeze({
       id: "macos-arm64",
+      pid: deps.pid,
       paths,
       fs: deps.fs,
       ...boundary,
+      async processAlive({ pid } = {}) {
+        const processId = Number(pid);
+        if (!Number.isInteger(processId) || processId <= 0) return false;
+        try {
+          const result = await boundary.run({
+            executable: fixed("ps", "/bin/ps"),
+            args: ["-p", String(processId), "-o", "pid="],
+            timeoutMs: 3e3
+          });
+          return result.exitCode === 0 && Boolean(String(result.stdout || "").trim());
+        } catch {
+          return false;
+        }
+      },
+      async terminateProcess({ pid, executableName } = {}) {
+        if (!Number.isInteger(pid) || pid <= 0) {
+          return { ok: false, matched: false, killed: false, detail: "invalid pid" };
+        }
+        try {
+          const inspected = await boundary.run({
+            executable: fixed("ps", "/bin/ps"),
+            args: ["-p", String(pid), "-o", "comm="],
+            timeoutMs: 3e3
+          });
+          if (inspected.exitCode !== 0 || inspected.timedOut || inspected.aborted) {
+            return { ok: false, matched: false, killed: false, detail: "ps failed" };
+          }
+          const command = String(inspected.stdout || "").trim().split(/\r?\n/, 1)[0];
+          if (!command) return { ok: true, matched: false, killed: false, detail: "process not found" };
+          if (normalizedExecutableName(command) !== normalizedExecutableName(executableName)) {
+            return { ok: true, matched: false, killed: false, detail: "pid reused by " + command };
+          }
+          const terminated = await boundary.run({
+            executable: fixed("kill", "/bin/kill"),
+            args: ["-9", String(pid)],
+            timeoutMs: 3e3
+          });
+          const killed = terminated.exitCode === 0 && !terminated.timedOut && !terminated.aborted;
+          return {
+            ok: killed,
+            matched: true,
+            killed,
+            detail: killed ? "terminated" : "kill failed"
+          };
+        } catch (error) {
+          return { ok: false, matched: false, killed: false, detail: (error == null ? void 0 : error.message) || String(error) };
+        }
+      },
       revealFile(filePath) {
         return boundary.run({
           executable: fixed("system-open", "/usr/bin/open"),
@@ -21832,6 +21884,14 @@
     const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
     return key === void 0 ? void 0 : environment[key];
   }
+  function normalizedExecutableName2(value) {
+    return String(value || "").trim().split(/[\\/]/).at(-1).replace(/\.exe$/i, "").toLowerCase();
+  }
+  function tasklistImage(stdout) {
+    const line = String(stdout || "").split(/\r?\n/).find((value) => /^"/.test(value.trim()));
+    const match = line && line.trim().match(/^"((?:[^"]|"")*)"/);
+    return match ? match[1].replace(/""/g, '"') : "";
+  }
   function createWindowsAdapter(deps) {
     if (!deps || deps.platform !== "win32" || deps.arch !== "x64") throw new Error("Windows x64 dependencies are required");
     const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
@@ -21840,9 +21900,61 @@
     const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "x64" });
     return Object.freeze({
       id: "windows-x64",
+      pid: deps.pid,
       paths,
       fs: deps.fs,
       ...boundary,
+      async processAlive({ pid } = {}) {
+        const processId = Number(pid);
+        if (!Number.isInteger(processId) || processId <= 0) return false;
+        try {
+          const tasklist = paths.join([systemRoot, "System32", "tasklist.exe"]);
+          const result = await boundary.run({
+            executable: fixed("tasklist", tasklist),
+            args: ["/FI", "PID eq " + processId, "/FO", "CSV", "/NH"],
+            timeoutMs: 3e3
+          });
+          return result.exitCode === 0 && Boolean(tasklistImage(result.stdout));
+        } catch {
+          return false;
+        }
+      },
+      async terminateProcess({ pid, executableName } = {}) {
+        if (!Number.isInteger(pid) || pid <= 0) {
+          return { ok: false, matched: false, killed: false, detail: "invalid pid" };
+        }
+        try {
+          const tasklist = paths.join([systemRoot, "System32", "tasklist.exe"]);
+          const inspected = await boundary.run({
+            executable: fixed("tasklist", tasklist),
+            args: ["/FI", "PID eq " + pid, "/FO", "CSV", "/NH"],
+            timeoutMs: 3e3
+          });
+          if (inspected.exitCode !== 0 || inspected.timedOut || inspected.aborted) {
+            return { ok: false, matched: false, killed: false, detail: "tasklist failed" };
+          }
+          const image = tasklistImage(inspected.stdout);
+          if (!image) return { ok: true, matched: false, killed: false, detail: "process not found" };
+          if (normalizedExecutableName2(image) !== normalizedExecutableName2(executableName)) {
+            return { ok: true, matched: false, killed: false, detail: "pid reused by " + image };
+          }
+          const taskkill = paths.join([systemRoot, "System32", "taskkill.exe"]);
+          const terminated = await boundary.run({
+            executable: fixed("taskkill", taskkill),
+            args: ["/PID", String(pid), "/T", "/F"],
+            timeoutMs: 3e3
+          });
+          const killed = terminated.exitCode === 0 && !terminated.timedOut && !terminated.aborted;
+          return {
+            ok: killed,
+            matched: true,
+            killed,
+            detail: killed ? "terminated" : "taskkill failed"
+          };
+        } catch (error) {
+          return { ok: false, matched: false, killed: false, detail: (error == null ? void 0 : error.message) || String(error) };
+        }
+      },
       revealFile(filePath) {
         const explorer = paths.join([systemRoot, "explorer.exe"]);
         return boundary.run({
@@ -21896,6 +22008,7 @@
     return {
       platform,
       arch: processImpl.arch,
+      pid: processImpl.pid,
       home,
       temp: os.tmpdir(),
       env,
@@ -23440,7 +23553,8 @@
     const title = compactText(meta && meta.title);
     if (title) return title;
     const label = lang === "en" ? "New session" : "\u65B0\u4F1A\u8BDD";
-    const date = localDate(meta && (meta.createdAt || meta.updatedAt), lang);
+    const stamp = meta && (meta.createdAt || meta.updatedAt);
+    const date = stamp ? localDate(stamp, lang) : "";
     return date ? `${label} \xB7 ${date}` : label;
   }
   function sortSessions(list) {
@@ -26311,6 +26425,47 @@
     };
   }
 
+  // src/lib/turnProgress.js
+  init_cep_runtime_inject();
+  var TERMINAL_EVENT_TYPES = /* @__PURE__ */ new Set([
+    "text-delta",
+    "tool-start",
+    "approval-required",
+    "question-required",
+    "turn-end",
+    "error"
+  ]);
+  function reduceTurnStage(current, evt, { pendingTurnId } = {}) {
+    if (!evt || typeof evt !== "object") return current;
+    if (evt.type === "turn-progress") {
+      if (evt.turnId && evt.turnId !== pendingTurnId) {
+        return current;
+      }
+      return evt.stage || current;
+    }
+    if (TERMINAL_EVENT_TYPES.has(evt.type)) {
+      return null;
+    }
+    return current;
+  }
+  function turnProgressText(stage, backend, lang = "zh") {
+    const label = backendLabel(backend, lang);
+    const zh = lang === "zh";
+    if (stage === "connect") {
+      return zh ? `\u6B63\u5728\u8FDE\u63A5 ${label}\u2026` : `Connecting to ${label}\u2026`;
+    }
+    if (stage === "spawn") {
+      return zh ? `\u6B63\u5728\u542F\u52A8 ${label}\u2026` : `Starting ${label}\u2026`;
+    }
+    if (stage === "session") {
+      return zh ? "\u6B63\u5728\u5EFA\u7ACB\u4F1A\u8BDD\u2026" : "Creating session\u2026";
+    }
+    if (stage === "dispatch") {
+      return zh ? "\u7B49\u5F85\u6A21\u578B\u56DE\u590D\u2026" : "Waiting for the model\u2026";
+    }
+    return "";
+  }
+
   // src/screens/ChatScreen.jsx
   var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
   var C2 = {
@@ -26485,6 +26640,10 @@
     entries = [],
     streaming = false,
     thinking = false,
+    turnStage = null,
+    turnBackend = "subscription",
+    sessionTitle = "",
+    onOpenSessions,
     composerDisabled = false,
     disabledHint = "",
     onSend,
@@ -26566,7 +26725,7 @@
     import_react39.default.useEffect(() => {
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
-    }, [entries, streaming, thinking]);
+    }, [entries, streaming, thinking, turnStage]);
     import_react39.default.useEffect(() => {
       if (typeof ResizeObserver !== "function") return void 0;
       if (!layoutRef.current || !footerRef.current) return void 0;
@@ -26614,6 +26773,21 @@
       remove: t.attachmentRemove
     };
     return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+      sessionTitle ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { flex: "none", height: 28, display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "0 var(--space-2)", borderBottom: "1px solid var(--border-subtle)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { minWidth: 0, flex: 1 }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+          Button,
+          {
+            variant: "ghost",
+            size: "sm",
+            icon: "history",
+            title: sessionTitle,
+            onClick: onOpenSessions,
+            style: { maxWidth: "100%", minWidth: 0 },
+            children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: sessionTitle })
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { variant: "ghost", size: "sm", icon: "plus", onClick: onNewSession, children: t.newSession })
+      ] }) : null,
       /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
         !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(import_react39.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(AIAvatar, { size: 32 }),
@@ -26643,6 +26817,9 @@
         streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Spinner, { size: 12 }),
           /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: t.thinking })
+        ] }) : turnStage ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Spinner, { size: 12 }),
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: turnProgressText(turnStage, turnBackend, lang) })
         ] }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
@@ -27489,8 +27666,9 @@
 
   // src/lib/backendLifecycle.js
   init_cep_runtime_inject();
-  function installBeforeUnloadReset(target, backend, onBeforeUnload) {
-    if (!backend || typeof backend.reset !== "function") {
+  function installBeforeUnloadReset(target, backends, onBeforeUnload) {
+    const resettable = Array.isArray(backends) ? backends : [backends];
+    if (!resettable.length || resettable.some((backend) => !backend || typeof backend.reset !== "function")) {
       throw new TypeError("A backend with reset() is required");
     }
     let active = true;
@@ -27500,8 +27678,16 @@
       if (target && typeof target.removeEventListener === "function") {
         target.removeEventListener("beforeunload", dispose);
       }
-      if (typeof onBeforeUnload === "function") onBeforeUnload();
-      backend.reset();
+      try {
+        if (typeof onBeforeUnload === "function") onBeforeUnload();
+      } catch (error) {
+      }
+      for (const backend of resettable) {
+        try {
+          backend.reset();
+        } catch (error) {
+        }
+      }
     };
     if (target && typeof target.addEventListener === "function") {
       target.addEventListener("beforeunload", dispose);
@@ -28473,6 +28659,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         ]));
       }
     }
+    function emitTurnProgress(stage) {
+      if (!activeRun || !activeTurn) return;
+      emit({
+        type: "turn-progress",
+        ...activeTurn.turnId ? { turnId: activeTurn.turnId } : {},
+        stage
+      });
+    }
     function resetProviderDeltaRedactor() {
       providerDeltaRedactor.discard();
       providerDeltaPhase = void 0;
@@ -29103,6 +29297,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         let spawnedProc;
         try {
           try {
+            emitTurnProgress("spawn");
             spawnedProc = spawnProcess(executable, args, {
               stdio: "pipe",
               windowsHide: true,
@@ -29259,13 +29454,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (activeRun === run) finishActive();
         return;
       }
-      writeMessage({
+      if (writeMessage({
         type: "user",
         message: {
           role: "user",
           content: [{ type: "text", text: withAttachmentManifest(turn.text, turn.attachments) }]
         }
-      });
+      })) emitTurnProgress("dispatch");
     }
     async function sendUser(input) {
       if (activeRun) return activeRun;
@@ -29304,13 +29499,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const userText = withAttachmentManifest(turn.text, turn.attachments);
       transcript.push({ role: "user", text: turn.text });
       activeTurnDispatched = true;
-      writeMessage({
+      if (writeMessage({
         type: "user",
         message: {
           role: "user",
           content: [{ type: "text", text: userText }]
         }
-      });
+      })) emitTurnProgress("dispatch");
       return run;
     }
     function stop() {
@@ -29729,6 +29924,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function emit(evt) {
       if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
     }
+    function emitTurnProgress(stage) {
+      if (!activeRun || !activeTurn) return;
+      emit({
+        type: "turn-progress",
+        ...activeTurn.turnId ? { turnId: activeTurn.turnId } : {},
+        stage
+      });
+    }
     function resetProviderDeltaRedactor() {
       providerDeltaRedactor.discard();
       providerDeltaPhase = void 0;
@@ -30118,6 +30321,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         ];
         let spawnedProc;
         try {
+          emitTurnProgress("spawn");
           spawnedProc = adapter.spawn(executable, appServerArgs, {
             stdio: "pipe",
             windowsHide: true,
@@ -30221,6 +30425,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       let result;
       if (adoptedThreadId) {
         try {
+          emitTurnProgress("session");
           result = await threadRpc.request("thread/resume", {
             threadId: adoptedThreadId,
             ...params
@@ -30233,6 +30438,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       if (!result) {
         try {
+          emitTurnProgress("session");
           result = await threadRpc.request("thread/start", {
             ephemeral: false,
             ...params
@@ -30292,7 +30498,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         preambleSent = true;
       }
       activeTurnDispatched = true;
-      rpc.request("turn/start", turnParams(activeTurn, turnText), turnTimeoutMs).catch((error) => {
+      const turnRequest = rpc.request("turn/start", turnParams(activeTurn, turnText), turnTimeoutMs);
+      emitTurnProgress("dispatch");
+      turnRequest.catch((error) => {
         void handleTurnFailure(error);
       });
     }
@@ -30884,10 +31092,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/cep/openCodeBackend.js
   var READY_TIMEOUT_MS = 3e4;
+  var PROBE_TIMEOUT_MS = 4e4;
   var READY_POLL_MS = 250;
+  var READY_REQUEST_TIMEOUT_MS = 1500;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "north-mini-code-free";
   var STDERR_TAIL_LIMIT3 = 4096;
+  var STALE_TERMINATE_LIMIT = 8;
+  var STALE_REMOVE_LIMIT = 64;
   function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -30943,9 +31155,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function decodeChunk(value) {
     if (typeof value === "string") return value;
     return new TextDecoder().decode(value);
-  }
-  function randomTempName2() {
-    return "ae-opencode-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
   }
   async function defaultGetPort() {
     const net = getCepRequire()("net");
@@ -31020,7 +31229,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     fetchImpl,
     getPort = defaultGetPort,
     fsImpl,
-    tempDirName = randomTempName2,
     getModel,
     getPermissionMode,
     getMcpSpec: getMcpSpec2,
@@ -31032,10 +31240,22 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getLang,
     lang = "zh",
     readyTimeoutMs = READY_TIMEOUT_MS,
+    probeTimeoutMs = PROBE_TIMEOUT_MS,
     readyPollMs = READY_POLL_MS,
-    sleepImpl = sleep
+    readyRequestTimeoutMs = READY_REQUEST_TIMEOUT_MS,
+    sleepImpl = sleep,
+    onSweepComplete
   } = {}) {
     const adapter = platform || createPlatformAdapter();
+    if (!Number.isFinite(readyRequestTimeoutMs) || readyRequestTimeoutMs <= 0 || readyRequestTimeoutMs < readyPollMs) {
+      throw new RangeError("OpenCode readiness request timeout must be at least the poll interval");
+    }
+    const openCodeRoot = adapter.paths.join([adapter.paths.configRoot, "opencode"]);
+    const workspaceDir = adapter.paths.join([openCodeRoot, "workspace"]);
+    const totalProbeTimeoutMs = Number(probeTimeoutMs);
+    if (!Number.isFinite(totalProbeTimeoutMs) || totalProbeTimeoutMs <= readyTimeoutMs) {
+      throw new TypeError("probeTimeoutMs must be greater than readyTimeoutMs");
+    }
     const currentLang = () => (typeof getLang === "function" ? getLang() : lang) || "zh";
     let proc = null;
     let port = null;
@@ -31045,6 +31265,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let adoptedSessionId = null;
     let sessionWasAdopted = false;
     let serverPromise = null;
+    let sweeping = null;
     let sessionPromise = null;
     let sseStarted = false;
     let sseClosed = false;
@@ -31063,13 +31284,23 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let activeTurnAccepted = false;
     let messageDispatched = false;
     let turnStarted = false;
+    let generation = 0;
     let toolMeta = { annotations: {} };
     const pendingApprovals = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     const startedTools = /* @__PURE__ */ new Set();
+    const partTypes = /* @__PURE__ */ new Map();
     const transcript = [];
     function emit(evt) {
       if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
+    }
+    function emitTurnProgress(stage) {
+      if (!activeRun || !activeTurn) return;
+      emit({
+        type: "turn-progress",
+        ...activeTurn.turnId ? { turnId: activeTurn.turnId } : {},
+        stage
+      });
     }
     function resetAssistantDeltaRedactor() {
       assistantDeltaRedactor.discard();
@@ -31107,6 +31338,171 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function currentEnv() {
       return adapter.completeSpawnEnv(env || {});
     }
+    function stableConfigHome(mcpSpec) {
+      let hostPort = "default";
+      try {
+        hostPort = new URL(String((mcpSpec == null ? void 0 : mcpSpec.url) || "")).port || "default";
+      } catch {
+      }
+      return adapter.paths.join([openCodeRoot, "home-" + hostPort]);
+    }
+    function instanceMarkerPath(home) {
+      return adapter.paths.join([home, "instance.json"]);
+    }
+    function removeInstanceMarker(home) {
+      if (!home) return;
+      try {
+        const fs = fsImpl || adapter.fs;
+        const markerPath = instanceMarkerPath(home);
+        if (typeof fs.existsSync === "function" && !fs.existsSync(markerPath)) return;
+        fs.rmSync(markerPath, { force: true });
+      } catch {
+      }
+    }
+    function readInstanceMarker(home) {
+      const fs = fsImpl || adapter.fs;
+      if (!home || typeof (fs == null ? void 0 : fs.readFileSync) !== "function") return null;
+      try {
+        const markerPath = instanceMarkerPath(home);
+        if (typeof fs.existsSync === "function" && !fs.existsSync(markerPath)) return null;
+        return JSON.parse(String(fs.readFileSync(markerPath, "utf8")));
+      } catch {
+        return null;
+      }
+    }
+    async function reclaimStableInstance(home) {
+      const marker = readInstanceMarker(home);
+      if ((marker == null ? void 0 : marker.owner) === "ae-mcp-panel" && marker.pid) {
+        const ownerPid = Number(marker.ownerPid);
+        let ownedElsewhere = false;
+        if (Number.isInteger(ownerPid) && ownerPid > 0 && ownerPid !== adapter.pid) {
+          try {
+            ownedElsewhere = await adapter.processAlive({ pid: ownerPid });
+          } catch {
+          }
+        }
+        if (!ownedElsewhere) {
+          try {
+            await adapter.terminateProcess({ pid: marker.pid, executableName: "opencode" });
+          } catch {
+          }
+        }
+      }
+      removeInstanceMarker(home);
+    }
+    async function removeStaleDirectory(home) {
+      if (!home) return false;
+      const fs = fsImpl || adapter.fs;
+      const options = { recursive: true, force: true };
+      try {
+        if ((fs == null ? void 0 : fs.promises) && typeof fs.promises.rm === "function") {
+          await fs.promises.rm(home, options);
+        } else if (typeof (fs == null ? void 0 : fs.rm) === "function") {
+          await new Promise((resolve, reject) => {
+            fs.rm(home, options, (error) => {
+              if (error) reject(error);
+              else resolve();
+            });
+          });
+        } else {
+          removeConfigHomeSyncFallback(home);
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    function sweepStaleInstances(skipHome = configHome) {
+      if (sweeping) return sweeping;
+      const fs = fsImpl || adapter.fs;
+      if (!fs || typeof fs.readdirSync !== "function") return Promise.resolve();
+      let entries;
+      try {
+        entries = fs.readdirSync(adapter.paths.tempRoot);
+      } catch {
+        return Promise.resolve();
+      }
+      const pendingSweep = (async () => {
+        let terminated = 0;
+        let removed = 0;
+        for (const entry2 of entries || []) {
+          if (removed >= STALE_REMOVE_LIMIT) break;
+          const name = String((entry2 == null ? void 0 : entry2.name) || entry2 || "");
+          if (!name.startsWith("ae-opencode-")) continue;
+          const home = adapter.paths.join([adapter.paths.tempRoot, name]);
+          if (home === skipHome) continue;
+          let marker = null;
+          try {
+            const markerPath = adapter.paths.join([home, "instance.json"]);
+            const exists = typeof fs.existsSync !== "function" || fs.existsSync(markerPath);
+            if (exists && typeof fs.readFileSync === "function") {
+              marker = JSON.parse(String(fs.readFileSync(markerPath, "utf8")));
+            }
+          } catch {
+          }
+          const ownerPid = Number(marker == null ? void 0 : marker.ownerPid);
+          if ((marker == null ? void 0 : marker.owner) === "ae-mcp-panel" && Number.isInteger(ownerPid) && ownerPid > 0 && ownerPid !== adapter.pid) {
+            let ownerAlive = false;
+            try {
+              ownerAlive = await adapter.processAlive({ pid: ownerPid });
+            } catch {
+            }
+            if (ownerAlive) continue;
+          }
+          if ((marker == null ? void 0 : marker.owner) === "ae-mcp-panel" && marker.pid) {
+            if (terminated >= STALE_TERMINATE_LIMIT) continue;
+            terminated += 1;
+            try {
+              await adapter.terminateProcess({ pid: marker.pid, executableName: "opencode" });
+            } catch {
+            }
+          }
+          removed += 1;
+          await removeStaleDirectory(home);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      })().catch(() => {
+      });
+      sweeping = pendingSweep;
+      pendingSweep.finally(() => {
+        if (sweeping === pendingSweep) sweeping = null;
+        try {
+          if (typeof onSweepComplete === "function") onSweepComplete();
+        } catch {
+        }
+      });
+      return pendingSweep;
+    }
+    function backendFs() {
+      return fsImpl || adapter.fs;
+    }
+    function removeConfigHomeSyncFallback(home) {
+      if (!home) return;
+      try {
+        backendFs().rmSync(home, { recursive: true, force: true });
+      } catch (error) {
+      }
+    }
+    function writeInstanceMarker(home, spawnedProc, instancePort) {
+      try {
+        backendFs().writeFileSync(
+          adapter.paths.join([home, "instance.json"]),
+          JSON.stringify({
+            owner: "ae-mcp-panel",
+            ownerPid: adapter.pid,
+            pid: spawnedProc.pid,
+            port: instancePort,
+            startedAt: (/* @__PURE__ */ new Date()).toISOString()
+          })
+        );
+      } catch (error) {
+      }
+    }
+    function cancelledStartError2() {
+      const error = new Error("OpenCode start was cancelled");
+      error.categoryCode = "CANCELLED";
+      return error;
+    }
     function finishActive() {
       if (!activeResolve) {
         activeRun = null;
@@ -31116,6 +31512,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         messageDispatched = false;
         turnStarted = false;
         startedTools.clear();
+        partTypes.clear();
         setActiveAttachmentPaths([]);
         return;
       }
@@ -31128,14 +31525,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       messageDispatched = false;
       turnStarted = false;
       startedTools.clear();
+      partTypes.clear();
       setActiveAttachmentPaths([]);
       resolve();
     }
-    async function request(path, options = {}) {
+    async function request(path, options = {}, requestBaseUrl = baseUrl) {
       const endpoint = endpointPath(path);
       let response;
       try {
-        response = await fetcher()(baseUrl + path, options);
+        response = await fetcher()(requestBaseUrl + path, options);
       } catch (error) {
         throw taggedError2(error, "endpoint", endpoint);
       }
@@ -31163,8 +31561,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         } : {}
       };
     }
-    async function requestJson(path, options = {}) {
-      const response = await request(path, options);
+    async function requestJson(path, options = {}, requestBaseUrl = baseUrl) {
+      const response = await request(path, options, requestBaseUrl);
       return response.json ? response.json() : {};
     }
     async function postJson(path, body) {
@@ -31174,14 +31572,26 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         body: JSON.stringify(body || {})
       });
     }
-    async function waitForMcp() {
+    async function waitForMcp(requestBaseUrl, isCancelled = () => false) {
       var _a;
       const deadline = Date.now() + readyTimeoutMs;
       let lastError = null;
       let lastStatus = null;
       while (Date.now() < deadline) {
+        if (isCancelled()) throw cancelledStartError2();
         try {
-          const status = await requestJson("/mcp");
+          const controller = new AbortController();
+          const requestTimeoutMs = Math.min(
+            readyRequestTimeoutMs,
+            Math.max(1, deadline - Date.now())
+          );
+          const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+          let status;
+          try {
+            status = await requestJson("/mcp", { signal: controller.signal }, requestBaseUrl);
+          } finally {
+            clearTimeout(timer);
+          }
           lastStatus = ((_a = status == null ? void 0 : status.ae) == null ? void 0 : _a.status) || status;
           if (status && status.ae && status.ae.status === "connected") return true;
         } catch (e) {
@@ -31199,10 +31609,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (lastError == null ? void 0 : lastError.responseExcerpt) error.responseExcerpt = lastError.responseExcerpt;
       throw error;
     }
-    function writeConfig(mcpSpec) {
-      const fs = fsImpl || adapter.fs;
-      configHome = adapter.paths.join([adapter.paths.tempRoot, tempDirName()]);
-      const configDir = adapter.paths.join([configHome, "opencode"]);
+    function writeConfig(mcpSpec, home) {
+      const fs = backendFs();
+      const configDir = adapter.paths.join([home, "opencode"]);
       fs.mkdirSync(configDir, { recursive: true });
       const mcpEntry = { type: "remote", url: mcpSpec.url, enabled: true };
       const config = {
@@ -31216,21 +31625,27 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }
       };
       fs.writeFileSync(adapter.paths.join([configDir, "opencode.json"]), JSON.stringify(config, null, 2));
+      return home;
     }
-    function handleExit(code, signal) {
+    function handleExit(exitedProc, processGeneration, home, code, signal) {
+      if (processGeneration !== generation || proc !== exitedProc) return;
       const wasStopping = stopping;
+      generation += 1;
       stderrRedactor.flush();
       const tail = trimStderrTail(stderrTail);
       proc = null;
-      serverPromise = null;
       sessionPromise = null;
       sessionId = null;
+      port = null;
+      baseUrl = "";
+      configHome = "";
       sseClosed = true;
       sseStarted = false;
       if (wasStopping) {
         clearProcessStderrAttachmentPaths();
         return;
       }
+      removeInstanceMarker(home);
       if (activeRun) {
         const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
         emit({
@@ -31249,14 +31664,19 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       clearProcessStderrAttachmentPaths();
     }
-    function handleError(error) {
+    function handleError(failedProc, processGeneration, home, error) {
+      if (processGeneration !== generation || proc !== failedProc) return;
+      generation += 1;
       stderrRedactor.flush();
       proc = null;
-      serverPromise = null;
       sessionPromise = null;
       sessionId = null;
+      port = null;
+      baseUrl = "";
+      configHome = "";
       sseClosed = true;
       sseStarted = false;
+      removeInstanceMarker(home);
       if (activeRun) {
         const tail = trimStderrTail(stderrTail);
         const classified = classifyErrorCode({ error, spawnError: true, stderrTail: tail });
@@ -31276,22 +31696,46 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       clearProcessStderrAttachmentPaths();
     }
     async function startServer() {
-      if (proc && baseUrl) return true;
-      if (serverPromise) return serverPromise;
       if (proc && baseUrl && !stopping && !sseClosed) return true;
-      serverPromise = (async () => {
+      if (serverPromise) return serverPromise;
+      const startGeneration = generation;
+      let spawnedProc = null;
+      let startHome;
+      let startPort = null;
+      let startBaseUrl = "";
+      const assertCurrentStart = () => {
+        var _a;
+        if (startGeneration === generation) return;
+        try {
+          (_a = spawnedProc == null ? void 0 : spawnedProc.kill) == null ? void 0 : _a.call(spawnedProc);
+        } catch (error) {
+        }
+        removeInstanceMarker(startHome);
+        throw cancelledStartError2();
+      };
+      const pendingStart = (async () => {
+        void sweepStaleInstances();
+        assertCurrentStart();
         let mcpSpec;
         try {
           mcpSpec = getMcpSpec2 ? await getMcpSpec2() : { command: "ae-mcp", args: [] };
-          writeConfig(mcpSpec);
+          assertCurrentStart();
+          startHome = stableConfigHome(mcpSpec);
+          (fsImpl || adapter.fs).mkdirSync(workspaceDir, { recursive: true });
+          await reclaimStableInstance(startHome);
+          assertCurrentStart();
+          writeConfig(mcpSpec, startHome);
         } catch (error) {
+          if ((error == null ? void 0 : error.categoryCode) === "CANCELLED") throw error;
           throw taggedError2(error, "categoryCode", "MCP_UNREACHABLE");
         }
-        port = await getPort();
-        baseUrl = "http://127.0.0.1:" + port;
-        const spawnEnv = adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: configHome });
+        startPort = await getPort();
+        assertCurrentStart();
+        startBaseUrl = "http://127.0.0.1:" + startPort;
+        const spawnEnv = adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: startHome });
         const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
         const executable = await adapter.resolveExecutable("opencode", { env: spawnEnv, ...requiredArch ? { requiredArch } : {} });
+        assertCurrentStart();
         if (!executable.ok) {
           const error = new Error(openCodeResolutionMessage(executable.code, currentLang(), executable));
           const classified = classifyErrorCode({ resolutionCode: executable.code });
@@ -31304,75 +31748,106 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         stopping = false;
         sseClosed = false;
         try {
-          proc = adapter.spawn(executable, ["serve", "--port", String(port)], {
+          spawnedProc = adapter.spawn(executable, ["serve", "--port", String(startPort)], {
             stdio: "pipe",
             windowsHide: true,
             // OpenCode scopes its project context to the cwd. Inheriting the CEP
             // process cwd (AE's Support Files, thousands of files) inflated every
             // provider request until the relay-side WAF rejected it with a 403
-            // challenge page (live-debugged 2026-08-20); pin a tiny neutral dir.
-            cwd: configHome,
+            // challenge page; pin a tiny neutral directory.
+            cwd: workspaceDir,
             env: spawnEnv
           });
         } catch (error) {
           throw taggedError2(error, "spawnError", true);
         }
-        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", (chunk) => {
+        writeInstanceMarker(startHome, spawnedProc, startPort);
+        assertCurrentStart();
+        proc = spawnedProc;
+        port = startPort;
+        baseUrl = startBaseUrl;
+        configHome = startHome;
+        if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on("data", (chunk) => {
+          if (startGeneration !== generation || proc !== spawnedProc) return;
           stderrRedactor.feed(chunk);
         });
-        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
+        if (spawnedProc.stderr && spawnedProc.stderr.on) spawnedProc.stderr.on("data", (chunk) => {
+          if (startGeneration !== generation || proc !== spawnedProc) return;
           stderrRedactor.feed(chunk);
         });
-        if (proc.on) {
-          proc.on("exit", (code, signal) => handleExit(code, signal));
-          proc.on("error", (error) => handleError(error));
+        if (spawnedProc.on) {
+          spawnedProc.on("exit", (code, signal) => handleExit(spawnedProc, startGeneration, startHome, code, signal));
+          spawnedProc.on("error", (error) => handleError(spawnedProc, startGeneration, startHome, error));
         }
-        await waitForMcp();
-        startSse();
+        await waitForMcp(startBaseUrl, () => startGeneration !== generation || proc !== spawnedProc);
+        assertCurrentStart();
+        startSse(startGeneration, spawnedProc, startHome, startBaseUrl);
         return true;
-      })();
+      })().catch((error) => {
+        var _a;
+        if (proc === spawnedProc) {
+          generation += 1;
+          proc = null;
+          port = null;
+          baseUrl = "";
+          configHome = "";
+          sseClosed = true;
+          sseStarted = false;
+        }
+        try {
+          (_a = spawnedProc == null ? void 0 : spawnedProc.kill) == null ? void 0 : _a.call(spawnedProc);
+        } catch (killError) {
+        }
+        removeInstanceMarker(startHome);
+        throw error;
+      });
+      serverPromise = pendingStart;
       try {
-        return await serverPromise;
+        return await pendingStart;
       } finally {
-        serverPromise = null;
+        if (serverPromise === pendingStart) serverPromise = null;
       }
     }
-    async function readSseBody(body, parser) {
+    async function readSseBody(body, parser, isCurrent) {
       if (!body) return;
       if (body.getReader) {
         const reader = body.getReader();
-        while (!sseClosed) {
+        while (isCurrent()) {
           const next = await reader.read();
           if (!next || next.done) break;
+          if (!isCurrent()) break;
           parser.feed(decodeChunk(next.value));
         }
         return;
       }
       if (body[Symbol.asyncIterator]) {
         for await (const chunk of body) {
-          if (sseClosed) break;
+          if (!isCurrent()) break;
           parser.feed(decodeChunk(chunk));
         }
       }
     }
-    function startSse() {
+    function startSse(processGeneration, spawnedProc, home, requestBaseUrl) {
       if (sseStarted) return;
       sseStarted = true;
+      const isCurrent = () => processGeneration === generation && proc === spawnedProc && !sseClosed;
       const parser = createSseParser(({ data: data2 }) => handleOpenCodeEvent(data2));
-      request("/event").then(async (response) => {
-        await readSseBody(response.body, parser);
-        if (!sseClosed) throw new Error("OpenCode event stream closed.");
+      request("/event", {}, requestBaseUrl).then(async (response) => {
+        await readSseBody(response.body, parser, isCurrent);
+        if (isCurrent()) throw new Error("OpenCode event stream closed.");
       }).catch((e) => {
         var _a;
-        if (!sseClosed) {
+        if (isCurrent()) {
+          generation += 1;
           sseStarted = false;
           const wasActive = Boolean(activeRun);
           sseClosed = true;
-          const failedProcess = proc;
           proc = null;
+          port = null;
           sessionId = null;
           sessionPromise = null;
           baseUrl = "";
+          configHome = "";
           if (wasActive) {
             emit({
               type: "error",
@@ -31392,31 +31867,40 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             finishActive();
           }
           try {
-            (_a = failedProcess == null ? void 0 : failedProcess.kill) == null ? void 0 : _a.call(failedProcess);
+            (_a = spawnedProc == null ? void 0 : spawnedProc.kill) == null ? void 0 : _a.call(spawnedProc);
           } catch {
           }
+          removeInstanceMarker(home);
         }
       });
     }
     async function ensureSession() {
       if (sessionPromise) return sessionPromise;
-      sessionPromise = (async () => {
+      const sessionGeneration = generation;
+      const assertCurrentSession = () => {
+        if (sessionGeneration !== generation) throw cancelledStartError2();
+      };
+      const pendingSession = (async () => {
         await startServer();
+        const liveGeneration = generation;
         try {
           toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
         } catch (error) {
           throw taggedError2(error, "categoryCode", "MCP_UNREACHABLE");
         }
+        if (liveGeneration !== generation) throw cancelledStartError2();
         if (sessionId) return sessionId;
         if (adoptedSessionId) {
           sessionId = adoptedSessionId;
           sessionWasAdopted = true;
           return sessionId;
         }
+        emitTurnProgress("session");
         const result = await postJson("/session", {
           title: "After Effects MCP",
           model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID)
         });
+        if (liveGeneration !== generation) throw cancelledStartError2();
         sessionId = String(result && (result.id || result.sessionID || result.sessionId) || "");
         if (!sessionId) throw taggedError2(new Error("OpenCode did not return a session id."), "fallbackCode", "SESSION_START_FAILED");
         adoptedSessionId = sessionId;
@@ -31424,10 +31908,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         emit({ type: "session-ref", ref: { kind: "opencode-session", id: sessionId } });
         return sessionId;
       })();
+      sessionPromise = pendingSession;
       try {
-        return await sessionPromise;
+        assertCurrentSession();
+        return await pendingSession;
       } finally {
-        sessionPromise = null;
+        if (sessionPromise === pendingSession) sessionPromise = null;
       }
     }
     function annFor(name) {
@@ -31531,7 +32017,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return;
       }
       if (type === "message.part.delta") {
-        if (p.field === "text") {
+        const partId = String(p.partID || "");
+        const partType = partId ? partTypes.get(partId) : void 0;
+        if (partType === "reasoning") {
+          emit({ type: "thinking", active: true });
+        } else if (partType === "text") {
+          emit({ type: "thinking", active: false });
+          const text = p.delta;
+          if (text) assistantDeltaRedactor.feed(String(text));
+        } else if (partType) {
+          return;
+        } else if (p.field === "text") {
           emit({ type: "thinking", active: false });
           const text = p.delta;
           if (text) assistantDeltaRedactor.feed(String(text));
@@ -31542,6 +32038,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       if (type === "message.part.updated") {
         const part = p.part || {};
+        if (part.id && part.type) partTypes.set(String(part.id), String(part.type));
         if (part.type === "tool") handleToolPart(part);
         else if (part.type === "reasoning") emit({ type: "thinking", active: true });
         return;
@@ -31627,24 +32124,33 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         activeResolve = resolve;
       });
       try {
+        if (!proc || !baseUrl || sseClosed) emitTurnProgress("spawn");
+        else if (!sessionId) emitTurnProgress("session");
         const id = await ensureSession();
         const userText = turn.text;
         transcript.push({ role: "user", text: userText });
-        messageDispatched = true;
         if (turn.turnId) {
           activeTurnAccepted = true;
           emit({ type: "turn-accepted", turnId: turn.turnId, transport: "opencode-file-part" });
         }
         const messageBody = { parts: openCodeParts(turn) };
         try {
-          await postJson("/session/" + encodeURIComponent(id) + "/message", messageBody);
+          messageDispatched = true;
+          const messageRequest = postJson("/session/" + encodeURIComponent(id) + "/message", messageBody);
+          emitTurnProgress("dispatch");
+          await messageRequest;
         } catch (error) {
-          if ((error == null ? void 0 : error.httpStatus) !== 404 || !sessionWasAdopted) throw error;
+          if (!sessionWasAdopted || (error == null ? void 0 : error.httpStatus) !== 404 && (error == null ? void 0 : error.httpStatus) !== 503) throw error;
           sessionId = null;
           adoptedSessionId = null;
           sessionWasAdopted = false;
           const replacementId = await ensureSession();
-          await postJson("/session/" + encodeURIComponent(replacementId) + "/message", messageBody);
+          const replacementRequest = postJson(
+            "/session/" + encodeURIComponent(replacementId) + "/message",
+            messageBody
+          );
+          emitTurnProgress("dispatch");
+          await replacementRequest;
         }
       } catch (e) {
         const httpStatus = extractHttpStatus(e == null ? void 0 : e.httpStatus);
@@ -31707,6 +32213,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
     }
     function reset() {
+      var _a;
+      generation += 1;
+      const stoppedProc = proc;
+      const stoppedHome = configHome;
       stopping = true;
       sseClosed = true;
       sseStarted = false;
@@ -31724,27 +32234,59 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       messageDispatched = false;
       turnStarted = false;
       startedTools.clear();
+      partTypes.clear();
       transcript.length = 0;
-      if (proc && proc.kill) proc.kill();
       proc = null;
+      port = null;
+      baseUrl = "";
+      configHome = "";
       serverPromise = null;
       stderrTail = "";
       clearProcessStderrAttachmentPaths();
       try {
-        if (configHome) {
-          const fs = fsImpl || adapter.fs;
-          fs.rmSync(configHome, { recursive: true, force: true });
-        }
-      } catch (e) {
+        (_a = stoppedProc == null ? void 0 : stoppedProc.kill) == null ? void 0 : _a.call(stoppedProc);
+      } catch (error) {
       }
+      removeInstanceMarker(stoppedHome);
+      void Promise.resolve().then(() => sweepStaleInstances());
     }
     async function probeAccount() {
+      const controller = new AbortController();
+      let timedOut = false;
+      let timer = null;
+      const seconds = totalProbeTimeoutMs / 1e3;
+      const timeoutLabel = Number.isInteger(seconds) ? `${seconds}s` : `${totalProbeTimeoutMs}ms`;
+      const timeout = new Promise((_resolve, reject) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+          reject(new Error("OpenCode probe timed out"));
+        }, totalProbeTimeoutMs);
+      });
       try {
-        await startServer();
-        await requestJson("/config/providers").catch(() => requestJson("/provider"));
+        await Promise.race([
+          (async () => {
+            await startServer();
+            await requestJson("/config/providers", { signal: controller.signal }).catch((error) => {
+              if (controller.signal.aborted) throw error;
+              return requestJson("/provider", { signal: controller.signal });
+            });
+          })(),
+          timeout
+        ]);
         return { loggedIn: true };
       } catch (e) {
+        if (timedOut) {
+          if (!activeRun) reset();
+          return {
+            loggedIn: false,
+            code: "PROBE_TIMEOUT",
+            detail: `OpenCode probe timed out after ${timeoutLabel}`
+          };
+        }
         return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }
     function getMessages() {
@@ -31755,6 +32297,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return id ? { kind: "opencode-session", id } : null;
     }
     function adoptSessionRef(ref) {
+      partTypes.clear();
       sessionId = null;
       adoptedSessionId = ref && ref.kind === "opencode-session" && ref.id ? String(ref.id) : null;
       sessionWasAdopted = Boolean(adoptedSessionId);
@@ -34774,6 +35317,7 @@ ${command}`
     }
   };
   var pkgVersion = package_default.version;
+  var PROBE_PENDING_GRACE_MS = 8e3;
   function readPref(key, fallback) {
     try {
       const v = window.localStorage.getItem(key);
@@ -34947,12 +35491,16 @@ ${command}`
     const [codexProbe, setCodexProbe] = import_react47.default.useState(null);
     const [codexModels, setCodexModels] = import_react47.default.useState(null);
     const [openCodeProbe, setOpenCodeProbe] = import_react47.default.useState(null);
+    const [openCodeProbeStale, setOpenCodeProbeStale] = import_react47.default.useState(false);
+    const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = import_react47.default.useState(0);
+    const openCodeProbeRunRef = import_react47.default.useRef(0);
     const [chatEntries, setChatEntries] = import_react47.default.useState([]);
     const chatEntriesRef = import_react47.default.useRef(chatEntries);
     chatEntriesRef.current = chatEntries;
     const sessionControllerRef = import_react47.default.useRef(null);
     const [chatStreaming, setChatStreaming] = import_react47.default.useState(false);
     const [thinkingActive, setThinkingActive] = import_react47.default.useState(false);
+    const [turnStage, setTurnStage] = import_react47.default.useState(null);
     const baseDescriptor = import_react47.default.useMemo(
       () => baseDescriptorFor(backendPref),
       [backendPref]
@@ -35105,11 +35653,14 @@ ${draft.baseUrl}`)) return;
     }, []);
     const handleChatEvent = import_react47.default.useCallback((evt) => {
       var _a;
+      const pending = pendingTurnRef.current;
+      setTurnStage((current) => reduceTurnStage(current, evt, {
+        pendingTurnId: pending == null ? void 0 : pending.turnId
+      }));
       if (evt.type === "session-ref") {
         (_a = sessionControllerRef.current) == null ? void 0 : _a.recordBackendRef(evt.ref);
         return;
       }
-      const pending = pendingTurnRef.current;
       if (evt.type === "error") {
         const exactSecrets = attachmentPathSecrets({ pendingTurn: pending });
         const effectiveBackend = effectiveBackendRef.current;
@@ -35153,6 +35704,7 @@ ${draft.baseUrl}`)) return;
         if (evt.turnId !== pending.turnId) return;
         setChatStreaming(false);
         setThinkingActive(false);
+        setTurnStage(null);
         if (evt.dispatchState === "not-started") {
           dispatchAttachmentDraft({
             type: "rejected",
@@ -35178,6 +35730,7 @@ ${draft.baseUrl}`)) return;
         }
         setChatStreaming(false);
         setThinkingActive(false);
+        setTurnStage(null);
       }
       commitChatEntries((entries) => reduceEvent(entries, evt), evt);
     }, [commitChatEntries, releaseTurnAttachments]);
@@ -35327,8 +35880,12 @@ ${draft.baseUrl}`)) return;
       });
     }, [effective.backend, sessionController, status.state]);
     import_react47.default.useEffect(
-      () => installBeforeUnloadReset(window, codexBackend, () => sessionController.flush()),
-      [codexBackend, sessionController]
+      () => installBeforeUnloadReset(
+        window,
+        [codexBackend, openCodeBackend, claudeBackend],
+        () => sessionController.flush()
+      ),
+      [claudeBackend, codexBackend, openCodeBackend, sessionController]
     );
     import_react47.default.useEffect(() => {
       const facts = {
@@ -35410,16 +35967,30 @@ ${draft.baseUrl}`)) return;
     }, [backendPref, runCodexProbe]);
     const runOpenCodeProbe = import_react47.default.useCallback(() => {
       let alive = true;
+      const runId = openCodeProbeRunRef.current + 1;
+      openCodeProbeRunRef.current = runId;
+      setOpenCodeProbeStale(false);
+      setOpenCodeProbeAttempt((value) => value + 1);
       setOpenCodeProbe(null);
       openCodeBackend.probeAccount().then((result) => {
-        if (alive) setOpenCodeProbe(result);
+        if (alive && openCodeProbeRunRef.current === runId) setOpenCodeProbe(result);
       }).catch((error) => {
-        if (alive) setOpenCodeProbe({ loggedIn: false, detail: (error == null ? void 0 : error.message) || String(error) });
+        if (alive && openCodeProbeRunRef.current === runId) {
+          setOpenCodeProbe({ loggedIn: false, detail: (error == null ? void 0 : error.message) || String(error) });
+        }
       });
       return () => {
         alive = false;
       };
     }, [openCodeBackend]);
+    import_react47.default.useEffect(() => {
+      if (backendPref !== "opencode" || openCodeProbe !== null) {
+        setOpenCodeProbeStale(false);
+        return void 0;
+      }
+      const timer = setTimeout(() => setOpenCodeProbeStale(true), PROBE_PENDING_GRACE_MS);
+      return () => clearTimeout(timer);
+    }, [backendPref, openCodeProbe, openCodeProbeAttempt]);
     import_react47.default.useEffect(() => {
       if (backendPref !== "opencode") return void 0;
       if (status.state !== "ok" || providerInit.state !== "ready") return void 0;
@@ -35435,6 +36006,7 @@ ${draft.baseUrl}`)) return;
       resetAttachmentDraftSession();
       setChatStreaming(false);
       setThinkingActive(false);
+      setTurnStage(null);
       if (pendingSessionLoadRef.current) return;
       setSessionModel(null);
       setSessionEffort(null);
@@ -35477,6 +36049,7 @@ ${draft.baseUrl}`)) return;
         return;
       }
       try {
+        setTurnStage("connect");
         const result = activeBackend.sendUser(turn);
         Promise.resolve(result).catch((error) => {
           var _a2;
@@ -35505,6 +36078,7 @@ ${draft.baseUrl}`)) return;
       await sessionController.createSession();
       setChatStreaming(false);
       setThinkingActive(false);
+      setTurnStage(null);
     };
     const pushLog = import_react47.default.useCallback((m) => {
       const message = String(m != null ? m : "");
@@ -35532,6 +36106,7 @@ ${draft.baseUrl}`)) return;
         await sessionController.switchTo(id);
         setChatStreaming(false);
         setThinkingActive(false);
+        setTurnStage(null);
       } catch (error) {
         pushLog("Session switch failed: " + ((error == null ? void 0 : error.message) || String(error)));
       } finally {
@@ -35807,6 +36382,10 @@ ${draft.baseUrl}`)) return;
     const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
+    const activeSessionMeta = sessionSnapshot.sessions.find(
+      (meta) => meta.id === sessionSnapshot.activeId
+    ) || null;
+    const sessionTitle = displayTitle(activeSessionMeta, lang);
     return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)(import_react47.default.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
         StatusBar,
@@ -35833,6 +36412,10 @@ ${draft.baseUrl}`)) return;
             entries: chatEntries,
             streaming: chatStreaming,
             thinking: thinkingActive,
+            turnStage,
+            turnBackend: effective.backend,
+            sessionTitle,
+            onOpenSessions: () => setSessionsOpen(true),
             composerDisabled,
             disabledHint: paused ? t.pausedHint : composerDisabled ? backendDisabledHint : "",
             noticeActionLabel: paused ? t.resume : t.goSettings,
@@ -35932,10 +36515,14 @@ ${draft.baseUrl}`)) return;
             },
             onRecheckBackend: () => {
               if (backendPref === "codex") runCodexProbe();
-              else if (backendPref === "opencode") runOpenCodeProbe();
-              else runClaudeProbe();
+              else if (backendPref === "opencode") {
+                if (openCodeProbe === null && openCodeProbeStale && !chatStreaming) {
+                  openCodeBackend.reset();
+                }
+                runOpenCodeProbe();
+              } else runClaudeProbe();
             },
-            recheckDisabled: backendPref === "codex" ? codexProbe === null : backendPref === "opencode" ? openCodeProbe === null : probe === null,
+            recheckDisabled: backendPref === "codex" ? codexProbe === null : backendPref === "opencode" ? openCodeProbe === null && !openCodeProbeStale : probe === null,
             providers,
             providerManager,
             providerInit,

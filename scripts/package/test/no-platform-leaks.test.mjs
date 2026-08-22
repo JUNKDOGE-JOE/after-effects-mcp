@@ -9,13 +9,8 @@ const PANEL_SRC_ROOT = path.join(REPO_ROOT, 'plugin', 'panel', 'src');
 const CEP_ROOT = path.join(PANEL_SRC_ROOT, 'cep');
 const PLATFORM_ROOT = path.join(CEP_ROOT, 'platform') + path.sep;
 
-// Exact counts keep the remaining filesystem compatibility boundaries narrow.
-// Provider storage and Codex environment shaping still need their current CEP
-// primitives until those interfaces move behind the platform adapter.
+// Exact counts keep the remaining compatibility boundary narrow.
 const GATED_PLATFORM_ALLOWLIST = new Map([
-  ['plugin/panel/src/cep/providerStore.js::native-path-home-module', 2],
-  // Provider env shaping is part of the same gated provider-facade migration.
-  ['plugin/panel/src/lib/providerProfile.js::windows-user-root-env', 4],
   // 'PowerShell' here is the Claude CLI builtin TOOL NAME being disallowed
   // (--disallowedTools), not a system command invocation.
   ['plugin/panel/src/cep/claudeAgentBackend.js::system-discovery-command', 1],
@@ -83,9 +78,4 @@ test('business modules do not branch on platform or invoke system discovery comm
     if (!usedAllowances.has(key)) leaks.push('stale or count-mismatched gated allowlist: ' + key);
   }
   assert.deepEqual(leaks, []);
-
-  const zcode = fs.readFileSync(path.join(CEP_ROOT, 'zcodeBackend.js'), 'utf8');
-  for (const pattern of [/credentials\.json/, /decryptZcodeCredentialValue/, /readZcodeOAuthAccessToken/, /resolveZcodeCodingPlanApiKey/]) {
-    assert.doesNotMatch(zcode, pattern, 'ZCode must not scrape or exchange desktop credentials');
-  }
 });

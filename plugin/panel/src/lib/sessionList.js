@@ -26,7 +26,8 @@ export function displayTitle(meta, lang = 'zh') {
   const title = compactText(meta && meta.title);
   if (title) return title;
   const label = lang === 'en' ? 'New session' : '新会话';
-  const date = localDate(meta && (meta.createdAt || meta.updatedAt), lang);
+  const stamp = meta && (meta.createdAt || meta.updatedAt);
+  const date = stamp ? localDate(stamp, lang) : '';
   return date ? `${label} · ${date}` : label;
 }
 

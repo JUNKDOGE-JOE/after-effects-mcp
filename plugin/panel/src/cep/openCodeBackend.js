@@ -11,10 +11,14 @@ import { openCodeProviderDefinitions } from './openCodeProviderStore.js';
 import { attachmentFileUrl, normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
 const READY_TIMEOUT_MS = 30000;
+const PROBE_TIMEOUT_MS = 40000;
 const READY_POLL_MS = 250;
+const READY_REQUEST_TIMEOUT_MS = 1500;
 const DEFAULT_PROVIDER_ID = 'opencode';
 const DEFAULT_MODEL_ID = 'north-mini-code-free';
 const STDERR_TAIL_LIMIT = 4096;
+const STALE_TERMINATE_LIMIT = 8;
+const STALE_REMOVE_LIMIT = 64;
 
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
@@ -93,10 +97,6 @@ function taggedError(error, property, value) {
 function decodeChunk(value) {
   if (typeof value === 'string') return value;
   return new TextDecoder().decode(value);
-}
-
-function randomTempName() {
-  return 'ae-opencode-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
 }
 
 async function defaultGetPort() {
@@ -195,7 +195,6 @@ export function createOpenCodeBackend({
   fetchImpl,
   getPort = defaultGetPort,
   fsImpl,
-  tempDirName = randomTempName,
   getModel,
   getPermissionMode,
   getMcpSpec,
@@ -207,10 +206,26 @@ export function createOpenCodeBackend({
   getLang,
   lang = 'zh',
   readyTimeoutMs = READY_TIMEOUT_MS,
+  probeTimeoutMs = PROBE_TIMEOUT_MS,
   readyPollMs = READY_POLL_MS,
+  readyRequestTimeoutMs = READY_REQUEST_TIMEOUT_MS,
   sleepImpl = sleep,
+  onSweepComplete,
 } = {}) {
   const adapter = platform || createPlatformAdapter();
+  if (!Number.isFinite(readyRequestTimeoutMs)
+    || readyRequestTimeoutMs <= 0
+    || readyRequestTimeoutMs < readyPollMs) {
+    throw new RangeError('OpenCode readiness request timeout must be at least the poll interval');
+  }
+  // OpenCode isolates sessions and its event bus by request directory. Keep
+  // the default cwd stable so resumed sessions publish to this panel's bus.
+  const openCodeRoot = adapter.paths.join([adapter.paths.configRoot, 'opencode']);
+  const workspaceDir = adapter.paths.join([openCodeRoot, 'workspace']);
+  const totalProbeTimeoutMs = Number(probeTimeoutMs);
+  if (!Number.isFinite(totalProbeTimeoutMs) || totalProbeTimeoutMs <= readyTimeoutMs) {
+    throw new TypeError('probeTimeoutMs must be greater than readyTimeoutMs');
+  }
   const currentLang = () => (typeof getLang === 'function' ? getLang() : lang) || 'zh';
   let proc = null;
   let port = null;
@@ -220,6 +235,7 @@ export function createOpenCodeBackend({
   let adoptedSessionId = null;
   let sessionWasAdopted = false;
   let serverPromise = null;
+  let sweeping = null;
   let sessionPromise = null;
   let sseStarted = false;
   let sseClosed = false;
@@ -236,14 +252,25 @@ export function createOpenCodeBackend({
   let activeTurnAccepted = false;
   let messageDispatched = false;
   let turnStarted = false;
+  let generation = 0;
   let toolMeta = { annotations: {} };
   const pendingApprovals = new Map();
   const sessionAllowedTools = new Set();
   const startedTools = new Set();
+  const partTypes = new Map();
   const transcript = [];
 
   function emit(evt) {
     if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
+  }
+
+  function emitTurnProgress(stage) {
+    if (!activeRun || !activeTurn) return;
+    emit({
+      type: 'turn-progress',
+      ...(activeTurn.turnId ? { turnId: activeTurn.turnId } : {}),
+      stage,
+    });
   }
 
   function resetAssistantDeltaRedactor() {
@@ -290,6 +317,185 @@ export function createOpenCodeBackend({
     return adapter.completeSpawnEnv(env || {});
   }
 
+  function stableConfigHome(mcpSpec) {
+    let hostPort = 'default';
+    try {
+      hostPort = new URL(String(mcpSpec?.url || '')).port || 'default';
+    } catch {}
+    return adapter.paths.join([openCodeRoot, 'home-' + hostPort]);
+  }
+
+  function instanceMarkerPath(home) {
+    return adapter.paths.join([home, 'instance.json']);
+  }
+
+  function removeInstanceMarker(home) {
+    if (!home) return;
+    try {
+      const fs = fsImpl || adapter.fs;
+      const markerPath = instanceMarkerPath(home);
+      if (typeof fs.existsSync === 'function' && !fs.existsSync(markerPath)) return;
+      fs.rmSync(markerPath, { force: true });
+    } catch {}
+  }
+
+  function readInstanceMarker(home) {
+    const fs = fsImpl || adapter.fs;
+    if (!home || typeof fs?.readFileSync !== 'function') return null;
+    try {
+      const markerPath = instanceMarkerPath(home);
+      if (typeof fs.existsSync === 'function' && !fs.existsSync(markerPath)) return null;
+      return JSON.parse(String(fs.readFileSync(markerPath, 'utf8')));
+    } catch {
+      return null;
+    }
+  }
+
+  async function reclaimStableInstance(home) {
+    const marker = readInstanceMarker(home);
+    if (marker?.owner === 'ae-mcp-panel' && marker.pid) {
+      const ownerPid = Number(marker.ownerPid);
+      let ownedElsewhere = false;
+      if (Number.isInteger(ownerPid) && ownerPid > 0 && ownerPid !== adapter.pid) {
+        try {
+          ownedElsewhere = await adapter.processAlive({ pid: ownerPid });
+        } catch {}
+      }
+      if (!ownedElsewhere) {
+        try {
+          await adapter.terminateProcess({ pid: marker.pid, executableName: 'opencode' });
+        } catch {}
+      }
+    }
+    removeInstanceMarker(home);
+  }
+
+  async function removeStaleDirectory(home) {
+    if (!home) return false;
+    const fs = fsImpl || adapter.fs;
+    const options = { recursive: true, force: true };
+    try {
+      if (fs?.promises && typeof fs.promises.rm === 'function') {
+        await fs.promises.rm(home, options);
+      } else if (typeof fs?.rm === 'function') {
+        await new Promise((resolve, reject) => {
+          fs.rm(home, options, (error) => {
+            if (error) reject(error);
+            else resolve();
+          });
+        });
+      } else {
+        removeConfigHomeSyncFallback(home);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function sweepStaleInstances(skipHome = configHome) {
+    if (sweeping) return sweeping;
+    const fs = fsImpl || adapter.fs;
+    if (!fs || typeof fs.readdirSync !== 'function') return Promise.resolve();
+
+    let entries;
+    try {
+      entries = fs.readdirSync(adapter.paths.tempRoot);
+    } catch {
+      return Promise.resolve();
+    }
+
+    const pendingSweep = (async () => {
+      let terminated = 0;
+      let removed = 0;
+      for (const entry of entries || []) {
+        if (removed >= STALE_REMOVE_LIMIT) break;
+        const name = String(entry?.name || entry || '');
+        if (!name.startsWith('ae-opencode-')) continue;
+        const home = adapter.paths.join([adapter.paths.tempRoot, name]);
+        if (home === skipHome) continue;
+
+        let marker = null;
+        try {
+          const markerPath = adapter.paths.join([home, 'instance.json']);
+          const exists = typeof fs.existsSync !== 'function' || fs.existsSync(markerPath);
+          if (exists && typeof fs.readFileSync === 'function') {
+            marker = JSON.parse(String(fs.readFileSync(markerPath, 'utf8')));
+          }
+        } catch {}
+
+        const ownerPid = Number(marker?.ownerPid);
+        if (marker?.owner === 'ae-mcp-panel'
+          && Number.isInteger(ownerPid)
+          && ownerPid > 0
+          && ownerPid !== adapter.pid) {
+          let ownerAlive = false;
+          try {
+            ownerAlive = await adapter.processAlive({ pid: ownerPid });
+          } catch {}
+          if (ownerAlive) continue;
+        }
+
+        if (marker?.owner === 'ae-mcp-panel' && marker.pid) {
+          if (terminated >= STALE_TERMINATE_LIMIT) continue;
+          terminated += 1;
+          try {
+            await adapter.terminateProcess({ pid: marker.pid, executableName: 'opencode' });
+          } catch {}
+        }
+
+        removed += 1;
+        await removeStaleDirectory(home);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    })().catch(() => {});
+
+    sweeping = pendingSweep;
+    pendingSweep.finally(() => {
+      if (sweeping === pendingSweep) sweeping = null;
+      try {
+        if (typeof onSweepComplete === 'function') onSweepComplete();
+      } catch {}
+    });
+    return pendingSweep;
+  }
+
+  function backendFs() {
+    return fsImpl || adapter.fs;
+  }
+
+  function removeConfigHomeSyncFallback(home) {
+    if (!home) return;
+    try {
+      backendFs().rmSync(home, { recursive: true, force: true });
+    } catch (error) {
+      // A live process may still hold its cwd on Windows; a later sweep retries.
+    }
+  }
+
+  function writeInstanceMarker(home, spawnedProc, instancePort) {
+    try {
+      backendFs().writeFileSync(
+        adapter.paths.join([home, 'instance.json']),
+        JSON.stringify({
+        owner: 'ae-mcp-panel',
+        ownerPid: adapter.pid,
+        pid: spawnedProc.pid,
+          port: instancePort,
+          startedAt: new Date().toISOString(),
+        }),
+      );
+    } catch (error) {
+      // Marker failure must not turn a healthy CLI spawn into a failed chat.
+    }
+  }
+
+  function cancelledStartError() {
+    const error = new Error('OpenCode start was cancelled');
+    error.categoryCode = 'CANCELLED';
+    return error;
+  }
+
   function finishActive() {
     if (!activeResolve) {
       activeRun = null;
@@ -299,6 +505,7 @@ export function createOpenCodeBackend({
       messageDispatched = false;
       turnStarted = false;
       startedTools.clear();
+      partTypes.clear();
       setActiveAttachmentPaths([]);
       return;
     }
@@ -311,15 +518,16 @@ export function createOpenCodeBackend({
     messageDispatched = false;
     turnStarted = false;
     startedTools.clear();
+    partTypes.clear();
     setActiveAttachmentPaths([]);
     resolve();
   }
 
-  async function request(path, options = {}) {
+  async function request(path, options = {}, requestBaseUrl = baseUrl) {
     const endpoint = endpointPath(path);
     let response;
     try {
-      response = await fetcher()(baseUrl + path, options);
+      response = await fetcher()(requestBaseUrl + path, options);
     } catch (error) {
       throw taggedError(error, 'endpoint', endpoint);
     }
@@ -348,8 +556,8 @@ export function createOpenCodeBackend({
     };
   }
 
-  async function requestJson(path, options = {}) {
-    const response = await request(path, options);
+  async function requestJson(path, options = {}, requestBaseUrl = baseUrl) {
+    const response = await request(path, options, requestBaseUrl);
     return response.json ? response.json() : {};
   }
 
@@ -361,13 +569,27 @@ export function createOpenCodeBackend({
     });
   }
 
-  async function waitForMcp() {
+  async function waitForMcp(requestBaseUrl, isCancelled = () => false) {
     const deadline = Date.now() + readyTimeoutMs;
     let lastError = null;
     let lastStatus = null;
     while (Date.now() < deadline) {
+      if (isCancelled()) throw cancelledStartError();
       try {
-        const status = await requestJson('/mcp');
+        const controller = new AbortController();
+        const requestTimeoutMs = Math.min(
+          readyRequestTimeoutMs,
+          Math.max(1, deadline - Date.now()),
+        );
+        const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+        let status;
+        try {
+          // OpenCode can accept a connection immediately after bind without
+          // servicing it, so each readiness attempt must expire and retry.
+          status = await requestJson('/mcp', { signal: controller.signal }, requestBaseUrl);
+        } finally {
+          clearTimeout(timer);
+        }
         lastStatus = status?.ae?.status || status;
         if (status && status.ae && status.ae.status === 'connected') return true;
       } catch (e) {
@@ -386,10 +608,9 @@ export function createOpenCodeBackend({
     throw error;
   }
 
-  function writeConfig(mcpSpec) {
-    const fs = fsImpl || adapter.fs;
-    configHome = adapter.paths.join([adapter.paths.tempRoot, tempDirName()]);
-    const configDir = adapter.paths.join([configHome, 'opencode']);
+  function writeConfig(mcpSpec, home) {
+    const fs = backendFs();
+    const configDir = adapter.paths.join([home, 'opencode']);
     fs.mkdirSync(configDir, { recursive: true });
     const mcpEntry = { type: 'remote', url: mcpSpec.url, enabled: true };
     const config = {
@@ -403,22 +624,28 @@ export function createOpenCodeBackend({
       },
     };
     fs.writeFileSync(adapter.paths.join([configDir, 'opencode.json']), JSON.stringify(config, null, 2));
+    return home;
   }
 
-  function handleExit(code, signal) {
+  function handleExit(exitedProc, processGeneration, home, code, signal) {
+    if (processGeneration !== generation || proc !== exitedProc) return;
     const wasStopping = stopping;
+    generation += 1;
     stderrRedactor.flush();
     const tail = trimStderrTail(stderrTail);
     proc = null;
-    serverPromise = null;
     sessionPromise = null;
     sessionId = null;
+    port = null;
+    baseUrl = '';
+    configHome = '';
     sseClosed = true;
     sseStarted = false;
     if (wasStopping) {
       clearProcessStderrAttachmentPaths();
       return;
     }
+    removeInstanceMarker(home);
     if (activeRun) {
       const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
       emit({
@@ -438,14 +665,19 @@ export function createOpenCodeBackend({
     clearProcessStderrAttachmentPaths();
   }
 
-  function handleError(error) {
+  function handleError(failedProc, processGeneration, home, error) {
+    if (processGeneration !== generation || proc !== failedProc) return;
+    generation += 1;
     stderrRedactor.flush();
     proc = null;
-    serverPromise = null;
     sessionPromise = null;
     sessionId = null;
+    port = null;
+    baseUrl = '';
+    configHome = '';
     sseClosed = true;
     sseStarted = false;
+    removeInstanceMarker(home);
     if (activeRun) {
       const tail = trimStderrTail(stderrTail);
       const classified = classifyErrorCode({ error, spawnError: true, stderrTail: tail });
@@ -466,28 +698,42 @@ export function createOpenCodeBackend({
   }
 
   async function startServer() {
-    if (proc && baseUrl) return true;
-    if (serverPromise) return serverPromise;
-    // Reuse the live instance. Without this, every probe-then-send pair
-    // spawned a second opencode while startSse's started-guard kept the event
-    // stream attached to the first one — the new instance's session events
-    // never reached the panel (turns hung busy forever) and orphan processes
-    // piled up (#286). reset()/exit clear proc, so config changes still
-    // rebuild with fresh state.
     if (proc && baseUrl && !stopping && !sseClosed) return true;
-    serverPromise = (async () => {
+    if (serverPromise) return serverPromise;
+    const startGeneration = generation;
+    let spawnedProc = null;
+      let startHome;
+    let startPort = null;
+    let startBaseUrl = '';
+    const assertCurrentStart = () => {
+      if (startGeneration === generation) return;
+      try { spawnedProc?.kill?.(); } catch (error) {}
+      removeInstanceMarker(startHome);
+      throw cancelledStartError();
+    };
+    const pendingStart = (async () => {
+      void sweepStaleInstances();
+      assertCurrentStart();
       let mcpSpec;
       try {
         mcpSpec = getMcpSpec ? await getMcpSpec() : { command: 'ae-mcp', args: [] };
-        writeConfig(mcpSpec);
+        assertCurrentStart();
+        startHome = stableConfigHome(mcpSpec);
+        (fsImpl || adapter.fs).mkdirSync(workspaceDir, { recursive: true });
+        await reclaimStableInstance(startHome);
+        assertCurrentStart();
+        writeConfig(mcpSpec, startHome);
       } catch (error) {
+        if (error?.categoryCode === 'CANCELLED') throw error;
         throw taggedError(error, 'categoryCode', 'MCP_UNREACHABLE');
       }
-      port = await getPort();
-      baseUrl = 'http://127.0.0.1:' + port;
-      const spawnEnv = adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: configHome });
+      startPort = await getPort();
+      assertCurrentStart();
+      startBaseUrl = 'http://127.0.0.1:' + startPort;
+      const spawnEnv = adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: startHome });
       const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
       const executable = await adapter.resolveExecutable('opencode', { env: spawnEnv, ...(requiredArch ? { requiredArch } : {}) });
+      assertCurrentStart();
       if (!executable.ok) {
         const error = new Error(openCodeResolutionMessage(executable.code, currentLang(), executable));
         const classified = classifyErrorCode({ resolutionCode: executable.code });
@@ -500,76 +746,110 @@ export function createOpenCodeBackend({
       stopping = false;
       sseClosed = false;
       try {
-        proc = adapter.spawn(executable, ['serve', '--port', String(port)], {
+        spawnedProc = adapter.spawn(executable, ['serve', '--port', String(startPort)], {
           stdio: 'pipe',
           windowsHide: true,
           // OpenCode scopes its project context to the cwd. Inheriting the CEP
           // process cwd (AE's Support Files, thousands of files) inflated every
           // provider request until the relay-side WAF rejected it with a 403
-          // challenge page (live-debugged 2026-08-20); pin a tiny neutral dir.
-          cwd: configHome,
+          // challenge page; pin a tiny neutral directory.
+          cwd: workspaceDir,
           env: spawnEnv,
         });
       } catch (error) {
         throw taggedError(error, 'spawnError', true);
       }
-      if (proc.stdout && proc.stdout.on) proc.stdout.on('data', (chunk) => {
+      writeInstanceMarker(startHome, spawnedProc, startPort);
+      assertCurrentStart();
+      proc = spawnedProc;
+      port = startPort;
+      baseUrl = startBaseUrl;
+      configHome = startHome;
+      if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on('data', (chunk) => {
+        if (startGeneration !== generation || proc !== spawnedProc) return;
         stderrRedactor.feed(chunk);
       });
-      if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
+      if (spawnedProc.stderr && spawnedProc.stderr.on) spawnedProc.stderr.on('data', (chunk) => {
+        if (startGeneration !== generation || proc !== spawnedProc) return;
         stderrRedactor.feed(chunk);
       });
-      if (proc.on) {
-        proc.on('exit', (code, signal) => handleExit(code, signal));
-        proc.on('error', (error) => handleError(error));
+      if (spawnedProc.on) {
+        spawnedProc.on('exit', (code, signal) => (
+          handleExit(spawnedProc, startGeneration, startHome, code, signal)
+        ));
+        spawnedProc.on('error', (error) => (
+          handleError(spawnedProc, startGeneration, startHome, error)
+        ));
       }
-      await waitForMcp();
-      startSse();
+        await waitForMcp(startBaseUrl, () => (
+          startGeneration !== generation || proc !== spawnedProc
+        ));
+      assertCurrentStart();
+      startSse(startGeneration, spawnedProc, startHome, startBaseUrl);
       return true;
-    })();
+    })().catch((error) => {
+      if (proc === spawnedProc) {
+        generation += 1;
+        proc = null;
+        port = null;
+        baseUrl = '';
+        configHome = '';
+        sseClosed = true;
+        sseStarted = false;
+      }
+      try { spawnedProc?.kill?.(); } catch (killError) {}
+      removeInstanceMarker(startHome);
+      throw error;
+    });
+    serverPromise = pendingStart;
     try {
-      return await serverPromise;
+      return await pendingStart;
     } finally {
-      serverPromise = null;
+      if (serverPromise === pendingStart) serverPromise = null;
     }
   }
 
-  async function readSseBody(body, parser) {
+  async function readSseBody(body, parser, isCurrent) {
     if (!body) return;
     if (body.getReader) {
       const reader = body.getReader();
-      while (!sseClosed) {
+      while (isCurrent()) {
         const next = await reader.read();
         if (!next || next.done) break;
+        if (!isCurrent()) break;
         parser.feed(decodeChunk(next.value));
       }
       return;
     }
     if (body[Symbol.asyncIterator]) {
       for await (const chunk of body) {
-        if (sseClosed) break;
+        if (!isCurrent()) break;
         parser.feed(decodeChunk(chunk));
       }
     }
   }
 
-  function startSse() {
+  function startSse(processGeneration, spawnedProc, home, requestBaseUrl) {
     if (sseStarted) return;
     sseStarted = true;
+    const isCurrent = () => processGeneration === generation
+      && proc === spawnedProc && !sseClosed;
     const parser = createSseParser(({ data }) => handleOpenCodeEvent(data));
-    request('/event').then(async (response) => {
-      await readSseBody(response.body, parser);
-      if (!sseClosed) throw new Error('OpenCode event stream closed.');
+    request('/event', {}, requestBaseUrl).then(async (response) => {
+      await readSseBody(response.body, parser, isCurrent);
+      if (isCurrent()) throw new Error('OpenCode event stream closed.');
     }).catch((e) => {
-      if (!sseClosed) {
+      if (isCurrent()) {
+        generation += 1;
         sseStarted = false;
         const wasActive = Boolean(activeRun);
         sseClosed = true;
-        const failedProcess = proc;
         proc = null;
+        port = null;
         sessionId = null;
         sessionPromise = null;
         baseUrl = '';
+        configHome = '';
         if (wasActive) {
           emit({
             type: 'error',
@@ -588,20 +868,27 @@ export function createOpenCodeBackend({
           });
           finishActive();
         }
-        try { failedProcess?.kill?.(); } catch {}
+        try { spawnedProc?.kill?.(); } catch {}
+    removeInstanceMarker(home);
       }
     });
   }
 
   async function ensureSession() {
     if (sessionPromise) return sessionPromise;
-    sessionPromise = (async () => {
+    const sessionGeneration = generation;
+    const assertCurrentSession = () => {
+      if (sessionGeneration !== generation) throw cancelledStartError();
+    };
+    const pendingSession = (async () => {
       await startServer();
+      const liveGeneration = generation;
       try {
         toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
       } catch (error) {
         throw taggedError(error, 'categoryCode', 'MCP_UNREACHABLE');
       }
+      if (liveGeneration !== generation) throw cancelledStartError();
       if (sessionId) return sessionId;
       if (adoptedSessionId) {
         sessionId = adoptedSessionId;
@@ -612,10 +899,12 @@ export function createOpenCodeBackend({
       // (a permission field here broke session creation on the live round).
       // Write approval is owned by the CEP host conversation gate, and the
       // injected opencode.json already sets permission '*': 'allow'.
+      emitTurnProgress('session');
       const result = await postJson('/session', {
         title: 'After Effects MCP',
         model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID),
       });
+      if (liveGeneration !== generation) throw cancelledStartError();
       sessionId = String((result && (result.id || result.sessionID || result.sessionId)) || '');
       if (!sessionId) throw taggedError(new Error('OpenCode did not return a session id.'), 'fallbackCode', 'SESSION_START_FAILED');
       adoptedSessionId = sessionId;
@@ -623,10 +912,12 @@ export function createOpenCodeBackend({
       emit({ type: 'session-ref', ref: { kind: 'opencode-session', id: sessionId } });
       return sessionId;
     })();
+    sessionPromise = pendingSession;
     try {
-      return await sessionPromise;
+      assertCurrentSession();
+      return await pendingSession;
     } finally {
-      sessionPromise = null;
+      if (sessionPromise === pendingSession) sessionPromise = null;
     }
   }
 
@@ -742,7 +1033,17 @@ export function createOpenCodeBackend({
       return;
     }
     if (type === 'message.part.delta') {
-      if (p.field === 'text') {
+      const partId = String(p.partID || '');
+      const partType = partId ? partTypes.get(partId) : undefined;
+      if (partType === 'reasoning') {
+        emit({ type: 'thinking', active: true });
+      } else if (partType === 'text') {
+        emit({ type: 'thinking', active: false });
+        const text = p.delta;
+        if (text) assistantDeltaRedactor.feed(String(text));
+      } else if (partType) {
+        return;
+      } else if (p.field === 'text') {
         emit({ type: 'thinking', active: false });
         const text = p.delta;
         if (text) assistantDeltaRedactor.feed(String(text));
@@ -753,6 +1054,7 @@ export function createOpenCodeBackend({
     }
     if (type === 'message.part.updated') {
       const part = p.part || {};
+      if (part.id && part.type) partTypes.set(String(part.id), String(part.type));
       if (part.type === 'tool') handleToolPart(part);
       else if (part.type === 'reasoning') emit({ type: 'thinking', active: true });
       return;
@@ -847,10 +1149,11 @@ export function createOpenCodeBackend({
       activeResolve = resolve;
     });
     try {
+      if (!proc || !baseUrl || sseClosed) emitTurnProgress('spawn');
+      else if (!sessionId) emitTurnProgress('session');
       const id = await ensureSession();
       const userText = turn.text;
       transcript.push({ role: 'user', text: userText });
-      messageDispatched = true;
       // Accept at dispatch, not on POST completion: OpenCode's message POST
       // blocks until the model finishes while assistant deltas stream over
       // SSE, so a late accept rendered the reply ABOVE the user's message.
@@ -863,14 +1166,22 @@ export function createOpenCodeBackend({
       }
       const messageBody = { parts: openCodeParts(turn) };
       try {
-        await postJson('/session/' + encodeURIComponent(id) + '/message', messageBody);
+        messageDispatched = true;
+        const messageRequest = postJson('/session/' + encodeURIComponent(id) + '/message', messageBody);
+        emitTurnProgress('dispatch');
+        await messageRequest;
       } catch (error) {
-        if (error?.httpStatus !== 404 || !sessionWasAdopted) throw error;
+        if (!sessionWasAdopted || (error?.httpStatus !== 404 && error?.httpStatus !== 503)) throw error;
         sessionId = null;
         adoptedSessionId = null;
         sessionWasAdopted = false;
         const replacementId = await ensureSession();
-        await postJson('/session/' + encodeURIComponent(replacementId) + '/message', messageBody);
+        const replacementRequest = postJson(
+          '/session/' + encodeURIComponent(replacementId) + '/message',
+          messageBody,
+        );
+        emitTurnProgress('dispatch');
+        await replacementRequest;
       }
     } catch (e) {
       const httpStatus = extractHttpStatus(e?.httpStatus);
@@ -936,6 +1247,9 @@ export function createOpenCodeBackend({
   }
 
   function reset() {
+    generation += 1;
+    const stoppedProc = proc;
+    const stoppedHome = configHome;
     stopping = true;
     sseClosed = true;
     sseStarted = false;
@@ -953,31 +1267,59 @@ export function createOpenCodeBackend({
     messageDispatched = false;
     turnStarted = false;
     startedTools.clear();
+    partTypes.clear();
     transcript.length = 0;
-    if (proc && proc.kill) proc.kill();
     proc = null;
+    port = null;
+    baseUrl = '';
+    configHome = '';
     serverPromise = null;
     stderrTail = '';
     clearProcessStderrAttachmentPaths();
-    try {
-      if (configHome) {
-        const fs = fsImpl || adapter.fs;
-        fs.rmSync(configHome, { recursive: true, force: true });
-      }
-    } catch (e) {
-      // best-effort cleanup
-    }
+    try { stoppedProc?.kill?.(); } catch (error) {}
+    removeInstanceMarker(stoppedHome);
+    void Promise.resolve().then(() => sweepStaleInstances());
   }
 
   async function probeAccount() {
+    const controller = new AbortController();
+    let timedOut = false;
+    let timer = null;
+    const seconds = totalProbeTimeoutMs / 1000;
+    const timeoutLabel = Number.isInteger(seconds) ? `${seconds}s` : `${totalProbeTimeoutMs}ms`;
+    const timeout = new Promise((_resolve, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        reject(new Error('OpenCode probe timed out'));
+      }, totalProbeTimeoutMs);
+    });
     try {
-      await startServer();
-      // Reachability check only. The payload embeds each provider's raw API
-      // key (OpenCode returns auth.json values verbatim), so never retain it.
-      await requestJson('/config/providers').catch(() => requestJson('/provider'));
+      await Promise.race([
+        (async () => {
+          await startServer();
+          // Reachability check only. The payload embeds each provider's raw API
+          // key (OpenCode returns auth.json values verbatim), so never retain it.
+          await requestJson('/config/providers', { signal: controller.signal }).catch((error) => {
+            if (controller.signal.aborted) throw error;
+            return requestJson('/provider', { signal: controller.signal });
+          });
+        })(),
+        timeout,
+      ]);
       return { loggedIn: true };
     } catch (e) {
+      if (timedOut) {
+        if (!activeRun) reset();
+        return {
+          loggedIn: false,
+          code: 'PROBE_TIMEOUT',
+          detail: `OpenCode probe timed out after ${timeoutLabel}`,
+        };
+      }
       return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -991,6 +1333,7 @@ export function createOpenCodeBackend({
   }
 
   function adoptSessionRef(ref) {
+    partTypes.clear();
     sessionId = null;
     adoptedSessionId = ref && ref.kind === 'opencode-session' && ref.id
       ? String(ref.id) : null;

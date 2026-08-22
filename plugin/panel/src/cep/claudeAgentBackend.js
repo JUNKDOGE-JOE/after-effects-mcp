@@ -410,6 +410,15 @@ export function createClaudeAgentBackend({
     }
   }
 
+  function emitTurnProgress(stage) {
+    if (!activeRun || !activeTurn) return;
+    emit({
+      type: 'turn-progress',
+      ...(activeTurn.turnId ? { turnId: activeTurn.turnId } : {}),
+      stage,
+    });
+  }
+
   function resetProviderDeltaRedactor() {
     providerDeltaRedactor.discard();
     providerDeltaPhase = undefined;
@@ -1070,6 +1079,7 @@ export function createClaudeAgentBackend({
       let spawnedProc;
       try {
         try {
+          emitTurnProgress('spawn');
           spawnedProc = spawnProcess(executable, args, {
             stdio: 'pipe',
             windowsHide: true,
@@ -1236,13 +1246,13 @@ export function createClaudeAgentBackend({
       if (activeRun === run) finishActive();
       return;
     }
-    writeMessage({
+    if (writeMessage({
       type: 'user',
       message: {
         role: 'user',
         content: [{ type: 'text', text: withAttachmentManifest(turn.text, turn.attachments) }],
       },
-    });
+    })) emitTurnProgress('dispatch');
   }
 
   async function sendUser(input) {
@@ -1280,13 +1290,13 @@ export function createClaudeAgentBackend({
     const userText = withAttachmentManifest(turn.text, turn.attachments);
     transcript.push({ role: 'user', text: turn.text });
     activeTurnDispatched = true;
-    writeMessage({
+    if (writeMessage({
       type: 'user',
       message: {
         role: 'user',
         content: [{ type: 'text', text: userText }],
       },
-    });
+    })) emitTurnProgress('dispatch');
     return run;
   }
 

@@ -7,13 +7,14 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function makeProc() {
+function makeProc(pid = 7001) {
   const stdoutHandlers = [];
   const stderrHandlers = [];
   const exitHandlers = [];
   const errorHandlers = [];
   let killed = false;
   return {
+    pid,
     get killed() {
       return killed;
     },
@@ -53,7 +54,7 @@ function makeSpawn() {
   const calls = [];
   const procs = [];
   function spawn(command, args, options) {
-    const proc = makeProc();
+    const proc = makeProc(7001 + procs.length);
     calls.push({ command, args, options, proc });
     procs.push(proc);
     return proc;
@@ -136,19 +137,43 @@ function makeFetch() {
   };
 }
 
-function makeFs() {
+function makeFs({ entries = [], files = {}, throwOnRemove = [] } = {}) {
   const writes = [];
   const dirs = [];
+  const removals = [];
+  const syncRemovals = [];
+  const stored = new Map(Object.entries(files));
   return {
     writes,
     dirs,
+    removals,
+    syncRemovals,
     mkdirSync(dir, options) {
       dirs.push({ dir, options });
     },
     writeFileSync(file, text) {
       writes.push({ file, text });
+      stored.set(file, String(text));
     },
-    rmSync() {},
+    readdirSync() {
+      return entries.slice();
+    },
+    existsSync(file) {
+      return stored.has(file);
+    },
+    readFileSync(file) {
+      if (!stored.has(file)) throw new Error('missing file');
+      return stored.get(file);
+    },
+    rm(dir, options, callback) {
+      removals.push(dir);
+      queueMicrotask(() => callback(null));
+    },
+    rmSync(dir) {
+      syncRemovals.push(dir);
+      removals.push(dir);
+      if (throwOnRemove.includes(dir)) throw new Error('directory busy');
+    },
   };
 }
 
@@ -164,16 +189,27 @@ function makeBackend(options = {}) {
   const events = [];
   const spawned = makeSpawn();
   const fetched = makeFetch();
-  const fsImpl = makeFs();
+  const fsImpl = options.fsImpl || makeFs(options.fsOptions);
+  const terminated = [];
   const platform = {
     id: 'windows-x64',
-    paths: { tempRoot: 'C:\\tmp', join: (parts) => parts.join('\\') },
+    pid: 4100,
+    paths: {
+      tempRoot: 'C:\\tmp',
+      configRoot: 'C:\\Users\\test\\.ae-mcp',
+      join: (parts) => parts.join('\\'),
+    },
     fs: fsImpl,
     completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
+    processAlive: options.processAlive || (async () => false),
     resolveExecutable: options.resolveExecutable || (async () => ({ ok: true, id: 'opencode', path: 'C:\\Tools\\opencode.exe', argsPrefix: [], source: 'path', version: '1.0.0', arch: 'x64' })),
     spawn: (executable, args, spawnOptions) => {
       if (options.spawnError) throw options.spawnError;
       return spawned.spawn(executable.path, [...(executable.argsPrefix || []), ...args], spawnOptions);
+    },
+    terminateProcess: async (request) => {
+      terminated.push(request);
+      return { ok: true, matched: true, killed: true, detail: 'terminated' };
     },
   };
   const backend = createOpenCodeBackend({
@@ -181,7 +217,6 @@ function makeBackend(options = {}) {
     fetchImpl: fetched.fetchImpl,
     getPort: async () => 4567,
     fsImpl,
-    tempDirName: () => 'ae-opencode-test',
     getMcpSpec: async () => ({
       kind: 'http',
       url: 'http://127.0.0.1:11488/mcp/c/opencode-default-token',
@@ -194,8 +229,295 @@ function makeBackend(options = {}) {
     env: { PATH: 'C:\\Node' },
     ...options,
   });
-  return { backend, events, spawned, fetched, fsImpl };
+  return { backend, events, spawned, fetched, fsImpl, terminated };
 }
+
+function makeSweepFs(marker, removeImpl) {
+  const files = new Map([
+    ['C:\\tmp\\ae-opencode-old\\instance.json', JSON.stringify(marker)],
+  ]);
+  const removals = [];
+  const syncRemovals = [];
+  return {
+    files,
+    removals,
+    syncRemovals,
+    readdirSync: () => ['ae-opencode-old'],
+    existsSync: (file) => files.has(file),
+    readFileSync: (file) => files.get(file),
+    mkdirSync() {},
+    writeFileSync(file, text) {
+      files.set(file, text);
+    },
+    rm(dir, options, callback) {
+      removals.push(dir);
+      if (removeImpl) removeImpl(dir, options, callback);
+      else queueMicrotask(() => callback(null));
+    },
+    rmSync(dir) {
+      syncRemovals.push(dir);
+    },
+  };
+}
+
+function makeStableFs(marker) {
+  const markerPath = 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\instance.json';
+  const files = new Map(marker ? [[markerPath, JSON.stringify(marker)]] : []);
+  const writes = [];
+  const dirs = [];
+  const removals = [];
+  return {
+    markerPath,
+    files,
+    writes,
+    dirs,
+    removals,
+    readdirSync: () => [],
+    existsSync: (file) => files.has(file),
+    readFileSync: (file) => files.get(file),
+    mkdirSync(dir, options) {
+      dirs.push({ dir, options });
+    },
+    writeFileSync(file, text) {
+      writes.push({ file, text });
+      files.set(file, text);
+    },
+    rm(dir, _options, callback) {
+      removals.push(dir);
+      files.delete(dir);
+      queueMicrotask(() => callback(null));
+    },
+    rmSync(file) {
+      removals.push(file);
+      files.delete(file);
+    },
+  };
+}
+
+test('OpenCode reclaims a stable marker owned by this panel before spawn', async () => {
+  const fsImpl = makeStableFs({ owner: 'ae-mcp-panel', ownerPid: 4100, pid: 7101 });
+  const h = makeBackend({ fsImpl });
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(h.terminated, [{ pid: 7101, executableName: 'opencode' }]);
+  assert.equal(fsImpl.removals.includes(fsImpl.markerPath), true);
+});
+
+test('OpenCode does not terminate a stable marker owned by another live panel', async () => {
+  const fsImpl = makeStableFs({ owner: 'ae-mcp-panel', ownerPid: 5100, pid: 7102 });
+  const aliveRequests = [];
+  const h = makeBackend({
+    fsImpl,
+    processAlive: async (request) => { aliveRequests.push(request); return true; },
+  });
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(aliveRequests, [{ pid: 5100 }]);
+  assert.equal(h.terminated.length, 0);
+  assert.equal(fsImpl.removals.includes(fsImpl.markerPath), true);
+});
+
+test('OpenCode terminates a stable marker after its owner process exits', async () => {
+  const fsImpl = makeStableFs({ owner: 'ae-mcp-panel', ownerPid: 5101, pid: 7103 });
+  const aliveRequests = [];
+  const h = makeBackend({
+    fsImpl,
+    processAlive: async (request) => { aliveRequests.push(request); return false; },
+  });
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(aliveRequests, [{ pid: 5101 }]);
+  assert.deepEqual(h.terminated, [{ pid: 7103, executableName: 'opencode' }]);
+  assert.equal(fsImpl.removals.includes(fsImpl.markerPath), true);
+});
+
+test('OpenCode reset and unexpected exit remove only the stable instance marker', async () => {
+  const configHome = 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488';
+  const resetFs = makeStableFs(null);
+  const resetBackend = makeBackend({ fsImpl: resetFs });
+  assert.deepEqual(await resetBackend.backend.probeAccount(), { loggedIn: true });
+  resetBackend.backend.reset();
+  assert.equal(resetFs.removals.includes(resetFs.markerPath), true);
+  assert.equal(resetFs.removals.includes(configHome), false);
+
+  const exitFs = makeStableFs(null);
+  const exited = makeBackend({ fsImpl: exitFs });
+  assert.deepEqual(await exited.backend.probeAccount(), { loggedIn: true });
+  exited.spawned.procs[0].exit(1);
+  await flush();
+  assert.equal(exitFs.removals.includes(exitFs.markerPath), true);
+  assert.equal(exitFs.removals.includes(configHome), false);
+});
+
+test('OpenCode keeps reasoning parts out of assistant text', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser({ turnId: 'turn-reasoning', text: 'reply OK', attachments: [] });
+  await flush();
+
+  fetched.sse.push({
+    type: 'message.part.updated',
+    properties: { sessionID: 'session_1', part: { id: 'prt_A', type: 'reasoning', text: '' } },
+  });
+  await flush();
+  const thinkingBeforeReasoning = events.findIndex((event) => event.type === 'thinking' && event.active === true);
+  fetched.sse.push({
+    type: 'message.part.delta',
+    properties: { sessionID: 'session_1', partID: 'prt_A', field: 'text', delta: 'We need answer only OK.' },
+  });
+  fetched.sse.push({
+    type: 'message.part.updated',
+    properties: { sessionID: 'session_1', part: { id: 'prt_A', type: 'reasoning', text: 'We need answer only OK.' } },
+  });
+  fetched.sse.push({
+    type: 'message.part.updated',
+    properties: { sessionID: 'session_1', part: { id: 'prt_B', type: 'text', text: '' } },
+  });
+  fetched.sse.push({
+    type: 'message.part.delta',
+    properties: { sessionID: 'session_1', partID: 'prt_B', field: 'text', delta: 'OK' },
+  });
+  fetched.sse.push({
+    type: 'message.part.updated',
+    properties: { sessionID: 'session_1', part: { id: 'prt_B', type: 'text', text: 'OK' } },
+  });
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+
+  const textEvents = events.filter((event) => event.type === 'text-delta');
+  assert.equal(textEvents.map((event) => event.text).join(''), 'OK');
+  assert.deepEqual(backend.getMessages().at(-1), { role: 'assistant', text: 'OK' });
+  const thinkingFinished = events.findIndex((event) => event.type === 'thinking' && event.active === false);
+  const firstText = events.findIndex((event) => event.type === 'text-delta');
+  assert.ok(thinkingBeforeReasoning >= 0);
+  assert.ok(thinkingFinished > thinkingBeforeReasoning);
+  assert.ok(firstText > thinkingFinished);
+});
+
+test('OpenCode falls back to delta field when the part type is unknown', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser('legacy delta');
+  await flush();
+  fetched.sse.push({
+    type: 'message.part.delta',
+    properties: { sessionID: 'session_1', partID: 'unknown', field: 'text', delta: 'legacy' },
+  });
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+  assert.equal(events.filter((event) => event.type === 'text-delta').map((event) => event.text).join(''), 'legacy');
+  assert.deepEqual(backend.getMessages().at(-1), { role: 'assistant', text: 'legacy' });
+});
+
+test('OpenCode startup does not wait for asynchronous stale-directory removal', async () => {
+  let finishRemove;
+  const removePending = new Promise((resolve) => { finishRemove = resolve; });
+  let removeStarted;
+  const started = new Promise((resolve) => { removeStarted = resolve; });
+  const fsImpl = makeSweepFs(null, (_dir, _options, callback) => {
+    removeStarted();
+    removePending.then(() => callback(null));
+  });
+  let sweepDone;
+  const swept = new Promise((resolve) => { sweepDone = resolve; });
+  const h = makeBackend({ fsImpl, onSweepComplete: sweepDone });
+  const probe = h.backend.probeAccount();
+  await started;
+
+  const result = await Promise.race([
+    probe,
+    new Promise((resolve) => setTimeout(() => resolve('blocked'), 500)),
+  ]);
+  assert.deepEqual(result, { loggedIn: true });
+  assert.equal(fsImpl.syncRemovals.some((dir) => dir.startsWith('C:\\tmp\\ae-opencode-')), false);
+  finishRemove();
+  await swept;
+  assert.equal(fsImpl.removals.filter((dir) => dir === 'C:\\tmp\\ae-opencode-old').length, 1);
+});
+
+test('OpenCode startup survives an asynchronous stale-directory removal failure', async () => {
+  const fsImpl = makeSweepFs(null, (_dir, _options, callback) => {
+    queueMicrotask(() => callback(new Error('remove failed')));
+  });
+  let sweepDone;
+  const swept = new Promise((resolve) => { sweepDone = resolve; });
+  const h = makeBackend({ fsImpl, onSweepComplete: sweepDone });
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  await swept;
+  assert.equal(fsImpl.removals.filter((dir) => dir === 'C:\\tmp\\ae-opencode-old').length, 1);
+  assert.equal(fsImpl.syncRemovals.some((dir) => dir.startsWith('C:\\tmp\\ae-opencode-')), false);
+});
+
+test('OpenCode startup fails promptly when serve exits during MCP readiness', async () => {
+  const base = makeFetch();
+  const fetchImpl = async (url, options = {}) => {
+    if (new URL(url).pathname === '/mcp') return jsonResponse({ error: 'starting' }, false, 503);
+    return base.fetchImpl(url, options);
+  };
+  const h = makeBackend({
+    fetchImpl,
+    readyTimeoutMs: 1000,
+    probeTimeoutMs: 2000,
+    readyPollMs: 0,
+    sleepImpl: () => new Promise((resolve) => setTimeout(resolve, 1)),
+  });
+  const probe = h.backend.probeAccount();
+  for (let index = 0; index < 20 && !h.spawned.procs[0]; index += 1) await flush();
+  assert.ok(h.spawned.procs[0]);
+  h.spawned.procs[0].exit(1);
+  const result = await Promise.race([
+    probe,
+    new Promise((resolve) => setTimeout(() => resolve('slow'), 200)),
+  ]);
+  assert.notEqual(result, 'slow');
+  assert.equal(result.loggedIn, false);
+});
+
+test('OpenCode sweep skips an instance owned by another live panel', async () => {
+  const fsImpl = makeSweepFs({ owner: 'ae-mcp-panel', ownerPid: 5200, pid: 6200 });
+  const aliveRequests = [];
+  let sweepDone;
+  const swept = new Promise((resolve) => { sweepDone = resolve; });
+  const h = makeBackend({
+    fsImpl,
+    processAlive: async (request) => { aliveRequests.push(request); return true; },
+    onSweepComplete: sweepDone,
+  });
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  await swept;
+  assert.deepEqual(aliveRequests, [{ pid: 5200 }]);
+  assert.equal(h.terminated.length, 0);
+  assert.equal(fsImpl.removals.includes('C:\\tmp\\ae-opencode-old'), false);
+});
+
+test('OpenCode sweep terminates an instance owned by the same panel process', async () => {
+  const fsImpl = makeSweepFs({ owner: 'ae-mcp-panel', ownerPid: 4100, pid: 6201 });
+  let sweepDone;
+  const swept = new Promise((resolve) => { sweepDone = resolve; });
+  const h = makeBackend({ fsImpl, onSweepComplete: sweepDone });
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  await swept;
+  assert.deepEqual(h.terminated, [{ pid: 6201, executableName: 'opencode' }]);
+  assert.equal(fsImpl.removals.filter((dir) => dir === 'C:\\tmp\\ae-opencode-old').length, 1);
+});
+
+test('OpenCode sweep terminates an instance whose owner process is gone', async () => {
+  const fsImpl = makeSweepFs({ owner: 'ae-mcp-panel', ownerPid: 5300, pid: 6202 });
+  const aliveRequests = [];
+  let sweepDone;
+  const swept = new Promise((resolve) => { sweepDone = resolve; });
+  const h = makeBackend({
+    fsImpl,
+    processAlive: async (request) => { aliveRequests.push(request); return false; },
+    onSweepComplete: sweepDone,
+  });
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  await swept;
+  assert.deepEqual(aliveRequests, [{ pid: 5300 }]);
+  assert.deepEqual(h.terminated, [{ pid: 6202, executableName: 'opencode' }]);
+  assert.equal(fsImpl.removals.filter((dir) => dir === 'C:\\tmp\\ae-opencode-old').length, 1);
+});
 
 test('createOpenCodeBackend sends official file parts and accepts at dispatch', async () => {
   const { backend, events, fetched } = makeBackend();
@@ -400,16 +722,34 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   assert.equal(spawned.calls[0].options.windowsHide, true);
   // OpenCode scopes project context to cwd; inheriting AE's cwd ballooned
   // provider requests until relay-side WAFs rejected them (2026-08-20).
-  assert.equal(spawned.calls[0].options.cwd, 'C:\\tmp\\ae-opencode-test');
-  assert.equal(spawned.calls[0].options.env.XDG_CONFIG_HOME, 'C:\\tmp\\ae-opencode-test');
+  assert.equal(spawned.calls[0].options.cwd, 'C:\\Users\\test\\.ae-mcp\\opencode\\workspace');
+  assert.equal(spawned.calls[0].options.env.XDG_CONFIG_HOME, 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488');
+  assert.equal(fsImpl.dirs.some((entry) => (
+    entry.dir === 'C:\\Users\\test\\.ae-mcp\\opencode\\workspace'
+      && entry.options.recursive === true
+  )), true);
+  assert.equal(fsImpl.dirs.some((entry) => (
+    entry.dir === 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\opencode'
+      && entry.options.recursive === true
+  )), true);
 
-  assert.equal(fsImpl.writes.length, 1);
-  assert.equal(fsImpl.writes[0].file, 'C:\\tmp\\ae-opencode-test\\opencode\\opencode.json');
-  assert.deepEqual(JSON.parse(fsImpl.writes[0].text).mcp.ae, {
+  const configWrite = fsImpl.writes.find((write) => write.file.endsWith('opencode\\opencode.json'));
+  assert.equal(configWrite.file, 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\opencode\\opencode.json');
+  assert.deepEqual(JSON.parse(configWrite.text).mcp.ae, {
     type: 'remote',
     url: 'http://127.0.0.1:11488/mcp/c/opencode-default-token',
     enabled: true,
   });
+  const markerWrite = fsImpl.writes.find((write) => write.file.endsWith('instance.json'));
+  assert.equal(markerWrite.file, 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\instance.json');
+  assert.deepEqual(JSON.parse(markerWrite.text), {
+    owner: 'ae-mcp-panel',
+    ownerPid: 4100,
+    pid: 7001,
+    port: 4567,
+    startedAt: JSON.parse(markerWrite.text).startedAt,
+  });
+  assert.equal(Number.isNaN(Date.parse(JSON.parse(markerWrite.text).startedAt)), false);
 
   await flush();
   const sessionCall = fetched.calls.find((call) => call.path === '/session');
@@ -424,6 +764,191 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   await pending;
 });
 
+test('OpenCode sweeps marked and unmarked stale homes while preserving the selected current home', async () => {
+  const root = 'C:\\tmp';
+  const markedHome = root + '\\ae-opencode-marked';
+  const plainHome = root + '\\ae-opencode-plain';
+  const currentHome = root + '\\ae-opencode-current';
+  const fsImpl = makeFs({
+    entries: ['other', 'ae-opencode-marked', 'ae-opencode-plain', 'ae-opencode-current'],
+    files: {
+      [markedHome + '\\instance.json']: JSON.stringify({
+        owner: 'ae-mcp-panel', pid: 41, port: 4001, startedAt: '2026-08-22T00:00:00.000Z',
+      }),
+    },
+  });
+  let sweepDone;
+  const swept = new Promise((resolve) => { sweepDone = resolve; });
+  const h = makeBackend({ fsImpl, onSweepComplete: sweepDone });
+
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  await swept;
+  assert.deepEqual(h.terminated, [{ pid: 41, executableName: 'opencode' }]);
+  assert.ok(fsImpl.removals.includes(markedHome));
+  assert.ok(fsImpl.removals.includes(plainHome));
+  assert.equal(fsImpl.removals.includes(currentHome), true);
+  h.backend.reset();
+});
+
+test('OpenCode ignores stale-home removal failures and still starts the server', async () => {
+  const staleHome = 'C:\\tmp\\ae-opencode-busy';
+  const fsImpl = makeFs({
+    entries: ['ae-opencode-busy'],
+    throwOnRemove: [staleHome],
+  });
+  const h = makeBackend({ fsImpl });
+
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.equal(h.spawned.calls.length, 1);
+  assert.ok(fsImpl.removals.includes(staleHome));
+  h.backend.reset();
+});
+
+test('OpenCode stale sweeps bound process termination and directory removal work', async () => {
+  const removableEntries = Array.from({ length: 70 }, (_value, index) => (
+    'ae-opencode-plain-' + index
+  ));
+  const removableFs = makeFs({ entries: removableEntries });
+  let removableSweepDone;
+  const removableSwept = new Promise((resolve) => { removableSweepDone = resolve; });
+  const removable = makeBackend({ fsImpl: removableFs, onSweepComplete: removableSweepDone });
+  await removable.backend.probeAccount();
+  await removableSwept;
+  assert.equal(removableFs.removals.length, 64);
+  removable.backend.reset();
+
+  const markedEntries = Array.from({ length: 12 }, (_value, index) => (
+    'ae-opencode-marked-' + index
+  ));
+  const markedFiles = Object.fromEntries(markedEntries.map((name, index) => [
+    'C:\\tmp\\' + name + '\\instance.json',
+    JSON.stringify({ owner: 'ae-mcp-panel', pid: 100 + index }),
+  ]));
+  const markedFs = makeFs({ entries: markedEntries, files: markedFiles });
+  let markedSweepDone;
+  const markedSwept = new Promise((resolve) => { markedSweepDone = resolve; });
+  const marked = makeBackend({ fsImpl: markedFs, onSweepComplete: markedSweepDone });
+  await marked.backend.probeAccount();
+  await markedSwept;
+  assert.equal(marked.terminated.length, 8);
+  assert.equal(markedFs.removals.length, 8);
+  marked.backend.reset();
+});
+
+test('OpenCode cancels an old starting generation without letting its exit clear the replacement', async () => {
+  const base = makeFetch();
+  let resolveFirstMcp;
+  let holdFirstMcp = true;
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/mcp' && holdFirstMcp) {
+      holdFirstMcp = false;
+      return new Promise((resolve) => { resolveFirstMcp = resolve; });
+    }
+    return base.fetchImpl(url, options);
+  };
+  const h = makeBackend({ fetchImpl });
+  const firstProbe = h.backend.probeAccount();
+  for (let index = 0; index < 30 && !resolveFirstMcp; index += 1) await flush();
+  assert.equal(typeof resolveFirstMcp, 'function');
+  const oldProc = h.spawned.procs[0];
+  const marker = 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\instance.json';
+
+  h.backend.reset();
+  const secondProbe = await h.backend.probeAccount();
+  assert.deepEqual(secondProbe, { loggedIn: true });
+  assert.equal(h.spawned.calls.length, 2);
+  resolveFirstMcp(jsonResponse({ ae: { status: 'connected' } }));
+  assert.equal((await firstProbe).loggedIn, false);
+  assert.equal(oldProc.killed, true);
+  assert.ok(h.fsImpl.removals.includes(marker));
+
+  oldProc.exit(0);
+  const pending = h.backend.sendUser({ turnId: 'turn-after-cancel', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !base.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  assert.equal(h.spawned.calls.length, 2);
+  base.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+});
+
+test('OpenCode probe has a total timeout, aborts provider fetch, and resets idle runtime', async () => {
+  const base = makeFetch();
+  let providerSignal = null;
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/config/providers') {
+      providerSignal = options.signal;
+      return new Promise(() => {});
+    }
+    return base.fetchImpl(url, options);
+  };
+  const h = makeBackend({
+    fetchImpl,
+    readyTimeoutMs: 5,
+    probeTimeoutMs: 15,
+  });
+
+  const result = await h.backend.probeAccount();
+
+  assert.deepEqual(result, {
+    loggedIn: false,
+    code: 'PROBE_TIMEOUT',
+    detail: 'OpenCode probe timed out after 15ms',
+  });
+  assert.equal(providerSignal?.aborted, true);
+  assert.equal(h.spawned.procs[0].killed, true);
+});
+
+test('OpenCode reports cold-start stages before model output and omits spawn on a warm turn', async () => {
+  const h = makeBackend();
+  const first = h.backend.sendUser({ turnId: 'turn-progress-1', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !h.fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  const coldStages = h.events.filter((event) => event.type === 'turn-progress');
+  assert.deepEqual(coldStages.map((event) => event.stage), ['spawn', 'session', 'dispatch']);
+  assert.ok(coldStages.every((event) => event.turnId === 'turn-progress-1'));
+  const acceptedIndex = h.events.findIndex((event) => event.type === 'turn-accepted');
+  assert.ok(h.events.indexOf(coldStages[0]) < acceptedIndex);
+  assert.ok(h.events.indexOf(coldStages[1]) < acceptedIndex);
+  assert.ok(h.events.indexOf(coldStages[2]) > acceptedIndex);
+  h.fetched.sse.push({
+    type: 'message.part.delta',
+    properties: { sessionID: 'session_1', field: 'text', delta: 'hello' },
+  });
+  h.fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await first;
+  const textIndex = h.events.findIndex((event) => event.type === 'text-delta');
+  assert.ok(coldStages.every((event) => h.events.indexOf(event) < textIndex));
+
+  const boundary = h.events.length;
+  const second = h.backend.sendUser({ turnId: 'turn-progress-2', text: 'again', attachments: [] });
+  for (let index = 0; index < 30
+    && h.fetched.calls.filter((call) => call.path === '/session/session_1/message').length < 2; index += 1) {
+    await flush();
+  }
+  assert.deepEqual(
+    h.events.slice(boundary).filter((event) => event.type === 'turn-progress').map((event) => event.stage),
+    ['dispatch'],
+  );
+  h.fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await second;
+  assert.equal(h.spawned.calls.length, 1);
+});
+
 test('createOpenCodeBackend writes only a per-conversation remote MCP URL', async () => {
   const url = 'http://127.0.0.1:11488/mcp/c/opencode-token';
   const { backend, fetched, fsImpl } = makeBackend({
@@ -432,12 +957,13 @@ test('createOpenCodeBackend writes only a per-conversation remote MCP URL', asyn
   const pending = backend.sendUser('http mcp');
   await flush();
 
-  assert.deepEqual(JSON.parse(fsImpl.writes[0].text).mcp.ae, {
+  const config = fsImpl.writes.find((write) => write.file.endsWith('opencode\\opencode.json'));
+  assert.deepEqual(JSON.parse(config.text).mcp.ae, {
     type: 'remote',
     url,
     enabled: true,
   });
-  assert.match(JSON.parse(fsImpl.writes[0].text).mcp.ae.url, /\/mcp\/c\//);
+  assert.match(JSON.parse(config.text).mcp.ae.url, /\/mcp\/c\//);
   fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
   await pending;
 });
@@ -457,7 +983,9 @@ test('createOpenCodeBackend injects panel-managed OpenCode provider definitions'
   const pending = backend.sendUser('provider config');
   await flush();
 
-  const config = JSON.parse(fsImpl.writes[0].text);
+  const config = JSON.parse(fsImpl.writes.find((write) => (
+    write.file.endsWith('opencode\\opencode.json')
+  )).text);
   assert.deepEqual(config.permission, { '*': 'allow' });
   assert.deepEqual(config.provider, {
     'aemcp-relay': {
@@ -497,7 +1025,9 @@ test('createOpenCodeBackend maps text, reasoning, tool, and idle SSE events to p
   fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
   await pending;
 
-  assert.deepEqual(events.filter((event) => event.type !== 'session-ref'), [
+  assert.deepEqual(events.filter((event) => (
+    event.type !== 'session-ref' && event.type !== 'turn-progress'
+  )), [
     { type: 'turn-start' },
     { type: 'thinking', active: true },
     { type: 'thinking', active: false },
@@ -627,6 +1157,82 @@ test('OpenCode session creation HTTP 400 keeps status, endpoint, and a bounded r
     responseExcerpt: '{"error":"request body rejected"}',
   });
   assert.equal(error.dispatchState, 'not-started');
+});
+
+test('OpenCode readiness request timeout cannot be shorter than its poll interval', () => {
+  assert.throws(() => makeBackend({
+    readyRequestTimeoutMs: 10,
+    readyPollMs: 20,
+  }), /request timeout must be at least the poll interval/i);
+});
+
+test('OpenCode readiness retries after the first MCP request is accepted but never answered', async () => {
+  const base = makeFetch();
+  const signals = [];
+  let attempts = 0;
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname !== '/mcp') return base.fetchImpl(url, options);
+    attempts += 1;
+    signals.push(options.signal);
+    if (attempts > 1) return jsonResponse({ ae: { status: 'connected' } });
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => {
+        const error = new Error('readiness request aborted');
+        error.name = 'AbortError';
+        reject(error);
+      }, { once: true });
+    });
+  };
+  const h = makeBackend({
+    fetchImpl,
+    readyRequestTimeoutMs: 20,
+    readyPollMs: 1,
+    readyTimeoutMs: 2000,
+    probeTimeoutMs: 3000,
+  });
+  const startedAt = Date.now();
+
+  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.ok(Date.now() - startedAt < 1000);
+  assert.equal(h.spawned.calls.length, 1);
+  assert.equal(attempts, 2);
+  assert.equal(signals.every((signal) => signal && typeof signal.aborted === 'boolean'), true);
+  assert.equal(signals[0].aborted, true);
+});
+
+test('OpenCode readiness aborts every hung MCP request until the total deadline', async () => {
+  const base = makeFetch();
+  const signals = [];
+  let attempts = 0;
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname !== '/mcp') return base.fetchImpl(url, options);
+    attempts += 1;
+    signals.push(options.signal);
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => {
+        const error = new Error('readiness request aborted');
+        error.name = 'AbortError';
+        reject(error);
+      }, { once: true });
+    });
+  };
+  const h = makeBackend({
+    fetchImpl,
+    readyRequestTimeoutMs: 20,
+    readyPollMs: 1,
+    readyTimeoutMs: 80,
+  });
+  const startedAt = Date.now();
+  await h.backend.sendUser({ turnId: 'turn-hung-readiness', text: 'hello', attachments: [] });
+
+  const error = h.events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'MCP_UNREACHABLE');
+  assert.ok(Date.now() - startedAt < 500);
+  assert.ok(attempts >= 2);
+  assert.equal(signals.length, attempts);
+  assert.equal(signals.every((signal) => signal && signal.aborted === true), true);
 });
 
 test('OpenCode MCP readiness timeout keeps the fixed message and last response detail', async () => {
@@ -809,6 +1415,59 @@ test('OpenCode adopts an existing session without creating a new one', async () 
   assert.equal(h.fetched.calls.some((call) => call.path === '/session/session_saved/message'), true);
   assert.deepEqual(h.backend.getSessionRef(), { kind: 'opencode-session', id: 'session_saved' });
   h.backend.reset();
+});
+
+test('OpenCode recreates an adopted session once after a message 503', async () => {
+  const base = makeFetch();
+  const calls = [];
+  let unavailable = true;
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    calls.push({ method: options.method || 'GET', path: parsed.pathname });
+    if (parsed.pathname === '/session/session_legacy/message' && unavailable) {
+      unavailable = false;
+      return { ok: false, status: 503, text: async () => '' };
+    }
+    return base.fetchImpl(url, options);
+  };
+  const h = makeBackend({ fetchImpl });
+  h.backend.adoptSessionRef({ kind: 'opencode-session', id: 'session_legacy' });
+  const run = h.backend.sendUser({ turnId: 'turn-rebuild-503', text: 'continue', attachments: [] });
+  for (let index = 0; index < 30
+    && !calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+
+  assert.equal(calls.filter((call) => call.path === '/session/session_legacy/message').length, 1);
+  assert.equal(calls.filter((call) => call.method === 'POST' && call.path === '/session').length, 1);
+  assert.equal(calls.filter((call) => call.path === '/session/session_1/message').length, 1);
+  assert.equal(h.events.some((event) => (
+    event.type === 'session-ref' && event.ref.id === 'session_1'
+  )), true);
+  base.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await run;
+});
+
+test('OpenCode does not rebuild a new session after a non-adopted message 503', async () => {
+  const base = makeFetch();
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    calls.push({ method: options.method || 'GET', path: parsed.pathname });
+    if (parsed.pathname === '/session/session_1/message') {
+      return { ok: false, status: 503, text: async () => '' };
+    }
+    return base.fetchImpl(url, options);
+  };
+  const h = makeBackend({ fetchImpl });
+  await h.backend.sendUser({ turnId: 'turn-no-rebuild-503', text: 'start', attachments: [] });
+
+  assert.equal(calls.filter((call) => call.method === 'POST' && call.path === '/session').length, 1);
+  assert.equal(calls.filter((call) => call.path === '/session/session_1/message').length, 1);
+  assert.equal(h.events.find((event) => event.type === 'error')?.code, 'UPSTREAM_HTTP_503');
 });
 
 test('OpenCode recreates an adopted session once after a message 404', async () => {

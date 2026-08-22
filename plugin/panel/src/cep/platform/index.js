@@ -32,6 +32,7 @@ export function defaultPlatformDependencies() {
   return {
     platform,
     arch: processImpl.arch,
+    pid: processImpl.pid,
     home,
     temp: os.tmpdir(),
     env,
