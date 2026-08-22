@@ -14,12 +14,6 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [0.10.1] — 2026-08-23
 
-#### 🐛 修复 / 改进
-
-- **首跑向导的「连接外部客户端」改成一段可复制的提示词**——原来要先在 Claude Desktop / Claude Code / Cursor 三者里单选，再照抄对应的配置块，每支持一个新客户端就多一份配置要维护，用户拿到 JSON 后还得自己判断该放进哪个文件。现在只给一段话，粘给你正在用的 AI 客户端，由它自己完成 MCP 注册；提示词里的地址与 stdio shim 路径取自**本次安装的真实端口与扩展目录**，不是占位符。下方保留一行裸 URL 作为手工出口，可选的系统 Node 检测改为常驻（只有 Claude Desktop 这类只支持 stdio 的客户端需要）。设置页的逐客户端配置作为高级入口保持不变。
-
-### [0.10.0] — 2026-08-22
-
 #### ✨ 新增
 
 - **Provider 管理器一键探测模型（#306）**——填好 Base URL 与 API Key 后，「探测模型」按钮对 `<baseURL>/v1/models` 发一次请求（Anthropic 方言用 `x-api-key` + `anthropic-version`，OpenAI 兼容方言用 `Authorization: Bearer`），把返回的模型 id 去重后追加到已填内容之后。请求由 CEP 的 Node 侧发出——面板是 `file://` 页面而 provider 主机不给 CORS 头，浏览器 `fetch` 走不通；`http://` 需显式确认，所有可见错误按 key 脱敏。Phase 3 拆除 legacy provider 机制时一并删掉的模型发现能力就此补回。
@@ -35,6 +29,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 #### 🐛 修复 / 改进
 
+- **首跑向导的「连接外部客户端」改成一段可复制的提示词**——原来要先在 Claude Desktop / Claude Code / Cursor 三者里单选，再照抄对应的配置块，每支持一个新客户端就多一份配置要维护，用户拿到 JSON 后还得自己判断该放进哪个文件。现在只给一段话，粘给你正在用的 AI 客户端，由它自己完成 MCP 注册；提示词里的地址与 stdio shim 路径取自**本次安装的真实端口与扩展目录**，不是占位符。下方保留一行裸 URL 作为手工出口，可选的系统 Node 检测改为常驻（只有 Claude Desktop 这类只支持 stdio 的客户端需要）。设置页的逐客户端配置作为高级入口保持不变。
 - **OpenCode 子进程生命周期闭环**——面板卸载时显式终止全部聊天后端；OpenCode 改用固定的工作目录与配置目录（`~/.ae-mcp/opencode/`），不再每次启动都在临时目录生成一套 60 MB 的依赖、也不再泄漏目录；实例写入带 PID 的所有权标记，启动前核对进程映像名后回收上一个面板上下文留下的孤儿实例（PID 被系统复用或属于另一个仍在运行的 AE 实例时不终止），旧版本遗留的临时目录由异步、有界的清扫逐步删除。启动流程新增代际守卫，重置期间仍在进行的旧启动会被取消并终止其进程，启动中进程崩溃立即失败；账户探针有 40 秒总期限和可中止请求，卡住超过宽限期后可从设置页重置并重新检测。就绪轮询的每次 `/mcp` 请求带独立超时：opencode 刚绑定端口、尚未开始处理时到达的首个请求会被接受却永不应答，此前这一条请求就能拖死整个 30 秒就绪期限，让重载 / 重检后的探针稳定超时。
 - **重启 / 重载 / 切回后沿用的 OpenCode 会话不再回合永忙**——OpenCode 按目录隔离会话与事件流，此前每次启动的随机临时目录让沿用的会话在另一个实例里运行、事件永远到不了面板；固定目录后事件正常到达，旧版本留在已删除临时目录中的会话首次发送返回 503 时会自动重建一次新会话。
 - **OpenCode 的思考过程不再混进回复正文**——opencode 1.17 的 reasoning 增量与正文增量同为 `field:"text"`，现在按 part 类型路由：思考只点亮「思考中」，正文只收文本 part；未知 part 保持旧行为。
@@ -335,12 +330,6 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ### [0.10.1] — 2026-08-23
 
-#### 🐛 Fixed / Improved
-
-- **The wizard's "connect an external client" page is now one copyable prompt** — it used to make the reader pick between Claude Desktop, Claude Code and Cursor and then copy the matching config blob, so every additional client meant another config to maintain and the reader still had to work out which file it belonged in. It now shows a single prompt to paste into whichever AI client the reader already uses, letting that client perform the MCP registration; the address and stdio shim path inside it come from **this install's real port and extension directory**, not placeholders. The bare URL stays below it as a manual exit, and the optional system-Node check is always visible now that no client is selected (only stdio-only clients such as Claude Desktop need it). The Settings page keeps its per-client configs as the advanced entry point.
-
-### [0.10.0] — 2026-08-22
-
 #### ✨ Added
 
 - **One-click model discovery in the Provider Manager (#306)** — with a Base URL and API key in the form, "Probe models" issues a single request to `<baseURL>/v1/models` (`x-api-key` plus `anthropic-version` for the Anthropic dialect, `Authorization: Bearer` for the OpenAI-compatible one) and appends the returned ids, deduplicated, after whatever is already typed. The request leaves from the CEP Node side because the panel is a `file://` page and provider hosts send no CORS headers, so browser `fetch` cannot reach them; `http://` requires explicit confirmation, and every visible error is redacted against the key. This restores the model discovery that was removed together with the legacy provider machinery in Phase 3.
@@ -377,6 +366,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 #### 🐛 Fixed / Improved
 
+- **The wizard's "connect an external client" page is now one copyable prompt** — it used to make the reader pick between Claude Desktop, Claude Code and Cursor and then copy the matching config blob, so every additional client meant another config to maintain and the reader still had to work out which file it belonged in. It now shows a single prompt to paste into whichever AI client the reader already uses, letting that client perform the MCP registration; the address and stdio shim path inside it come from **this install's real port and extension directory**, not placeholders. The bare URL stays below it as a manual exit, and the optional system-Node check is always visible now that no client is selected (only stdio-only clients such as Claude Desktop need it). The Settings page keeps its per-client configs as the advanced entry point.
 - **Anthropic / AWS Bedrock tool-schema compatibility** — the `inputSchema` that `ae_nativeExec` advertises to MCP clients no longer carries a top-level `allOf` (the Anthropic API and Bedrock reject the whole request with `input_schema does not support oneOf, allOf, or anyOf at the top level`; Claude Code users routed to Bedrock through a relay hit it first). The nested discriminated schemas for all 23 primitives, full server-side read/write program validation, and the structured error contract are unchanged, and a guard test now forbids top-level combinators on every advertised tool.
 - **README one-line install prompt rewritten** — it now covers the snags seen in real installs: call a freshly installed `uv` by full path, use the launcher's absolute path, register the MCP server at user scope (with the exact Claude Code `claude mcp add -s user …` line), leave other MCP entries alone and echo the final entry, and state that MCP tools only load in a new session (open one before verifying with `ae_ping`).
 - **AE 2023/2024 Windows runtime compatibility completed (#235)** — CEP 11 (Node 15 / V8 8.8) lacks `Object.hasOwn` / `Array.prototype.at` / `structuredClone`, so the host and the panel each load a dependency-free polyfill shim; the bare `node:` specifier ban became a manifest-driven contract test; the AEX, Platform Helper and transport `.node` addon all link the static CRT (/MT), enforced by a PE import-table verifier (which also fixes a false positive on the 8-byte `.fptable` section name). The AE 2023/2024 real-host matrix is still tracked in #215.
