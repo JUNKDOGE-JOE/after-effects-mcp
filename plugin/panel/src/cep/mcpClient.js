@@ -1,5 +1,5 @@
 const MCP_PROTOCOL_VERSION = '2025-06-18';
-export const PANEL_VERSION = '0.10.0';
+export const PANEL_VERSION = '0.10.1';
 
 function defaultFetch() {
   if (globalThis.window && globalThis.window.fetch) {
