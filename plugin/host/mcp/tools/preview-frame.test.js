@@ -41,14 +41,31 @@ function makeDeps(calls, logs, options) {
             const match = /new File\(("(?:[^"\\]|\\.)*")\)/.exec(request.code);
             assert.ok(match, 'rendered JSX contains output File path');
             const outputPath = JSON.parse(match[1]);
-            const frame = setting.bytes || fixturePng(setting.width || 4, setting.height || 2, calls.length);
+            const timeMatch = /var requestedTime = ([^;]+);/.exec(request.code);
+            const requestedTime = timeMatch ? JSON.parse(timeMatch[1]) : null;
+            const frame = setting.frameForTime
+                ? setting.frameForTime(requestedTime, calls.length - 1)
+                : (setting.bytes || fixturePng(setting.width || 4, setting.height || 2, calls.length));
             if (setting.partial) {
                 fs.writeFileSync(outputPath, frame.subarray(0, Math.floor(frame.length / 2)));
                 setTimeout(function () { fs.writeFileSync(outputPath, frame); }, 60);
             } else fs.writeFileSync(outputPath, frame);
-            return { payload: { ok: true, result: JSON.stringify({ ok: true, compId: 42, compName: 'Comp', time: calls.length - 1, compWidth: setting.compWidth || 4, compHeight: setting.compHeight || 2, resolutionFactor: [1, 1], path: outputPath, source: 'comp', method: 'saveFrameToPng' }) } };
+            return { payload: { ok: true, result: JSON.stringify({ ok: true, compId: 42, compName: 'Comp', time: requestedTime === null ? calls.length - 1 : requestedTime, compWidth: setting.compWidth || 4, compHeight: setting.compHeight || 2, resolutionFactor: [1, 1], path: outputPath, source: 'comp', method: 'saveFrameToPng' }) } };
         },
     };
+}
+
+function boxFixture(changed) {
+    const rgba = Buffer.alloc(4 * 4 * 4);
+    for (let pixel = 0; pixel < 16; pixel += 1) {
+        const at = pixel * 4;
+        rgba[at] = 40; rgba[at + 1] = 40; rgba[at + 2] = 40; rgba[at + 3] = 255;
+    }
+    if (changed) for (let y = 1; y <= 2; y += 1) for (let x = 1; x <= 2; x += 1) {
+        const at = (y * 4 + x) * 4;
+        rgba[at] = 240;
+    }
+    return png.encodePng(rgba, 4, 4);
 }
 
 const context = { session: { clientName: 'preview-test' }, port: 1 };
@@ -114,4 +131,91 @@ test('preview helpers implement Template dollar escapes and increasing frame bud
     assert.equal(preview.renderTemplate('$$ $name ${name}', { name: 'ok' }), '$ ok ok');
     assert.equal(preview.previewTimeoutMs(1), 45000);
     assert.equal(preview.previewTimeoutMs(8), 290000);
+});
+
+test('ae_previewFrame expands ranges and enforces range exclusivity and bounds', async () => {
+    const calls = [];
+    const output = await preview.call({ range: { start: 0, end: 2, count: 5 }, out_dir: tempDir() }, context, makeDeps(calls, [], {}));
+    assert.deepEqual(output.result.structuredContent.frames.map(function (frame) { return frame.time; }), [0, 0.5, 1, 1.5, 2]);
+    assert.deepEqual(calls.map(function (request) {
+        return Number(/var requestedTime = ([^;]+);/.exec(request.code)[1]);
+    }), [0, 0.5, 1, 1.5, 2]);
+    const mixed = await preview.call({ range: { start: 0, end: 1, count: 2 }, times: [0] }, context, makeDeps([], [], {}));
+    assert.equal(mixed.result.isError, true);
+    assert.match(mixed.result.structuredContent.error, /cannot be combined/);
+    const bounded = await preview.call({ range: { start: 0, end: 1, count: 17 } }, context, makeDeps([], [], {}));
+    assert.equal(bounded.result.isError, true);
+    assert.match(bounded.result.structuredContent.error, /between 2 and 16/);
+    const separateLimit = await preview.call({ range: { start: 0, end: 1, count: 9 } }, context, makeDeps([], [], {}));
+    assert.equal(separateLimit.result.isError, true);
+    assert.match(separateLimit.result.structuredContent.error, /at most 8/);
+});
+
+test('ae_previewFrame returns one bounded grid image while preserving frame records', async () => {
+    const output = await preview.call({ times: [0, 0.5, 1, 1.5], layout: 'grid', grid_max_side: 256, out_dir: tempDir() }, context, makeDeps([], [], { width: 80, height: 60 }));
+    const value = output.result.structuredContent;
+    assert.equal(value.frames.length, 4);
+    assert.equal(value.grid.cells.length, 4);
+    assert.ok(value.grid.width <= 256);
+    assert.ok(value.grid.height <= 256);
+    assert.deepEqual(output.result.content.map(function (item) { return item.type; }), ['image', 'text']);
+    assert.equal(output.result.content[0]._meta.kind, 'grid');
+});
+
+test('ae_previewFrame compares captured times and reports diff geometry', async () => {
+    const same = await preview.call({
+        compare: { a: { time: 1 }, b: { time: 1 }, mode: 'both' }, out_dir: tempDir(),
+    }, context, makeDeps([], [], { width: 4, height: 4, compWidth: 4, compHeight: 4, frameForTime: function () { return boxFixture(false); } }));
+    assert.equal(same.result.structuredContent.compare.metrics.changedRatio, 0);
+    assert.deepEqual(same.result.content.map(function (item) { return item.type; }), ['image', 'image', 'text']);
+    assert.deepEqual(same.result.content.slice(0, 2).map(function (item) { return item._meta.kind; }), ['diff', 'side-by-side']);
+
+    const changed = await preview.call({
+        compare: { a: { time: 0 }, b: { time: 1 }, mode: 'diff', threshold: 8 }, out_dir: tempDir(),
+    }, context, makeDeps([], [], {
+        width: 4, height: 4, compWidth: 4, compHeight: 4,
+        frameForTime: function (time) { return boxFixture(time === 1); },
+    }));
+    assert.equal(changed.result.structuredContent.compare.metrics.changedPixels, 4);
+    assert.deepEqual(changed.result.structuredContent.compare.metrics.bbox, { x: 1, y: 1, w: 2, h: 2 });
+});
+
+test('ae_previewFrame resolves registered frames and rejects unknown or changed files', async () => {
+    const deps = makeDeps([], [], { width: 4, height: 4, compWidth: 4, compHeight: 4, frameForTime: function () { return boxFixture(false); } });
+    const prior = await preview.call({ time: 1, out_dir: tempDir() }, context, deps);
+    const priorValue = prior.result.structuredContent;
+    const referenced = await preview.call({
+        compare: { a: { capture_id: priorValue.captureId, index: 0 }, b: { time: 1 }, mode: 'diff' }, out_dir: tempDir(),
+    }, context, deps);
+    assert.equal(referenced.result.structuredContent.compare.metrics.changedRatio, 0);
+    assert.equal(referenced.result.structuredContent.compare.a.captureId, priorValue.captureId);
+
+    const registeredOnly = await preview.call({
+        compare: {
+            a: { capture_id: priorValue.captureId, index: 0 },
+            b: { capture_id: priorValue.captureId, index: 0 },
+            mode: 'diff',
+        },
+    }, context, deps);
+    assert.equal(registeredOnly.result.structuredContent.compId, priorValue.compId);
+    assert.equal(registeredOnly.result.structuredContent.compName, priorValue.compName);
+
+    const unknown = await preview.call({
+        compare: { a: { capture_id: 'missing', index: 0 }, b: { capture_id: 'missing', index: 0 }, mode: 'diff' },
+    }, context, deps);
+    assert.equal(unknown.result.isError, true);
+    assert.match(unknown.result.structuredContent.error, /unknown capture_id\/index/);
+
+    fs.writeFileSync(priorValue.frames[0].path, boxFixture(true));
+    const changed = await preview.call({
+        compare: { a: { capture_id: priorValue.captureId, index: 0 }, b: { capture_id: priorValue.captureId, index: 0 }, mode: 'diff' },
+    }, context, deps);
+    assert.equal(changed.result.isError, true);
+    assert.match(changed.result.structuredContent.error, /frame file missing or changed since capture/);
+});
+
+test('ae_previewFrame rejects compare mixed with ordinary frame arguments', async () => {
+    const output = await preview.call({ compare: { a: { time: 0 }, b: { time: 1 } }, times: [0, 1] }, context, makeDeps([], [], {}));
+    assert.equal(output.result.isError, true);
+    assert.match(output.result.structuredContent.error, /cannot be combined/);
 });

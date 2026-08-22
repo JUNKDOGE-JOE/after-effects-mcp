@@ -90,6 +90,42 @@ Recovery scripts and metadata live only under
 the `.aep`. The legacy HTTP `/exec` route does not enable diagnostics and keeps
 its existing request and response shape.
 
+### `ae_previewFrame` visual verification
+
+`ae_previewFrame` uses After Effects `CompItem.saveFrameToPng` and performs all
+PNG decoding, scaling, contact-sheet composition, and comparison in the CEP
+host with no browser canvas or image-library dependency. It supports three
+forms:
+
+- A single `time` or `times` array returns the existing per-frame MCP image
+  content and `structuredContent.frames` records. Separate output accepts at
+  most 8 times.
+- `range:{start,end,count}` samples evenly spaced times including both
+  endpoints (2–8 for separate output, or up to 16 with `layout:'grid'`). A grid
+  returns one labeled contact-sheet image;
+  `grid_max_side` is 256–2048 and defaults to 1280. `structuredContent.grid`
+  reports the final path, dimensions, digest, rows, columns, cell dimensions,
+  scaling flag, and final pixel coordinates for every frame.
+- `compare:{a,b,mode,threshold}` compares two `{time}` selectors or previously
+  returned `{capture_id,index}` frames. `mode` is `diff`, `side-by-side`, or
+  `both` (default); `threshold` is 0–255 (default 8). The result includes the
+  selected frame identities, `changedRatio`, `changedPixels`, `totalPixels`,
+  `meanAbsDiff`, `maxAbsDiff`, changed-region `bbox`, artifact paths, and a
+  scaling flag. Frame B is resampled to Frame A dimensions when necessary and
+  that fact is reported in metrics and warnings. Metrics, including `bbox`,
+  always use Frame A's original pixel coordinates even when `scaled:true`
+  means the heatmap or side-by-side image itself was reduced.
+
+`range` is mutually exclusive with `time` and `times`. `compare` is a
+comparison-only call and is mutually exclusive with `time`, `times`, `range`,
+and `layout`. The process keeps the most recent 50 successful capture records;
+a referenced PNG must still match its recorded SHA-256 or the comparison fails.
+Grid, diff, and side-by-side output is bounded to a 2048-pixel long side (or the
+smaller `grid_max_side` for grids). Existing `comp_id`, `out_dir`,
+`include_base64`, `scale`, and `repaint_delay_ms` behavior is unchanged, and
+`frames` contains every newly captured frame even when the call returns a
+single derived image.
+
 ## Host response shape
 
 Successful MCP calls return the standard JSON-RPC result through the `/mcp`
