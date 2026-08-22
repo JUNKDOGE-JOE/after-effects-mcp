@@ -8,8 +8,10 @@ import {
   draftFromEntry,
   draftToEntry,
   emptyDraft,
+  mergeProbedModelIds,
   validateDraft,
 } from '../../lib/providerManagerState';
+import { redactCredentialText } from '../../lib/credentialTextRedaction.js';
 
 const L = {
   zh: {
@@ -20,6 +22,8 @@ const L = {
     dialectCap: '中转端点常按模型家族区分方言；混合模型列表选 OpenAI 兼容通常全部可用。',
     openCodeKeyCap: '密钥写入 OpenCode auth.json；从旧版本升级的 Provider 必须重新填写。',
     needsApiKey: '需重填 key', insecure: '允许非回环 HTTP（保存时再次确认）',
+    probe: '探测模型', probing: '探测中…',
+    probeFilled: (added, total) => `已填入 ${added} 个模型（共 ${total}）`,
     models: (count) => `${count} 个模型`, selected: '已选',
   },
   en: {
@@ -35,6 +39,8 @@ const L = {
     dialectCap: 'Relays often vary the dialect per model family; OpenAI-compatible usually covers mixed model lists.',
     openCodeKeyCap: 'The key is written to OpenCode auth.json. Older providers must be entered again.',
     needsApiKey: 'API key required', insecure: 'Allow non-loopback HTTP (confirmed again on save)',
+    probe: 'Probe models', probing: 'Probing…',
+    probeFilled: (added, total) => `Filled ${added} models (${total} found)`,
     models: (count) => `${count} models`, selected: 'selected',
   },
 };
@@ -64,11 +70,14 @@ export function ProviderManagerSection({
   activeProviderId = '',
   onUpsert,
   onRemove,
+  onProbe,
   disabled = false,
 }) {
   const t = L[lang] || L.zh;
   const [draft, setDraft] = React.useState(null);
   const [error, setError] = React.useState('');
+  const [note, setNote] = React.useState('');
+  const [probing, setProbing] = React.useState(false);
   const save = async (event) => {
     event.preventDefault();
     const message = validateDraft(draft);
@@ -105,6 +114,7 @@ export function ProviderManagerSection({
           onClick={(event) => {
             event.preventDefault();
             setDraft(emptyDraft());
+            setNote('');
           }}
         >
           {t.add}
@@ -146,6 +156,7 @@ export function ProviderManagerSection({
                   onClick={() => {
                     setDraft(draftFromEntry(provider));
                     setError('');
+                    setNote('');
                   }}
                 >
                   {t.edit}
@@ -190,12 +201,44 @@ export function ProviderManagerSection({
               />
             </Field>
             <Field label={t.model}>
-              <Input
-                mono
-                value={draft.modelId}
-                onChange={(value) => setDraft({ ...draft, modelId: value })}
-                placeholder="claude-sonnet-4"
-              />
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Input
+                  mono
+                  value={draft.modelId}
+                  onChange={(value) => setDraft({ ...draft, modelId: value })}
+                  placeholder="claude-sonnet-4"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={disabled || probing || !String(draft.baseUrl || '').trim()}
+                  onClick={async (event) => {
+                    const form = event.currentTarget.closest('form');
+                    const apiKey = String(new FormData(form).get('modelAuthSecret') || '');
+                    setProbing(true);
+                    setError('');
+                    setNote('');
+                    try {
+                      const result = await onProbe(draft, { apiKey });
+                      if (!result.ok) setError(result.detail);
+                      else {
+                        const merged = mergeProbedModelIds(draft.modelId, result.models);
+                        setDraft({ ...draft, modelId: merged.modelId });
+                        setNote(t.probeFilled(merged.added, result.total));
+                      }
+                    } catch (probeError) {
+                      setError(redactCredentialText(
+                        probeError?.message || 'Provider model probe failed', [apiKey],
+                      ));
+                    } finally {
+                      setProbing(false);
+                    }
+                  }}
+                >
+                  {probing ? t.probing : t.probe}
+                </Button>
+              </div>
             </Field>
             <label style={{
               display: 'flex', gap: 6, alignItems: 'center', font: '400 11px/1.35 var(--font-ui)',
@@ -216,6 +259,9 @@ export function ProviderManagerSection({
             {error ? <div style={{
               font: '400 10px/1.4 var(--font-ui)', color: 'var(--warn)',
             }}>{error}</div> : null}
+            {note ? <div style={{
+              font: '400 10px/1.4 var(--font-ui)', color: 'var(--text-tertiary)',
+            }}>{note}</div> : null}
             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
               <Button
                 variant="ghost"
@@ -223,6 +269,7 @@ export function ProviderManagerSection({
                 onClick={() => {
                   setDraft(null);
                   setError('');
+                  setNote('');
                 }}
               >
                 {t.cancel}

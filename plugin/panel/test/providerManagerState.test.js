@@ -4,6 +4,7 @@ import {
   draftFromEntry,
   draftToEntry,
   emptyDraft,
+  mergeProbedModelIds,
   validateDraft,
 } from '../src/lib/providerManagerState.js';
 
@@ -51,4 +52,10 @@ test('draft protocol round-trips and defaults to anthropic', () => {
   assert.equal(draftFromEntry({ protocol: 'openai' }).protocol, 'openai');
   assert.equal(draftFromEntry({ protocol: 'weird' }).protocol, 'anthropic');
   assert.equal(draftToEntry({ name: 'x', protocol: 'openai' }).protocol, 'openai');
+});
+
+test('probed model ids append after existing ids without duplicates', () => {
+  assert.deepEqual(mergeProbedModelIds('old, shared', ['shared', 'new']), {
+    modelId: 'old, shared, new', added: 1,
+  });
 });

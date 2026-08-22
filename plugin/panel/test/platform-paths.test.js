@@ -159,6 +159,7 @@ test('default Windows dependencies find USERPROFILE case-insensitively', (t) => 
       require(name) {
         if (name === 'os') return { homedir: () => 'C:\\Fallback', tmpdir: () => 'D:\\Temp' };
         if (name === 'fs') return fs;
+        if (name === 'http' || name === 'https') return { request() {} };
         if (name === 'child_process') return { spawn };
         throw new Error('unexpected require: ' + name);
       },

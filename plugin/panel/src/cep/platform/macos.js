@@ -1,5 +1,6 @@
 import { createPathCatalog } from './paths.js';
 import { createProcessBoundary } from './process.js';
+import { createHttpJsonRequester } from './http-json.js';
 
 function normalizedExecutableName(value) {
   return String(value || '').trim().split('/').at(-1).replace(/\.exe$/i, '').toLowerCase();
@@ -15,6 +16,7 @@ export function createMacosAdapter(deps) {
     pid: deps.pid,
     paths,
     fs: deps.fs,
+    requestJson: createHttpJsonRequester(deps),
     ...boundary,
     async processAlive({ pid } = {}) {
       const processId = Number(pid);

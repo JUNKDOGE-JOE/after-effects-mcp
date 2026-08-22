@@ -34,6 +34,7 @@ import {
   migrateBackendPref,
 } from '../lib/channels.js';
 import { createOpenCodeProviderStore } from '../cep/openCodeProviderStore.js';
+import { probeOpenCodeProviderModels } from '../cep/openCodeModelProbe.js';
 import { ProviderManagerSection } from '../components/settings/ProviderManagerSection';
 import { reduceEvent, userTurnEntry } from '../lib/chatEntries';
 import {
@@ -348,6 +349,11 @@ function Shell({ cs }) {
       lang={lang}
       providers={providers}
       disabled={providerInit.state !== 'ready'}
+      onProbe={async (draft, { apiKey }) => probeOpenCodeProviderModels({
+        draft,
+        apiKey: apiKey || openCodeProviderStore.readApiKey(draft.id || ''),
+        adapter: platform,
+      })}
       onUpsert={async (event, draft) => {
         const formElement = event.currentTarget;
         const form = new FormData(event.currentTarget);
