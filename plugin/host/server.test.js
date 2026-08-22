@@ -682,10 +682,133 @@ test('/exec fails closed when connected graph invalidation fails', async () => {
 test('default ExtendScript transport remains byte-identical to its fixed baseline', () => {
     const server = loadServer();
     const wrapped = server.wrapForEvalScriptTransport('1 + 1');
-    assert.equal(Buffer.byteLength(wrapped), 3730);
+    assert.doesNotMatch(wrapped, /[^\x00-\x7f]/);
+    assert.equal(Buffer.byteLength(wrapped), 4963);
     assert.equal(
         crypto.createHash('sha256').update(wrapped).digest('hex'),
-        'a9c18556f6daa331a68e1d7f9a313a6e7fc8bcdf34e5cab15f6faf8096b30b6f',
+        'fb30f61841ee2fc9a55710498a70ca3e6ed8d302c373c4930eeb8ab635ed0b36',
+    );
+});
+
+test('ExtendScript quote fast and regexp paths remain byte-identical to the character loop', () => {
+    const server = loadServer();
+    let codePointRange = '';
+    for (let codePoint = 0; codePoint <= 0x02ff; codePoint += 1) {
+        codePointRange += String.fromCharCode(codePoint);
+    }
+    let latin1Range = '';
+    for (let codePoint = 0x0080; codePoint <= 0x00ff; codePoint += 1) {
+        latin1Range += String.fromCharCode(codePoint);
+    }
+    const boundarySurrogate = 'a'.repeat(8191) + '\ud83d\ude00' + 'b';
+    const boundaryChinese = 'a'.repeat(8188) + ('中文').repeat(8) + 'b';
+    const denseUnit = 'abcdefghijklm"\\';
+    const quoteDense = denseUnit.repeat((600 * 1024) / denseUnit.length);
+    const cases = [
+        ['U+0000 through U+02FF', codePointRange],
+        ['U+0080 through U+00FF', latin1Range],
+        ['surrogate pair', '\ud83d\ude00'],
+        ['surrogate pair across 8192 boundary', boundarySurrogate],
+        ['Chinese run across 8192 boundary', boundaryChinese],
+        ['mixed escapes', 'quote:" slash:\\ control:\u0001'],
+        ['replacement tokens', '$& $1 $$ 100% \u4e2d'],
+        ['300 KB ASCII', 'a'.repeat(300 * 1024)],
+        ['300 KB with Chinese', ('中文').repeat(150 * 1024)],
+        ['600 KB quote-dense ASCII', quoteDense],
+    ];
+    function quoteByCharacter(value) {
+        const text = String(value);
+        let output = '"';
+        for (let index = 0; index < text.length; index += 1) {
+            const code = text.charCodeAt(index);
+            if (code === 8) output += '\\b';
+            else if (code === 9) output += '\\t';
+            else if (code === 10) output += '\\n';
+            else if (code === 12) output += '\\f';
+            else if (code === 13) output += '\\r';
+            else if (code === 34) output += '\\"';
+            else if (code === 92) output += '\\\\';
+            else if (code < 32 || code > 126) {
+                output += '\\u' + ('0000' + code.toString(16)).slice(-4);
+            } else {
+                output += text.charAt(index);
+            }
+        }
+        return output + '"';
+    }
+    cases.forEach(function (entry) {
+        const evaluated = evaluateTransportEnvelope(server, JSON.stringify(entry[1]));
+        const expected = '{"ok":true,"resultType":"string","result":'
+            + quoteByCharacter(entry[1]) + '}';
+        assert.doesNotMatch(evaluated.wrapped, /[^\x00-\x7f]/, entry[0] + ' wrapper');
+        assert.doesNotMatch(evaluated.encoded, /[^\x00-\x7f]/, entry[0] + ' envelope');
+        assert.equal(evaluated.encoded, expected, entry[0] + ' encoded');
+        assert.deepEqual(
+            server.decodeEvalScriptTransportResult(evaluated.encoded),
+            { resultType: 'string', result: entry[1] },
+            entry[0] + ' decoded',
+        );
+    });
+
+    const escapedCases = [
+        ['\u0001', '\\u0001'],
+        ['\u007f', '\\u007f'],
+        ['\u4e2d', '\\u4e2d'],
+        ['\ud83d\ude00', '\\ud83d\\ude00'],
+        ['\b\t\n\f\r"\\', '\\b\\t\\n\\f\\r\\"\\\\'],
+    ];
+    escapedCases.forEach(function (entry) {
+        const evaluated = evaluateTransportEnvelope(server, JSON.stringify(entry[0]));
+        assert.equal(
+            evaluated.encoded,
+            '{"ok":true,"resultType":"string","result":"' + entry[1] + '"}',
+        );
+    });
+
+    const shortObjects = [];
+    for (let index = 0; index < 20000; index += 1) {
+        shortObjects.push({ i: index, name: 'x' });
+    }
+    const shortObjectsJson = JSON.stringify(shortObjects);
+    const evaluatedObjects = evaluateTransportEnvelope(server, shortObjectsJson);
+    assert.equal(
+        evaluatedObjects.encoded,
+        '{"ok":true,"resultType":"json","result":'
+            + quoteByCharacter(shortObjectsJson) + '}',
+    );
+    assert.deepEqual(JSON.parse(evaluatedObjects.payload.result), shortObjects);
+});
+
+test('ExtendScript quote self-check falls back when regexp replacement is unavailable', () => {
+    const server = loadServer();
+    const value = 'ascii \u0001 中文 \ud83d\ude00 " \\ \b\t\n\f\r';
+    const wrapped = server.wrapForEvalScriptTransport(JSON.stringify(value));
+    const normal = Function('return ' + wrapped)();
+    const fallback = Function(
+        'var __r=String.prototype.replace;'
+        + 'String.prototype.replace=function(){throw new Error("no replace");};'
+        + 'try{return ' + wrapped + ';}finally{String.prototype.replace=__r;}',
+    )();
+    assert.equal(fallback, normal);
+    assert.deepEqual(
+        server.decodeEvalScriptTransportResult(fallback),
+        { resultType: 'string', result: value },
+    );
+});
+
+test('ExtendScript quote self-check falls back when global escape is unavailable', () => {
+    const server = loadServer();
+    const value = 'ascii \u0001 \u00e9 \u4e2d \ud83d\ude00';
+    const wrapped = server.wrapForEvalScriptTransport(JSON.stringify(value));
+    const normal = Function('return ' + wrapped)();
+    const fallback = Function(
+        'var __e=escape;escape=undefined;'
+        + 'try{return ' + wrapped + ';}finally{escape=__e;}',
+    )();
+    assert.equal(fallback, normal);
+    assert.deepEqual(
+        server.decodeEvalScriptTransportResult(fallback),
+        { resultType: 'string', result: value },
     );
 });
 
@@ -699,6 +822,7 @@ test('diagnostic transport embeds string and JSON results without re-escaping th
             '$.writeln("success");' + JSON.stringify(expected),
             { diagnostics: true },
         );
+        assert.doesNotMatch(stringResult.wrapped, /[^\x00-\x7f]/);
         assert.equal(stringResult.outer.inner.resultType, 'string');
         assert.equal(stringResult.outer.inner.result, expected);
         assert.deepEqual(server.decodeEvalScriptTransportResult(stringResult.encoded), {

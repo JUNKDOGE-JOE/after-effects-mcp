@@ -371,6 +371,52 @@ function quoteAsciiJsString(value) {
     return out + '"';
 }
 
+const EVAL_SCRIPT_QUOTE_SOURCE = (
+    'var __aemcp_quote_probe_re=/[\\u0000-\\u001f"\\\\\\u007f-\\uffff]/;' +
+    'var __aemcp_quote_match_re=/[\\b\\t\\n\\f\\r"\\\\]|[\\u0000-\\u0007\\u000b\\u000e-\\u001f\\u007f-\\uffff]+/g;' +
+    'function __aemcp_quote_match(m){' +
+    'var n=m.charCodeAt(0);' +
+    'if(n===92){return "\\\\\\\\";}' +
+    'if(n===34){return "\\\\\\"";}' +
+    'if(n===8){return "\\\\b";}' +
+    'if(n===9){return "\\\\t";}' +
+    'if(n===10){return "\\\\n";}' +
+    'if(n===12){return "\\\\f";}' +
+    'if(n===13){return "\\\\r";}' +
+    'return escape(m).toLowerCase().replace(/%u/g,"\\\\u").replace(/%/g,"\\\\u00");' +
+    '}' +
+    'function __aemcp_quote_slow(v){' +
+    'var s=String(v),out="\\"";' +
+    'for(var i=0;i<s.length;i++){' +
+    'var c=s.charCodeAt(i);' +
+    'if(c===8){out+="\\\\b";}' +
+    'else if(c===9){out+="\\\\t";}' +
+    'else if(c===10){out+="\\\\n";}' +
+    'else if(c===12){out+="\\\\f";}' +
+    'else if(c===13){out+="\\\\r";}' +
+    'else if(c===34){out+="\\\\\\"";}' +
+    'else if(c===92){out+="\\\\\\\\";}' +
+    'else if(c<32||c>126){out+="\\\\u"+("0000"+c.toString(16)).slice(-4);}' +
+    'else{out+=s.charAt(i);}' +
+    '}' +
+    'return out+"\\"";' +
+    '}' +
+    'function __aemcp_quote_fast(v){' +
+    'var s=String(v);' +
+    'if(!__aemcp_quote_probe_re.test(s)){return "\\""+s+"\\"";}' +
+    'var parts=[],step=8192;' +
+    'for(var i=0;i<s.length;i+=step){' +
+    'parts.push(s.slice(i,i+step).replace(__aemcp_quote_match_re,__aemcp_quote_match));' +
+    '}' +
+    'return "\\""+parts.join("")+"\\"";' +
+    '}' +
+    'var __aemcp_quote=(function(){' +
+    'var probe="\\u0001\\b\\t\\n\\f\\r\\"\\\\\\u007f\\u00e9\\u4e2d\\ud83d\\ude00 ok";' +
+    'try{if(__aemcp_quote_fast(probe)===__aemcp_quote_slow(probe)){return __aemcp_quote_fast;}}catch(ignore){}' +
+    'return __aemcp_quote_slow;' +
+    '})();'
+);
+
 // CEP can corrupt non-ASCII result text when CSInterface.evalScript crosses
 // the ExtendScript -> panel boundary on localized Windows installs. Return an
 // ASCII-only JSON envelope from JSX, then decode it in Node before HTTP JSON.
@@ -378,22 +424,7 @@ function wrapForEvalScriptTransportDefault(code) {
     return (
         '(function(){' +
         'var __aemcp_max_depth=12,__aemcp_max_length=1000000;' +
-        'function __aemcp_quote(v){' +
-        'var s=String(v),out="\\"";' +
-        'for(var i=0;i<s.length;i++){' +
-        'var c=s.charCodeAt(i);' +
-        'if(c===8){out+="\\\\b";}' +
-        'else if(c===9){out+="\\\\t";}' +
-        'else if(c===10){out+="\\\\n";}' +
-        'else if(c===12){out+="\\\\f";}' +
-        'else if(c===13){out+="\\\\r";}' +
-        'else if(c===34){out+="\\\\\\"";}' +
-        'else if(c===92){out+="\\\\\\\\";}' +
-        'else if(c<32||c>126){out+="\\\\u"+("0000"+c.toString(16)).slice(-4);}' +
-        'else{out+=s.charAt(i);}' +
-        '}' +
-        'return out+"\\"";' +
-        '}' +
+        EVAL_SCRIPT_QUOTE_SOURCE +
         'function __aemcp_projection_error(reason){' +
         'throw new Error("ae_exec result "+reason+"; return a smaller projection (for example, map to the fields you need)");' +
         '}' +
@@ -429,22 +460,25 @@ function wrapForEvalScriptTransportDefault(code) {
         'if(__aemcp_seen(seen,value)){__aemcp_projection_error("contains a cyclic plain Object or Array");}' +
         'seen.push(value);' +
         'try{' +
-        'var out,child,childValue,readable,i,key,own,first=true;' +
+        'var out,parts=[],child,childValue,readable,i,key,own,quotedKey,first=true;' +
         'if(kind==="array"){' +
-        'out=__aemcp_piece(state,"[");' +
+        'state.length+=1;' +
         'var arrayLength=0;' +
         'try{arrayLength=value.length;}catch(ignoreLength){arrayLength=0;}' +
         'for(i=0;i<arrayLength;i++){' +
-        'if(i>0){out+=__aemcp_piece(state,",");}' +
+        'if(i>0){state.length+=1;}' +
         'readable=true;' +
         'try{childValue=value[i];}catch(ignoreArrayProperty){readable=false;}' +
         'child=readable?__aemcp_json(childValue,depth+1,seen,state):null;' +
         'if(child===null){child=__aemcp_piece(state,"null");}' +
-        'out+=child;' +
+        'parts.push(child);' +
         '}' +
-        'return out+__aemcp_piece(state,"]");' +
+        'state.length+=1;' +
+        'out="["+parts.join(",")+"]";' +
+        'if(state.length>__aemcp_max_length){__aemcp_projection_error("exceeds the 1000000 character serialization limit");}' +
+        'return out;' +
         '}' +
-        'out=__aemcp_piece(state,"{");' +
+        'state.length+=1;' +
         'for(key in value){' +
         'own=false;' +
         'try{own=Object.prototype.hasOwnProperty.call(value,key);}catch(ignoreOwn){own=false;}' +
@@ -454,11 +488,16 @@ function wrapForEvalScriptTransportDefault(code) {
         'if(!readable){continue;}' +
         'child=__aemcp_json(childValue,depth+1,seen,state);' +
         'if(child===null){continue;}' +
-        'if(!first){out+=__aemcp_piece(state,",");}' +
+        'if(!first){state.length+=1;}' +
         'first=false;' +
-        'out+=__aemcp_piece(state,__aemcp_quote(key))+__aemcp_piece(state,":")+child;' +
+        'quotedKey=__aemcp_piece(state,__aemcp_quote(key));' +
+        'state.length+=1;' +
+        'parts.push(quotedKey+":"+child);' +
         '}' +
-        'return out+__aemcp_piece(state,"}");' +
+        'state.length+=1;' +
+        'out="{"+parts.join(",")+"}";' +
+        'if(state.length>__aemcp_max_length){__aemcp_projection_error("exceeds the 1000000 character serialization limit");}' +
+        'return out;' +
         '}finally{seen.pop();}' +
         '}' +
         'try{' +
@@ -490,12 +529,12 @@ function wrapForEvalScriptTransportDiagnostics(code) {
         'var __aemcp_before=null,__aemcp_after=null;',
         'var __aemcp_dollar=null,__aemcp_writeln=null,__aemcp_writeln_own=false,__aemcp_writeln_replacement=null;',
         'function __aemcp_note(stage,err){try{if(__aemcp_notes.length<20){var text=stage;if(err!==undefined&&err!==null){text+=": "+String(err);}__aemcp_notes.push(String(text).slice(0,160));}}catch(ignore){}}',
-        'function __aemcp_quote(v){var s=String(v),out="\\\"";for(var i=0;i<s.length;i++){var c=s.charCodeAt(i);if(c===8){out+="\\\\b";}else if(c===9){out+="\\\\t";}else if(c===10){out+="\\\\n";}else if(c===12){out+="\\\\f";}else if(c===13){out+="\\\\r";}else if(c===34){out+="\\\\\\\"";}else if(c===92){out+="\\\\\\\\";}else if(c<32||c>126){out+="\\\\u"+("0000"+c.toString(16)).slice(-4);}else{out+=s.charAt(i);}}return out+"\\\"";}',
+        EVAL_SCRIPT_QUOTE_SOURCE,
         'function __aemcp_projection_error(reason){throw new Error(reason);}',
         'function __aemcp_piece(state,piece){state.length+=piece.length;if(state.length>__aemcp_max_length){__aemcp_projection_error("diagnostics serialization limit exceeded");}return piece;}',
         'function __aemcp_seen(stack,value){for(var i=0;i<stack.length;i++){if(stack[i]===value){return true;}}return false;}',
         'function __aemcp_kind(value){var tag;try{tag=Object.prototype.toString.call(value);}catch(ignore){return "leaf";}if(tag==="[object Array]"){return "array";}if(tag!=="[object Object]"){return "leaf";}var constructorValue;try{constructorValue=value.constructor;}catch(ignoreConstructor){return "leaf";}return constructorValue===Object?"object":"leaf";}',
-        'function __aemcp_json(value,depth,seen,state){if(arguments.length===1){depth=0;seen=[];state={length:0};}if(value===null){return __aemcp_piece(state,"null");}var valueType=typeof value;if(valueType==="string"){return __aemcp_piece(state,__aemcp_quote(value));}if(valueType==="number"){return __aemcp_piece(state,isFinite(value)?String(value):"null");}if(valueType==="boolean"){return __aemcp_piece(state,value?"true":"false");}if(valueType==="undefined"||valueType==="function"){return null;}if(valueType!=="object"){return __aemcp_piece(state,__aemcp_quote(String(value)));}var kind=__aemcp_kind(value);if(kind==="leaf"){return __aemcp_piece(state,__aemcp_quote(String(value)));}if(depth>=__aemcp_max_depth){__aemcp_projection_error("diagnostics maximum depth exceeded");}if(__aemcp_seen(seen,value)){__aemcp_projection_error("diagnostics contain a cycle");}seen.push(value);try{var out,child,childValue,readable,i,key,own,first=true;if(kind==="array"){out=__aemcp_piece(state,"[");var arrayLength=0;try{arrayLength=value.length;}catch(ignoreLength){arrayLength=0;}for(i=0;i<arrayLength;i++){if(i>0){out+=__aemcp_piece(state,",");}readable=true;try{childValue=value[i];}catch(ignoreArrayProperty){readable=false;}child=readable?__aemcp_json(childValue,depth+1,seen,state):null;if(child===null){child=__aemcp_piece(state,"null");}out+=child;}return out+__aemcp_piece(state,"]");}out=__aemcp_piece(state,"{");for(key in value){own=false;try{own=Object.prototype.hasOwnProperty.call(value,key);}catch(ignoreOwn){own=false;}if(!own){continue;}readable=true;try{childValue=value[key];}catch(ignoreObjectProperty){readable=false;}if(!readable){continue;}child=__aemcp_json(childValue,depth+1,seen,state);if(child===null){continue;}if(!first){out+=__aemcp_piece(state,",");}first=false;out+=__aemcp_piece(state,__aemcp_quote(key))+__aemcp_piece(state,":")+child;}return out+__aemcp_piece(state,"}");}finally{seen.pop();}}',
+        'function __aemcp_json(value,depth,seen,state){if(arguments.length===1){depth=0;seen=[];state={length:0};}if(value===null){return __aemcp_piece(state,"null");}var valueType=typeof value;if(valueType==="string"){return __aemcp_piece(state,__aemcp_quote(value));}if(valueType==="number"){return __aemcp_piece(state,isFinite(value)?String(value):"null");}if(valueType==="boolean"){return __aemcp_piece(state,value?"true":"false");}if(valueType==="undefined"||valueType==="function"){return null;}if(valueType!=="object"){return __aemcp_piece(state,__aemcp_quote(String(value)));}var kind=__aemcp_kind(value);if(kind==="leaf"){return __aemcp_piece(state,__aemcp_quote(String(value)));}if(depth>=__aemcp_max_depth){__aemcp_projection_error("diagnostics maximum depth exceeded");}if(__aemcp_seen(seen,value)){__aemcp_projection_error("diagnostics contain a cycle");}seen.push(value);try{var out,parts=[],child,childValue,readable,i,key,own,quotedKey,first=true;if(kind==="array"){state.length+=1;var arrayLength=0;try{arrayLength=value.length;}catch(ignoreLength){arrayLength=0;}for(i=0;i<arrayLength;i++){if(i>0){state.length+=1;}readable=true;try{childValue=value[i];}catch(ignoreArrayProperty){readable=false;}child=readable?__aemcp_json(childValue,depth+1,seen,state):null;if(child===null){child=__aemcp_piece(state,"null");}parts.push(child);}state.length+=1;out="["+parts.join(",")+"]";if(state.length>__aemcp_max_length){__aemcp_projection_error("diagnostics serialization limit exceeded");}return out;}state.length+=1;for(key in value){own=false;try{own=Object.prototype.hasOwnProperty.call(value,key);}catch(ignoreOwn){own=false;}if(!own){continue;}readable=true;try{childValue=value[key];}catch(ignoreObjectProperty){readable=false;}if(!readable){continue;}child=__aemcp_json(childValue,depth+1,seen,state);if(child===null){continue;}if(!first){state.length+=1;}first=false;quotedKey=__aemcp_piece(state,__aemcp_quote(key));state.length+=1;parts.push(quotedKey+":"+child);}state.length+=1;out="{"+parts.join(",")+"}";if(state.length>__aemcp_max_length){__aemcp_projection_error("diagnostics serialization limit exceeded");}return out;}finally{seen.pop();}}',
         'function __aemcp_read_revision(){try{if(typeof app!=="undefined"&&app&&app.project){var v=app.project.revision;return typeof v==="number"&&isFinite(v)?v:null;}}catch(ignore){}return null;}',
         'function __aemcp_read_project_path(){try{if(typeof app!=="undefined"&&app&&app.project&&app.project.file){return app.project.file.fsName?String(app.project.file.fsName):null;}}catch(ignore){}return null;}',
         'function __aemcp_read(o,n,stage){try{var v=o?o[n]:null;return v===undefined?null:v;}catch(err){__aemcp_note(stage,err);return null;}}',
