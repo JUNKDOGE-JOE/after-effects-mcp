@@ -23,6 +23,8 @@ After Effects 状态通过 ExtendScript 和冻结的原生 AEGP 平面访问。
 2. 把同一版本的原生插件装到该 After Effects 宿主使用的插件目录——Windows 用
    `.aex`，macOS 用 `AeMcpNative.plugin` 包。ZXP 不含任何平台二进制，两个系统
    通用；只有原生插件按平台分别构建，`ae_nativeExec` 是唯一需要它的工具。
+   两个平台的确切安装位置见[安装文档](docs/INSTALL.md)；macOS 的包还需要先去掉
+   下载隔离属性，After Effects 才会加载它。
 3. 启动 After Effects，打开 **Window > Extensions > ae-mcp**。外部客户端
    使用 MCP 时保持面板打开。
 4. 按下面两种接入方式之一配置客户端。

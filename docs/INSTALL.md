@@ -15,6 +15,30 @@ supported client connections.
    directory used by the selected After Effects host. `ae_nativeExec` is the
    only tool that needs it, so a release that has not yet published the
    native plug-in for your platform is still usable through the other ten.
+
+   On Windows, copy the file into the selected host with administrator
+   rights:
+
+   ```text
+   <After Effects>\Support Files\Plug-ins\Extensions\AeMcpNative.aex
+   ```
+
+   On macOS, unzip the download and place the whole `AeMcpNative.plugin`
+   bundle in the per-user MediaCore directory, then clear the download
+   quarantine so After Effects can load it:
+
+   ```bash
+   mkdir -p ~/Library/Application\ Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp
+   ditto -x -k AeMcpNative-<version>-macos-arm64.plugin.zip /tmp/ae-mcp-plugin
+   mv /tmp/ae-mcp-plugin/AeMcpNative.plugin \
+     ~/Library/Application\ Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp/
+   xattr -dr com.apple.quarantine \
+     ~/Library/Application\ Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp/AeMcpNative.plugin
+   ```
+
+   The macOS bundle is ad-hoc signed and not notarized, so verify its
+   SHA-256 against the release checksum file before installing it. Keep the
+   bundle intact — copying only the executable out of it does not work.
 4. Start After Effects and open **Window > Extensions > ae-mcp**.
 
 The panel must remain open because it owns the local service at
