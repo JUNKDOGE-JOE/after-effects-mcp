@@ -5,7 +5,7 @@
 **一行安装提示词——复制给 Claude Code 或其它 AI agent：**
 
 ```text
-请从 v0.9.6 发布页安装 ae-mcp 的 ZXP 和 AEX，在 After Effects 中打开
+请从 v0.10.0-rc.1 预发布页安装 ae-mcp 的 ZXP 和 AEX，在 After Effects 中打开
 Window > Extensions > ae-mcp，然后用 `claude mcp add --transport http ae
 http://127.0.0.1:11488/mcp` 接入 Claude Code；Claude Desktop 则使用系统 Node
 执行扩展目录里的 `host/stdio-shim.js`，并在测试 `ae_ping` 前提醒我重新启动
