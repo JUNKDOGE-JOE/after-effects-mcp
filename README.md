@@ -26,7 +26,9 @@ through ExtendScript and the frozen native AEGP plane.
    bundle on macOS. Keep the version pair from the same release. The ZXP
    carries no platform binaries and installs on both systems; only this
    native plug-in is built per platform, and `ae_nativeExec` is the one tool
-   that needs it.
+   that needs it. [Install](docs/INSTALL.md) has the exact per-platform
+   destination, and the macOS bundle additionally needs its download
+   quarantine cleared before After Effects will load it.
 3. Start After Effects and open **Window > Extensions > ae-mcp**. Keep the panel
    open while an external client uses MCP.
 4. Configure one of the two supported external connection forms below.
