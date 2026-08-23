@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { canonicalJson } from '../../../package/lib/manifest.mjs';
 import { canonicalStringify, sha256File } from '../../artifact-manifest.mjs';
 
-export const PRODUCT_VERSION = '0.10.1';
+export const PRODUCT_VERSION = '0.10.2';
 export const PRODUCT_SCENARIOS = [
   'clean-install-and-upgrade-rollback',
   'permission-denial-and-recovery',

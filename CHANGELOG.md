@@ -10,12 +10,17 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
-### Unreleased
+### [0.10.2] — 2026-08-23
 
-- **失败恢复从 `ae_exec` 中拆出**——恢复操作改由独立的 `ae_execRecover` 接收 `recoveryId` 与可选修正脚本，`ae_exec` 只接受正常脚本执行参数，避免模型把恢复编号误当脚本内容。本项会把公开工具从 11 个增加到 12 个，并改变旧恢复调用方式，合并前仍需完成兼容性决策。
+- **失败恢复从 `ae_exec` 中拆出**——恢复操作改由独立的 `ae_execRecover` 接收 `recoveryId` 与可选修正脚本，`ae_exec` 只接受正常脚本执行参数，避免模型把恢复编号误当脚本内容。本项把公开工具从 11 个增加到 12 个。旧的 `ae_exec({recoveryId})` 调用方式不再受理，会返回一条指明改用 `ae_execRecover` 的错误；不提供兼容垫片——在同一个 schema 里并列两个可选字段正是这次要消除的歧义来源。
 - **OpenCode 自定义模型可按模型设置上下文窗口**——Provider 管理器为每个模型提供 32K / 64K / 128K（推荐）/ 200K 与自定义数值；旧配置自动沿用 128K。面板拒绝小于 32K 或大于 2M 的值，并按窗口自动预留合理的回复空间，避免把 32K 模型同时声明成 32K 输出而导致每轮都压缩。填大不会增加模型真实能力，界面明确提示过大可能来不及压缩、过小会更频繁压缩。
 - **Luna 的属性读取不再被本地拒绝**——`ae_read` 现在接受按属性完整路径排序；Luna 在真实长会话里生成这种合法请求时，可以直接读取而不会在到达 AE 前失败。
 - **低档模型的脚本返回要求更明确**——主机现在明确区分普通脚本末尾的结果与函数包装内必须 `return` 的结果，减少“AE 已执行、面板却只能判失败”的可避免恢复流程。
+- **审批卡会真正显示，档位与当前会话一致**——手动档下每个写操作都会弹出审批卡，并可展开查看真实调用参数。审批身份改用被调工具自身的名字（恢复操作显示为 `ae_execRecover` 而不是 `ae_exec`）；授权绑定的内容指纹按完整调用计算，而不是卡片上那段 200 字预览，避免前缀相同的两个脚本被当成同一次已授权操作。用户取消、审批对话框不可用、审批超时、明确拒绝现在是四条不同的提示，不再一律显示为「用户拒绝」。
+- **长任务持续显示进度，运行中切换会话会先确认**——回合运行期间持续显示已用时长与预计 token。任务尚未结束时新建或切换会话会先弹出确认框：「取消」让当前任务继续跑完，「停止并继续」才停止当前任务并切换，不再静默中断。
+- **OpenCode 失败后会话仍然可用**——provider 或 socket 失败会保留真实失败原因，并允许在同一个会话里重试，而不是让会话卡在永久忙碌状态。（issue 里要求的「自动一次性重试 / 退避」尚未实现。）
+- **OpenCode 长会话的请求不再膨胀**——发送前会精简历史里已经执行过的旧脚本正文；工具结果与 AE 回读保持不变，主要缓解第 6、7 轮之后的请求体积增长。代价是模型无法引用旧脚本原文，除非重新提供。
+- **中文跨数据块不再乱码**——Claude、Codex、OpenCode 三条通道的分块输出统一按完整 UTF-8 边界解码。
 
 ### [0.10.1] — 2026-08-23
 
@@ -331,12 +336,17 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ## English
 
-### Unreleased
+### [0.10.2] — 2026-08-23
 
-- **Failure recovery is split out of `ae_exec`** — a dedicated `ae_execRecover` now accepts `recoveryId` and optional corrected code, while `ae_exec` accepts only normal script-execution arguments so models cannot mistake a recovery id for script text. This increases the public surface from 11 tools to 12 and changes the previous recovery call shape; the compatibility decision remains required before merge.
+- **Failure recovery is split out of `ae_exec`** — a dedicated `ae_execRecover` now accepts `recoveryId` and optional corrected code, while `ae_exec` accepts only normal script-execution arguments so models cannot mistake a recovery id for script text. This increases the public surface from 11 tools to 12. The previous `ae_exec({recoveryId})` shape is rejected with an error naming `ae_execRecover`; no compatibility shim is provided, because two optional fields sharing one schema is the ambiguity this change exists to remove.
 - **Per-model context windows for custom OpenCode models** — Provider Manager now offers 32K / 64K / 128K (recommended) / 200K presets plus a custom value for every model; existing configurations keep the 128K default. Values below 32K or above 2M are rejected, and the advertised output reserve scales with the chosen window so a 32K model is not also declared as having 32K of output capacity. The UI warns that a larger number cannot increase a provider's real capacity, while a smaller number compacts more often.
 - **Luna property reads no longer fail local validation** — `ae_read` now accepts sorting properties by their full match path, so this valid request shape from Luna reaches After Effects instead of failing before dispatch.
 - **Clearer script-result guidance for smaller models** — host instructions now distinguish a bare script's final value from the explicit `return` required inside an IIFE, reducing avoidable recoveries where AE changed but the panel received `undefined`.
+- **The approval card actually appears, and its tier matches the conversation** — in manual tier every write raises an approval card whose real call arguments can be expanded. Approval identity now uses the invoked tool's own name (a retry shows as `ae_execRecover`, not `ae_exec`), and the authorization content hash covers the complete call instead of the card's 200-character preview, so two scripts sharing a prefix are no longer treated as the same approved operation. User cancellation, an unavailable approval dialog, an approval timeout, and an explicit denial are now four distinct messages rather than one generic "user denied".
+- **Long turns keep reporting progress, and switching sessions mid-run asks first** — a running turn continuously reports elapsed time and estimated tokens. Creating or switching sessions while a turn is unfinished raises a confirmation: "cancel" leaves the running task alone, and only "stop and continue" stops it before switching. Turns are no longer dropped silently.
+- **An OpenCode failure leaves the session usable** — a provider or socket failure preserves the real cause and allows a retry in the same conversation instead of leaving the session permanently busy. (The automatic one-shot retry/backoff the issue asks for is still not implemented.)
+- **OpenCode long sessions stop inflating their requests** — already-executed script bodies are trimmed from the outbound history copy before sending. Tool results and AE readbacks are unchanged; this mainly relieves the request growth seen after the sixth or seventh turn. The tradeoff is that the model cannot quote an old script body unless it is supplied again.
+- **Chunked output no longer corrupts multi-byte text** — the Claude, Codex, and OpenCode channels all decode streamed chunks on complete UTF-8 boundaries.
 
 ### [0.10.1] — 2026-08-23
 
