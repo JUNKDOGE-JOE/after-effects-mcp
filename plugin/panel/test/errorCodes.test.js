@@ -26,6 +26,7 @@ test('error code table is frozen and contains the complete panel vocabulary', ()
     'TURN_ABORTED',
     'TURN_INPUT_INVALID',
     'TURN_START_FAILED',
+    'UPSTREAM_CONNECTION_CLOSED',
     'UPSTREAM_ERROR',
     'UPSTREAM_HTTP_<status>',
   ];
@@ -59,6 +60,13 @@ test('classifyErrorCode distinguishes spawn, auth exit, HTTP, JSON-RPC, and reso
   });
   assert.deepEqual(classifyErrorCode({ httpStatus: 500 }), {
     code: 'UPSTREAM_HTTP_500',
+    kind: 'network',
+  });
+  assert.deepEqual(classifyErrorCode({
+    upstream: true,
+    upstreamText: 'cause: The socket connection was closed unexpectedly',
+  }), {
+    code: 'UPSTREAM_CONNECTION_CLOSED',
     kind: 'network',
   });
   assert.deepEqual(classifyErrorCode({ jsonRpcCode: -32000, fallbackCode: 'BACKEND_ERROR' }), {

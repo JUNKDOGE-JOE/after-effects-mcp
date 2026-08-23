@@ -71,6 +71,36 @@ test('parses data and bare-array shapes with stable deduplication', async () => 
   assert.deepEqual(bare, { ok: true, models: ['x', 'y'], total: 2 });
 });
 
+test('filters unsafe catalog ids and caps the model rows returned to the panel', async () => {
+  const valid = Array.from({ length: 205 }, (_value, index) => ({ id: `model-${index}` }));
+  const result = await probeOpenCodeProviderModels({
+    draft: draft('https://relay.test'),
+    adapter: harness(ok({ data: [
+      { id: 'bad model' },
+      { id: '<script>' },
+      ...valid,
+      { id: 'model-0' },
+    ] })).adapter,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.models.length, 200);
+  assert.equal(result.total, 205);
+  assert.equal(result.models[0], 'model-0');
+  assert.equal(result.models.at(-1), 'model-199');
+});
+
+test('rejects a successful model response that reflects a credential', async () => {
+  const key = 'sk-test-REFLECTED-SECRET';
+  const result = await probeOpenCodeProviderModels({
+    draft: draft('https://relay.test'),
+    apiKey: key,
+    adapter: harness(ok({ data: [{ id: key }] })).adapter,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.detail.includes(key), false);
+  assert.match(result.detail, /rejected/i);
+});
+
 test('reports HTTP, non-JSON, timeout and socket failures without leaking keys', async () => {
   const key = 'sk-test-SECRET-123';
   const cases = [

@@ -45,6 +45,26 @@ test('Codex model-list data preserves capability metadata', () => {
   assert.deepEqual(descriptor.models[0].effortLevels, ['low', 'high']);
 });
 
+test('Codex model-list accepts the app-server data envelope', () => {
+  const descriptor = codexDescriptorFromModels({
+    data: [{
+      id: 'gpt-5.6-luna',
+      displayName: 'Luna',
+      isDefault: true,
+      defaultReasoningEffort: 'medium',
+      additionalSpeedTiers: ['fast'],
+      supportedReasoningEfforts: [
+        { reasoningEffort: 'low' },
+        { reasoningEffort: 'medium' },
+        { reasoningEffort: 'high' },
+      ],
+    }],
+  });
+  assert.equal(descriptor.defaultModelId, 'gpt-5.6-luna');
+  assert.deepEqual(descriptor.models.map((model) => model.id), ['gpt-5.6-luna']);
+  assert.equal(descriptor.supportsFast('gpt-5.6-luna'), true);
+});
+
 test('Codex login descriptor fills the official 5.6 models', () => {
   const merged = mergeCodexOfficialLoginModels(codexStaticDescriptor());
   assert.ok(merged.models.some((model) => model.id === 'gpt-5.6-terra'));

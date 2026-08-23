@@ -50,6 +50,10 @@ function declineResult() {
   return { action: 'decline', content: {} };
 }
 
+function unavailableResult() {
+  return { action: 'unavailable', content: {} };
+}
+
 function normalizeDirectResult(value) {
   if (!isPlainObject(value) || !['accept', 'decline', 'cancel'].includes(value.action)) return null;
   const content = isPlainObject(value.content) ? cloneVisible(value.content) : {};
@@ -199,7 +203,7 @@ export function createElicitationCoordinator({
       .then(() => strategy(request, { ...context, signal, plan }))
       .then(
         (value) => ({ aborted: false, value }),
-        () => ({ aborted: false, value: declineResult() }),
+        (error) => ({ aborted: false, error }),
       );
     const outcome = await Promise.race([called, aborted]);
     for (const source of sources) source.removeEventListener('abort', forwardAbort);
@@ -234,6 +238,7 @@ export function createElicitationCoordinator({
 
       const outcome = await invoke(resolveApproval, request, context, plan);
       if (outcome.aborted || context?.signal?.aborted) return cancelResult();
+      if (outcome.error) return context?.hostApproval ? unavailableResult() : declineResult();
       const direct = normalizeDirectResult(outcome.value);
       if (direct) {
         if (plan && direct.action === 'accept') {
@@ -246,7 +251,13 @@ export function createElicitationCoordinator({
         if (outcome.value.decision === 'allow') return approvalResult('once', outcome.value);
         if (outcome.value.decision === 'deny') return declineResult();
         if (outcome.value.decision !== 'ask') return declineResult();
-        const pending = enqueue(request, context, plan, outcome.value);
+        // Host ApprovalQueue currently supports one request at a time, not a
+        // remembered session grant. Do not offer a button whose promise the
+        // host cannot keep.
+        const policy = context?.hostApproval
+          ? { ...outcome.value, allowSession: false }
+          : outcome.value;
+        const pending = enqueue(request, context, plan, policy);
         release();
         return await pending;
       }

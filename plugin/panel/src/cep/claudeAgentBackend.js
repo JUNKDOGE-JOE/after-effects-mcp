@@ -24,6 +24,7 @@ import {
 } from '../lib/questionForm.js';
 
 export const CLAUDE_MINIMUM_VERSION = '2.0.0';
+export const CLAUDE_NO_PROGRESS_WARNING_MS = 180000;
 
 const STDERR_TAIL_LIMIT = 4096;
 const DISALLOWED_TOOLS = [
@@ -346,6 +347,9 @@ export function createClaudeAgentBackend({
   fsImpl,
   tempDirName = randomTempName,
   now = Date.now,
+  setTimeoutImpl = setTimeout,
+  clearTimeoutImpl = clearTimeout,
+  noProgressWarningMs = CLAUDE_NO_PROGRESS_WARNING_MS,
   env,
 } = {}) {
   const adapter = platform || createPlatformAdapter();
@@ -386,6 +390,10 @@ export function createClaudeAgentBackend({
   let providerDeltaRedactor = createDeltaRedactor([], () => {});
   let stderrDeltaRedactor = createDeltaRedactor([], () => {});
   let processStderrAttachmentPaths = [];
+  let noProgressWarningTimer = null;
+  let progressStartedAt = null;
+  let progressLastAt = null;
+  let progressWarningEmitted = false;
   const pendingApprovals = new Map();
   const pendingQuestions = new Map();
   const sessionAllowedTools = new Set();
@@ -410,12 +418,52 @@ export function createClaudeAgentBackend({
     }
   }
 
-  function emitTurnProgress(stage) {
+  function clearNoProgressWarning() {
+    if (noProgressWarningTimer !== null) {
+      clearTimeoutImpl(noProgressWarningTimer);
+      noProgressWarningTimer = null;
+    }
+  }
+
+  function armNoProgressWarning() {
+    clearNoProgressWarning();
+    if (!activeRun || !activeTurn || progressWarningEmitted) return;
+    noProgressWarningTimer = setTimeoutImpl(() => {
+      noProgressWarningTimer = null;
+      if (!activeRun || !activeTurn || progressWarningEmitted) return;
+      const current = now();
+      const elapsedSinceProgress = Math.max(0, current - (progressLastAt ?? current));
+      if (elapsedSinceProgress < noProgressWarningMs) {
+        armNoProgressWarning();
+        return;
+      }
+      progressWarningEmitted = true;
+      emit({
+        type: 'turn-progress-warning',
+        ...(activeTurn.turnId ? { turnId: activeTurn.turnId } : {}),
+        elapsedMs: Math.max(0, current - (progressStartedAt ?? current)),
+        warningMs: noProgressWarningMs,
+      });
+    }, Math.max(0, noProgressWarningMs));
+  }
+
+  function touchProgress() {
     if (!activeRun || !activeTurn) return;
+    // A later progress update re-arms the advisory warning for a new idle
+    // window; the warning itself never changes process or retry state.
+    if (progressWarningEmitted) progressWarningEmitted = false;
+    progressLastAt = now();
+    armNoProgressWarning();
+  }
+
+  function emitTurnProgress(stage, details = {}) {
+    if (!activeRun || !activeTurn) return;
+    touchProgress();
     emit({
       type: 'turn-progress',
       ...(activeTurn.turnId ? { turnId: activeTurn.turnId } : {}),
       stage,
+      ...details,
     });
   }
 
@@ -530,6 +578,7 @@ export function createClaudeAgentBackend({
   }
 
   function finishActive() {
+    clearNoProgressWarning();
     const resolve = activeResolve;
     activeResolve = null;
     activeRun = null;
@@ -538,6 +587,9 @@ export function createClaudeAgentBackend({
     activeTurnAccepted = false;
     activeTurnDispatched = false;
     activeSawTextDelta = false;
+    progressStartedAt = null;
+    progressLastAt = null;
+    progressWarningEmitted = false;
     startedTools.clear();
     setActiveAttachmentPaths([]);
     if (resolve) resolve();
@@ -597,6 +649,7 @@ export function createClaudeAgentBackend({
     clearStderr = false,
   } = {}) {
     runtimeGeneration += 1;
+    clearNoProgressWarning();
     drainControls('Claude CLI session ended.');
     setThinking(false);
     const current = proc;
@@ -616,6 +669,9 @@ export function createClaudeAgentBackend({
     }
     if (finishRun) finishActive();
     if (clearStderr) stderrTail = '';
+    progressStartedAt = activeRun ? now() : null;
+    progressLastAt = progressStartedAt;
+    progressWarningEmitted = false;
     clearProviderSensitiveValues();
   }
 
@@ -848,6 +904,7 @@ export function createClaudeAgentBackend({
   function handleStreamEvent(message) {
     const event = message?.event;
     if (!event) return;
+    touchProgress();
     if (event.type === 'content_block_start') {
       const type = event.content_block?.type;
       if (type === 'thinking') setThinking(true);
@@ -933,6 +990,16 @@ export function createClaudeAgentBackend({
     }
     if (message.type === 'system' && message.subtype === 'init') {
       markTurnAccepted();
+      return;
+    }
+    if (message.type === 'system' && message.subtype === 'thinking_tokens') {
+      const estimatedTokens = Number(message.estimated_tokens);
+      if (Number.isFinite(estimatedTokens) && estimatedTokens >= 0) {
+        emitTurnProgress('thinking', {
+          estimatedTokens: Math.floor(estimatedTokens),
+          elapsedMs: Math.max(0, now() - (progressStartedAt ?? now())),
+        });
+      }
       return;
     }
     if (message.type === 'stream_event') {
@@ -1100,6 +1167,8 @@ export function createClaudeAgentBackend({
       const generation = runtimeGeneration;
       proc = spawnedProc;
       processSettings = settingsIdentity;
+      spawnedProc.stdout?.setEncoding?.('utf8');
+      spawnedProc.stderr?.setEncoding?.('utf8');
       const reader = createNdjsonReader((message) => {
         if (generation !== runtimeGeneration || proc !== spawnedProc) return;
         handleCliMessage(message);
@@ -1277,6 +1346,10 @@ export function createClaudeAgentBackend({
     activeTurnAccepted = false;
     activeTurnDispatched = false;
     resumeRetryUsed = false;
+    progressStartedAt = now();
+    progressLastAt = progressStartedAt;
+    progressWarningEmitted = false;
+    clearNoProgressWarning();
     setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
     resetProviderDeltaRedactor();
     activeRun = new Promise((resolve) => { activeResolve = resolve; });

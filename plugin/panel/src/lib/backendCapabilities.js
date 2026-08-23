@@ -147,7 +147,9 @@ export function mergeCodexOfficialLoginModels(descriptor) {
 
 function modelListArray(modelListResult) {
   if (Array.isArray(modelListResult)) return modelListResult;
-  return Array.isArray(modelListResult?.models) ? modelListResult.models : [];
+  if (Array.isArray(modelListResult?.models)) return modelListResult.models;
+  // Codex app-server 0.149 returns model/list as { data: [...] }.
+  return Array.isArray(modelListResult?.data) ? modelListResult.data : [];
 }
 
 export function codexDescriptorFromModels(modelListResult) {
@@ -197,11 +199,11 @@ export function openCodeStaticDescriptor() {
     label: 'OpenCode',
     models: [
       {
-        id: 'north-mini-code-free', label: 'North Mini Code Free',
+        id: 'hy3-free', label: 'HY 3 Free',
         effortLevels: [], cost: 1, adaptive: false,
       },
     ],
-    defaultModelId: 'north-mini-code-free',
+    defaultModelId: 'hy3-free',
     defaultEffort: null,
     supportsFast: () => false,
     approvalModes: APPROVAL_MODES,
@@ -258,8 +260,8 @@ export function openCodeDescriptorFromModels(providerResult) {
     }
   }
   if (!models.length) return openCodeStaticDescriptor();
-  const defaultModel = models.find((model) => model.id === 'north-mini-code-free')
-    || models.find((model) => model.id.endsWith('/north-mini-code-free'))
+  const defaultModel = models.find((model) => model.id === 'hy3-free')
+    || models.find((model) => model.id.endsWith('/hy3-free'))
     || models[0];
   return {
     id: 'opencode',

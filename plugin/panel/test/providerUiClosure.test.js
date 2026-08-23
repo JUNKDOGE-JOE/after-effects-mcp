@@ -4,6 +4,10 @@ import { test } from 'node:test';
 
 const app = () => readFileSync(new URL('../src/app/App.jsx', import.meta.url), 'utf8');
 const settings = () => readFileSync(new URL('../src/screens/SettingsScreen.jsx', import.meta.url), 'utf8');
+const providerManager = () => readFileSync(
+  new URL('../src/components/settings/ProviderManagerSection.jsx', import.meta.url),
+  'utf8',
+);
 
 test('Provider Manager is OpenCode-only and has no platform helper entry point', () => {
   const source = app();
@@ -27,6 +31,24 @@ test('saving a provider refreshes the OpenCode configuration process', () => {
   assert.match(source, /openCodeProviderStore\.save\(draft, \{ apiKey, currentId: draft\.id \}\)/);
   assert.match(source, /openCodeBackend\.reset\(\);[\s\S]*runOpenCodeProbe\(\);/);
   assert.match(source, /getProviders: \(\) => providersRef\.current/);
+  assert.match(source, /providersRef\.current = nextProviders;[\s\S]*setProviders\(nextProviders\);[\s\S]*openCodeBackend\.reset\(\);/);
+  assert.match(source, /providerSensitiveValuesRef\.current = Array\.from\(new Set/);
+});
+
+test('Provider Manager exposes per-model context presets and a custom value path', () => {
+  const source = providerManager();
+  assert.match(source, /OPEN_CODE_CONTEXT_WINDOW_PRESETS/);
+  assert.match(source, /openCodeContextPresetValue/);
+  assert.match(source, /contextCustom/);
+  assert.match(source, /reconcileDraftModelContexts/);
+  assert.match(source, /probeRunRef/);
+  assert.match(source, /setDraft\(\(current\) =>/);
+  assert.match(source, /probeRunRef\.current !== runId/);
+  assert.match(source, /maxHeight: 240, overflowY: 'auto'/);
+});
+
+test('Provider Manager cannot reset OpenCode while a real task is streaming', () => {
+  assert.match(app(), /disabled=\{providerInit\.state !== 'ready' \|\| chatStreaming\}/);
 });
 
 test('Settings makes OpenCode selectable and removes custom Claude/Codex API routes', () => {

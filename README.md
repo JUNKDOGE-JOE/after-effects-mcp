@@ -69,6 +69,7 @@ stdio request queue and forwards MCP responses to the panel host.
 ## Panel capabilities
 
 - `ae_exec` for maintained ExtendScript operations.
+- `ae_execRecover` for retrying a dispatched `ae_exec` failure by its returned id.
 - `ae_nativeExec` for the frozen native AEGP primitives.
 - `ae_previewFrame`, `ae_validateExpressions`, `ae_snapshot`, and checkpoints.
 - Bundled skills plus the local JSX Tool Library.

@@ -40,7 +40,7 @@ Claude Desktop:
 | Area | Tools |
 |---|---|
 | Status | `ae_status` |
-| ExtendScript | `ae_exec` |
+| ExtendScript | `ae_exec`, `ae_execRecover` |
 | Structured reads | `ae_read` |
 | Native AEGP | `ae_nativeExec` |
 | Preview and validation | `ae_previewFrame`, `ae_validateExpressions` |
@@ -56,10 +56,10 @@ state and audit evidence before retrying.
 
 ### `ae_exec` failure recovery
 
-`ae_exec` accepts either new `code` or a six-character `recoveryId`. The input
-schema intentionally does not use a top-level JSON Schema combinator; the host
-validates the two forms at call time. `retryMode` is valid only with a
-`recoveryId` and is either `restore` (the default) or `continue`.
+`ae_exec` accepts only a new script and requires `code`. Recovery is a separate
+`ae_execRecover` call requiring the exact six-character `recoveryId` returned
+by a dispatched `ae_exec` failure. Its optional `retryMode` is either `restore`
+(the default) or `continue`; corrected inline `code` is also optional.
 
 After a dispatched failure, the tool returns the original failure plus an
 absolute editable `scriptPath`, `recoveryId`, `attempt`, checkpoint identity
@@ -76,9 +76,9 @@ host methods are not exposed through interceptable JavaScript prototypes.
 Failures before dispatch, including argument or approval rejection, do not
 create recovery files.
 
-Edit `scriptPath` and call `ae_exec({"recoveryId":"..."})`, or provide the
-corrected script inline as `code`. By default the host restores the checkpoint
-created by the failed call before executing the corrected script. A
+Edit `scriptPath` and call `ae_execRecover({"recoveryId":"..."})`, or provide
+the corrected script inline as `code`. By default the host restores the
+checkpoint created by the failed call before executing the corrected script. A
 `checkpoint_label` must have successfully created that restore point. Without
 one, retry is automatic only when the recorded project revision did not
 change; otherwise the caller must explicitly choose `retryMode:"continue"` or

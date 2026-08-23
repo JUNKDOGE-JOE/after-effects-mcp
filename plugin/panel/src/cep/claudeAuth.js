@@ -85,6 +85,8 @@ export async function probeClaudeLogin({
       return;
     }
 
+    proc.stdout?.setEncoding?.('utf8');
+    proc.stderr?.setEncoding?.('utf8');
     proc.stdout?.on?.('data', (chunk) => {
       stdout = (stdout + String(chunk || '')).slice(-4000);
     });

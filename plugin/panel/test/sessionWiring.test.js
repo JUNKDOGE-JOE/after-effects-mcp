@@ -35,9 +35,16 @@ test('unload flushes first and controlled backend switches guard restored entrie
 
 test('chat screen exposes session history and new-session actions', () => {
   assert.match(CHAT_SCREEN, /icon="history"[\s\S]*?title=\{sessionTitle\}[\s\S]*?onClick=\{onOpenSessions\}/);
-  assert.match(CHAT_SCREEN, /icon="plus"[\s\S]*?onClick=\{onNewSession\}/);
+  assert.match(CHAT_SCREEN, /icon="plus"[\s\S]*?onClick=\{\(\) => onNewSession\(\)\}/);
   assert.match(APP, /sessionTitle=\{sessionTitle\}/);
   assert.match(APP, /onOpenSessions=\{\(\) => setSessionsOpen\(true\)\}/);
+});
+
+test('ChatScreen new-session actions discard component click events', () => {
+  assert.match(CHAT_SCREEN, /icon="plus"[\s\S]*?onClick=\{\(\) => onNewSession\(\)\}/);
+  assert.match(CHAT_SCREEN, /onAction=\{onNoticeAction \|\| \(\(\) => onNewSession\(\)\)\}/);
+  assert.match(CHAT_SCREEN, /onAction=\{attachmentDraft\.dispatchState === 'uncertain' \? \(\) => onNewSession\(\) : null\}/);
+  assert.doesNotMatch(CHAT_SCREEN, /on(?:Click|Action)=\{onNewSession\}/);
 });
 
 test('OpenCode pending probes become retryable and stale rechecks reset idle runtime', () => {
@@ -52,8 +59,25 @@ test('turn progress is reduced in App and rendered below the transcript', () => 
   assert.match(APP, /setTurnStage\(\(current\) => reduceTurnStage\(current, evt,/);
   assert.match(APP, /setTurnStage\('connect'\);[\s\S]*?activeBackend\.sendUser\(turn\)/);
   assert.match(APP, /turnStage=\{turnStage\}[\s\S]*?turnBackend=\{effective\.backend\}/);
-  assert.match(CHAT_SCREEN, /\[entries, streaming, thinking, turnStage\]/);
-  assert.match(CHAT_SCREEN, /streaming && thinking[\s\S]*?: turnStage[\s\S]*?turnProgressText\(turnStage, turnBackend, lang\)/);
+  assert.match(CHAT_SCREEN, /\[entries, streaming, thinking, turnStage, turnProgress\]/);
+  assert.match(CHAT_SCREEN, /streaming && thinking[\s\S]*?turnProgress[\s\S]*?turnProgressText\(turnProgress\?\.stage \|\| turnStage, turnBackend, lang\)/);
+  assert.match(CHAT_SCREEN, /estimatedTokens/);
+  assert.match(CHAT_SCREEN, /progressWarning/);
+  assert.match(APP, /turn-progress-warning/);
+});
+
+test('running session navigation requires confirmation and stops the current task', () => {
+  assert.match(APP, /confirmChatNavigation/);
+  assert.match(APP, /当前任务仍在运行|A task is still running/);
+  assert.match(APP, /activeBackend\?\.stop\(\)/);
+  assert.match(APP, /stopTaskConfirm/);
+});
+
+test('host approval policy sync failure is visible and blocks new sends', () => {
+  assert.match(APP, /hostConversationError/);
+  assert.match(APP, /审批档位未同步|Approval mode is not synced/);
+  assert.match(APP, /composerDisabled[\s\S]*Boolean\(hostConversationError\)/);
+  assert.match(APP, /runHostConversationSync[\s\S]*hostConversation\.updatePolicy/);
 });
 
 test('SessionDrawer uses inline rename and two-step delete without window.confirm', () => {

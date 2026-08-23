@@ -5,8 +5,20 @@
 // trimmed, non-empty line. Handles lines torn across chunks and CRLF.
 export function createLineSplitter(onLine) {
   let buffer = '';
+  const decoder = typeof TextDecoder === 'function' ? new TextDecoder('utf-8') : null;
+  function textFor(chunk) {
+    if (typeof chunk === 'string') return chunk;
+    if (decoder && chunk !== undefined && chunk !== null) {
+      try {
+        // Streaming decode retains an incomplete multibyte sequence until the
+        // next chunk instead of silently replacing it with U+FFFD.
+        return decoder.decode(chunk, { stream: true });
+      } catch {}
+    }
+    return String(chunk || '');
+  }
   return function push(chunk) {
-    buffer += String(chunk || '');
+    buffer += textFor(chunk);
     let index = buffer.indexOf('\n');
     while (index !== -1) {
       const line = buffer.slice(0, index).trim();

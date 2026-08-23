@@ -8,17 +8,25 @@ function createProcess() {
   const exits = [];
   const errors = [];
   const writes = [];
+  const encodings = [];
   let killCount = 0;
   return {
     stdin: { write: (line) => writes.push(line) },
-    stdout: { on: (event, handler) => event === 'data' && stdout.push(handler) },
-    stderr: { on: (event, handler) => event === 'data' && stderr.push(handler) },
+    stdout: {
+      on: (event, handler) => event === 'data' && stdout.push(handler),
+      setEncoding: (value) => encodings.push(['stdout', value]),
+    },
+    stderr: {
+      on: (event, handler) => event === 'data' && stderr.push(handler),
+      setEncoding: (value) => encodings.push(['stderr', value]),
+    },
     on(event, handler) {
       if (event === 'exit') exits.push(handler);
       if (event === 'error') errors.push(handler);
     },
     kill() { killCount += 1; },
     get killCount() { return killCount; },
+    encodings,
     writes,
     emit(message) {
       for (const handler of stdout) handler(`${JSON.stringify(message)}\n`);
@@ -82,10 +90,10 @@ function makeBackend(overrides = {}) {
   };
   const backend = createCodexBackend({
     platform,
-    getModel: () => 'gpt-5.5',
-    getEffort: () => 'high',
-    getFast: () => true,
-    getPermissionMode: () => 'manual',
+    getModel: () => overrides.state?.model || 'gpt-5.5',
+    getEffort: () => overrides.state?.effort ?? 'high',
+    getFast: () => overrides.state?.fast ?? true,
+    getPermissionMode: () => overrides.state?.permissionMode || 'manual',
     getMcpSpec: overrides.getMcpSpec || (async () => ({
       kind: 'http',
       url: 'http://127.0.0.1:11488/mcp/c/codex-token',
@@ -141,6 +149,10 @@ test('Codex starts its CLI app-server with an isolated pre-created CODEX_HOME', 
   const { backend, spawned, mkdirs } = makeBackend();
   try {
     const { thread, turn } = await startTurn(backend, spawned);
+    assert.deepEqual(spawned[0].proc.encodings, [
+      ['stdout', 'utf8'],
+      ['stderr', 'utf8'],
+    ]);
     assert.deepEqual(spawned[0].args, [
       'app-server',
       '-c',
@@ -159,6 +171,38 @@ test('Codex starts its CLI app-server with an isolated pre-created CODEX_HOME', 
     assert.deepEqual(turn.params.input, [{ type: 'text', text: 'hello' }]);
   } finally {
     backend.reset();
+  }
+});
+
+test('Codex serializes every discovered model effort and supported speed tier', async () => {
+  const discovered = [
+    { id: 'gpt-5.6-sol', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], fast: true },
+    { id: 'gpt-5.6-terra', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], fast: true },
+    { id: 'gpt-5.6-luna', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], fast: true },
+    { id: 'gpt-5.5', efforts: ['low', 'medium', 'high', 'xhigh'], fast: true },
+    { id: 'gpt-5.4', efforts: ['low', 'medium', 'high', 'xhigh'], fast: true },
+    { id: 'gpt-5.4-mini', efforts: ['low', 'medium', 'high', 'xhigh'], fast: false },
+    { id: 'gpt-5.3-codex-spark', efforts: ['low', 'medium', 'high', 'xhigh'], fast: false },
+  ];
+
+  for (const model of discovered) {
+    const speedModes = model.fast ? [false, true] : [false];
+    for (const effort of model.efforts) {
+      for (const fast of speedModes) {
+        const h = makeBackend({ state: { model: model.id, effort, fast } });
+        try {
+          const { pending, proc, turn } = await startTurn(h.backend, h.spawned);
+          assert.equal(turn.params.model, model.id, `${model.id}/${effort}/${fast}`);
+          assert.equal(turn.params.effort, effort, `${model.id}/${effort}/${fast}`);
+          if (fast) assert.equal(turn.params.serviceTier, 'priority');
+          else assert.equal(Object.hasOwn(turn.params, 'serviceTier'), false);
+          h.backend.reset();
+          await pending;
+        } finally {
+          h.backend.reset();
+        }
+      }
+    }
   }
 });
 
@@ -223,6 +267,24 @@ test('Codex account probes use the same isolated CLI environment', async () => {
   assert.equal(result.platformId, 'windows-x64');
   assert.equal(spawned[0].options.env.CODEX_HOME, 'C:\\Users\\test\\.ae-mcp\\codex-home');
   assert.equal(mkdirs.length, 1);
+});
+
+test('Codex account probes retain the real model/list data envelope', async () => {
+  const { backend, spawned } = makeBackend();
+  const pending = backend.probeAccount();
+  await flush();
+  const proc = spawned[0].proc;
+  const initialize = parseWrites(proc)[0];
+  proc.emit({ id: initialize.id, result: {} });
+  await flush();
+  const account = parseWrites(proc)[1];
+  proc.emit({ id: account.id, result: { account: { email: 'user@example.test' } } });
+  await flush();
+  const models = parseWrites(proc)[2];
+  proc.emit({ id: models.id, result: { data: [{ id: 'gpt-5.6-luna' }] } });
+
+  const result = await pending;
+  assert.deepEqual(result.models, [{ id: 'gpt-5.6-luna' }]);
 });
 
 test('Codex account probes return isolated-home diagnostics when login is required', async () => {

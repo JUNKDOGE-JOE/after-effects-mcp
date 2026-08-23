@@ -1,8 +1,22 @@
 import { createPlatformAdapter } from './platform/index.js';
+import {
+  OPEN_CODE_DEFAULT_CONTEXT_WINDOW,
+  normalizeOpenCodeContextWindow,
+  openCodeOutputLimit,
+} from '../lib/openCodeModelLimits.js';
+import { openCodeCatalogId } from '../lib/openCodeCatalogId.js';
 
 const CONFIG_FILE = 'opencode-providers.json';
 const AUTH_FILE = 'auth.json';
+// modelContexts is an optional additive field. Keeping v1 means an older panel
+// can still read the provider registry after a rollback; if that old panel
+// saves it, the per-model values fall back to 128K when this build returns.
 const VERSION = 1;
+
+export const OPEN_CODE_CUSTOM_MODEL_LIMIT = Object.freeze({
+  context: OPEN_CODE_DEFAULT_CONTEXT_WINDOW,
+  output: openCodeOutputLimit(OPEN_CODE_DEFAULT_CONTEXT_WINDOW),
+});
 
 function storeError(code, message) {
   const error = new Error(message || code);
@@ -46,7 +60,26 @@ function normalizeModelIds(value) {
   const values = Array.isArray(value) ? value : String(value || '').split(/[\s,]+/);
   const models = values.map((item) => String(item || '').trim()).filter(Boolean);
   if (!models.length) throw storeError('OPENCODE_PROVIDER_INVALID', 'At least one model is required');
+  if (models.some((modelId) => !openCodeCatalogId(modelId))) {
+    throw storeError('OPENCODE_PROVIDER_INVALID', 'Model ID is invalid');
+  }
   return Array.from(new Set(models)).sort();
+}
+
+function normalizeModelContexts(value, modelIds) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const contexts = Object.create(null);
+  try {
+    for (const modelId of modelIds) {
+      const context = Object.prototype.hasOwnProperty.call(source, modelId)
+        ? source[modelId]
+        : undefined;
+      contexts[modelId] = normalizeOpenCodeContextWindow(context);
+    }
+  } catch (error) {
+    throw storeError('OPENCODE_PROVIDER_INVALID', error?.message || 'Model context window is invalid');
+  }
+  return contexts;
 }
 
 function normalizeProvider(value) {
@@ -59,6 +92,7 @@ function normalizeProvider(value) {
   if (value.allowInsecureHttp !== true && normalizeBaseUrl(value.baseUrl).startsWith('http:')) {
     throw storeError('OPENCODE_PROVIDER_INVALID', 'Insecure provider HTTP requires confirmation');
   }
+  const modelIds = normalizeModelIds(value.modelIds || value.modelId);
   return {
     id,
     name,
@@ -69,7 +103,8 @@ function normalizeProvider(value) {
     // unknown-field errors, while /chat/completions served every family).
     protocol: value.protocol === 'openai' ? 'openai' : 'anthropic',
     allowInsecureHttp: value.allowInsecureHttp === true,
-    modelIds: normalizeModelIds(value.modelIds || value.modelId),
+    modelIds,
+    modelContexts: normalizeModelContexts(value.modelContexts, modelIds),
     needsApiKey: value.needsApiKey === true,
   };
 }
@@ -152,7 +187,13 @@ export function openCodeProviderDefinitions(providers) {
       // "/chat/completions") directly to baseURL, so the injected URL must
       // carry the "/v1" segment relay endpoints expect.
       options: { baseURL: canonicalOpenCodeBaseUrl(provider.baseUrl) },
-      models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }])),
+      models: Object.fromEntries(provider.modelIds.map((id) => {
+        const context = provider.modelContexts[id];
+        return [id, {
+          name: id,
+          limit: { context, output: openCodeOutputLimit(context) },
+        }];
+      })),
     };
   }
   return definitions;

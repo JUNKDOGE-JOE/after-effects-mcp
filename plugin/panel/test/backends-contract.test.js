@@ -55,6 +55,7 @@ test('contract event vocabulary retains the public backend events', () => {
     'turn-accepted',
     'session-ref',
     'turn-progress',
+    'turn-progress-warning',
     'text-delta',
     'tool-start',
     'tool-result',

@@ -80,8 +80,8 @@ The following are not adversarial security claims and remain required:
 - approval, pause, and kill-switch controls that reduce operator mistakes.
 
 These controls protect project correctness and normal operation. They do not sandbox a trusted MCP
-caller. In particular, public `ae_exec` accepts full JSX source and therefore sets the authority
-ceiling for the product.
+caller. In particular, public `ae_exec` and corrected-code `ae_execRecover` calls accept full JSX
+source and therefore set the authority ceiling for the product.
 
 ## Release integrity is retained
 

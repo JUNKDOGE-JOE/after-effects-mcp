@@ -9,7 +9,7 @@ function response(value, isError = false) {
   };
 }
 
-test('Tools API maps folded Tool Library semantics to the host 11-tool surface', async () => {
+test('Tools API maps folded Tool Library semantics to the host 12-tool surface', async () => {
   const calls = [];
   const api = createToolsApi({
     async callTool(name, args) {

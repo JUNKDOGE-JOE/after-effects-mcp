@@ -14,7 +14,7 @@ const SORTS = {
     project: ['name', 'type', 'id'],
     comps: ['name', 'type', 'id'],
     layers: ['stackIndex', 'name', 'inPoint', 'outPoint'],
-    properties: ['propertyIndex', 'name', 'matchName'],
+    properties: ['propertyIndex', 'name', 'matchName', 'matchPath'],
     keyframes: ['time'],
     compSettings: [],
 };
@@ -46,26 +46,59 @@ const definition = {
                 description: 'Target view. comp/layer/property selectors and depth/sampleTime are valid only for the target branches that use them.',
             },
             comp: {
+                description: 'Composition selector. Omit it to use the current active composition.',
                 type: 'object',
                 properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string' },
-                    index: { type: 'integer', minimum: 1 },
+                    id: {
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Composition item ID; use exactly one selector field when selecting a composition.',
+                    },
+                    name: {
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Composition name; use exactly one selector field when selecting a composition.',
+                    },
+                    index: {
+                        type: 'integer',
+                        minimum: 1,
+                        description: '1-based composition index; use exactly one selector field when selecting a composition.',
+                    },
                 },
                 additionalProperties: false,
             },
             layer: {
+                description: 'Layer selector. Required only for properties/keyframes; omit it for project, comps, layers, and compSettings.',
                 type: 'object',
                 properties: {
-                    index: { type: 'integer', minimum: 1 },
-                    id: { type: 'string' },
-                    name: { type: 'string' },
+                    index: {
+                        type: 'integer',
+                        minimum: 1,
+                        description: '1-based layer index; use exactly one selector field.',
+                    },
+                    id: {
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Layer ID copied from ae_read output; never pass an empty or invented value.',
+                    },
+                    name: {
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Layer name; use exactly one selector field.',
+                    },
                 },
                 additionalProperties: false,
             },
             property: {
+                description: 'Property selector. For properties, omit it to read the layer root. For keyframes, copy a real matchPath from ae_read output. Never send a placeholder such as "unused".',
                 type: 'object',
-                properties: { matchPath: { type: 'string' } },
+                properties: {
+                    matchPath: {
+                        type: 'string',
+                        minLength: 1,
+                        description: 'Non-empty match-name path copied from ae_read property output.',
+                    },
+                },
                 additionalProperties: false,
             },
             page: {
@@ -79,7 +112,10 @@ const definition = {
             sort: {
                 type: 'object',
                 properties: {
-                    by: { type: 'string' },
+                    by: {
+                        type: 'string',
+                        description: 'Sort field for the selected target: project/comps use name, type, or id; layers use stackIndex, name, inPoint, or outPoint; properties use propertyIndex, name, matchName, or matchPath; keyframes use time.',
+                    },
                     order: { type: 'string', enum: ['asc', 'desc'], default: 'asc' },
                 },
                 additionalProperties: false,
@@ -95,7 +131,12 @@ const definition = {
                 },
                 additionalProperties: false,
             },
-            depth: { type: 'integer', minimum: 1, maximum: 8, default: 2 },
+            depth: {
+                type: 'integer',
+                minimum: 1,
+                maximum: 8,
+                description: 'Property-tree depth. Use only when target is properties; omit it for every other target.',
+            },
             sampleTime: { type: 'number', description: 'Seconds; valid only for properties.' },
             timeout_sec: { type: 'number', minimum: 1, maximum: 120, default: 30 },
         },
@@ -116,6 +157,108 @@ function has(object, key) {
 
 function isObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+// Some OpenAI-compatible tool callers materialize every optional schema field
+// and fill target-inapplicable branches with placeholders. Keep the public flat
+// schema (top-level combinators are not portable to every provider), but remove
+// values that cannot affect the selected read view before enforcing the branch's
+// meaningful constraints.
+function normalizeCompSelector(value) {
+    if (!isObject(value)) return value;
+    const keys = Object.keys(value);
+    if (keys.length <= 1 || keys.some(function (key) { return ['id', 'name', 'index'].indexOf(key) === -1; })) return value;
+    if (typeof value.id === 'string' && /^[1-9][0-9]*$/.test(value.id)) return { id: value.id };
+    if (typeof value.name === 'string' && value.name.length > 0) return { name: value.name };
+    if (Number.isSafeInteger(value.index) && value.index > 0) return { index: value.index };
+    if (typeof value.id === 'string' && value.id.length > 0) return { id: value.id };
+    return value;
+}
+
+function normalizeLayerSelector(value) {
+    if (!isObject(value)) return value;
+    const keys = Object.keys(value);
+    if (keys.length <= 1 || keys.some(function (key) { return ['id', 'name', 'index'].indexOf(key) === -1; })) return value;
+    if (typeof value.id === 'string' && /^[1-9][0-9]*$/.test(value.id)) return { id: value.id };
+    if (value.id === 'unused' && value.name === 'unused' && Number.isSafeInteger(value.index) && value.index > 0) {
+        return { index: value.index };
+    }
+    if (typeof value.name === 'string' && value.name.length > 0 && value.name !== 'unused') return { name: value.name };
+    if (Number.isSafeInteger(value.index) && value.index > 0) return { index: value.index };
+    return value;
+}
+
+function isUnusedPropertyPlaceholder(value) {
+    return isObject(value)
+        && Object.keys(value).length === 1
+        && value.matchPath === 'unused';
+}
+
+function isLunaUnusedLayerFingerprint(value) {
+    return isObject(value)
+        && Object.keys(value).length === 3
+        && Object.keys(value).every(function (key) { return ['id', 'name', 'index'].indexOf(key) !== -1; })
+        && value.id === 'unused'
+        && value.name === 'unused'
+        && Number.isSafeInteger(value.index)
+        && value.index > 0;
+}
+
+function compactNoopFilter(value) {
+    if (!isObject(value)) return value;
+    const stringFilters = ['nameContains', 'type', 'matchNamePrefix'];
+    const booleanFilters = ['enabledOnly', 'timeVaryingOnly'];
+    const compact = {};
+    const keys = Object.keys(value);
+    for (let i = 0; i < keys.length; i += 1) {
+        const key = keys[i];
+        if (stringFilters.indexOf(key) !== -1 && value[key] === '') continue;
+        if (booleanFilters.indexOf(key) !== -1 && value[key] === false) continue;
+        compact[key] = value[key];
+    }
+    return compact;
+}
+
+function normalizeArgs(args) {
+    if (!isObject(args)) return args;
+    const normalized = Object.assign({}, args);
+    const target = normalized.target;
+    if (TARGETS.indexOf(target) === -1) return normalized;
+
+    if (['project', 'comps'].indexOf(target) !== -1) delete normalized.comp;
+    else if (normalized.comp !== undefined) normalized.comp = normalizeCompSelector(normalized.comp);
+
+    if (['properties', 'keyframes'].indexOf(target) === -1) {
+        delete normalized.layer;
+        delete normalized.property;
+    } else {
+        const dropUnusedProperty = target === 'properties'
+            && isUnusedPropertyPlaceholder(normalized.property)
+            && isLunaUnusedLayerFingerprint(normalized.layer);
+        if (normalized.layer !== undefined) normalized.layer = normalizeLayerSelector(normalized.layer);
+        if (dropUnusedProperty) delete normalized.property;
+    }
+    if (target !== 'properties') {
+        delete normalized.depth;
+        delete normalized.sampleTime;
+    }
+
+    if (target === 'compSettings') {
+        delete normalized.page;
+        delete normalized.sort;
+        delete normalized.filter;
+        return normalized;
+    }
+
+    if (normalized.filter !== undefined) normalized.filter = compactNoopFilter(normalized.filter);
+    if (isObject(normalized.sort)
+        && normalized.sort.by === 'index'
+        && Object.keys(normalized.sort).every(function (key) { return ['by', 'order'].indexOf(key) !== -1; })) {
+        const naturalSort = { layers: 'stackIndex', properties: 'propertyIndex', keyframes: 'time' }[target];
+        if (naturalSort) normalized.sort = Object.assign({}, normalized.sort, { by: naturalSort });
+        else delete normalized.sort;
+    }
+    return normalized;
 }
 
 function fail(error) {
@@ -278,19 +421,20 @@ function validateResult(target, value) {
 }
 
 async function call(args, context, deps) {
-    const validation = validateArgs(args);
+    const requestArgs = normalizeArgs(args);
+    const validation = validateArgs(requestArgs);
     if (validation) return fail(validation);
-    const target = args.target;
+    const target = requestArgs.target;
     const options = {
         target: target,
-        comp: args.comp || null,
-        layer: args.layer || null,
-        property: args.property || null,
-        page: { offset: args.page && args.page.offset !== undefined ? args.page.offset : 0, limit: args.page && args.page.limit !== undefined ? args.page.limit : 50 },
-        sort: { by: args.sort ? (args.sort.by || null) : null, order: args.sort && args.sort.order ? args.sort.order : 'asc' },
-        filter: args.filter || {},
-        depth: args.depth === undefined ? 2 : args.depth,
-        sampleTime: args.sampleTime === undefined ? null : args.sampleTime,
+        comp: requestArgs.comp || null,
+        layer: requestArgs.layer || null,
+        property: requestArgs.property || null,
+        page: { offset: requestArgs.page && requestArgs.page.offset !== undefined ? requestArgs.page.offset : 0, limit: requestArgs.page && requestArgs.page.limit !== undefined ? requestArgs.page.limit : 50 },
+        sort: { by: requestArgs.sort ? (requestArgs.sort.by || null) : null, order: requestArgs.sort && requestArgs.sort.order ? requestArgs.sort.order : 'asc' },
+        filter: requestArgs.filter || {},
+        depth: requestArgs.depth === undefined ? 2 : requestArgs.depth,
+        sampleTime: requestArgs.sampleTime === undefined ? null : requestArgs.sampleTime,
     };
     let code;
     try {
@@ -301,7 +445,7 @@ async function call(args, context, deps) {
     try {
         const request = {
             code: code,
-            timeoutMs: (args.timeout_sec === undefined ? 30 : args.timeout_sec) * 1000,
+            timeoutMs: (requestArgs.timeout_sec === undefined ? 30 : requestArgs.timeout_sec) * 1000,
             client: context && context.session ? context.session.clientName : 'mcp:ae_read',
             nativeProjectGraphEffect: 'preserve',
         };
@@ -331,4 +475,4 @@ async function call(args, context, deps) {
     }
 }
 
-module.exports = { definition, call, renderTemplate, validateArgs, readTemplate, TARGETS };
+module.exports = { definition, call, renderTemplate, validateArgs, normalizeArgs, readTemplate, TARGETS };

@@ -2,7 +2,22 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { buildTools, noTopLevelCombinator } = require('./tools');
+const { assertPatternDescriptions, buildTools, noTopLevelCombinator } = require('./tools');
+
+test('MCP input-schema patterns must explain their value constraint', () => {
+    assert.doesNotThrow(function () {
+        assertPatternDescriptions({
+            type: 'object',
+            properties: { id: { type: 'string', pattern: '^[a-z]+$', description: 'Lowercase ID.' } },
+        }, 'fixture', 'inputSchema');
+    });
+    assert.throws(function () {
+        assertPatternDescriptions({
+            type: 'object',
+            properties: { id: { type: 'string', pattern: '^[a-z]+$' } },
+        }, 'fixture', 'inputSchema');
+    }, /inputSchema\.properties\.id/);
+});
 
 test('tools/list uses top-level JSON-schema object forms only', () => {
     const registry = buildTools({
@@ -14,7 +29,7 @@ test('tools/list uses top-level JSON-schema object forms only', () => {
     });
     const tools = registry.list();
     assert.deepEqual(tools.map(function (tool) { return tool.name; }), [
-        'ae_status', 'ae_exec', 'ae_previewFrame', 'ae_read', 'ae_checkpoint',
+        'ae_status', 'ae_exec', 'ae_execRecover', 'ae_previewFrame', 'ae_read', 'ae_checkpoint',
         'ae_revert', 'ae_validateExpressions', 'ae_nativeExec', 'ae_toolSearch',
         'ae_toolUse', 'ae_skillUse',
     ]);
@@ -22,7 +37,15 @@ test('tools/list uses top-level JSON-schema object forms only', () => {
         assert.equal(tool.inputSchema.type, 'object');
         assert.equal(noTopLevelCombinator(tool.inputSchema), true);
     });
+    assert.ok(
+        Buffer.byteLength(JSON.stringify(tools), 'utf8') < 20000,
+        'the complete advertised tool surface must fit the provider replay budget',
+    );
     const exec = tools.find(function (tool) { return tool.name === 'ae_exec'; });
+    const recover = tools.find(function (tool) { return tool.name === 'ae_execRecover'; });
+    assert.deepEqual(exec.inputSchema.required, ['code']);
+    assert.equal(Object.prototype.hasOwnProperty.call(exec.inputSchema.properties, 'recoveryId'), false);
+    assert.deepEqual(recover.inputSchema.required, ['recoveryId']);
     assert.deepEqual(exec.outputSchema.properties.contentType.enum, ['text', 'json']);
     assert.match(exec.description, /contentType/);
 });

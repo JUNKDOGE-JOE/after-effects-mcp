@@ -5,8 +5,10 @@ import { readFileSync } from 'node:fs';
 import {
   CLAUDE_MINIMUM_VERSION,
   createClaudeAgentBackend,
+  CLAUDE_NO_PROGRESS_WARNING_MS,
   resolveClaudeCli,
 } from '../src/cep/claudeAgentBackend.js';
+import { CLAUDE_MODELS } from '../src/lib/backendCapabilities.js';
 
 const SPIKE_ROOT = new URL('./fixtures/claude-cli-spike/', import.meta.url);
 
@@ -34,6 +36,9 @@ class FakeProcess extends EventEmitter {
     super();
     this.stdout = new EventEmitter();
     this.stderr = new EventEmitter();
+    this.encodings = [];
+    this.stdout.setEncoding = (value) => { this.encodings.push(['stdout', value]); };
+    this.stderr.setEncoding = (value) => { this.encodings.push(['stderr', value]); };
     this.stdinLines = [];
     this.killCount = 0;
     this.stdin = {
@@ -186,6 +191,9 @@ function makeHarness(overrides = {}) {
     getLang: overrides.getLang,
     lang: overrides.lang || 'en',
     now: overrides.now || (() => 100),
+    setTimeoutImpl: overrides.setTimeoutImpl,
+    clearTimeoutImpl: overrides.clearTimeoutImpl,
+    noProgressWarningMs: overrides.noProgressWarningMs,
     env: overrides.env,
     spawnImpl: overrides.spawnImpl,
   });
@@ -295,6 +303,18 @@ test('turn round-trip uses real stream-json wire and keeps one process', async (
   await second;
 });
 
+test('Claude decodes both child-process streams as UTF-8', async () => {
+  const h = makeHarness();
+  const run = h.backend.sendUser('utf8');
+  await flush();
+  assert.deepEqual(h.processes[0].encodings, [
+    ['stdout', 'utf8'],
+    ['stderr', 'utf8'],
+  ]);
+  finishTurn(h.processes[0]);
+  await run;
+});
+
 test('Claude reports spawn and dispatch before output and omits spawn on a warm turn', async () => {
   const h = makeHarness();
   const first = h.backend.sendUser({ turnId: 'turn-progress-1', text: 'hello', attachments: [] });
@@ -326,6 +346,67 @@ test('Claude reports spawn and dispatch before output and omits spawn on a warm 
     ['dispatch'],
   );
   assert.equal(h.processes.length, 1);
+});
+
+test('Claude thinking_tokens emits estimated tokens and elapsed turn progress', async () => {
+  let clock = 1000;
+  const h = makeHarness({ now: () => clock });
+  const run = h.backend.sendUser({ turnId: 'turn-thinking-progress', text: 'think', attachments: [] });
+  await flush();
+
+  clock = 1375;
+  emitWire(h.processes[0], {
+    type: 'system',
+    subtype: 'thinking_tokens',
+    estimated_tokens: 42,
+  });
+
+  assert.deepEqual(h.events.find((event) => event.type === 'turn-progress' && event.stage === 'thinking'), {
+    type: 'turn-progress',
+    turnId: 'turn-thinking-progress',
+    stage: 'thinking',
+    estimatedTokens: 42,
+    elapsedMs: 375,
+  });
+  finishTurn(h.processes[0]);
+  await run;
+});
+
+test('Claude soft watchdog warns once after no progress without killing or retrying', async () => {
+  let clock = 0;
+  let watchdog;
+  const h = makeHarness({
+    now: () => clock,
+    noProgressWarningMs: CLAUDE_NO_PROGRESS_WARNING_MS,
+    setTimeoutImpl: (callback) => {
+      watchdog = callback;
+      return watchdog;
+    },
+    clearTimeoutImpl: () => {},
+  });
+  const run = h.backend.sendUser({ turnId: 'turn-watchdog', text: 'long task', attachments: [] });
+  await flush();
+  assert.equal(typeof watchdog, 'function');
+
+  clock = CLAUDE_NO_PROGRESS_WARNING_MS;
+  watchdog();
+  assert.deepEqual(h.events.find((event) => event.type === 'turn-progress-warning'), {
+    type: 'turn-progress-warning',
+    turnId: 'turn-watchdog',
+    elapsedMs: CLAUDE_NO_PROGRESS_WARNING_MS,
+    warningMs: CLAUDE_NO_PROGRESS_WARNING_MS,
+  });
+  assert.equal(h.processes[0].killCount, 0);
+  assert.equal(h.processes.length, 1);
+
+  emitWire(h.processes[0], {
+    type: 'system',
+    subtype: 'thinking_tokens',
+    estimated_tokens: 1,
+  });
+  assert.equal(h.events.filter((event) => event.type === 'turn-progress-warning').length, 1);
+  finishTurn(h.processes[0]);
+  await run;
 });
 
 test('spawn argv carries isolation, agents, approvals, effort, and MCP config', async () => {
@@ -386,6 +467,22 @@ test('spawn argv carries isolation, agents, approvals, effort, and MCP config', 
   });
   finishTurn(h.processes[0]);
   await run;
+});
+
+test('Claude serializes every advertised model and effort pair', async () => {
+  for (const model of CLAUDE_MODELS) {
+    for (const effort of model.effortLevels) {
+      const h = makeHarness({ state: { model: model.id, effort } });
+      const run = h.backend.sendUser('reply OK');
+      await flush();
+      const args = h.spawns[0].args;
+      assert.equal(args[args.indexOf('--model') + 1], model.id, `${model.id}/${effort}`);
+      assert.equal(args[args.indexOf('--effort') + 1], effort, `${model.id}/${effort}`);
+      finishTurn(h.processes[0]);
+      await run;
+      h.backend.reset();
+    }
+  }
 });
 
 test('real assistant and user wire map AE tool start and result events', async () => {

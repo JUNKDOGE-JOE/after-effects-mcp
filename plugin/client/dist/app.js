@@ -24330,6 +24330,23 @@ When you are done, remind me of two things: MCP tools load only in a new session
       return { label, description: asText(option2.description) };
     }).filter(Boolean);
   }
+  function questionsFromUserInput(params) {
+    const input = params && (params.input || params) || {};
+    const list = Array.isArray(input.questions) ? input.questions : [];
+    return list.map((q, index) => {
+      const options = normalizedOptions(q && q.options);
+      return {
+        id: `q${index}`,
+        key: asText(q && q.question) || asText(q && q.header) || "question",
+        prompt: asText(q && q.question) || asText(q && q.header),
+        header: asText(q && q.header),
+        options,
+        multiSelect: Boolean(q && q.multiSelect),
+        allowCustom: true,
+        required: true
+      };
+    });
+  }
   function questionsFromCodexUserInput(params) {
     const list = Array.isArray(params && params.questions) ? params.questions : [];
     return list.map((q, index) => {
@@ -25836,6 +25853,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     RPC_TIMEOUT: entry("RPC_TIMEOUT", "network", "\u8BF7\u6C42\u7B49\u5F85\u8D85\u65F6\uFF1B\u8BF7\u68C0\u67E5\u901A\u9053\u8FDB\u7A0B\u4E0E\u7F51\u7EDC\u540E\u518D\u8BD5\u3002", "The request timed out; check the channel process and network before retrying."),
     UPSTREAM_HTTP: entry("UPSTREAM_HTTP_<status>", "network", "\u4E0A\u6E38\u8FD4\u56DE\u4E86 HTTP \u9519\u8BEF\uFF1B\u8BF7\u6309\u72B6\u6001\u7801\u68C0\u67E5\u767B\u5F55\u3001\u989D\u5EA6\u6216\u4E2D\u8F6C\u670D\u52A1\u3002", "The upstream returned an HTTP error; use the status code to check auth, quota, or relay service."),
     UPSTREAM_ERROR: entry("UPSTREAM_ERROR", "model", "\u4E0A\u6E38\u6216\u6A21\u578B\u8FD4\u56DE\u5931\u8D25\uFF1B\u8BF7\u68C0\u67E5\u6A21\u578B\u53EF\u7528\u6027\u4E0E\u670D\u52A1\u72B6\u6001\u3002", "The upstream or model failed; check model availability and service status."),
+    UPSTREAM_CONNECTION_CLOSED: entry("UPSTREAM_CONNECTION_CLOSED", "network", "\u4E0A\u6E38\u8FDE\u63A5\u5728\u8FD4\u56DE\u9519\u8BEF\u65F6\u88AB\u4E2D\u65AD\uFF1B\u672C\u8F6E\u4E0D\u4F1A\u81EA\u52A8\u91CD\u53D1\uFF0C\u4E0B\u4E00\u6761\u6D88\u606F\u5C06\u4F7F\u7528\u65B0\u4F1A\u8BDD\u3002", "The upstream connection closed while returning an error. This turn is not retried automatically; the next message uses a fresh session."),
     EVENT_STREAM_FAILED: entry("EVENT_STREAM_FAILED", "network", "\u4E8B\u4EF6\u6D41\u5DF2\u65AD\u5F00\uFF1B\u8BF7\u68C0\u67E5 OpenCode \u8FDB\u7A0B\u4E0E\u672C\u5730\u7F51\u7EDC\u3002", "The event stream disconnected; check the OpenCode process and local network."),
     TURN_INPUT_INVALID: entry("TURN_INPUT_INVALID", "attachment", "\u8BF7\u79FB\u9664\u4E0D\u53EF\u7528\u9644\u4EF6\u6216\u91CD\u65B0\u9009\u62E9\u6587\u4EF6\u3002", "Remove unavailable attachments or select the files again."),
     TURN_ABORTED: entry("TURN_ABORTED", "aborted", "\u672C\u56DE\u5408\u5DF2\u505C\u6B62\uFF0C\u53EF\u5728\u786E\u8BA4\u6CA1\u6709\u672A\u51B3\u5199\u5165\u540E\u91CD\u65B0\u53D1\u9001\u3002", "The turn was stopped; resend after confirming there is no unresolved write."),
@@ -25909,6 +25927,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const errorCode = error && error.code;
     const combined = [
       textOf(error),
+      textOf(input.upstreamText),
       textOf(input.stderrTail),
       textOf(input.message)
     ].filter(Boolean).join("\n");
@@ -25916,6 +25935,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
     if (httpStatus) {
       const code = `UPSTREAM_HTTP_${httpStatus}`;
       return { code, kind: codeKind(code) };
+    }
+    if (/(?:socket|connection).{0,32}(?:closed|reset|terminated)|ECONNRESET|UND_ERR_SOCKET/i.test(combined)) {
+      return { code: "UPSTREAM_CONNECTION_CLOSED", kind: "network" };
     }
     if (/\b(?:cancelled|canceled|interrupted)\b/i.test(String(errorCode || "")) || /\b(?:cancelled|canceled|interrupted)\b/i.test(combined)) {
       return { code: "CANCELLED", kind: "backend" };
@@ -26492,6 +26514,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
     if (stage === "dispatch") {
       return zh ? "\u7B49\u5F85\u6A21\u578B\u56DE\u590D\u2026" : "Waiting for the model\u2026";
     }
+    if (stage === "thinking") {
+      return zh ? "\u6A21\u578B\u601D\u8003\u4E2D\u2026" : "Model is thinking\u2026";
+    }
     return "";
   }
 
@@ -26517,6 +26542,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
       failed: "\u5931\u8D25",
       awaiting: "\u7B49\u5F85\u6279\u51C6",
       thinking: "\u601D\u8003\u4E2D\u2026",
+      progressTokens: (tokens) => `\u9884\u8BA1 ${tokens} tokens`,
+      progressElapsed: (seconds) => `\u8017\u65F6 ${seconds}s`,
+      progressWarning: "\u8D85\u8FC7 3 \u5206\u949F\u6CA1\u6709\u65B0\u7684\u8FDB\u5EA6\uFF0C\u4EFB\u52A1\u4ECD\u5728\u8FD0\u884C\uFF1B\u4E0D\u4F1A\u81EA\u52A8\u505C\u6B62\u6216\u91CD\u8BD5\u3002",
       attachmentAdd: "\u6DFB\u52A0\u6587\u4EF6",
       attachmentDrop: "\u62D6\u653E\u6216\u7C98\u8D34\u6587\u4EF6",
       attachmentStaging: "\u6B63\u5728\u51C6\u5907\u2026",
@@ -26545,6 +26573,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
       failed: "Failed",
       awaiting: "Awaiting approval",
       thinking: "Thinking\u2026",
+      progressTokens: (tokens) => `~${tokens} tokens`,
+      progressElapsed: (seconds) => `${seconds}s elapsed`,
+      progressWarning: "No new progress for 3 minutes. The task is still running; it will not be stopped or retried automatically.",
       attachmentAdd: "Add files",
       attachmentDrop: "Drop or paste files",
       attachmentStaging: "Preparing\u2026",
@@ -26664,12 +26695,16 @@ When you are done, remind me of two things: MCP tools load only in a new session
       onSelect: () => onSelect && onSelect(item.id)
     }));
   }
+  function progressSeconds(ms) {
+    return Math.max(0, Math.round(Number(ms || 0) / 1e3));
+  }
   function ChatScreen({
     lang = "zh",
     entries = [],
     streaming = false,
     thinking = false,
     turnStage = null,
+    turnProgress = null,
     turnBackend = "subscription",
     sessionTitle = "",
     onOpenSessions,
@@ -26754,7 +26789,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     import_react39.default.useEffect(() => {
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
-    }, [entries, streaming, thinking, turnStage]);
+    }, [entries, streaming, thinking, turnStage, turnProgress]);
     import_react39.default.useEffect(() => {
       if (typeof ResizeObserver !== "function") return void 0;
       if (!layoutRef.current || !footerRef.current) return void 0;
@@ -26815,7 +26850,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: sessionTitle })
           }
         ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { variant: "ghost", size: "sm", icon: "plus", onClick: onNewSession, children: t.newSession })
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { variant: "ghost", size: "sm", icon: "plus", onClick: () => onNewSession(), children: t.newSession })
       ] }) : null,
       /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
         !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(import_react39.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
@@ -26843,12 +26878,23 @@ When you are done, remind me of two things: MCP tools load only in a new session
           ))
         ] }) : null,
         entries.map((entry2) => /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Entry, { entry: entry2, lang, onApprove, onAnswerQuestion }, entry2.sid || entry2.id)),
-        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+        streaming && thinking && !turnProgress ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Spinner, { size: 12 }),
           /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: t.thinking })
-        ] }) : turnStage ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Spinner, { size: 12 }),
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: turnProgressText(turnStage, turnBackend, lang) })
+        ] }) : turnStage || turnProgress ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Spinner, { size: 12 }),
+            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: turnProgressText((turnProgress == null ? void 0 : turnProgress.stage) || turnStage, turnBackend, lang) }),
+            (turnProgress == null ? void 0 : turnProgress.estimatedTokens) !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { children: [
+              "\xB7 ",
+              t.progressTokens(turnProgress.estimatedTokens)
+            ] }) : null,
+            (turnProgress == null ? void 0 : turnProgress.elapsedMs) !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { children: [
+              "\xB7 ",
+              t.progressElapsed(progressSeconds(turnProgress.elapsedMs))
+            ] }) : null
+          ] }),
+          (turnProgress == null ? void 0 : turnProgress.warning) ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { color: "var(--warning, var(--text-secondary))" }, children: t.progressWarning }) : null
         ] }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
@@ -26862,12 +26908,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || (() => onNewSession()) }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
             Notice,
             {
               text: attachmentDraft.dispatchState === "uncertain" ? t.uncertainTurn : sendError.message,
               actionLabel: attachmentDraft.dispatchState === "uncertain" ? t.newSession : null,
-              onAction: attachmentDraft.dispatchState === "uncertain" ? onNewSession : null
+              onAction: attachmentDraft.dispatchState === "uncertain" ? () => onNewSession() : null
             }
           ) : null,
           height: composerSize.height,
@@ -27482,7 +27528,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
   function modelListArray(modelListResult) {
     if (Array.isArray(modelListResult)) return modelListResult;
-    return Array.isArray(modelListResult == null ? void 0 : modelListResult.models) ? modelListResult.models : [];
+    if (Array.isArray(modelListResult == null ? void 0 : modelListResult.models)) return modelListResult.models;
+    return Array.isArray(modelListResult == null ? void 0 : modelListResult.data) ? modelListResult.data : [];
   }
   function codexDescriptorFromModels(modelListResult) {
     var _a;
@@ -27523,14 +27570,14 @@ When you are done, remind me of two things: MCP tools load only in a new session
       label: "OpenCode",
       models: [
         {
-          id: "north-mini-code-free",
-          label: "North Mini Code Free",
+          id: "hy3-free",
+          label: "HY 3 Free",
           effortLevels: [],
           cost: 1,
           adaptive: false
         }
       ],
-      defaultModelId: "north-mini-code-free",
+      defaultModelId: "hy3-free",
       defaultEffort: null,
       supportsFast: () => false,
       approvalModes: APPROVAL_MODES,
@@ -27580,7 +27627,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       }
     }
     if (!models.length) return openCodeStaticDescriptor();
-    const defaultModel = models.find((model) => model.id === "north-mini-code-free") || models.find((model) => model.id.endsWith("/north-mini-code-free")) || models[0];
+    const defaultModel = models.find((model) => model.id === "hy3-free") || models.find((model) => model.id.endsWith("/hy3-free")) || models[0];
     return {
       id: "opencode",
       label: "OpenCode",
@@ -28063,8 +28110,19 @@ When you are done, remind me of two things: MCP tools load only in a new session
   init_cep_runtime_inject();
   function createLineSplitter(onLine) {
     let buffer = "";
+    const decoder = typeof TextDecoder === "function" ? new TextDecoder("utf-8") : null;
+    function textFor(chunk) {
+      if (typeof chunk === "string") return chunk;
+      if (decoder && chunk !== void 0 && chunk !== null) {
+        try {
+          return decoder.decode(chunk, { stream: true });
+        } catch {
+        }
+      }
+      return String(chunk || "");
+    }
     return function push(chunk) {
-      buffer += String(chunk || "");
+      buffer += textFor(chunk);
       let index = buffer.indexOf("\n");
       while (index !== -1) {
         const line = buffer.slice(0, index).trim();
@@ -28359,6 +28417,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/cep/claudeAgentBackend.js
   var CLAUDE_MINIMUM_VERSION = "2.0.0";
+  var CLAUDE_NO_PROGRESS_WARNING_MS = 18e4;
   var STDERR_TAIL_LIMIT = 4096;
   var DISALLOWED_TOOLS = [
     "Bash",
@@ -28627,6 +28686,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     fsImpl,
     tempDirName = randomTempName,
     now = Date.now,
+    setTimeoutImpl = setTimeout,
+    clearTimeoutImpl = clearTimeout,
+    noProgressWarningMs = CLAUDE_NO_PROGRESS_WARNING_MS,
     env
   } = {}) {
     const adapter = platform || createPlatformAdapter();
@@ -28666,6 +28728,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let stderrDeltaRedactor = createDeltaRedactor([], () => {
     });
     let processStderrAttachmentPaths = [];
+    let noProgressWarningTimer = null;
+    let progressStartedAt = null;
+    let progressLastAt = null;
+    let progressWarningEmitted = false;
     const pendingApprovals = /* @__PURE__ */ new Map();
     const pendingQuestions = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
@@ -28688,12 +28754,47 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         ]));
       }
     }
-    function emitTurnProgress(stage) {
+    function clearNoProgressWarning() {
+      if (noProgressWarningTimer !== null) {
+        clearTimeoutImpl(noProgressWarningTimer);
+        noProgressWarningTimer = null;
+      }
+    }
+    function armNoProgressWarning() {
+      clearNoProgressWarning();
+      if (!activeRun || !activeTurn || progressWarningEmitted) return;
+      noProgressWarningTimer = setTimeoutImpl(() => {
+        noProgressWarningTimer = null;
+        if (!activeRun || !activeTurn || progressWarningEmitted) return;
+        const current = now();
+        const elapsedSinceProgress = Math.max(0, current - (progressLastAt != null ? progressLastAt : current));
+        if (elapsedSinceProgress < noProgressWarningMs) {
+          armNoProgressWarning();
+          return;
+        }
+        progressWarningEmitted = true;
+        emit({
+          type: "turn-progress-warning",
+          ...activeTurn.turnId ? { turnId: activeTurn.turnId } : {},
+          elapsedMs: Math.max(0, current - (progressStartedAt != null ? progressStartedAt : current)),
+          warningMs: noProgressWarningMs
+        });
+      }, Math.max(0, noProgressWarningMs));
+    }
+    function touchProgress() {
       if (!activeRun || !activeTurn) return;
+      if (progressWarningEmitted) progressWarningEmitted = false;
+      progressLastAt = now();
+      armNoProgressWarning();
+    }
+    function emitTurnProgress(stage, details = {}) {
+      if (!activeRun || !activeTurn) return;
+      touchProgress();
       emit({
         type: "turn-progress",
         ...activeTurn.turnId ? { turnId: activeTurn.turnId } : {},
-        stage
+        stage,
+        ...details
       });
     }
     function resetProviderDeltaRedactor() {
@@ -28794,6 +28895,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
     }
     function finishActive() {
+      clearNoProgressWarning();
       const resolve = activeResolve;
       activeResolve = null;
       activeRun = null;
@@ -28802,6 +28904,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       activeTurnAccepted = false;
       activeTurnDispatched = false;
       activeSawTextDelta = false;
+      progressStartedAt = null;
+      progressLastAt = null;
+      progressWarningEmitted = false;
       startedTools.clear();
       setActiveAttachmentPaths([]);
       if (resolve) resolve();
@@ -28860,6 +28965,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       clearStderr = false
     } = {}) {
       runtimeGeneration += 1;
+      clearNoProgressWarning();
       drainControls("Claude CLI session ended.");
       setThinking(false);
       const current = proc;
@@ -28882,6 +28988,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       if (finishRun) finishActive();
       if (clearStderr) stderrTail = "";
+      progressStartedAt = activeRun ? now() : null;
+      progressLastAt = progressStartedAt;
+      progressWarningEmitted = false;
       clearProviderSensitiveValues();
     }
     function handleProcessFailure(target, generation, { message, classificationInput, detail }) {
@@ -29100,6 +29209,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       var _a;
       const event = message == null ? void 0 : message.event;
       if (!event) return;
+      touchProgress();
       if (event.type === "content_block_start") {
         const type = (_a = event.content_block) == null ? void 0 : _a.type;
         if (type === "thinking") setThinking(true);
@@ -29180,6 +29290,16 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       if (message.type === "system" && message.subtype === "init") {
         markTurnAccepted();
+        return;
+      }
+      if (message.type === "system" && message.subtype === "thinking_tokens") {
+        const estimatedTokens = Number(message.estimated_tokens);
+        if (Number.isFinite(estimatedTokens) && estimatedTokens >= 0) {
+          emitTurnProgress("thinking", {
+            estimatedTokens: Math.floor(estimatedTokens),
+            elapsedMs: Math.max(0, now() - (progressStartedAt != null ? progressStartedAt : now()))
+          });
+        }
         return;
       }
       if (message.type === "stream_event") {
@@ -29286,7 +29406,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (proc && processSettings === settingsIdentity) return true;
       if (startPromise) return startPromise;
       const pendingStart = (async () => {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
         const resolvedLang = currentLang();
         const resolved = await resolveClaude({ platform: adapter, env, lang: resolvedLang });
         if (activeRun === null) throw cancelledStartError();
@@ -29345,19 +29465,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         const generation = runtimeGeneration;
         proc = spawnedProc;
         processSettings = settingsIdentity;
+        (_b = (_a = spawnedProc.stdout) == null ? void 0 : _a.setEncoding) == null ? void 0 : _b.call(_a, "utf8");
+        (_d = (_c = spawnedProc.stderr) == null ? void 0 : _c.setEncoding) == null ? void 0 : _d.call(_c, "utf8");
         const reader = createNdjsonReader((message) => {
           if (generation !== runtimeGeneration || proc !== spawnedProc) return;
           handleCliMessage(message);
         });
-        (_b = (_a = spawnedProc.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", reader);
-        (_d = (_c = spawnedProc.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", (chunk) => {
+        (_f = (_e = spawnedProc.stdout) == null ? void 0 : _e.on) == null ? void 0 : _f.call(_e, "data", reader);
+        (_h = (_g = spawnedProc.stderr) == null ? void 0 : _g.on) == null ? void 0 : _h.call(_g, "data", (chunk) => {
           if (generation !== runtimeGeneration || proc !== spawnedProc) return;
           stderrDeltaRedactor.feed(chunk);
         });
-        (_e = spawnedProc.on) == null ? void 0 : _e.call(spawnedProc, "exit", (code, signal) => {
+        (_i = spawnedProc.on) == null ? void 0 : _i.call(spawnedProc, "exit", (code, signal) => {
           handleExit(spawnedProc, generation, code, signal);
         });
-        (_f = spawnedProc.on) == null ? void 0 : _f.call(spawnedProc, "error", (error) => {
+        (_j = spawnedProc.on) == null ? void 0 : _j.call(spawnedProc, "error", (error) => {
           handleProcError(spawnedProc, generation, error);
         });
         return true;
@@ -29513,6 +29635,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       activeTurnAccepted = false;
       activeTurnDispatched = false;
       resumeRetryUsed = false;
+      progressStartedAt = now();
+      progressLastAt = progressStartedAt;
+      progressWarningEmitted = false;
+      clearNoProgressWarning();
       setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
       resetProviderDeltaRedactor();
       activeRun = new Promise((resolve) => {
@@ -29602,7 +29728,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       };
     }
     return await new Promise((resolve) => {
-      var _a, _b;
+      var _a, _b, _c, _d, _e, _f;
       let settled = false;
       let stdout = "";
       let stderr = "";
@@ -29663,7 +29789,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         });
         return;
       }
-      (_b = (_a = proc.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", (chunk) => {
+      (_b = (_a = proc.stdout) == null ? void 0 : _a.setEncoding) == null ? void 0 : _b.call(_a, "utf8");
+      (_d = (_c = proc.stderr) == null ? void 0 : _c.setEncoding) == null ? void 0 : _d.call(_c, "utf8");
+      (_f = (_e = proc.stdout) == null ? void 0 : _e.on) == null ? void 0 : _f.call(_e, "data", (chunk) => {
         stdout = (stdout + String(chunk || "")).slice(-4e3);
       });
       if (proc.stderr && proc.stderr.on) {
@@ -30317,7 +30445,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (startGeneration !== runtimeGeneration) throw new Error("Codex start was cancelled");
       };
       const pendingStart = (async () => {
-        var _a;
+        var _a, _b, _c, _d, _e;
         const spawnEnv = currentEnv();
         stderrTail = "";
         resetProviderStderrRedactor();
@@ -30360,6 +30488,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           throw taggedError(error, "spawnError", true);
         }
         proc = spawnedProc;
+        (_c = (_b = spawnedProc.stdout) == null ? void 0 : _b.setEncoding) == null ? void 0 : _c.call(_b, "utf8");
+        (_e = (_d = spawnedProc.stderr) == null ? void 0 : _d.setEncoding) == null ? void 0 : _e.call(_d, "utf8");
         const generation = startGeneration + 1;
         runtimeGeneration = generation;
         const nextRpc = createRpc({
@@ -30697,6 +30827,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
     }
     async function probeAccount() {
+      var _a, _b, _c, _d;
       const spawnEnv = currentEnv();
       let cliInfo = { ok: false, cliPath: "", version: "" };
       try {
@@ -30734,6 +30865,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       } catch (error) {
         return failure2(redactText(error && error.message ? error.message : String(error), probeSecrets()));
       }
+      (_b = (_a = probeProc.stdout) == null ? void 0 : _a.setEncoding) == null ? void 0 : _b.call(_a, "utf8");
+      (_d = (_c = probeProc.stderr) == null ? void 0 : _c.setEncoding) == null ? void 0 : _d.call(_c, "utf8");
       const probeRpc = createRpc({ writeLine: (line) => probeProc.stdin.write(line) });
       const reader = createNdjsonReader((message) => probeRpc.handleMessage(message));
       if (probeProc.stdout && probeProc.stdout.on) probeProc.stdout.on("data", reader);
@@ -30752,7 +30885,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         let models = null;
         try {
           const listed = await boundedProbeRequest(probeRpc, "model/list", {}, PROBE_MODEL_LIST_TIMEOUT_MS, "model/list");
-          models = Array.isArray(listed) ? listed : listed && listed.models;
+          models = Array.isArray(listed) ? listed : Array.isArray(listed == null ? void 0 : listed.models) ? listed.models : listed == null ? void 0 : listed.data;
         } catch (e) {
           models = null;
         }
@@ -30800,7 +30933,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       preambleSent = Boolean(adoptedThreadId);
     }
     async function deleteSessionRef(ref) {
-      var _a, _b, _c, _d, _e, _f, _g;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
       if (!ref || ref.kind !== "codex-thread" || !ref.id) {
         return { ok: false, detail: "invalid codex thread reference" };
       }
@@ -30829,13 +30962,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           windowsHide: true,
           env: spawnEnv
         });
+        (_b = (_a = deleteProc.stdout) == null ? void 0 : _a.setEncoding) == null ? void 0 : _b.call(_a, "utf8");
+        (_d = (_c = deleteProc.stderr) == null ? void 0 : _c.setEncoding) == null ? void 0 : _d.call(_c, "utf8");
         deleteRpc = createRpc({ writeLine: (line) => deleteProc.stdin.write(line) });
         const reader = createNdjsonReader((message) => deleteRpc.handleMessage(message));
-        (_b = (_a = deleteProc.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", reader);
-        (_d = (_c = deleteProc.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", () => {
+        (_f = (_e = deleteProc.stdout) == null ? void 0 : _e.on) == null ? void 0 : _f.call(_e, "data", reader);
+        (_h = (_g = deleteProc.stderr) == null ? void 0 : _g.on) == null ? void 0 : _h.call(_g, "data", () => {
         });
-        (_e = deleteProc.on) == null ? void 0 : _e.call(deleteProc, "exit", () => deleteRpc.close(new Error("codex app-server exited during thread delete")));
-        (_f = deleteProc.on) == null ? void 0 : _f.call(deleteProc, "error", (error) => deleteRpc.close(error));
+        (_i = deleteProc.on) == null ? void 0 : _i.call(deleteProc, "exit", () => deleteRpc.close(new Error("codex app-server exited during thread delete")));
+        (_j = deleteProc.on) == null ? void 0 : _j.call(deleteProc, "error", (error) => deleteRpc.close(error));
         await deleteRpc.request("initialize", {
           clientInfo: { name: "ae-mcp-panel", version: PANEL_VERSION },
           capabilities: { experimentalApi: true }
@@ -30846,7 +30981,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return { ok: false, detail: (error == null ? void 0 : error.message) || String(error) };
       } finally {
         try {
-          (_g = deleteProc == null ? void 0 : deleteProc.kill) == null ? void 0 : _g.call(deleteProc);
+          (_k = deleteProc == null ? void 0 : deleteProc.kill) == null ? void 0 : _k.call(deleteProc);
         } catch {
         }
         if (deleteRpc) deleteRpc.close(new Error("codex thread delete finished"));
@@ -30906,11 +31041,55 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     return { feed };
   }
 
+  // src/lib/openCodeCatalogId.js
+  init_cep_runtime_inject();
+  function openCodeCatalogId(value) {
+    const text = String(value || "").trim();
+    if (!text || text.length > 200 || !/^[a-z0-9._:@/+\-]+$/i.test(text)) return "";
+    return text;
+  }
+
   // src/cep/openCodeProviderStore.js
   init_cep_runtime_inject();
+
+  // src/lib/openCodeModelLimits.js
+  init_cep_runtime_inject();
+  var OPEN_CODE_DEFAULT_CONTEXT_WINDOW = 128e3;
+  var OPEN_CODE_CONTEXT_WINDOW_MIN = 32e3;
+  var OPEN_CODE_CONTEXT_WINDOW_MAX = 2e6;
+  var OPEN_CODE_CONTEXT_WINDOW_PRESETS = Object.freeze([
+    32e3,
+    64e3,
+    OPEN_CODE_DEFAULT_CONTEXT_WINDOW,
+    2e5
+  ]);
+  function normalizeOpenCodeContextWindow(value, {
+    fallback = OPEN_CODE_DEFAULT_CONTEXT_WINDOW
+  } = {}) {
+    const candidate = value === void 0 || value === null || value === "" ? fallback : Number(value);
+    if (!Number.isSafeInteger(candidate) || candidate < OPEN_CODE_CONTEXT_WINDOW_MIN || candidate > OPEN_CODE_CONTEXT_WINDOW_MAX) {
+      throw new RangeError(
+        `Context window must be an integer from ${OPEN_CODE_CONTEXT_WINDOW_MIN} to ${OPEN_CODE_CONTEXT_WINDOW_MAX} tokens`
+      );
+    }
+    return candidate;
+  }
+  function openCodeOutputLimit(contextWindow) {
+    const context = normalizeOpenCodeContextWindow(contextWindow);
+    return Math.min(32e3, Math.max(4e3, Math.floor(context / 4)));
+  }
+  function openCodeContextPresetValue(value) {
+    return typeof value === "number" && OPEN_CODE_CONTEXT_WINDOW_PRESETS.includes(value) ? String(value) : "custom";
+  }
+
+  // src/cep/openCodeProviderStore.js
   var CONFIG_FILE = "opencode-providers.json";
   var AUTH_FILE = "auth.json";
   var VERSION = 1;
+  var OPEN_CODE_CUSTOM_MODEL_LIMIT = Object.freeze({
+    context: OPEN_CODE_DEFAULT_CONTEXT_WINDOW,
+    output: openCodeOutputLimit(OPEN_CODE_DEFAULT_CONTEXT_WINDOW)
+  });
   function storeError(code, message) {
     const error = new Error(message || code);
     error.code = code;
@@ -30944,7 +31123,23 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const values = Array.isArray(value) ? value : String(value || "").split(/[\s,]+/);
     const models = values.map((item) => String(item || "").trim()).filter(Boolean);
     if (!models.length) throw storeError("OPENCODE_PROVIDER_INVALID", "At least one model is required");
+    if (models.some((modelId) => !openCodeCatalogId(modelId))) {
+      throw storeError("OPENCODE_PROVIDER_INVALID", "Model ID is invalid");
+    }
     return Array.from(new Set(models)).sort();
+  }
+  function normalizeModelContexts(value, modelIds2) {
+    const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const contexts = /* @__PURE__ */ Object.create(null);
+    try {
+      for (const modelId of modelIds2) {
+        const context = Object.prototype.hasOwnProperty.call(source, modelId) ? source[modelId] : void 0;
+        contexts[modelId] = normalizeOpenCodeContextWindow(context);
+      }
+    } catch (error) {
+      throw storeError("OPENCODE_PROVIDER_INVALID", (error == null ? void 0 : error.message) || "Model context window is invalid");
+    }
+    return contexts;
   }
   function normalizeProvider(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -30956,6 +31151,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     if (value.allowInsecureHttp !== true && normalizeBaseUrl(value.baseUrl).startsWith("http:")) {
       throw storeError("OPENCODE_PROVIDER_INVALID", "Insecure provider HTTP requires confirmation");
     }
+    const modelIds2 = normalizeModelIds(value.modelIds || value.modelId);
     return {
       id,
       name,
@@ -30966,7 +31162,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       // unknown-field errors, while /chat/completions served every family).
       protocol: value.protocol === "openai" ? "openai" : "anthropic",
       allowInsecureHttp: value.allowInsecureHttp === true,
-      modelIds: normalizeModelIds(value.modelIds || value.modelId),
+      modelIds: modelIds2,
+      modelContexts: normalizeModelContexts(value.modelContexts, modelIds2),
       needsApiKey: value.needsApiKey === true
     };
   }
@@ -31050,7 +31247,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         // "/chat/completions") directly to baseURL, so the injected URL must
         // carry the "/v1" segment relay endpoints expect.
         options: { baseURL: canonicalOpenCodeBaseUrl(provider.baseUrl) },
-        models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }]))
+        models: Object.fromEntries(provider.modelIds.map((id) => {
+          const context = provider.modelContexts[id];
+          return [id, {
+            name: id,
+            limit: { context, output: openCodeOutputLimit(context) }
+          }];
+        }))
       };
     }
     return definitions;
@@ -31128,16 +31331,82 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     });
   }
 
+  // src/cep/openCodeHistoryGuard.js
+  init_cep_runtime_inject();
+  var OPEN_CODE_HISTORY_GUARD_FILENAME = "ae-mcp-history-guard.js";
+  var OPEN_CODE_HISTORY_GUARD_MARKER = "/* executed AE script omitted from prior model history */";
+  var AE_EXEC_TOOL_NAMES = Object.freeze([
+    "ae_exec",
+    "ae_execRecover",
+    "ae_ae_exec",
+    "ae_ae_execRecover",
+    "mcp__ae__ae_exec",
+    "mcp__ae__ae_execRecover"
+  ]);
+  function openCodeHistoryGuardPluginSource() {
+    const names = JSON.stringify(AE_EXEC_TOOL_NAMES);
+    const marker = JSON.stringify(OPEN_CODE_HISTORY_GUARD_MARKER);
+    return [
+      `const AE_EXEC_TOOL_NAMES = new Set(${names});`,
+      `const MARKER = ${marker};`,
+      "function guard(messages) {",
+      "  if (!Array.isArray(messages)) return;",
+      "  for (const message of messages) {",
+      "    if (!message || !Array.isArray(message.parts)) continue;",
+      "    for (const part of message.parts) {",
+      '      if (!part || part.type !== "tool" || !AE_EXEC_TOOL_NAMES.has(part.tool)) continue;',
+      "      const state = part.state;",
+      '      if (!state || (state.status !== "completed" && state.status !== "error")) continue;',
+      "      const input = state.input;",
+      '      if (!input || typeof input !== "object" || Array.isArray(input)) continue;',
+      '      if (typeof input.code !== "string" || input.code.length === 0) continue;',
+      "      input.code = MARKER;",
+      "    }",
+      "  }",
+      "}",
+      "export const AeMcpHistoryGuard = async () => {",
+      "  return {",
+      '    "experimental.chat.messages.transform": async (_input, output) => {',
+      "      guard(output && output.messages);",
+      "    },",
+      "  };",
+      "};",
+      ""
+    ].join("\n");
+  }
+
   // src/cep/openCodeBackend.js
   var READY_TIMEOUT_MS = 3e4;
   var PROBE_TIMEOUT_MS = 4e4;
   var READY_POLL_MS = 250;
   var READY_REQUEST_TIMEOUT_MS = 1500;
   var DEFAULT_PROVIDER_ID = "opencode";
-  var DEFAULT_MODEL_ID = "north-mini-code-free";
+  var DEFAULT_MODEL_ID = "hy3-free";
   var STDERR_TAIL_LIMIT3 = 4096;
   var STALE_TERMINATE_LIMIT = 8;
   var STALE_REMOVE_LIMIT = 64;
+  var OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES = Object.freeze([
+    "apply_patch",
+    "bash",
+    "batch",
+    "codesearch",
+    "edit",
+    "glob",
+    "grep",
+    "invalid",
+    "list",
+    "lsp",
+    "plan_enter",
+    "plan_exit",
+    "read",
+    "skill",
+    "task",
+    "todoread",
+    "todowrite",
+    "webfetch",
+    "websearch",
+    "write"
+  ]);
   function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
@@ -31190,10 +31459,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     result[property] = value;
     return result;
   }
-  function decodeChunk(value) {
-    if (typeof value === "string") return value;
-    return new TextDecoder().decode(value);
-  }
   async function defaultGetPort() {
     const net = getCepRequire()("net");
     return new Promise((resolve, reject) => {
@@ -31243,6 +31508,55 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return String(value);
     }
   }
+  function boundedCauseChain(value, limit = 6) {
+    const messages = [];
+    const seen = /* @__PURE__ */ new Set();
+    function visit(candidate, depth) {
+      if (candidate === void 0 || candidate === null || depth > 5 || messages.length >= limit) return;
+      if (typeof candidate === "string") {
+        const text = candidate.trim().slice(0, 500);
+        if (text && !messages.includes(text)) messages.push(text);
+        return;
+      }
+      if (typeof candidate !== "object" || seen.has(candidate)) return;
+      seen.add(candidate);
+      for (const field of ["message", "code", "statusCode", "status"]) {
+        const item = candidate[field];
+        if (typeof item === "string" || typeof item === "number") visit(String(item), depth + 1);
+      }
+      visit(candidate.cause, depth + 1);
+      visit(candidate.error, depth + 1);
+      if (candidate.data && typeof candidate.data === "object") {
+        visit(candidate.data.message, depth + 1);
+        visit(candidate.data.cause, depth + 1);
+        visit(candidate.data.error, depth + 1);
+        visit(candidate.data.statusCode, depth + 1);
+      }
+    }
+    visit(value, 0);
+    return messages;
+  }
+  function sanitizeOpenCodeProviderFacts(value) {
+    const source = Array.isArray(value == null ? void 0 : value.providers) ? value.providers : Array.isArray(value) ? value : value && typeof value === "object" ? Object.entries(value).filter(([key]) => key !== "default").map(([key, provider]) => ({
+      ...provider && typeof provider === "object" ? provider : {},
+      id: (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || key
+    })) : [];
+    const providers = [];
+    for (const provider of source) {
+      if (!provider || typeof provider !== "object") continue;
+      const id = openCodeCatalogId(
+        provider.id || provider.providerID || provider.providerId || provider.name
+      );
+      if (!id) continue;
+      const rawModels = Array.isArray(provider.models) ? provider.models : provider.models && typeof provider.models === "object" ? Object.entries(provider.models).map(([key, model]) => ({
+        ...model && typeof model === "object" ? model : {},
+        id: (model == null ? void 0 : model.id) || (model == null ? void 0 : model.modelID) || (model == null ? void 0 : model.modelId) || key
+      })) : [];
+      const modelIds2 = Array.from(new Set(rawModels.map((model) => openCodeCatalogId(model && typeof model === "object" ? model.id || model.modelID || model.modelId || model.name : model)).filter(Boolean)));
+      if (modelIds2.length) providers.push({ id, modelIds: modelIds2, needsApiKey: false });
+    }
+    return providers;
+  }
   function parseModel(value) {
     const raw = String(value || DEFAULT_MODEL_ID);
     if (raw.includes("/")) {
@@ -31262,6 +31576,47 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function permissionReplyPath(sessionId, permissionId) {
     return "/session/" + encodeURIComponent(sessionId) + "/permission/" + encodeURIComponent(permissionId);
   }
+  function questionsFromOpenCode(value) {
+    const raw = Array.isArray(value) ? value : [];
+    const questions = questionsFromUserInput({
+      questions: raw.map((question) => ({
+        ...question,
+        multiSelect: Boolean(question && question.multiple)
+      }))
+    });
+    return questions.map((question, index) => {
+      var _a;
+      return {
+        ...question,
+        allowCustom: ((_a = raw[index]) == null ? void 0 : _a.custom) !== false
+      };
+    });
+  }
+  function answersForOpenCode(questions, values) {
+    return questions.map((question) => {
+      const value = values && typeof values === "object" ? values[question.id] : void 0;
+      if (question.multiSelect) {
+        const list = Array.isArray(value) ? value : value ? [value] : [];
+        return list.map((item) => String(item));
+      }
+      const selected = Array.isArray(value) ? value[0] : value;
+      return selected === void 0 || selected === null || selected === "" ? [] : [String(selected)];
+    });
+  }
+  function valuesFromOpenCodeAnswers(questions, answers) {
+    const values = {};
+    questions.forEach((question, index) => {
+      const list = Array.isArray(answers == null ? void 0 : answers[index]) ? answers[index].map((item) => String(item)) : [];
+      values[question.id] = question.multiSelect ? list : list[0] || "";
+    });
+    return values;
+  }
+  function questionReplyPath(questionId, action) {
+    return "/question/" + encodeURIComponent(questionId) + "/" + action;
+  }
+  function isBuiltInQuestionTool(part) {
+    return String((part == null ? void 0 : part.tool) || (part == null ? void 0 : part.name) || "").toLowerCase() === "question";
+  }
   function createOpenCodeBackend({
     platform,
     fetchImpl,
@@ -31272,6 +31627,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getMcpSpec: getMcpSpec2,
     getToolMeta,
     getProviders = () => [],
+    getSensitiveValues = () => [],
     getExpertGuidance = () => true,
     onEvent,
     env,
@@ -31322,15 +31678,53 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let activeTurnAccepted = false;
     let messageDispatched = false;
     let turnStarted = false;
+    let stopRequested = false;
     let generation = 0;
     let toolMeta = { annotations: {} };
     const pendingApprovals = /* @__PURE__ */ new Map();
+    const pendingQuestions = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     const startedTools = /* @__PURE__ */ new Set();
     const partTypes = /* @__PURE__ */ new Map();
     const transcript = [];
+    function redactionValues(paths = []) {
+      let providerSecrets = [];
+      try {
+        providerSecrets = getSensitiveValues();
+      } catch {
+      }
+      return Array.from(new Set([
+        ...Array.isArray(providerSecrets) ? providerSecrets : [],
+        ...paths
+      ].filter((item) => typeof item === "string" && item)));
+    }
+    function invalidateSession() {
+      const invalidated = sessionId || adoptedSessionId;
+      settleFailedTurnInteractions();
+      sessionId = null;
+      adoptedSessionId = null;
+      sessionWasAdopted = false;
+      sessionPromise = null;
+      sessionAllowedTools.clear();
+      return Boolean(invalidated);
+    }
+    function settlePendingQuestions() {
+      for (const [questionId] of pendingQuestions) {
+        pendingQuestions.delete(questionId);
+        emit({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
+      }
+    }
+    function settleFailedTurnInteractions() {
+      settlePendingQuestions();
+      for (const [permissionId] of pendingApprovals) {
+        emit({ type: "tool-denied", toolUseId: permissionId });
+      }
+      pendingApprovals.clear();
+      startedTools.clear();
+      partTypes.clear();
+    }
     function emit(evt) {
-      if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
+      if (onEvent) onEvent(redactValue(evt, redactionValues(activeAttachmentPaths)));
     }
     function emitTurnProgress(stage) {
       if (!activeRun || !activeTurn) return;
@@ -31342,20 +31736,20 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function resetAssistantDeltaRedactor() {
       assistantDeltaRedactor.discard();
-      assistantDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, (text) => {
+      assistantDeltaRedactor = createDeltaRedactor(redactionValues(activeAttachmentPaths), (text) => {
         activeAssistantText += text;
         emit({ type: "text-delta", text });
       });
     }
     function resetStderrRedactor() {
       stderrRedactor.discard();
-      stderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, (text) => {
+      stderrRedactor = createDeltaRedactor(redactionValues(processStderrAttachmentPaths), (text) => {
         stderrTail = appendTail4(stderrTail, text);
       });
     }
     function setActiveAttachmentPaths(values) {
       activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
-      if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+      if (stderrTail) stderrTail = redactValue(stderrTail, redactionValues(activeAttachmentPaths));
       const previousProcessPathCount = processStderrAttachmentPaths.length;
       processStderrAttachmentPaths = Array.from(/* @__PURE__ */ new Set([
         ...processStderrAttachmentPaths,
@@ -31650,13 +32044,22 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function writeConfig(mcpSpec, home) {
       const fs = backendFs();
       const configDir = adapter.paths.join([home, "opencode"]);
+      const pluginDir = adapter.paths.join([configDir, "plugins"]);
       fs.mkdirSync(configDir, { recursive: true });
+      fs.mkdirSync(pluginDir, { recursive: true });
+      fs.writeFileSync(
+        adapter.paths.join([pluginDir, OPEN_CODE_HISTORY_GUARD_FILENAME]),
+        openCodeHistoryGuardPluginSource()
+      );
       const mcpEntry = { type: "remote", url: mcpSpec.url, enabled: true };
       const config = {
         $schema: "https://opencode.ai/config.json",
         // OpenCode is only the CLI transport here. Host conversation approval
         // remains authoritative for writes through the tokenized MCP endpoint.
         permission: { "*": "allow" },
+        // Explicit names leave dynamic `ae` MCP tools enabled while preventing
+        // this isolated transport from reading or changing the workspace itself.
+        tools: Object.fromEntries(OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES.map((name) => [name, false])),
         provider: openCodeProviderDefinitions(getProviders()),
         mcp: {
           ae: mcpEntry
@@ -31669,6 +32072,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (processGeneration !== generation || proc !== exitedProc) return;
       const wasStopping = stopping;
       generation += 1;
+      settlePendingQuestions();
       stderrRedactor.flush();
       const tail = trimStderrTail(stderrTail);
       proc = null;
@@ -31705,6 +32109,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function handleError(failedProc, processGeneration, home, error) {
       if (processGeneration !== generation || proc !== failedProc) return;
       generation += 1;
+      settlePendingQuestions();
       stderrRedactor.flush();
       proc = null;
       sessionPromise = null;
@@ -31752,6 +32157,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         throw cancelledStartError2();
       };
       const pendingStart = (async () => {
+        var _a, _b, _c, _d;
         void sweepStaleInstances();
         assertCurrentStart();
         let mcpSpec;
@@ -31786,7 +32192,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         stopping = false;
         sseClosed = false;
         try {
-          spawnedProc = adapter.spawn(executable, ["serve", "--port", String(startPort)], {
+          spawnedProc = adapter.spawn(executable, [
+            "serve",
+            "--print-logs",
+            "--log-level",
+            "INFO",
+            "--port",
+            String(startPort)
+          ], {
             stdio: "pipe",
             windowsHide: true,
             // OpenCode scopes its project context to the cwd. Inheriting the CEP
@@ -31805,6 +32218,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         port = startPort;
         baseUrl = startBaseUrl;
         configHome = startHome;
+        (_b = (_a = spawnedProc.stdout) == null ? void 0 : _a.setEncoding) == null ? void 0 : _b.call(_a, "utf8");
+        (_d = (_c = spawnedProc.stderr) == null ? void 0 : _c.setEncoding) == null ? void 0 : _d.call(_c, "utf8");
         if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on("data", (chunk) => {
           if (startGeneration !== generation || proc !== spawnedProc) return;
           stderrRedactor.feed(chunk);
@@ -31848,28 +32263,44 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     async function readSseBody(body, parser, isCurrent) {
       if (!body) return;
+      const decoder = typeof TextDecoder === "function" ? new TextDecoder("utf-8") : null;
+      const feedChunk = (chunk) => {
+        if (!isCurrent()) return;
+        if (typeof chunk === "string") parser.feed(chunk);
+        else if (decoder) parser.feed(decoder.decode(chunk, { stream: true }));
+        else parser.feed(String(chunk || ""));
+      };
+      const flushDecoder = () => {
+        if (!decoder) return;
+        const tail = decoder.decode();
+        if (tail) parser.feed(tail);
+      };
       if (body.getReader) {
         const reader = body.getReader();
         while (isCurrent()) {
           const next = await reader.read();
           if (!next || next.done) break;
           if (!isCurrent()) break;
-          parser.feed(decodeChunk(next.value));
+          feedChunk(next.value);
         }
+        if (isCurrent()) flushDecoder();
         return;
       }
       if (body[Symbol.asyncIterator]) {
         for await (const chunk of body) {
           if (!isCurrent()) break;
-          parser.feed(decodeChunk(chunk));
+          feedChunk(chunk);
         }
+        if (isCurrent()) flushDecoder();
       }
     }
     function startSse(processGeneration, spawnedProc, home, requestBaseUrl) {
       if (sseStarted) return;
       sseStarted = true;
       const isCurrent = () => processGeneration === generation && proc === spawnedProc && !sseClosed;
-      const parser = createSseParser(({ data: data2 }) => handleOpenCodeEvent(data2));
+      const parser = createSseParser(({ data: data2 }) => {
+        if (isCurrent()) handleOpenCodeEvent(data2);
+      });
       request("/event", {}, requestBaseUrl).then(async (response) => {
         await readSseBody(response.body, parser, isCurrent);
         if (isCurrent()) throw new Error("OpenCode event stream closed.");
@@ -31879,6 +32310,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           generation += 1;
           sseStarted = false;
           const wasActive = Boolean(activeRun);
+          settlePendingQuestions();
           sseClosed = true;
           proc = null;
           port = null;
@@ -32012,6 +32444,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
     }
     function handleToolPart(part) {
+      if (isBuiltInQuestionTool(part)) return;
       const toolUseId = String(part.callID || part.id || "");
       if (!toolUseId) return;
       const name = prefixedToolName2(part.tool || part.name);
@@ -32034,18 +32467,22 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       emit({ type: "tool-start", toolUseId, name, input: state.input || {} });
     }
     function handleOpenCodeEvent(evt) {
+      var _a;
       const type = eventType(evt);
       if (!type) return;
       const p = evt && evt.properties || {};
-      if (sessionId && p.sessionID && p.sessionID !== sessionId) return;
+      if (p.sessionID && (!sessionId || p.sessionID !== sessionId)) return;
       if (type === "session.status") {
         const st = p.status && p.status.type || "";
         if (st === "busy") {
+          if (!activeRun) return;
           if (!turnStarted) {
             turnStarted = true;
             emit({ type: "turn-start" });
           }
         } else if (st === "idle") {
+          if (stopRequested) return;
+          if (!activeRun || !turnStarted) return;
           assistantDeltaRedactor.flush();
           drainApprovals();
           emit({ type: "turn-end", stopReason: "end_turn" });
@@ -32081,28 +32518,80 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         else if (part.type === "reasoning") emit({ type: "thinking", active: true });
         return;
       }
+      if (type === "question.asked") {
+        const questionId = String(p.id || "");
+        if (!questionId || pendingQuestions.has(questionId)) return;
+        const questions = questionsFromOpenCode(p.questions);
+        if (!questions.length) {
+          void postJson(questionReplyPath(questionId, "reject"), {}).catch(() => {
+          });
+          return;
+        }
+        pendingQuestions.set(questionId, { questions, settling: false });
+        emit({
+          type: "question-required",
+          toolUseId: questionId,
+          source: "opencode-question",
+          title: "",
+          questions
+        });
+        return;
+      }
+      if (type === "question.replied" || type === "question.rejected") {
+        const questionId = String(p.requestID || p.requestId || "");
+        const pending = pendingQuestions.get(questionId);
+        if (!pending) return;
+        pendingQuestions.delete(questionId);
+        if (type === "question.rejected") {
+          emit({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
+        } else {
+          const values = valuesFromOpenCodeAnswers(pending.questions, p.answers);
+          emit({
+            type: "question-resolved",
+            toolUseId: questionId,
+            outcome: "answered",
+            answers: displayAnswers(pending.questions, values)
+          });
+        }
+        return;
+      }
       if (type === "session.error") {
         assistantDeltaRedactor.discard();
+        stderrRedactor.flush();
         const error = p.error || p;
         const detail = error && error.data && error.data.message || error && error.message || (typeof error === "string" ? error : "");
-        const httpStatus = extractHttpStatus(detail);
+        if (stopRequested && /abort(?:ed)?/i.test([error && error.name, detail].filter(Boolean).join(" "))) {
+          return;
+        }
+        const causeChain = boundedCauseChain(error);
+        const processTail = trimStderrTail(stderrTail);
+        const combined = [detail, ...causeChain, processTail].filter(Boolean).join("\n");
+        const httpStatus = extractHttpStatus(error == null ? void 0 : error.statusCode) || extractHttpStatus((_a = error == null ? void 0 : error.data) == null ? void 0 : _a.statusCode) || extractHttpStatus(combined);
         const classified = classifyErrorCode({
-          error: { message: detail },
+          error: { message: combined },
+          httpStatus,
           upstream: true,
-          upstreamText: detail
+          upstreamText: combined
         });
+        settleFailedTurnInteractions();
         emit({
           type: "error",
           kind: classified.kind,
           code: classified.code,
           // OpenCode session errors arrive as {name, data:{message}} objects;
           // String() on that shape rendered "[object Object]" in the chat.
-          message: httpStatus ? "OpenCode upstream request failed." : detail || error && error.name || "OpenCode session error",
+          message: httpStatus ? "OpenCode upstream request failed." : classified.code === "UPSTREAM_CONNECTION_CLOSED" ? "OpenCode upstream connection was interrupted." : detail || error && error.name || "OpenCode session error",
           detail: {
             ...(error == null ? void 0 : error.name) ? { errorName: error.name } : {},
             ...httpStatus ? { httpStatus } : {},
-            ...httpStatus && detail ? {
+            ...detail ? {
               upstreamMessage: String(redactValue(detail, activeAttachmentPaths)).slice(0, 500)
+            } : {},
+            ...causeChain.length ? {
+              causeChain: redactValue(causeChain, activeAttachmentPaths)
+            } : {},
+            ...processTail ? {
+              stderrTail: redactValue(processTail, activeAttachmentPaths)
             } : {}
           },
           ...activeTurnFailureFields()
@@ -32136,6 +32625,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     async function sendUser(input) {
       if (activeRun) return activeRun;
+      stopRequested = false;
       let turn;
       try {
         turn = normalizeTurnInput(input);
@@ -32200,6 +32690,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           spawnError: (e == null ? void 0 : e.spawnError) === true,
           fallbackCode
         });
+        const sessionReset = messageDispatched ? invalidateSession() : false;
         let message = e && e.message ? e.message : "Failed to start OpenCode turn.";
         if (classified.code.startsWith("UPSTREAM_HTTP_")) message = "OpenCode upstream request failed.";
         else if (classified.code === "AUTH_REQUIRED") message = "OpenCode authentication is required.";
@@ -32214,7 +32705,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           ...(e == null ? void 0 : e.lastError) ? { lastError: e.lastError } : {},
           ...(e == null ? void 0 : e.responseExcerpt) ? { responseExcerpt: redactValue(e.responseExcerpt, activeAttachmentPaths) } : {},
           ...(e == null ? void 0 : e.resolution) ? { resolution: e.resolution } : {},
-          ...(e == null ? void 0 : e.code) && (e == null ? void 0 : e.spawnError) ? { spawnCode: e.code } : {}
+          ...(e == null ? void 0 : e.code) && (e == null ? void 0 : e.spawnError) ? { spawnCode: e.code } : {},
+          ...sessionReset ? { sessionReset: true } : {}
         };
         emit({
           type: "error",
@@ -32239,9 +32731,62 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (decision === "deny") emit({ type: "tool-denied", toolUseId: id });
       else emit({ type: "tool-allowed", toolUseId: id });
     }
+    async function answerQuestion(toolUseId, result) {
+      const id = String(toolUseId || "");
+      const pending = pendingQuestions.get(id);
+      if (!pending || pending.settling) return false;
+      pending.settling = true;
+      const submitted = result && result.action === "submit";
+      try {
+        if (submitted) {
+          await postJson(questionReplyPath(id, "reply"), {
+            answers: answersForOpenCode(pending.questions, result.values)
+          });
+        } else {
+          await postJson(questionReplyPath(id, "reject"), {});
+        }
+      } catch (error) {
+        if (pendingQuestions.get(id) === pending) pending.settling = false;
+        const httpStatus = extractHttpStatus(error == null ? void 0 : error.httpStatus);
+        const classified = classifyErrorCode({ error, httpStatus, fallbackCode: "BACKEND_ERROR" });
+        emit({
+          type: "error",
+          kind: classified.kind,
+          code: classified.code,
+          message: submitted ? "Failed to answer OpenCode question." : "Failed to dismiss OpenCode question.",
+          detail: {
+            ...httpStatus ? { httpStatus } : {},
+            ...(error == null ? void 0 : error.endpoint) ? { endpoint: error.endpoint } : {}
+          }
+        });
+        return false;
+      }
+      if (pendingQuestions.get(id) !== pending) return true;
+      pendingQuestions.delete(id);
+      emit({
+        type: "question-resolved",
+        toolUseId: id,
+        outcome: submitted ? "answered" : "cancelled",
+        ...submitted ? { answers: displayAnswers(pending.questions, result.values) } : {}
+      });
+      return true;
+    }
+    async function rejectPendingQuestions() {
+      const rejects = [];
+      for (const [questionId, pending] of Array.from(pendingQuestions.entries())) {
+        pendingQuestions.delete(questionId);
+        if (!pending.settling && baseUrl) {
+          rejects.push(postJson(questionReplyPath(questionId, "reject"), {}));
+        }
+        emit({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
+      }
+      await Promise.allSettled(rejects);
+    }
     async function stop() {
+      if (activeRun) stopRequested = true;
+      await rejectPendingQuestions();
       if (sessionId) {
-        await postJson("/session/" + encodeURIComponent(sessionId) + "/interrupt", {}).catch(() => {
+        await postJson("/session/" + encodeURIComponent(sessionId) + "/abort", {}).catch(() => {
         });
       }
       await drainApprovals();
@@ -32258,6 +32803,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       stopping = true;
       sseClosed = true;
       sseStarted = false;
+      settlePendingQuestions();
       pendingApprovals.clear();
       sessionAllowedTools.clear();
       sessionId = null;
@@ -32271,6 +32817,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       activeTurnAccepted = false;
       messageDispatched = false;
       turnStarted = false;
+      stopRequested = false;
       startedTools.clear();
       partTypes.clear();
       transcript.length = 0;
@@ -32302,17 +32849,18 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }, totalProbeTimeoutMs);
       });
       try {
-        await Promise.race([
+        const providers = await Promise.race([
           (async () => {
             await startServer();
-            await requestJson("/config/providers", { signal: controller.signal }).catch((error) => {
+            const catalog = await requestJson("/config/providers", { signal: controller.signal }).catch((error) => {
               if (controller.signal.aborted) throw error;
               return requestJson("/provider", { signal: controller.signal });
             });
+            return sanitizeOpenCodeProviderFacts(catalog);
           })(),
           timeout
         ]);
-        return { loggedIn: true };
+        return { loggedIn: true, providers };
       } catch (e) {
         if (timedOut) {
           if (!activeRun) reset();
@@ -32335,6 +32883,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return id ? { kind: "opencode-session", id } : null;
     }
     function adoptSessionRef(ref) {
+      settlePendingQuestions();
       partTypes.clear();
       sessionId = null;
       adoptedSessionId = ref && ref.kind === "opencode-session" && ref.id ? String(ref.id) : null;
@@ -32359,6 +32908,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     return {
       sendUser,
       approve,
+      answerQuestion,
       stop,
       reset,
       getSessionRef,
@@ -32495,6 +33045,7 @@ ${command}`
 
   // src/cep/openCodeModelProbe.js
   init_cep_runtime_inject();
+  var MAX_PROBED_MODELS = 200;
   function failure(detail, apiKey) {
     return { ok: false, detail: redactCredentialText(detail, [apiKey]) };
   }
@@ -32504,13 +33055,13 @@ ${command}`
     const seen = /* @__PURE__ */ new Set();
     const models = [];
     for (const row of rows) {
-      const id = String(typeof row === "string" ? row : (row == null ? void 0 : row.id) || "").trim();
+      const id = openCodeCatalogId(typeof row === "string" ? row : row == null ? void 0 : row.id);
       if (id && !seen.has(id)) {
         seen.add(id);
-        models.push(id);
+        if (models.length < MAX_PROBED_MODELS) models.push(id);
       }
     }
-    return models;
+    return { models, total: seen.size };
   }
   async function probeOpenCodeProviderModels({
     draft,
@@ -32550,9 +33101,12 @@ ${command}`
       return failure(`HTTP ${(response == null ? void 0 : response.status) || 0}${snippet ? `: ${snippet}` : ""}`, key);
     }
     if (response.json === null) return failure("Provider returned a non-JSON response", key);
-    const models = modelIds(response.json);
-    if (!models) return failure("Provider models response has an unsupported shape", key);
-    return { ok: true, models, total: models.length };
+    if (containsExactSecret(response.json, ["aemcp-secret://", key])) {
+      return failure("Provider models response was rejected", key);
+    }
+    const catalog = modelIds(response.json);
+    if (!catalog) return failure("Provider models response has an unsupported shape", key);
+    return { ok: true, models: catalog.models, total: catalog.total };
   }
 
   // src/components/settings/ProviderManagerSection.jsx
@@ -32561,6 +33115,18 @@ ${command}`
 
   // src/lib/providerManagerState.js
   init_cep_runtime_inject();
+  function providerDraftModelIds(value) {
+    return Array.from(new Set(
+      String(value || "").split(/[\s,]+/).map((id) => id.trim()).filter(Boolean)
+    ));
+  }
+  function reconcileDraftModelContexts(modelId, current = {}) {
+    const source = current && typeof current === "object" && !Array.isArray(current) ? current : {};
+    return Object.fromEntries(providerDraftModelIds(modelId).map((id) => [
+      id,
+      Object.prototype.hasOwnProperty.call(source, id) ? source[id] : OPEN_CODE_DEFAULT_CONTEXT_WINDOW
+    ]));
+  }
   function emptyDraft() {
     return {
       id: "",
@@ -32568,17 +33134,20 @@ ${command}`
       baseUrl: "",
       allowInsecureHttp: false,
       modelId: "",
+      modelContexts: {},
       protocol: "anthropic"
     };
   }
   function draftFromEntry(entry2) {
+    const modelId = Array.isArray(entry2 == null ? void 0 : entry2.modelIds) ? entry2.modelIds.join(", ") : "";
     return {
       ...emptyDraft(),
       id: String((entry2 == null ? void 0 : entry2.id) || ""),
       name: String((entry2 == null ? void 0 : entry2.name) || ""),
       baseUrl: String((entry2 == null ? void 0 : entry2.baseUrl) || ""),
       allowInsecureHttp: (entry2 == null ? void 0 : entry2.allowInsecureHttp) === true,
-      modelId: Array.isArray(entry2 == null ? void 0 : entry2.modelIds) ? entry2.modelIds.join(", ") : "",
+      modelId,
+      modelContexts: reconcileDraftModelContexts(modelId, entry2 == null ? void 0 : entry2.modelContexts),
       protocol: (entry2 == null ? void 0 : entry2.protocol) === "openai" ? "openai" : "anthropic"
     };
   }
@@ -32588,7 +33157,20 @@ ${command}`
     }
     try {
       const url = new URL(String((draft == null ? void 0 : draft.baseUrl) || "").trim());
-      if (url.protocol === "http:" || url.protocol === "https:") return "";
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        const modelIds2 = providerDraftModelIds(draft == null ? void 0 : draft.modelId);
+        if (!modelIds2.length) return "\u81F3\u5C11\u586B\u5199\u4E00\u4E2A\u6A21\u578B / at least one model is required";
+        if (modelIds2.some((modelId) => !openCodeCatalogId(modelId))) {
+          return "\u6A21\u578B\u540D\u79F0\u683C\u5F0F\u65E0\u6548 / model id is invalid";
+        }
+        try {
+          const contexts = reconcileDraftModelContexts(draft == null ? void 0 : draft.modelId, draft == null ? void 0 : draft.modelContexts);
+          for (const value of Object.values(contexts)) normalizeOpenCodeContextWindow(value);
+        } catch (error) {
+          return `${error.message} / \u4E0A\u4E0B\u6587\u7A97\u53E3\u6570\u503C\u65E0\u6548`;
+        }
+        return "";
+      }
     } catch (error) {
     }
     return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
@@ -32596,11 +33178,15 @@ ${command}`
   function draftToEntry(draft) {
     const name = String((draft == null ? void 0 : draft.name) || (draft == null ? void 0 : draft.id) || "").trim();
     const id = String((draft == null ? void 0 : draft.id) || "").trim() || name.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    const modelContexts = Object.fromEntries(
+      Object.entries(reconcileDraftModelContexts(draft == null ? void 0 : draft.modelId, draft == null ? void 0 : draft.modelContexts)).map(([modelId, value]) => [modelId, normalizeOpenCodeContextWindow(value)])
+    );
     return {
       ...emptyDraft(),
       ...draft || {},
       id,
-      name
+      name,
+      modelContexts
     };
   }
   function mergeProbedModelIds(current, discovered) {
@@ -32632,9 +33218,14 @@ ${command}`
       insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09",
       probe: "\u63A2\u6D4B\u6A21\u578B",
       probing: "\u63A2\u6D4B\u4E2D\u2026",
-      probeFilled: (added, total) => `\u5DF2\u586B\u5165 ${added} \u4E2A\u6A21\u578B\uFF08\u5171 ${total}\uFF09`,
+      probeFound: (shown, total) => total > shown ? `\u63A2\u6D4B\u5230 ${total} \u4E2A\u6A21\u578B\uFF0C\u5DF2\u52A0\u5165\u524D ${shown} \u4E2A` : `\u5DF2\u52A0\u5165 ${shown} \u4E2A\u6A21\u578B`,
       models: (count) => `${count} \u4E2A\u6A21\u578B`,
-      selected: "\u5DF2\u9009"
+      selected: "\u5DF2\u9009",
+      contextWindow: "\u4E0A\u4E0B\u6587\u7A97\u53E3",
+      contextCustom: "\u81EA\u5B9A\u4E49",
+      contextTokens: "tokens",
+      contextRecommended: "\u63A8\u8350",
+      contextCap: "\u6309\u6A21\u578B\u8BBE\u7F6E\u3002\u8D8A\u5C0F\u8D8A\u65E9\u538B\u7F29\uFF0C32K/64K \u4E5F\u4F1A\u7F29\u77ED\u5355\u6B21\u56DE\u7B54\u4E0E\u5DE5\u5177\u89C4\u5212\uFF1B\u4E0D\u786E\u5B9A\u5C31\u9009 128K\u3002\u81EA\u5B9A\u4E49\u8303\u56F4 32K\u20132M\u3002"
     },
     en: {
       title: "Provider manager",
@@ -32656,9 +33247,14 @@ ${command}`
       insecure: "Allow non-loopback HTTP (confirmed again on save)",
       probe: "Probe models",
       probing: "Probing\u2026",
-      probeFilled: (added, total) => `Filled ${added} models (${total} found)`,
+      probeFound: (shown, total) => total > shown ? `Found ${total} models; added the first ${shown}` : `Added ${shown} models`,
       models: (count) => `${count} models`,
-      selected: "selected"
+      selected: "selected",
+      contextWindow: "Context window",
+      contextCustom: "Custom",
+      contextTokens: "tokens",
+      contextRecommended: "recommended",
+      contextCap: "Set per model. Smaller values compact sooner; 32K/64K also shorten a single answer and tool plan. Use 128K when unsure. Custom range: 32K\u20132M."
     }
   };
   function SecretInput({ name, disabled = false }) {
@@ -32699,9 +33295,22 @@ ${command}`
     const [error, setError] = import_react44.default.useState("");
     const [note, setNote] = import_react44.default.useState("");
     const [probing, setProbing] = import_react44.default.useState(false);
+    const probeRunRef = import_react44.default.useRef(0);
+    const invalidateProbe = import_react44.default.useCallback(() => {
+      probeRunRef.current += 1;
+      setProbing(false);
+    }, []);
+    const draftModelIds = providerDraftModelIds(draft == null ? void 0 : draft.modelId);
+    const setModelContext = (modelId, value) => setDraft((current) => current ? {
+      ...current,
+      // Keep temporarily removed IDs while the user edits the comma-separated
+      // list. draftToEntry performs the final cleanup on Save.
+      modelContexts: { ...current.modelContexts, [modelId]: value }
+    } : current);
     const save = async (event) => {
       var _a, _b;
       event.preventDefault();
+      invalidateProbe();
       const message = validateDraft(draft);
       if (message) {
         setError(message);
@@ -32741,9 +33350,12 @@ ${command}`
             variant: "secondary",
             size: "sm",
             icon: "plus",
+            disabled,
             onClick: (event) => {
               event.preventDefault();
+              invalidateProbe();
               setDraft(emptyDraft());
+              setError("");
               setNote("");
             },
             children: t.add
@@ -32792,6 +33404,7 @@ ${command}`
                   size: "sm",
                   disabled,
                   onClick: () => {
+                    invalidateProbe();
                     setDraft(draftFromEntry(provider));
                     setError("");
                     setNote("");
@@ -32805,7 +33418,10 @@ ${command}`
                   variant: "ghost",
                   size: "sm",
                   disabled,
-                  onClick: () => onRemove(provider),
+                  onClick: () => {
+                    invalidateProbe();
+                    onRemove(provider);
+                  },
                   children: t.del
                 }
               )
@@ -32821,21 +33437,36 @@ ${command}`
           borderRadius: "var(--radius-sm)",
           background: "var(--bg-panel)"
         }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+            Input,
+            {
+              disabled,
+              value: draft.name,
+              onChange: (value) => setDraft({ ...draft, name: value })
+            }
+          ) }),
           /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
             Input,
             {
               mono: true,
+              disabled,
               value: draft.baseUrl,
-              onChange: (value) => setDraft({ ...draft, baseUrl: value }),
+              onChange: (value) => {
+                invalidateProbe();
+                setDraft({ ...draft, baseUrl: value });
+              },
               placeholder: "https://api.example.com/v1"
             }
           ) }),
           /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.dialect, caption: t.dialectCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
             Select,
             {
+              disabled,
               value: draft.protocol,
-              onChange: (value) => setDraft({ ...draft, protocol: value }),
+              onChange: (value) => {
+                invalidateProbe();
+                setDraft({ ...draft, protocol: value });
+              },
               options: [
                 { value: "anthropic", label: t.dialectAnthropic },
                 { value: "openai", label: t.dialectOpenAi }
@@ -32852,11 +33483,15 @@ ${command}`
               "input",
               {
                 type: "checkbox",
+                disabled,
                 checked: draft.allowInsecureHttp,
-                onChange: (event) => setDraft({
-                  ...draft,
-                  allowInsecureHttp: event.target.checked
-                })
+                onChange: (event) => {
+                  invalidateProbe();
+                  setDraft({
+                    ...draft,
+                    allowInsecureHttp: event.target.checked
+                  });
+                }
               }
             ),
             t.insecure
@@ -32867,8 +33502,12 @@ ${command}`
               Input,
               {
                 mono: true,
+                disabled,
                 value: draft.modelId,
-                onChange: (value) => setDraft({ ...draft, modelId: value }),
+                onChange: (value) => setDraft({
+                  ...draft,
+                  modelId: value
+                }),
                 placeholder: "claude-sonnet-4"
               }
             ),
@@ -32882,30 +33521,112 @@ ${command}`
                 onClick: async (event) => {
                   const form = event.currentTarget.closest("form");
                   const apiKey = String(new FormData(form).get("modelAuthSecret") || "");
+                  const runId = probeRunRef.current + 1;
+                  probeRunRef.current = runId;
                   setProbing(true);
                   setError("");
                   setNote("");
                   try {
                     const result = await onProbe(draft, { apiKey });
+                    if (probeRunRef.current !== runId) return;
                     if (!result.ok) setError(result.detail);
                     else {
-                      const merged = mergeProbedModelIds(draft.modelId, result.models);
-                      setDraft({ ...draft, modelId: merged.modelId });
-                      setNote(t.probeFilled(merged.added, result.total));
+                      setDraft((current) => {
+                        if (!current || probeRunRef.current !== runId) return current;
+                        const merged = mergeProbedModelIds(current.modelId, result.models);
+                        return {
+                          ...current,
+                          modelId: merged.modelId,
+                          modelContexts: {
+                            ...current.modelContexts,
+                            ...Object.fromEntries(result.models.map((modelId) => [
+                              modelId,
+                              Object.prototype.hasOwnProperty.call(
+                                current.modelContexts || {},
+                                modelId
+                              ) ? current.modelContexts[modelId] : OPEN_CODE_DEFAULT_CONTEXT_WINDOW
+                            ]))
+                          }
+                        };
+                      });
+                      setNote(t.probeFound(result.models.length, result.total));
                     }
                   } catch (probeError) {
-                    setError(redactCredentialText(
-                      (probeError == null ? void 0 : probeError.message) || "Provider model probe failed",
-                      [apiKey]
-                    ));
+                    if (probeRunRef.current === runId) {
+                      setError(redactCredentialText(
+                        (probeError == null ? void 0 : probeError.message) || "Provider model probe failed",
+                        [apiKey]
+                      ));
+                    }
                   } finally {
-                    setProbing(false);
+                    if (probeRunRef.current === runId) setProbing(false);
                   }
                 },
                 children: probing ? t.probing : t.probe
               }
             )
           ] }) }),
+          draftModelIds.length ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.contextWindow, caption: t.contextCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
+            display: "flex",
+            flexDirection: "column",
+            gap: 5,
+            maxHeight: 240,
+            overflowY: "auto",
+            paddingRight: 2
+          }, children: draftModelIds.map((modelId) => {
+            const contextValue = Object.prototype.hasOwnProperty.call(
+              draft.modelContexts || {},
+              modelId
+            ) ? draft.modelContexts[modelId] : OPEN_CODE_DEFAULT_CONTEXT_WINDOW;
+            const choice = openCodeContextPresetValue(contextValue);
+            return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: {
+              display: "grid",
+              gridTemplateColumns: "minmax(90px, 1fr) 105px",
+              gap: 6,
+              alignItems: "center"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { title: modelId, style: {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                font: "400 10px/1.35 var(--font-mono)",
+                color: "var(--text-secondary)"
+              }, children: modelId }),
+              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+                Select,
+                {
+                  disabled,
+                  value: choice,
+                  onChange: (value) => setModelContext(
+                    modelId,
+                    value === "custom" ? String(contextValue) : Number(value)
+                  ),
+                  options: [
+                    ...OPEN_CODE_CONTEXT_WINDOW_PRESETS.map((value) => ({
+                      value: String(value),
+                      label: value === OPEN_CODE_DEFAULT_CONTEXT_WINDOW ? `${value / 1e3}K (${t.contextRecommended})` : `${value / 1e3}K`
+                    })),
+                    { value: "custom", label: t.contextCustom }
+                  ]
+                }
+              ),
+              choice === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: { gridColumn: "1 / -1", display: "flex", gap: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+                Input,
+                {
+                  mono: true,
+                  type: "number",
+                  disabled,
+                  value: String(contextValue),
+                  onChange: (value) => setModelContext(modelId, value),
+                  suffix: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { style: {
+                    paddingRight: 5,
+                    font: "400 9px/1 var(--font-ui)",
+                    color: "var(--text-tertiary)"
+                  }, children: t.contextTokens })
+                }
+              ) }) : null
+            ] }, modelId);
+          }) }) }) : null,
           error ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
             font: "400 10px/1.4 var(--font-ui)",
             color: "var(--warn)"
@@ -32921,6 +33642,7 @@ ${command}`
                 variant: "ghost",
                 size: "sm",
                 onClick: () => {
+                  invalidateProbe();
                   setDraft(null);
                   setError("");
                   setNote("");
@@ -34389,6 +35111,9 @@ ${command}`
   function declineResult() {
     return { action: "decline", content: {} };
   }
+  function unavailableResult() {
+    return { action: "unavailable", content: {} };
+  }
   function normalizeDirectResult(value) {
     if (!isPlainObject3(value) || !["accept", "decline", "cancel"].includes(value.action)) return null;
     const content = isPlainObject3(value.content) ? cloneVisible(value.content) : {};
@@ -34531,7 +35256,7 @@ ${command}`
       });
       const called = Promise.resolve().then(() => strategy(request, { ...context, signal, plan })).then(
         (value) => ({ aborted: false, value }),
-        () => ({ aborted: false, value: declineResult() })
+        (error) => ({ aborted: false, error })
       );
       const outcome = await Promise.race([called, aborted]);
       for (const source of sources) source.removeEventListener("abort", forwardAbort);
@@ -34565,6 +35290,7 @@ ${command}`
         }
         const outcome = await invoke(resolveApproval, request, context, plan);
         if (outcome.aborted || ((_b = context == null ? void 0 : context.signal) == null ? void 0 : _b.aborted)) return cancelResult();
+        if (outcome.error) return (context == null ? void 0 : context.hostApproval) ? unavailableResult() : declineResult();
         const direct = normalizeDirectResult(outcome.value);
         if (direct) {
           if (plan && direct.action === "accept") {
@@ -34576,7 +35302,8 @@ ${command}`
           if (outcome.value.decision === "allow") return approvalResult("once", outcome.value);
           if (outcome.value.decision === "deny") return declineResult();
           if (outcome.value.decision !== "ask") return declineResult();
-          const pending = enqueue(request, context, plan, outcome.value);
+          const policy = (context == null ? void 0 : context.hostApproval) ? { ...outcome.value, allowSession: false } : outcome.value;
+          const pending = enqueue(request, context, plan, policy);
           release();
           return await pending;
         }
@@ -34643,20 +35370,37 @@ ${command}`
   function conversationApi(getHost) {
     const host = typeof getHost === "function" ? getHost() : null;
     const conversations = host && host.mcp && host.mcp.conversations;
-    if (!conversations || typeof conversations.create !== "function") return null;
+    if (!conversations) return null;
     return conversations;
+  }
+  function rebindError(id) {
+    const error = new Error(`CEP host conversation ${id || "unknown"} could not be rebound after the host API changed`);
+    error.code = "CEP_HOST_CONVERSATION_REBIND_FAILED";
+    return error;
   }
   function createHostConversation({ getHost } = {}) {
     let current = null;
     let currentApi = null;
+    function bindCurrent(conversations) {
+      if (!current) return null;
+      if (currentApi === conversations) return current;
+      if (!conversations || typeof conversations.getById !== "function") throw rebindError(current.id);
+      const rebound = conversations.getById(current.id);
+      if (!rebound) throw rebindError(current.id);
+      current = rebound;
+      currentApi = conversations;
+      return current;
+    }
     function ensureConversation({ label, approvalTier, expertGuidance } = {}) {
       const conversations = conversationApi(getHost);
       if (!conversations) {
+        if (current) throw rebindError(current.id);
         current = null;
         currentApi = null;
         return null;
       }
-      if (current && currentApi === conversations) return current;
+      if (current) return bindCurrent(conversations);
+      if (typeof conversations.create !== "function") return null;
       current = null;
       currentApi = conversations;
       current = conversations.create({
@@ -34672,27 +35416,24 @@ ${command}`
     function updatePolicy(patch = {}) {
       if (!current) return null;
       const conversations = conversationApi(getHost);
-      if (!conversations || conversations !== currentApi || typeof conversations.update !== "function") {
-        current = null;
-        currentApi = null;
-        return null;
-      }
+      if (!conversations || typeof conversations.update !== "function") throw rebindError(current.id);
+      bindCurrent(conversations);
       const updated = conversations.update(current.id, patch);
-      if (updated) current = updated;
-      else current = {
-        ...current,
-        policy: { ...current.policy || {}, ...patch }
-      };
+      if (!updated) throw rebindError(current.id);
+      current = updated;
       return current;
     }
     function closeConversation() {
       if (!current) return false;
       const closing = current;
+      const conversations = conversationApi(getHost);
+      if (!conversations || typeof conversations.close !== "function") throw rebindError(closing.id);
+      bindCurrent(conversations);
+      const closed = conversations.close(closing.id);
+      if (!closed) throw rebindError(closing.id);
       current = null;
       currentApi = null;
-      const conversations = conversationApi(getHost);
-      if (!conversations || typeof conversations.close !== "function") return false;
-      return conversations.close(closing.id);
+      return true;
     }
     function currentPath() {
       return current && current.path ? current.path : null;
@@ -34715,17 +35456,27 @@ ${command}`
 
   // src/lib/hostApprovalBridge.js
   init_cep_runtime_inject();
-  var APPROVAL_SCHEMA = Object.freeze({
-    type: "object",
-    properties: Object.freeze({
-      approve: Object.freeze({
-        type: "boolean",
-        title: "Approve",
-        description: "Approve this After Effects action."
-      })
-    }),
-    required: Object.freeze(["approve"])
-  });
+  function fallbackPlan(item) {
+    const source = String(item && item.id || "host-approval");
+    const hex = Array.from(source).map((character) => character.charCodeAt(0).toString(16)).join("");
+    const digest = (hex + "0".repeat(64)).slice(0, 64);
+    const risk = String(item && item.risk || "") === "destructive" ? "destructive" : String(item && item.risk || "") === "read-only" ? "read" : "write";
+    const summary = item && item.summary && typeof item.summary === "object" ? item.summary : {};
+    return {
+      artifactId: `host-${String(item && item.tool || "unknown")}`,
+      contentHash: digest,
+      planHash: digest,
+      operation: "execute",
+      risk,
+      normalizedArgs: {
+        code: typeof summary.code === "string" ? summary.code : "",
+        undo_group_name: summary.undo_group_name === void 0 ? null : summary.undo_group_name,
+        checkpoint_label: summary.checkpoint_label === void 0 ? null : summary.checkpoint_label
+      },
+      target: { tool: String(item && item.tool || "unknown") },
+      expiresAt: Date.now() + 10 * 60 * 1e3
+    };
+  }
   function summaryLines(summary) {
     const value = summary && typeof summary === "object" ? summary : {};
     const retry = value.recoveryId ? `Retry: ${value.recoveryId} (${value.retryMode === "continue" ? "continue" : `restore checkpoint ${value.restoreCheckpointId || "unavailable"}`})` : "";
@@ -34746,7 +35497,10 @@ ${command}`
     return {
       method: "elicitation/create",
       message: lines.join("\n"),
-      requestedSchema: APPROVAL_SCHEMA
+      requestedSchema: Object.freeze({
+        type: "object",
+        [PLAN_SCHEMA_KEY]: item && item.plan ? item.plan : fallbackPlan(item)
+      })
     };
   }
   function removeListener(emitter, listener) {
@@ -34783,18 +35537,22 @@ ${command}`
         if (!context) return;
         const controller = new AbortController();
         controllers.add(controller);
+        controller.signal.addEventListener("abort", () => {
+          approvals.resolve(item.id, "cancel");
+        }, { once: true });
         Promise.resolve(coordinator.handle(approvalRequestFor(item), {
           ...context,
+          hostApproval: true,
           conversationId: item.conversationId,
           approvalId: item.id,
           signal: controller.signal
         })).then((result) => {
           if (binding !== nextBinding || controller.signal.aborted) return;
-          const accepted = result && result.action === "accept" && result.content && result.content.approve === true;
-          approvals.resolve(item.id, accepted ? "accept" : "decline");
+          const decision = result && result.action === "accept" ? "accept" : result && result.action === "cancel" ? "cancel" : result && result.action === "decline" ? "decline" : "unavailable";
+          approvals.resolve(item.id, decision);
         }, () => {
           if (binding === nextBinding && !controller.signal.aborted) {
-            approvals.resolve(item.id, "decline");
+            approvals.resolve(item.id, "unavailable");
           }
         }).finally(() => controllers.delete(controller));
       };
@@ -35443,6 +36201,10 @@ ${command}`
       regenTitle: "\u91CD\u65B0\u751F\u6210\u8BBF\u95EE Token\uFF1F",
       regenBody: "\u6240\u6709\u5DF2\u8FDE\u63A5\u7684 AI \u5BA2\u6237\u7AEF\u4F1A\u7ACB\u5373\u5931\u53BB\u8BBF\u95EE\u6743\u9650\uFF0C\u9700\u8981\u91CD\u542F\u5B83\u4EEC\u624D\u80FD\u91CD\u65B0\u8FDE\u63A5\u3002",
       regenConfirm: "\u91CD\u65B0\u751F\u6210",
+      stopTaskTitle: "\u505C\u6B62\u5F53\u524D\u4EFB\u52A1\u5E76\u5207\u6362\uFF1F",
+      stopTaskBody: "\u5F53\u524D\u4EFB\u52A1\u4ECD\u5728\u8FD0\u884C\u3002\u7EE7\u7EED\u4F1A\u505C\u6B62\u5F53\u524D\u4EFB\u52A1\uFF0C\u7136\u540E\u6267\u884C\u4F1A\u8BDD\u5207\u6362\u6216\u65B0\u5EFA\u4F1A\u8BDD\u3002",
+      stopTaskConfirm: "\u505C\u6B62\u5E76\u7EE7\u7EED",
+      approvalSyncError: "\u5BA1\u6279\u6863\u4F4D\u672A\u540C\u6B65\uFF0C\u8BF7\u91CD\u8F7D\u9762\u677F\u540E\u518D\u64CD\u4F5C",
       cancel: "\u53D6\u6D88",
       pausedHint: "\u5DF2\u6682\u505C \u2014 \u6062\u590D\u540E\u624D\u80FD\u53D1\u9001",
       goSettings: "\u53BB\u8BBE\u7F6E",
@@ -35466,6 +36228,10 @@ ${command}`
       regenTitle: "Regenerate access token?",
       regenBody: "Every connected AI client loses access immediately and must be restarted to reconnect.",
       regenConfirm: "Regenerate",
+      stopTaskTitle: "Stop the current task and continue?",
+      stopTaskBody: "A task is still running. Continuing will stop it before switching or creating a session.",
+      stopTaskConfirm: "Stop and continue",
+      approvalSyncError: "Approval mode is not synced. Reload the panel before continuing.",
       cancel: "Cancel",
       pausedHint: "Paused \u2014 resume to send",
       goSettings: "Open Settings",
@@ -35520,6 +36286,20 @@ ${command}`
     const getHost = import_react47.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
     const hostConversation = import_react47.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
     const hostApprovalBridge = import_react47.default.useMemo(() => createHostApprovalBridge(), []);
+    const [hostConversationError, setHostConversationError] = import_react47.default.useState("");
+    const runHostConversationSync = import_react47.default.useCallback((operation) => {
+      var _a;
+      try {
+        const value = operation();
+        setHostConversationError("");
+        return value;
+      } catch (error) {
+        const message = (error == null ? void 0 : error.message) || String(error);
+        setHostConversationError(message);
+        (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, `Host conversation sync failed: ${message}`);
+        return null;
+      }
+    }, []);
     const [wizardDone, setWizardDone] = import_react47.default.useState(() => isWizardDone(window.localStorage));
     const [wizStep, setWizStep] = import_react47.default.useState(1);
     const [drawerOpen, setDrawerOpen] = import_react47.default.useState(false);
@@ -35530,6 +36310,7 @@ ${command}`
     const [clients, setClients] = import_react47.default.useState([]);
     const [mcpSessions, setMcpSessions] = import_react47.default.useState([]);
     const [confirmRegen, setConfirmRegen] = import_react47.default.useState(false);
+    const [confirmChatNavigation, setConfirmChatNavigation] = import_react47.default.useState(null);
     const [tokenEpoch, setTokenEpoch] = import_react47.default.useState(0);
     const platform = import_react47.default.useMemo(() => createPlatformAdapter(), []);
     const sessionStore = import_react47.default.useMemo(() => createSessionStore({
@@ -35589,8 +36370,8 @@ ${command}`
     const [toolApproval, setToolApproval] = import_react47.default.useState(() => elicitationCoordinator.snapshot());
     import_react47.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
     import_react47.default.useEffect(() => {
-      hostConversation.updatePolicy({ approvalTier: permissionMode });
-    }, [hostConversation, permissionMode]);
+      runHostConversationSync(() => hostConversation.updatePolicy({ approvalTier: permissionMode }));
+    }, [hostConversation, permissionMode, runHostConversationSync]);
     import_react47.default.useEffect(() => () => {
       elicitationCoordinator.dispose();
     }, [elicitationCoordinator]);
@@ -35606,20 +36387,29 @@ ${command}`
     const [providers, setProviders] = import_react47.default.useState([]);
     const providersRef = import_react47.default.useRef(providers);
     providersRef.current = providers;
+    const providerSensitiveValues = import_react47.default.useMemo(() => providers.map((provider) => {
+      try {
+        return openCodeProviderStore.readApiKey(provider.id);
+      } catch {
+        return "";
+      }
+    }).filter(Boolean), [openCodeProviderStore, providers]);
+    const providerSensitiveValuesRef = import_react47.default.useRef(providerSensitiveValues);
+    providerSensitiveValuesRef.current = providerSensitiveValues;
     const [expertGuidance, setExpertGuidance] = import_react47.default.useState(() => loadExpertGuidance(window.localStorage));
     const expertGuidanceRef = import_react47.default.useRef(expertGuidance);
     expertGuidanceRef.current = expertGuidance;
     import_react47.default.useEffect(() => {
-      hostConversation.updatePolicy({ expertGuidance });
-    }, [expertGuidance, hostConversation]);
+      runHostConversationSync(() => hostConversation.updatePolicy({ expertGuidance }));
+    }, [expertGuidance, hostConversation, runHostConversationSync]);
     import_react47.default.useEffect(() => {
       if (status.state !== "ok") return;
-      hostConversation.ensureConversation({
+      runHostConversationSync(() => hostConversation.ensureConversation({
         label: chatSessionIdRef.current,
         approvalTier: permissionModeRef.current,
         expertGuidance: expertGuidanceRef.current
-      });
-    }, [hostConversation, status.state]);
+      }));
+    }, [hostConversation, runHostConversationSync, status.state]);
     const resolveHostConversationContext = import_react47.default.useCallback((conversationId) => {
       const current = hostConversation.currentConversation();
       if (!current || current.id !== conversationId) return null;
@@ -35649,6 +36439,7 @@ ${command}`
     const [openCodeProbeStale, setOpenCodeProbeStale] = import_react47.default.useState(false);
     const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = import_react47.default.useState(0);
     const openCodeProbeRunRef = import_react47.default.useRef(0);
+    const openCodeAvailableProviders = import_react47.default.useMemo(() => Array.isArray(openCodeProbe == null ? void 0 : openCodeProbe.providers) && openCodeProbe.providers.length ? openCodeProbe.providers : providers, [openCodeProbe, providers]);
     const [chatEntries, setChatEntries] = import_react47.default.useState([]);
     const chatEntriesRef = import_react47.default.useRef(chatEntries);
     chatEntriesRef.current = chatEntries;
@@ -35656,6 +36447,7 @@ ${command}`
     const [chatStreaming, setChatStreaming] = import_react47.default.useState(false);
     const [thinkingActive, setThinkingActive] = import_react47.default.useState(false);
     const [turnStage, setTurnStage] = import_react47.default.useState(null);
+    const [turnProgress, setTurnProgress] = import_react47.default.useState(null);
     const baseDescriptor = import_react47.default.useMemo(
       () => baseDescriptorFor(backendPref),
       [backendPref]
@@ -35675,7 +36467,7 @@ ${command}`
       {
         lang,
         providers,
-        disabled: providerInit.state !== "ready",
+        disabled: providerInit.state !== "ready" || chatStreaming,
         onProbe: async (draft, { apiKey }) => probeOpenCodeProviderModels({
           draft,
           apiKey: apiKey || openCodeProviderStore.readApiKey(draft.id || ""),
@@ -35694,7 +36486,15 @@ ${command}`
 ${draft.baseUrl}`)) return;
             }
             openCodeProviderStore.save(draft, { apiKey, currentId: draft.id });
-            setProviders(openCodeProviderStore.list());
+            const nextProviders = openCodeProviderStore.list();
+            providersRef.current = nextProviders;
+            setProviders(nextProviders);
+            if (apiKey) {
+              providerSensitiveValuesRef.current = Array.from(/* @__PURE__ */ new Set([
+                ...providerSensitiveValuesRef.current,
+                apiKey
+              ]));
+            }
             openCodeBackend.reset();
             runOpenCodeProbe();
           } finally {
@@ -35703,7 +36503,9 @@ ${draft.baseUrl}`)) return;
         },
         onRemove: async (provider) => {
           openCodeProviderStore.remove(provider.id);
-          setProviders(openCodeProviderStore.list());
+          const nextProviders = openCodeProviderStore.list();
+          providersRef.current = nextProviders;
+          setProviders(nextProviders);
           openCodeBackend.reset();
           runOpenCodeProbe();
         }
@@ -35712,12 +36514,15 @@ ${draft.baseUrl}`)) return;
     const channels = import_react47.default.useMemo(() => ({
       claude: claudeChannels({ probe }),
       codex: codexChannels({ codexProbe }),
-      opencode: openCodeChannels({ probe: openCodeProbe, providers })
+      opencode: openCodeChannels({
+        probe: openCodeProbe,
+        providers: openCodeAvailableProviders
+      })
     }), [
       probe,
       codexProbe,
       openCodeProbe,
-      providers
+      openCodeAvailableProviders
     ]);
     const effective = pickBackend({ pref: backendPref, channels, channelChoices });
     const effectiveBackendRef = import_react47.default.useRef(effective.backend);
@@ -35817,6 +36622,24 @@ ${draft.baseUrl}`)) return;
       setTurnStage((current) => reduceTurnStage(current, evt, {
         pendingTurnId: pending == null ? void 0 : pending.turnId
       }));
+      const progressMatches = evt.turnId ? evt.turnId === (pending == null ? void 0 : pending.turnId) : Boolean(pending);
+      if (evt.type === "turn-progress" && progressMatches) {
+        setTurnProgress((current) => ({
+          ...current || {},
+          stage: evt.stage || (current == null ? void 0 : current.stage) || null,
+          ...evt.estimatedTokens === void 0 ? {} : { estimatedTokens: evt.estimatedTokens },
+          ...evt.elapsedMs === void 0 ? {} : { elapsedMs: evt.elapsedMs },
+          warning: false
+        }));
+      }
+      if (evt.type === "turn-progress-warning" && progressMatches) {
+        setTurnProgress((current) => ({
+          ...current || {},
+          warning: true,
+          ...evt.elapsedMs === void 0 ? {} : { warningElapsedMs: evt.elapsedMs },
+          ...evt.warningMs === void 0 ? {} : { warningMs: evt.warningMs }
+        }));
+      }
       if (evt.type === "session-ref") {
         (_a = sessionControllerRef.current) == null ? void 0 : _a.recordBackendRef(evt.ref);
         return;
@@ -35865,6 +36688,7 @@ ${draft.baseUrl}`)) return;
         setChatStreaming(false);
         setThinkingActive(false);
         setTurnStage(null);
+        setTurnProgress(null);
         if (evt.dispatchState === "not-started") {
           dispatchAttachmentDraft({
             type: "rejected",
@@ -35891,6 +36715,7 @@ ${draft.baseUrl}`)) return;
         setChatStreaming(false);
         setThinkingActive(false);
         setTurnStage(null);
+        setTurnProgress(null);
       }
       commitChatEntries((entries) => reduceEvent(entries, evt), evt);
     }, [commitChatEntries, releaseTurnAttachments]);
@@ -35932,6 +36757,7 @@ ${draft.baseUrl}`)) return;
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getProviders: () => providersRef.current,
+      getSensitiveValues: () => providerSensitiveValuesRef.current,
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       getLang: () => langRef.current,
@@ -36054,12 +36880,12 @@ ${draft.baseUrl}`)) return;
         backendPref,
         baseDescriptor,
         codexCachedModels: codexModels,
-        openCodeProviders: providers
+        openCodeProviders: openCodeAvailableProviders
       };
       const nextDescriptor = selectDescriptor(facts);
       setDescriptor(nextDescriptor);
       const reconciled = reconcileModelPref(model, nextDescriptor, {
-        providerFactsPending: backendPref === "opencode" && providerInit.state !== "ready"
+        providerFactsPending: backendPref === "opencode" && (providerInit.state !== "ready" || openCodeProbe === null)
       });
       if (reconciled !== model) {
         setModel(reconciled);
@@ -36071,7 +36897,8 @@ ${draft.baseUrl}`)) return;
       backendPref,
       baseDescriptor,
       codexModels,
-      providers,
+      openCodeAvailableProviders,
+      openCodeProbe,
       providerInit.state
     ]);
     const lastRealBackendRef = import_react47.default.useRef(null);
@@ -36133,7 +36960,12 @@ ${draft.baseUrl}`)) return;
       setOpenCodeProbeAttempt((value) => value + 1);
       setOpenCodeProbe(null);
       openCodeBackend.probeAccount().then((result) => {
-        if (alive && openCodeProbeRunRef.current === runId) setOpenCodeProbe(result);
+        if (!alive || openCodeProbeRunRef.current !== runId) return;
+        if (modelMetadataContainsCredential(result == null ? void 0 : result.providers, providerSensitiveValuesRef.current)) {
+          setOpenCodeProbe({ loggedIn: false, detail: "OpenCode model metadata was rejected" });
+          return;
+        }
+        setOpenCodeProbe(result);
       }).catch((error) => {
         if (alive && openCodeProbeRunRef.current === runId) {
           setOpenCodeProbe({ loggedIn: false, detail: (error == null ? void 0 : error.message) || String(error) });
@@ -36167,6 +36999,7 @@ ${draft.baseUrl}`)) return;
       setChatStreaming(false);
       setThinkingActive(false);
       setTurnStage(null);
+      setTurnProgress(null);
       if (pendingSessionLoadRef.current) return;
       setSessionModel(null);
       setSessionEffort(null);
@@ -36234,11 +37067,16 @@ ${draft.baseUrl}`)) return;
         });
       }
     };
-    const newChatSession = async () => {
+    const newChatSession = async (skipConfirmation = false) => {
+      if (!skipConfirmation && (pendingTurnRef.current || chatStreaming)) {
+        setConfirmChatNavigation({ kind: "new" });
+        return;
+      }
       await sessionController.createSession();
       setChatStreaming(false);
       setThinkingActive(false);
       setTurnStage(null);
+      setTurnProgress(null);
     };
     const pushLog = import_react47.default.useCallback((m) => {
       const message = String(m != null ? m : "");
@@ -36255,6 +37093,14 @@ ${draft.baseUrl}`)) return;
     }, [getHost]);
     panelLogRef.current = pushLog;
     const switchChatSession = import_react47.default.useCallback(async (id) => {
+      if (id === sessionController.snapshot().activeId) return;
+      if (pendingTurnRef.current || chatStreaming) {
+        setConfirmChatNavigation({ kind: "switch", id });
+        return;
+      }
+      await switchChatSessionNow(id);
+    }, [chatStreaming, sessionController]);
+    const switchChatSessionNow = import_react47.default.useCallback(async (id) => {
       const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
       pendingSessionLoadRef.current = id;
       if (target) {
@@ -36267,12 +37113,21 @@ ${draft.baseUrl}`)) return;
         setChatStreaming(false);
         setThinkingActive(false);
         setTurnStage(null);
+        setTurnProgress(null);
       } catch (error) {
         pushLog("Session switch failed: " + ((error == null ? void 0 : error.message) || String(error)));
       } finally {
         pendingSessionLoadRef.current = null;
       }
     }, [pushLog, sessionController]);
+    const confirmChatNavigationNow = import_react47.default.useCallback(async () => {
+      const request = confirmChatNavigation;
+      setConfirmChatNavigation(null);
+      if (!request) return;
+      if (pendingTurnRef.current || chatStreaming) activeBackend == null ? void 0 : activeBackend.stop();
+      if (request.kind === "new") await newChatSession(true);
+      else await switchChatSessionNow(request.id);
+    }, [activeBackend, chatStreaming, confirmChatNavigation, newChatSession, switchChatSessionNow]);
     const deleteChatSession = import_react47.default.useCallback(async (id) => {
       var _a;
       const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
@@ -36530,7 +37385,7 @@ ${draft.baseUrl}`)) return;
         }
       );
     }
-    const statusForBar = paused ? "paused" : status.state === "ok" ? "connected" : status.state === "starting" ? "waiting" : "error";
+    const statusForBar = hostConversationError ? "error" : paused ? "paused" : status.state === "ok" ? "connected" : status.state === "starting" ? "waiting" : "error";
     const tabs = [
       { id: "chat", icon: "message-square", label: t.chat },
       { id: "activity", icon: "list-checks", label: t.activity },
@@ -36538,7 +37393,7 @@ ${draft.baseUrl}`)) return;
       { id: "settings", icon: "settings", label: t.settings }
     ];
     const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
-    const composerDisabled = paused || effective.backend === "none";
+    const composerDisabled = paused || effective.backend === "none" || Boolean(hostConversationError);
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
     const activeSessionMeta = sessionSnapshot.sessions.find(
       (meta) => meta.id === sessionSnapshot.activeId
@@ -36549,7 +37404,7 @@ ${draft.baseUrl}`)) return;
         StatusBar,
         {
           status: statusForBar,
-          label: paused ? t.paused : status.state === "ok" ? `${t.connected} \xB7 127.0.0.1:${status.port}` : status.state === "error" ? `${t.error} \xB7 ${status.error || ""}` : t.starting,
+          label: hostConversationError ? `${t.error} \xB7 ${t.approvalSyncError}` : paused ? t.paused : status.state === "ok" ? `${t.connected} \xB7 127.0.0.1:${status.port}` : status.state === "error" ? `${t.error} \xB7 ${status.error || ""}` : t.starting,
           onStatusClick: () => {
             setDrawerOpen(true);
           },
@@ -36571,11 +37426,12 @@ ${draft.baseUrl}`)) return;
             streaming: chatStreaming,
             thinking: thinkingActive,
             turnStage,
+            turnProgress,
             turnBackend: effective.backend,
             sessionTitle,
             onOpenSessions: () => setSessionsOpen(true),
             composerDisabled,
-            disabledHint: paused ? t.pausedHint : composerDisabled ? backendDisabledHint : "",
+            disabledHint: hostConversationError ? t.approvalSyncError : paused ? t.pausedHint : composerDisabled ? backendDisabledHint : "",
             noticeActionLabel: paused ? t.resume : t.goSettings,
             onNoticeAction: () => paused ? togglePause() : setTab("settings"),
             onSend: sendChat,
@@ -36768,6 +37624,19 @@ ${draft.baseUrl}`)) return;
             setConfirmRegen(false);
             setTokenEpoch((n) => n + 1);
           }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+        ConfirmDialog,
+        {
+          open: Boolean(confirmChatNavigation),
+          title: t.stopTaskTitle,
+          body: t.stopTaskBody,
+          confirmLabel: t.stopTaskConfirm,
+          cancelLabel: t.cancel,
+          danger: true,
+          onCancel: () => setConfirmChatNavigation(null),
+          onConfirm: confirmChatNavigationNow
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(

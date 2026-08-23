@@ -9,9 +9,16 @@ import {
   draftToEntry,
   emptyDraft,
   mergeProbedModelIds,
+  providerDraftModelIds,
+  reconcileDraftModelContexts,
   validateDraft,
 } from '../../lib/providerManagerState';
 import { redactCredentialText } from '../../lib/credentialTextRedaction.js';
+import {
+  OPEN_CODE_CONTEXT_WINDOW_PRESETS,
+  OPEN_CODE_DEFAULT_CONTEXT_WINDOW,
+  openCodeContextPresetValue,
+} from '../../lib/openCodeModelLimits.js';
 
 const L = {
   zh: {
@@ -23,8 +30,13 @@ const L = {
     openCodeKeyCap: '密钥写入 OpenCode auth.json；从旧版本升级的 Provider 必须重新填写。',
     needsApiKey: '需重填 key', insecure: '允许非回环 HTTP（保存时再次确认）',
     probe: '探测模型', probing: '探测中…',
-    probeFilled: (added, total) => `已填入 ${added} 个模型（共 ${total}）`,
+    probeFound: (shown, total) => total > shown
+      ? `探测到 ${total} 个模型，已加入前 ${shown} 个`
+      : `已加入 ${shown} 个模型`,
     models: (count) => `${count} 个模型`, selected: '已选',
+    contextWindow: '上下文窗口', contextCustom: '自定义', contextTokens: 'tokens',
+    contextRecommended: '推荐',
+    contextCap: '按模型设置。越小越早压缩，32K/64K 也会缩短单次回答与工具规划；不确定就选 128K。自定义范围 32K–2M。',
   },
   en: {
     title: 'Provider manager',
@@ -40,8 +52,13 @@ const L = {
     openCodeKeyCap: 'The key is written to OpenCode auth.json. Older providers must be entered again.',
     needsApiKey: 'API key required', insecure: 'Allow non-loopback HTTP (confirmed again on save)',
     probe: 'Probe models', probing: 'Probing…',
-    probeFilled: (added, total) => `Filled ${added} models (${total} found)`,
+    probeFound: (shown, total) => total > shown
+      ? `Found ${total} models; added the first ${shown}`
+      : `Added ${shown} models`,
     models: (count) => `${count} models`, selected: 'selected',
+    contextWindow: 'Context window', contextCustom: 'Custom', contextTokens: 'tokens',
+    contextRecommended: 'recommended',
+    contextCap: 'Set per model. Smaller values compact sooner; 32K/64K also shorten a single answer and tool plan. Use 128K when unsure. Custom range: 32K–2M.',
   },
 };
 
@@ -78,8 +95,23 @@ export function ProviderManagerSection({
   const [error, setError] = React.useState('');
   const [note, setNote] = React.useState('');
   const [probing, setProbing] = React.useState(false);
+  const probeRunRef = React.useRef(0);
+  const invalidateProbe = React.useCallback(() => {
+    probeRunRef.current += 1;
+    setProbing(false);
+  }, []);
+  const draftModelIds = providerDraftModelIds(draft?.modelId);
+  const setModelContext = (modelId, value) => setDraft((current) => (
+    current ? {
+      ...current,
+      // Keep temporarily removed IDs while the user edits the comma-separated
+      // list. draftToEntry performs the final cleanup on Save.
+      modelContexts: { ...current.modelContexts, [modelId]: value },
+    } : current
+  ));
   const save = async (event) => {
     event.preventDefault();
+    invalidateProbe();
     const message = validateDraft(draft);
     if (message) {
       setError(message);
@@ -111,9 +143,12 @@ export function ProviderManagerSection({
           variant="secondary"
           size="sm"
           icon="plus"
+          disabled={disabled}
           onClick={(event) => {
             event.preventDefault();
+            invalidateProbe();
             setDraft(emptyDraft());
+            setError('');
             setNote('');
           }}
         >
@@ -154,6 +189,7 @@ export function ProviderManagerSection({
                   size="sm"
                   disabled={disabled}
                   onClick={() => {
+                    invalidateProbe();
                     setDraft(draftFromEntry(provider));
                     setError('');
                     setNote('');
@@ -165,7 +201,10 @@ export function ProviderManagerSection({
                   variant="ghost"
                   size="sm"
                   disabled={disabled}
-                  onClick={() => onRemove(provider)}
+                  onClick={() => {
+                    invalidateProbe();
+                    onRemove(provider);
+                  }}
                 >
                   {t.del}
                 </Button>
@@ -180,20 +219,32 @@ export function ProviderManagerSection({
             background: 'var(--bg-panel)',
           }}>
             <Field label={t.name}>
-              <Input value={draft.name} onChange={(value) => setDraft({ ...draft, name: value })} />
+              <Input
+                disabled={disabled}
+                value={draft.name}
+                onChange={(value) => setDraft({ ...draft, name: value })}
+              />
             </Field>
             <Field label={t.baseUrl}>
               <Input
                 mono
+                disabled={disabled}
                 value={draft.baseUrl}
-                onChange={(value) => setDraft({ ...draft, baseUrl: value })}
+                onChange={(value) => {
+                  invalidateProbe();
+                  setDraft({ ...draft, baseUrl: value });
+                }}
                 placeholder="https://api.example.com/v1"
               />
             </Field>
             <Field label={t.dialect} caption={t.dialectCap}>
               <Select
+                disabled={disabled}
                 value={draft.protocol}
-                onChange={(value) => setDraft({ ...draft, protocol: value })}
+                onChange={(value) => {
+                  invalidateProbe();
+                  setDraft({ ...draft, protocol: value });
+                }}
                 options={[
                   { value: 'anthropic', label: t.dialectAnthropic },
                   { value: 'openai', label: t.dialectOpenAi },
@@ -205,11 +256,15 @@ export function ProviderManagerSection({
             }}>
               <input
                 type="checkbox"
+                disabled={disabled}
                 checked={draft.allowInsecureHttp}
-                onChange={(event) => setDraft({
-                  ...draft,
-                  allowInsecureHttp: event.target.checked,
-                })}
+                onChange={(event) => {
+                  invalidateProbe();
+                  setDraft({
+                    ...draft,
+                    allowInsecureHttp: event.target.checked,
+                  });
+                }}
               />
               {t.insecure}
             </label>
@@ -220,8 +275,12 @@ export function ProviderManagerSection({
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <Input
                   mono
+                  disabled={disabled}
                   value={draft.modelId}
-                  onChange={(value) => setDraft({ ...draft, modelId: value })}
+                  onChange={(value) => setDraft({
+                    ...draft,
+                    modelId: value,
+                  })}
                   placeholder="claude-sonnet-4"
                 />
                 <Button
@@ -232,23 +291,45 @@ export function ProviderManagerSection({
                   onClick={async (event) => {
                     const form = event.currentTarget.closest('form');
                     const apiKey = String(new FormData(form).get('modelAuthSecret') || '');
+                    const runId = probeRunRef.current + 1;
+                    probeRunRef.current = runId;
                     setProbing(true);
                     setError('');
                     setNote('');
                     try {
                       const result = await onProbe(draft, { apiKey });
+                      if (probeRunRef.current !== runId) return;
                       if (!result.ok) setError(result.detail);
                       else {
-                        const merged = mergeProbedModelIds(draft.modelId, result.models);
-                        setDraft({ ...draft, modelId: merged.modelId });
-                        setNote(t.probeFilled(merged.added, result.total));
+                        setDraft((current) => {
+                          if (!current || probeRunRef.current !== runId) return current;
+                          const merged = mergeProbedModelIds(current.modelId, result.models);
+                          return {
+                            ...current,
+                            modelId: merged.modelId,
+                            modelContexts: {
+                              ...current.modelContexts,
+                              ...Object.fromEntries(result.models.map((modelId) => [
+                                modelId,
+                                Object.prototype.hasOwnProperty.call(
+                                  current.modelContexts || {}, modelId,
+                                )
+                                  ? current.modelContexts[modelId]
+                                  : OPEN_CODE_DEFAULT_CONTEXT_WINDOW,
+                              ])),
+                            },
+                          };
+                        });
+                        setNote(t.probeFound(result.models.length, result.total));
                       }
                     } catch (probeError) {
-                      setError(redactCredentialText(
-                        probeError?.message || 'Provider model probe failed', [apiKey],
-                      ));
+                      if (probeRunRef.current === runId) {
+                        setError(redactCredentialText(
+                          probeError?.message || 'Provider model probe failed', [apiKey],
+                        ));
+                      }
                     } finally {
-                      setProbing(false);
+                      if (probeRunRef.current === runId) setProbing(false);
                     }
                   }}
                 >
@@ -256,6 +337,68 @@ export function ProviderManagerSection({
                 </Button>
               </div>
             </Field>
+            {draftModelIds.length ? (
+              <Field label={t.contextWindow} caption={t.contextCap}>
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 5,
+                  maxHeight: 240, overflowY: 'auto', paddingRight: 2,
+                }}>
+                  {draftModelIds.map((modelId) => {
+                    const contextValue = Object.prototype.hasOwnProperty.call(
+                      draft.modelContexts || {}, modelId,
+                    )
+                      ? draft.modelContexts[modelId]
+                      : OPEN_CODE_DEFAULT_CONTEXT_WINDOW;
+                    const choice = openCodeContextPresetValue(contextValue);
+                    return (
+                      <div key={modelId} style={{
+                        display: 'grid', gridTemplateColumns: 'minmax(90px, 1fr) 105px',
+                        gap: 6, alignItems: 'center',
+                      }}>
+                        <span title={modelId} style={{
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-secondary)',
+                        }}>
+                          {modelId}
+                        </span>
+                        <Select
+                          disabled={disabled}
+                          value={choice}
+                          onChange={(value) => setModelContext(
+                            modelId,
+                            value === 'custom' ? String(contextValue) : Number(value),
+                          )}
+                          options={[
+                            ...OPEN_CODE_CONTEXT_WINDOW_PRESETS.map((value) => ({
+                              value: String(value),
+                              label: value === OPEN_CODE_DEFAULT_CONTEXT_WINDOW
+                                ? `${value / 1000}K (${t.contextRecommended})`
+                                : `${value / 1000}K`,
+                            })),
+                            { value: 'custom', label: t.contextCustom },
+                          ]}
+                        />
+                        {choice === 'custom' ? (
+                          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 6 }}>
+                            <Input
+                              mono
+                              type="number"
+                              disabled={disabled}
+                              value={String(contextValue)}
+                              onChange={(value) => setModelContext(modelId, value)}
+                              suffix={<span style={{
+                                paddingRight: 5, font: '400 9px/1 var(--font-ui)',
+                                color: 'var(--text-tertiary)',
+                              }}>{t.contextTokens}</span>}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Field>
+            ) : null}
             {error ? <div style={{
               font: '400 10px/1.4 var(--font-ui)', color: 'var(--warn)',
             }}>{error}</div> : null}
@@ -267,6 +410,7 @@ export function ProviderManagerSection({
                 variant="ghost"
                 size="sm"
                 onClick={() => {
+                  invalidateProbe();
                   setDraft(null);
                   setError('');
                   setNote('');

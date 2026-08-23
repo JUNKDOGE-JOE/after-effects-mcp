@@ -63,6 +63,7 @@ MCP 响应转发给面板宿主。
 ## 面板能力
 
 - `ae_exec`：执行维护中的 ExtendScript 操作。
+- `ae_execRecover`：按失败返回的编号重试一次已派发的 `ae_exec`。
 - `ae_nativeExec`：执行冻结的原生 AEGP primitive。
 - `ae_previewFrame`、`ae_validateExpressions`、`ae_snapshot` 和检查点。
 - 内置 skills 与本地 JSX Tool Library。
