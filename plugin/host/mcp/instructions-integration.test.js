@@ -65,7 +65,7 @@ test('initialize uses conversation expertGuidance while external sessions retain
         assert.doesNotMatch(lean.result.instructions, /EXTENDSCRIPT EXPERT GUARDRAILS/);
         assert.match(
             lean.result.instructions,
-            /This CEP-hosted server currently exposes: ae_status, ae_exec/,
+            /This CEP-hosted server currently exposes: ae_status, ae_exec, ae_execRecover/,
         );
     } finally {
         await new Promise(function (resolve) {

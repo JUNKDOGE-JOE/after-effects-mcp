@@ -28,6 +28,7 @@ export const ERROR_CODES = Object.freeze({
   RPC_TIMEOUT: entry('RPC_TIMEOUT', 'network', '请求等待超时；请检查通道进程与网络后再试。', 'The request timed out; check the channel process and network before retrying.'),
   UPSTREAM_HTTP: entry('UPSTREAM_HTTP_<status>', 'network', '上游返回了 HTTP 错误；请按状态码检查登录、额度或中转服务。', 'The upstream returned an HTTP error; use the status code to check auth, quota, or relay service.'),
   UPSTREAM_ERROR: entry('UPSTREAM_ERROR', 'model', '上游或模型返回失败；请检查模型可用性与服务状态。', 'The upstream or model failed; check model availability and service status.'),
+  UPSTREAM_CONNECTION_CLOSED: entry('UPSTREAM_CONNECTION_CLOSED', 'network', '上游连接在返回错误时被中断；本轮不会自动重发，下一条消息将使用新会话。', 'The upstream connection closed while returning an error. This turn is not retried automatically; the next message uses a fresh session.'),
   EVENT_STREAM_FAILED: entry('EVENT_STREAM_FAILED', 'network', '事件流已断开；请检查 OpenCode 进程与本地网络。', 'The event stream disconnected; check the OpenCode process and local network.'),
   TURN_INPUT_INVALID: entry('TURN_INPUT_INVALID', 'attachment', '请移除不可用附件或重新选择文件。', 'Remove unavailable attachments or select the files again.'),
   TURN_ABORTED: entry('TURN_ABORTED', 'aborted', '本回合已停止，可在确认没有未决写入后重新发送。', 'The turn was stopped; resend after confirming there is no unresolved write.'),
@@ -93,6 +94,7 @@ export function classifyErrorCode(input = {}) {
   const errorCode = error && error.code;
   const combined = [
     textOf(error),
+    textOf(input.upstreamText),
     textOf(input.stderrTail),
     textOf(input.message),
   ].filter(Boolean).join('\n');
@@ -102,6 +104,9 @@ export function classifyErrorCode(input = {}) {
   if (httpStatus) {
     const code = `UPSTREAM_HTTP_${httpStatus}`;
     return { code, kind: codeKind(code) };
+  }
+  if (/(?:socket|connection).{0,32}(?:closed|reset|terminated)|ECONNRESET|UND_ERR_SOCKET/i.test(combined)) {
+    return { code: 'UPSTREAM_CONNECTION_CLOSED', kind: 'network' };
   }
   if (/\b(?:cancelled|canceled|interrupted)\b/i.test(String(errorCode || ''))
       || /\b(?:cancelled|canceled|interrupted)\b/i.test(combined)) {

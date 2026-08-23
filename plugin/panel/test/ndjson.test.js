@@ -39,3 +39,16 @@ test('createNdjsonReader parses JSON lines and skips contamination', () => {
 
   assert.deepEqual(messages, [{ t: 'ready' }, { t: 'event', n: 2 }]);
 });
+
+test('createNdjsonReader preserves UTF-8 text across every multibyte chunk boundary', () => {
+  const source = `${JSON.stringify({ text: '做个炫酷文字动画' })}\n`;
+  const bytes = new TextEncoder().encode(source);
+
+  for (let cut = 1; cut < bytes.length; cut += 1) {
+    const messages = [];
+    const push = createNdjsonReader((message) => messages.push(message));
+    push(bytes.slice(0, cut));
+    push(bytes.slice(cut));
+    assert.deepEqual(messages, [{ text: '做个炫酷文字动画' }], `cut ${cut}`);
+  }
+});

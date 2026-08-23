@@ -770,6 +770,8 @@ export function createCodexBackend({
         throw taggedError(error, 'spawnError', true);
       }
       proc = spawnedProc;
+      spawnedProc.stdout?.setEncoding?.('utf8');
+      spawnedProc.stderr?.setEncoding?.('utf8');
       const generation = startGeneration + 1;
       runtimeGeneration = generation;
       const nextRpc = createRpc({
@@ -1164,6 +1166,8 @@ export function createCodexBackend({
     } catch (error) {
       return failure(redactText(error && error.message ? error.message : String(error), probeSecrets()));
     }
+    probeProc.stdout?.setEncoding?.('utf8');
+    probeProc.stderr?.setEncoding?.('utf8');
     const probeRpc = createRpc({ writeLine: (line) => probeProc.stdin.write(line) });
     const reader = createNdjsonReader((message) => probeRpc.handleMessage(message));
     if (probeProc.stdout && probeProc.stdout.on) probeProc.stdout.on('data', reader);
@@ -1181,7 +1185,9 @@ export function createCodexBackend({
       let models = null;
       try {
         const listed = await boundedProbeRequest(probeRpc, 'model/list', {}, PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
-        models = Array.isArray(listed) ? listed : listed && listed.models;
+        models = Array.isArray(listed)
+          ? listed
+          : (Array.isArray(listed?.models) ? listed.models : listed?.data);
       } catch (e) {
         // Non-fatal: a stuck/slow model/list (e.g. a relay whose upstream
         // stream disconnects) must not fail the whole probe.
@@ -1261,6 +1267,8 @@ export function createCodexBackend({
         windowsHide: true,
         env: spawnEnv,
       });
+      deleteProc.stdout?.setEncoding?.('utf8');
+      deleteProc.stderr?.setEncoding?.('utf8');
       deleteRpc = createRpc({ writeLine: (line) => deleteProc.stdin.write(line) });
       const reader = createNdjsonReader((message) => deleteRpc.handleMessage(message));
       deleteProc.stdout?.on?.('data', reader);

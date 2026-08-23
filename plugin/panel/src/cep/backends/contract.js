@@ -24,6 +24,8 @@
 //     may repeat after sendUser and before the first text-delta, tool-start,
 //     approval-required, or question-required event. Thinking does not end
 //     progress, and progress never appears after turn-end.
+//   turn-progress-warning{turnId?,elapsedMs,warningMs} is advisory only: it
+//     never stops, kills, or retries a running backend turn.
 //   ( text-delta{text,phase?}
 //   | tool-start{toolUseId,name,input}
 //   | tool-result{toolUseId,ok,text,durationMs}
@@ -54,6 +56,7 @@ export const BACKEND_EVENTS = Object.freeze([
   'turn-accepted',
   'session-ref',
   'turn-progress',
+  'turn-progress-warning',
   'text-delta',
   'tool-start',
   'tool-result',

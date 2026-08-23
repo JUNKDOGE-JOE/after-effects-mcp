@@ -7,7 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { ApprovalQueue } = require('./approvals');
 const {
-    READONLY_DENIED, NO_PROMPT_API, readTier, gateDecision, enforce,
+    READONLY_DENIED, NO_PROMPT_API, readTier, gateDecision, approvalPlan, enforce,
 } = require('./approval-gate');
 
 const MATRIX = [
@@ -22,6 +22,7 @@ test('gateDecision covers four tiers by read, write, and destructive risk', () =
         assert.equal(gateDecision(row[0], 'ae_status'), row[1], row[0] + ' read');
         assert.equal(gateDecision(row[0], 'ae_checkpoint'), row[2], row[0] + ' write');
         assert.equal(gateDecision(row[0], 'ae_exec'), row[3], row[0] + ' destructive');
+        assert.equal(gateDecision(row[0], 'ae_execRecover'), row[3], row[0] + ' destructive recovery');
     });
     assert.equal(gateDecision('invalid', 'ae_exec'), 'elicit');
 });
@@ -62,6 +63,15 @@ test('enforce allows null and none policies and denies readonly writes', async (
     });
 });
 
+test('approval plan identity covers code beyond the bounded card preview', () => {
+    const prefix = 'x'.repeat(200);
+    const first = approvalPlan('ae_exec', { code: prefix + 'A' }, 1000);
+    const second = approvalPlan('ae_exec', { code: prefix + 'B' }, 1000);
+    assert.equal(first.normalizedArgs.code.length, 200);
+    assert.notEqual(first.contentHash, second.contentHash);
+    assert.notEqual(first.planHash, second.planHash);
+});
+
 test('enforce reports missing prompt API, accepted approval, and exact decline text', async (t) => {
     // The approval timer is unref'd, so the test drives it with mock time.
     t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -86,6 +96,6 @@ test('enforce reports missing prompt API, accepted approval, and exact decline t
     const timeoutResult = enforce('ae_exec', context('manual'), { approvals: timedOut });
     t.mock.timers.tick(5);
     assert.deepEqual(await timeoutResult, {
-        ok: false, error: 'User denied this action.',
+        ok: false, error: 'Approval request timed out.',
     });
 });

@@ -1,5 +1,9 @@
 import { redactCredentialText } from '../lib/credentialTextRedaction.js';
+import { containsExactSecret } from '../lib/exactSecretRedaction.js';
+import { openCodeCatalogId } from '../lib/openCodeCatalogId.js';
 import { canonicalOpenCodeBaseUrl } from './openCodeProviderStore.js';
+
+const MAX_PROBED_MODELS = 200;
 
 function failure(detail, apiKey) {
   return { ok: false, detail: redactCredentialText(detail, [apiKey]) };
@@ -11,13 +15,13 @@ function modelIds(value) {
   const seen = new Set();
   const models = [];
   for (const row of rows) {
-    const id = String(typeof row === 'string' ? row : row?.id || '').trim();
+    const id = openCodeCatalogId(typeof row === 'string' ? row : row?.id);
     if (id && !seen.has(id)) {
       seen.add(id);
-      models.push(id);
+      if (models.length < MAX_PROBED_MODELS) models.push(id);
     }
   }
-  return models;
+  return { models, total: seen.size };
 }
 
 export async function probeOpenCodeProviderModels({
@@ -57,7 +61,10 @@ export async function probeOpenCodeProviderModels({
     return failure(`HTTP ${response?.status || 0}${snippet ? `: ${snippet}` : ''}`, key);
   }
   if (response.json === null) return failure('Provider returned a non-JSON response', key);
-  const models = modelIds(response.json);
-  if (!models) return failure('Provider models response has an unsupported shape', key);
-  return { ok: true, models, total: models.length };
+  if (containsExactSecret(response.json, ['aemcp-secret://', key])) {
+    return failure('Provider models response was rejected', key);
+  }
+  const catalog = modelIds(response.json);
+  if (!catalog) return failure('Provider models response has an unsupported shape', key);
+  return { ok: true, models: catalog.models, total: catalog.total };
 }

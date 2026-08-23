@@ -33,6 +33,7 @@ test('reduceTurnStage keeps progress through thinking and clears on visible outp
     assert.equal(reduceTurnStage('dispatch', { type }), null, type);
   }
   assert.equal(reduceTurnStage('session', { type: 'turn-accepted' }), 'session');
+  assert.equal(reduceTurnStage('thinking', { type: 'turn-progress-warning', elapsedMs: 180000 }), 'thinking');
 });
 
 test('turnProgressText localizes backend and generic stages', () => {
@@ -41,5 +42,6 @@ test('turnProgressText localizes backend and generic stages', () => {
   assert.equal(turnProgressText('spawn', 'opencode', 'zh'), '正在启动 OpenCode…');
   assert.equal(turnProgressText('session', 'opencode', 'en'), 'Creating session…');
   assert.equal(turnProgressText('dispatch', 'subscription', 'zh'), '等待模型回复…');
+  assert.equal(turnProgressText('thinking', 'subscription', 'en'), 'Model is thinking…');
   assert.equal(turnProgressText('unknown', 'codex', 'en'), '');
 });

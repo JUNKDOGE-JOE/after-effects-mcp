@@ -5,6 +5,7 @@ import { createMcpClient, PANEL_VERSION } from '../src/cep/mcpClient.js';
 const TOOL_NAMES = [
   'ae_status',
   'ae_exec',
+  'ae_execRecover',
   'ae_read',
   'ae_previewFrame',
   'ae_checkpoint',
@@ -91,7 +92,7 @@ function makeMounted() {
   return { mounted, calls, deleted };
 }
 
-test('createMcpClient prefers the mounted host handle and lists all 11 tools', async () => {
+test('createMcpClient prefers the mounted host handle and lists all 12 tools', async () => {
   const fixture = makeMounted();
   let fetchCalls = 0;
   const conversation = { id: 'conversation-1', path: '/mcp/c/token-1' };

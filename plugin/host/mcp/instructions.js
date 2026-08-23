@@ -6,12 +6,18 @@ const BASE = `Drive Adobe After Effects through two execution routes:
 - Use ae_nativeExec only for curated AEGP primitives and exact native
   semantics.
 
-For every AE execution route choice, use builtin:skill:ae-execution-guide,
-including simple edits. It defines program composition, readback, Undo,
+For every AE execution route choice, call ae_skillUse with name
+"ae-execution-guide", including simple edits. It defines program composition, readback, Undo,
 uncertain-write reconciliation, visual verification, and the generated native
 primitive reference. Read state before writing and prove the result afterward.
-Failed ae_exec calls return a recoveryId and editable scriptPath; edit the file
-and call ae_exec({recoveryId}) to restore and retry. checkpoint_label is required for a restore point.
+Use ae_exec only for a new script. A dispatched failure may return a recoveryId
+and editable scriptPath. Never invent or guess that id; edit the file or supply
+corrected code, then call ae_execRecover with the exact returned id.
+checkpoint_label is required for a restore point.
+Every ae_exec script must evaluate to a value. A bare script may end with
+JSON.stringify(result); but an IIFE must use return JSON.stringify(result);
+inside the function. Merely calling JSON.stringify inside an IIFE evaluates
+the outer script to undefined after AE may already have changed.
 `;
 const EXPERT = `
 EXTENDSCRIPT EXPERT GUARDRAILS — high-frequency AE traps (toggle via AE_MCP_EXPERT_GUIDANCE):

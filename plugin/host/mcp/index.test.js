@@ -88,7 +88,7 @@ test('MCP initializes, enforces loopback Origin/Host, and supports session lifec
             jsonrpc: '2.0', id: 2, method: 'tools/list', params: {},
         });
         assert.deepEqual(listed.body.result.tools.map(function (tool) { return tool.name; }), [
-            'ae_status', 'ae_exec', 'ae_previewFrame', 'ae_read', 'ae_checkpoint',
+            'ae_status', 'ae_exec', 'ae_execRecover', 'ae_previewFrame', 'ae_read', 'ae_checkpoint',
             'ae_revert', 'ae_validateExpressions', 'ae_nativeExec', 'ae_toolSearch',
             'ae_toolUse', 'ae_skillUse',
         ]);

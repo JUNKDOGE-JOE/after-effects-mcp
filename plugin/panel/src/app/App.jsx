@@ -94,6 +94,10 @@ const T = {
     regenTitle: '重新生成访问 Token？',
     regenBody: '所有已连接的 AI 客户端会立即失去访问权限，需要重启它们才能重新连接。',
     regenConfirm: '重新生成',
+    stopTaskTitle: '停止当前任务并切换？',
+    stopTaskBody: '当前任务仍在运行。继续会停止当前任务，然后执行会话切换或新建会话。',
+    stopTaskConfirm: '停止并继续',
+    approvalSyncError: '审批档位未同步，请重载面板后再操作',
     cancel: '取消',
     pausedHint: '已暂停 — 恢复后才能发送',
     goSettings: '去设置',
@@ -117,6 +121,10 @@ const T = {
     regenTitle: 'Regenerate access token?',
     regenBody: 'Every connected AI client loses access immediately and must be restarted to reconnect.',
     regenConfirm: 'Regenerate',
+    stopTaskTitle: 'Stop the current task and continue?',
+    stopTaskBody: 'A task is still running. Continuing will stop it before switching or creating a session.',
+    stopTaskConfirm: 'Stop and continue',
+    approvalSyncError: 'Approval mode is not synced. Reload the panel before continuing.',
     cancel: 'Cancel',
     pausedHint: 'Paused — resume to send',
     goSettings: 'Open Settings',
@@ -173,6 +181,19 @@ function Shell({ cs }) {
   const getHost = React.useCallback(() => (ctrl.current ? ctrl.current.getHost() : null), []);
   const hostConversation = React.useMemo(() => createHostConversation({ getHost }), [getHost]);
   const hostApprovalBridge = React.useMemo(() => createHostApprovalBridge(), []);
+  const [hostConversationError, setHostConversationError] = React.useState('');
+  const runHostConversationSync = React.useCallback((operation) => {
+    try {
+      const value = operation();
+      setHostConversationError('');
+      return value;
+    } catch (error) {
+      const message = error?.message || String(error);
+      setHostConversationError(message);
+      panelLogRef.current?.(`Host conversation sync failed: ${message}`);
+      return null;
+    }
+  }, []);
 
   // First-run wizard
   const [wizardDone, setWizardDone] = React.useState(() => isWizardDone(window.localStorage));
@@ -191,6 +212,7 @@ function Shell({ cs }) {
   const [clients, setClients] = React.useState([]);
   const [mcpSessions, setMcpSessions] = React.useState([]);
   const [confirmRegen, setConfirmRegen] = React.useState(false);
+  const [confirmChatNavigation, setConfirmChatNavigation] = React.useState(null);
   const [tokenEpoch, setTokenEpoch] = React.useState(0);
 
   // Embedded chat: provider references, model/permission prefs, entry feed.
@@ -250,8 +272,8 @@ function Shell({ cs }) {
   const [toolApproval, setToolApproval] = React.useState(() => elicitationCoordinator.snapshot());
   React.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
   React.useEffect(() => {
-    hostConversation.updatePolicy({ approvalTier: permissionMode });
-  }, [hostConversation, permissionMode]);
+    runHostConversationSync(() => hostConversation.updatePolicy({ approvalTier: permissionMode }));
+  }, [hostConversation, permissionMode, runHostConversationSync]);
   React.useEffect(() => () => {
     elicitationCoordinator.dispose();
   }, [elicitationCoordinator]);
@@ -273,20 +295,25 @@ function Shell({ cs }) {
   const [providers, setProviders] = React.useState([]);
   const providersRef = React.useRef(providers);
   providersRef.current = providers;
+  const providerSensitiveValues = React.useMemo(() => providers.map((provider) => {
+    try { return openCodeProviderStore.readApiKey(provider.id); } catch { return ''; }
+  }).filter(Boolean), [openCodeProviderStore, providers]);
+  const providerSensitiveValuesRef = React.useRef(providerSensitiveValues);
+  providerSensitiveValuesRef.current = providerSensitiveValues;
   const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
   const expertGuidanceRef = React.useRef(expertGuidance);
   expertGuidanceRef.current = expertGuidance;
   React.useEffect(() => {
-    hostConversation.updatePolicy({ expertGuidance });
-  }, [expertGuidance, hostConversation]);
+    runHostConversationSync(() => hostConversation.updatePolicy({ expertGuidance }));
+  }, [expertGuidance, hostConversation, runHostConversationSync]);
   React.useEffect(() => {
     if (status.state !== 'ok') return;
-    hostConversation.ensureConversation({
+    runHostConversationSync(() => hostConversation.ensureConversation({
       label: chatSessionIdRef.current,
       approvalTier: permissionModeRef.current,
       expertGuidance: expertGuidanceRef.current,
-    });
-  }, [hostConversation, status.state]);
+    }));
+  }, [hostConversation, runHostConversationSync, status.state]);
   const resolveHostConversationContext = React.useCallback((conversationId) => {
     const current = hostConversation.currentConversation();
     if (!current || current.id !== conversationId) return null;
@@ -316,6 +343,11 @@ function Shell({ cs }) {
   const [openCodeProbeStale, setOpenCodeProbeStale] = React.useState(false);
   const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = React.useState(0);
   const openCodeProbeRunRef = React.useRef(0);
+  const openCodeAvailableProviders = React.useMemo(() => (
+    Array.isArray(openCodeProbe?.providers) && openCodeProbe.providers.length
+      ? openCodeProbe.providers
+      : providers
+  ), [openCodeProbe, providers]);
   const [chatEntries, setChatEntries] = React.useState([]);
   const chatEntriesRef = React.useRef(chatEntries);
   chatEntriesRef.current = chatEntries;
@@ -323,6 +355,7 @@ function Shell({ cs }) {
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
   const [turnStage, setTurnStage] = React.useState(null);
+  const [turnProgress, setTurnProgress] = React.useState(null);
   const baseDescriptor = React.useMemo(
     () => baseDescriptorFor(backendPref),
     [backendPref],
@@ -347,7 +380,7 @@ function Shell({ cs }) {
     <ProviderManagerSection
       lang={lang}
       providers={providers}
-      disabled={providerInit.state !== 'ready'}
+      disabled={providerInit.state !== 'ready' || chatStreaming}
       onProbe={async (draft, { apiKey }) => probeOpenCodeProviderModels({
         draft,
         apiKey: apiKey || openCodeProviderStore.readApiKey(draft.id || ''),
@@ -364,7 +397,18 @@ function Shell({ cs }) {
             if (!window.confirm(`Allow provider requests over insecure HTTP?\n${draft.baseUrl}`)) return;
           }
           openCodeProviderStore.save(draft, { apiKey, currentId: draft.id });
-          setProviders(openCodeProviderStore.list());
+          const nextProviders = openCodeProviderStore.list();
+          // React state commits after this handler returns, while reset/probe
+          // below reads the synchronous ref. Publish the new registry to both
+          // so the first regenerated opencode.json cannot reuse old limits.
+          providersRef.current = nextProviders;
+          setProviders(nextProviders);
+          if (apiKey) {
+            providerSensitiveValuesRef.current = Array.from(new Set([
+              ...providerSensitiveValuesRef.current,
+              apiKey,
+            ]));
+          }
           openCodeBackend.reset();
           runOpenCodeProbe();
         } finally {
@@ -373,7 +417,9 @@ function Shell({ cs }) {
       }}
       onRemove={async (provider) => {
         openCodeProviderStore.remove(provider.id);
-        setProviders(openCodeProviderStore.list());
+        const nextProviders = openCodeProviderStore.list();
+        providersRef.current = nextProviders;
+        setProviders(nextProviders);
         openCodeBackend.reset();
         runOpenCodeProbe();
       }}
@@ -382,12 +428,15 @@ function Shell({ cs }) {
   const channels = React.useMemo(() => ({
     claude: claudeChannels({ probe }),
     codex: codexChannels({ codexProbe }),
-    opencode: openCodeChannels({ probe: openCodeProbe, providers }),
+    opencode: openCodeChannels({
+      probe: openCodeProbe,
+      providers: openCodeAvailableProviders,
+    }),
   }), [
     probe,
     codexProbe,
     openCodeProbe,
-    providers,
+    openCodeAvailableProviders,
   ]);
   const effective = pickBackend({ pref: backendPref, channels, channelChoices });
   const effectiveBackendRef = React.useRef(effective.backend);
@@ -491,6 +540,26 @@ function Shell({ cs }) {
     setTurnStage((current) => reduceTurnStage(current, evt, {
       pendingTurnId: pending?.turnId,
     }));
+    const progressMatches = evt.turnId
+      ? evt.turnId === pending?.turnId
+      : Boolean(pending);
+    if (evt.type === 'turn-progress' && progressMatches) {
+      setTurnProgress((current) => ({
+        ...(current || {}),
+        stage: evt.stage || current?.stage || null,
+        ...(evt.estimatedTokens === undefined ? {} : { estimatedTokens: evt.estimatedTokens }),
+        ...(evt.elapsedMs === undefined ? {} : { elapsedMs: evt.elapsedMs }),
+        warning: false,
+      }));
+    }
+    if (evt.type === 'turn-progress-warning' && progressMatches) {
+      setTurnProgress((current) => ({
+        ...(current || {}),
+        warning: true,
+        ...(evt.elapsedMs === undefined ? {} : { warningElapsedMs: evt.elapsedMs }),
+        ...(evt.warningMs === undefined ? {} : { warningMs: evt.warningMs }),
+      }));
+    }
     if (evt.type === 'session-ref') {
       sessionControllerRef.current?.recordBackendRef(evt.ref);
       return;
@@ -540,6 +609,7 @@ function Shell({ cs }) {
       setChatStreaming(false);
       setThinkingActive(false);
       setTurnStage(null);
+      setTurnProgress(null);
       if (evt.dispatchState === 'not-started') {
         dispatchAttachmentDraft({
           type: 'rejected',
@@ -566,6 +636,7 @@ function Shell({ cs }) {
       setChatStreaming(false);
       setThinkingActive(false);
       setTurnStage(null);
+      setTurnProgress(null);
     }
     commitChatEntries((entries) => reduceEvent(entries, evt), evt);
   }, [commitChatEntries, releaseTurnAttachments]);
@@ -610,6 +681,7 @@ function Shell({ cs }) {
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getProviders: () => providersRef.current,
+    getSensitiveValues: () => providerSensitiveValuesRef.current,
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     getLang: () => langRef.current,
@@ -719,7 +791,7 @@ function Shell({ cs }) {
       backendPref,
       baseDescriptor,
       codexCachedModels: codexModels,
-      openCodeProviders: providers,
+      openCodeProviders: openCodeAvailableProviders,
     };
     const nextDescriptor = selectDescriptor(facts);
     setDescriptor(nextDescriptor);
@@ -729,7 +801,8 @@ function Shell({ cs }) {
     // fallback descriptor would clobber a valid provider-model pref at boot
     // (live-seen: pref reset to the first relay model on every restart).
     const reconciled = reconcileModelPref(model, nextDescriptor, {
-      providerFactsPending: backendPref === 'opencode' && providerInit.state !== 'ready',
+      providerFactsPending: backendPref === 'opencode'
+        && (providerInit.state !== 'ready' || openCodeProbe === null),
     });
     if (reconciled !== model) {
       setModel(reconciled);
@@ -741,7 +814,8 @@ function Shell({ cs }) {
     backendPref,
     baseDescriptor,
     codexModels,
-    providers,
+    openCodeAvailableProviders,
+    openCodeProbe,
     providerInit.state,
   ]);
   const lastRealBackendRef = React.useRef(null);
@@ -804,7 +878,12 @@ function Shell({ cs }) {
     setOpenCodeProbeAttempt((value) => value + 1);
     setOpenCodeProbe(null);
     openCodeBackend.probeAccount().then((result) => {
-      if (alive && openCodeProbeRunRef.current === runId) setOpenCodeProbe(result);
+      if (!alive || openCodeProbeRunRef.current !== runId) return;
+      if (modelMetadataContainsCredential(result?.providers, providerSensitiveValuesRef.current)) {
+        setOpenCodeProbe({ loggedIn: false, detail: 'OpenCode model metadata was rejected' });
+        return;
+      }
+      setOpenCodeProbe(result);
     }).catch((error) => {
       if (alive && openCodeProbeRunRef.current === runId) {
         setOpenCodeProbe({ loggedIn: false, detail: error?.message || String(error) });
@@ -844,6 +923,7 @@ function Shell({ cs }) {
     setChatStreaming(false);
     setThinkingActive(false);
     setTurnStage(null);
+    setTurnProgress(null);
     if (pendingSessionLoadRef.current) return;
     setSessionModel(null);
     setSessionEffort(null);
@@ -911,11 +991,16 @@ function Shell({ cs }) {
     }
   };
 
-  const newChatSession = async () => {
+  const newChatSession = async (skipConfirmation = false) => {
+    if (!skipConfirmation && (pendingTurnRef.current || chatStreaming)) {
+      setConfirmChatNavigation({ kind: 'new' });
+      return;
+    }
     await sessionController.createSession();
     setChatStreaming(false);
     setThinkingActive(false);
     setTurnStage(null);
+    setTurnProgress(null);
   };
 
   // Note: the log-level filter is intentionally applied at append time only; existing buffered lines are unaffected by later level changes.
@@ -938,6 +1023,15 @@ function Shell({ cs }) {
   panelLogRef.current = pushLog;
 
   const switchChatSession = React.useCallback(async (id) => {
+    if (id === sessionController.snapshot().activeId) return;
+    if (pendingTurnRef.current || chatStreaming) {
+      setConfirmChatNavigation({ kind: 'switch', id });
+      return;
+    }
+    await switchChatSessionNow(id);
+  }, [chatStreaming, sessionController]);
+
+  const switchChatSessionNow = React.useCallback(async (id) => {
     const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
     pendingSessionLoadRef.current = id;
     if (target) {
@@ -950,12 +1044,22 @@ function Shell({ cs }) {
       setChatStreaming(false);
       setThinkingActive(false);
       setTurnStage(null);
+      setTurnProgress(null);
     } catch (error) {
       pushLog('Session switch failed: ' + (error?.message || String(error)));
     } finally {
       pendingSessionLoadRef.current = null;
     }
   }, [pushLog, sessionController]);
+
+  const confirmChatNavigationNow = React.useCallback(async () => {
+    const request = confirmChatNavigation;
+    setConfirmChatNavigation(null);
+    if (!request) return;
+    if (pendingTurnRef.current || chatStreaming) activeBackend?.stop();
+    if (request.kind === 'new') await newChatSession(true);
+    else await switchChatSessionNow(request.id);
+  }, [activeBackend, chatStreaming, confirmChatNavigation, newChatSession, switchChatSessionNow]);
 
   const deleteChatSession = React.useCallback(async (id) => {
     const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
@@ -1233,7 +1337,9 @@ function Shell({ cs }) {
     );
   }
 
-  const statusForBar = paused ? 'paused' : status.state === 'ok' ? 'connected' : status.state === 'starting' ? 'waiting' : 'error';
+  const statusForBar = hostConversationError
+    ? 'error'
+    : paused ? 'paused' : status.state === 'ok' ? 'connected' : status.state === 'starting' ? 'waiting' : 'error';
   const tabs = [
     { id: 'chat', icon: 'message-square', label: t.chat },
     { id: 'activity', icon: 'list-checks', label: t.activity },
@@ -1244,7 +1350,7 @@ function Shell({ cs }) {
     || (effective.reason && effective.reason.endsWith('-probing')
       ? (lang === 'zh' ? '正在检测凭据通道…' : 'Checking credential channels…')
       : '');
-  const composerDisabled = paused || effective.backend === 'none';
+  const composerDisabled = paused || effective.backend === 'none' || Boolean(hostConversationError);
   const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
   const activeSessionMeta = sessionSnapshot.sessions.find(
     (meta) => meta.id === sessionSnapshot.activeId,
@@ -1255,7 +1361,9 @@ function Shell({ cs }) {
     <React.Fragment>
       <StatusBar
         status={statusForBar}
-        label={paused ? t.paused : status.state === 'ok' ? `${t.connected} · 127.0.0.1:${status.port}` : status.state === 'error' ? `${t.error} · ${status.error || ''}` : t.starting}
+        label={hostConversationError
+          ? `${t.error} · ${t.approvalSyncError}`
+          : paused ? t.paused : status.state === 'ok' ? `${t.connected} · 127.0.0.1:${status.port}` : status.state === 'error' ? `${t.error} · ${status.error || ''}` : t.starting}
         onStatusClick={() => { setDrawerOpen(true); }}
         onSessions={() => setSessionsOpen(true)}
         onTogglePause={togglePause}
@@ -1273,11 +1381,14 @@ function Shell({ cs }) {
             streaming={chatStreaming}
             thinking={thinkingActive}
             turnStage={turnStage}
+            turnProgress={turnProgress}
             turnBackend={effective.backend}
             sessionTitle={sessionTitle}
             onOpenSessions={() => setSessionsOpen(true)}
             composerDisabled={composerDisabled}
-            disabledHint={paused ? t.pausedHint : composerDisabled ? backendDisabledHint : ''}
+            disabledHint={hostConversationError
+              ? t.approvalSyncError
+              : paused ? t.pausedHint : composerDisabled ? backendDisabledHint : ''}
             noticeActionLabel={paused ? t.resume : t.goSettings}
             onNoticeAction={() => (paused ? togglePause() : setTab('settings'))}
             onSend={sendChat}
@@ -1456,6 +1567,16 @@ function Shell({ cs }) {
           setConfirmRegen(false);
           setTokenEpoch((n) => n + 1);
         }}
+      />
+      <ConfirmDialog
+        open={Boolean(confirmChatNavigation)}
+        title={t.stopTaskTitle}
+        body={t.stopTaskBody}
+        confirmLabel={t.stopTaskConfirm}
+        cancelLabel={t.cancel}
+        danger
+        onCancel={() => setConfirmChatNavigation(null)}
+        onConfirm={confirmChatNavigationNow}
       />
       <ToolApprovalDialog
         record={toolApproval && toolApproval.plan ? toolApproval : null}

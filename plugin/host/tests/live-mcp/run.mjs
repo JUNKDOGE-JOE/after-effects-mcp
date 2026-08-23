@@ -441,7 +441,7 @@ async function main() {
             && touchedLayer, first);
         const fixed = script.split('\n').slice(0, 2).join('\n');
         fs.writeFileSync(first.scriptPath, fixed, 'utf8');
-        const restored = value(await call('ae_exec', { recoveryId: first.recoveryId }));
+        const restored = value(await call('ae_execRecover', { recoveryId: first.recoveryId }));
         const restoredLayers = value(await call('ae_read', { target: 'layers', comp: { id: compId } }));
         check('recovery default restores before retry', restored && restored.ok
             && restored.restored === 'checkpoint'
@@ -455,7 +455,7 @@ async function main() {
         });
         const second = value(secondReply);
         fs.writeFileSync(second.scriptPath, fixed, 'utf8');
-        const continued = value(await call('ae_exec', {
+        const continued = value(await call('ae_execRecover', {
             recoveryId: second.recoveryId,
             retryMode: 'continue',
         }));

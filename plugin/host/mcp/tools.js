@@ -9,9 +9,26 @@
 const jsonrpc = require('./jsonrpc');
 const { textResult, noTopLevelCombinator } = require('./tool-result');
 
+function assertPatternDescriptions(schema, toolName, path) {
+    if (schema === null || typeof schema !== 'object') return;
+    const location = path || '$';
+    const properties = schema.properties;
+    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return;
+    Object.keys(properties).forEach(function (name) {
+        const property = properties[name];
+        if (property && typeof property === 'object'
+            && Object.prototype.hasOwnProperty.call(property, 'pattern')
+            && (typeof property.description !== 'string' || property.description.trim() === '')) {
+            throw new Error('MCP tool inputSchema pattern requires a description: '
+                + toolName + ' at ' + location + '.properties.' + name);
+        }
+    });
+}
+
 const TOOL_MODULES = [
     require('./tools/status'),
     require('./tools/exec'),
+    require('./tools/exec-recover'),
     require('./tools/preview-frame'),
     require('./tools/read'),
     require('./tools/checkpoint'),
@@ -32,6 +49,7 @@ function buildTools(deps) {
         if (!noTopLevelCombinator(mod.definition.inputSchema)) {
             throw new Error('tool schema has a top-level combinator: ' + mod.definition.name);
         }
+        assertPatternDescriptions(mod.definition.inputSchema, mod.definition.name, 'inputSchema');
         if (byName.has(mod.definition.name)) {
             throw new Error('duplicate tool name: ' + mod.definition.name);
         }
@@ -55,4 +73,10 @@ function buildTools(deps) {
     return { list: function () { return definitions; }, call };
 }
 
-module.exports = { buildTools, noTopLevelCombinator, textResult, TOOL_MODULES };
+module.exports = {
+    buildTools,
+    noTopLevelCombinator,
+    textResult,
+    TOOL_MODULES,
+    assertPatternDescriptions,
+};

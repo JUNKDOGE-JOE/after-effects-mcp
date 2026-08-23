@@ -6,7 +6,7 @@ There are two, with **opposite defaults**, and the difference is deliberate. It
 has been read from the source as a fail-open bug (#243), so it is written down
 here rather than left to be rediscovered.
 
-**Verb surface** -- ae_exec, ae_previewFrame, and the rest. Gated by
+**Verb surface** -- ae_exec, ae_execRecover, ae_previewFrame, and the rest. Gated by
 `enforce()`, active only when AE_MCP_APPROVAL_TIER_FILE is set: the embedding
 UI writes one of readonly/manual/auto/none into that file and flips it when the
 user changes the approval chip. With the variable unset the gate is a no-op,
@@ -54,6 +54,7 @@ canUseTool tiers), so semantics match across backends.
 // host yet.
 
 const fs = require('fs');
+const crypto = require('crypto');
 const { VERB_ANNOTATIONS } = require('./annotations');
 
 const VALID_TIERS = ['readonly', 'manual', 'auto', 'none'];
@@ -115,6 +116,37 @@ function approvalSummary(args) {
     };
 }
 
+function approvalPlan(toolName, args, now = Date.now()) {
+    const input = args || {};
+    const normalizedArgs = {
+        code: typeof input.code === 'string' ? input.code.slice(0, 200) : '',
+        undo_group_name: input.undo_group_name === undefined ? null : input.undo_group_name,
+        checkpoint_label: input.checkpoint_label === undefined ? null : input.checkpoint_label,
+        recoveryId: input.recoveryId === undefined ? null : input.recoveryId,
+        retryMode: input.retryMode === undefined ? null : input.retryMode,
+        restoreCheckpointId: input.restoreCheckpointId === undefined
+            ? null : input.restoreCheckpointId,
+    };
+    // The card preview is intentionally bounded, but the identity must cover
+    // the complete tool call. Otherwise two scripts sharing the first 200
+    // characters would look like the same approved operation.
+    const raw = JSON.stringify({ tool: toolName, arguments: input });
+    const contentHash = crypto.createHash('sha256').update(raw).digest('hex');
+    const risk = riskLabel(toolName) === 'destructive'
+        ? 'destructive' : riskLabel(toolName) === 'read-only' ? 'read' : 'write';
+    const plan = {
+        artifactId: 'host-' + toolName,
+        contentHash,
+        operation: 'execute',
+        risk,
+        normalizedArgs,
+        target: { tool: toolName },
+        expiresAt: Number(now) + (10 * 60 * 1000),
+    };
+    plan.planHash = crypto.createHash('sha256').update(JSON.stringify(plan)).digest('hex');
+    return plan;
+}
+
 async function enforce(toolName, context, deps) {
     const policy = context && context.policy;
     const tier = policy ? policy.approvalTier : null;
@@ -133,8 +165,14 @@ async function enforce(toolName, context, deps) {
             tool: toolName,
             risk: riskLabel(toolName),
             summary: approvalSummary(context.arguments),
+            plan: approvalPlan(toolName, context.arguments),
         });
         if (selected === 'accept') return null;
+        if (selected === 'cancel') return { ok: false, error: 'User cancelled this action.' };
+        if (selected === 'unavailable') {
+            return { ok: false, error: 'approval required but the approval dialog is unavailable.' };
+        }
+        if (selected === 'timeout') return { ok: false, error: 'Approval request timed out.' };
         return { ok: false, error: 'User denied this action.' };
     } catch (error) {
         return {
@@ -151,5 +189,6 @@ module.exports = {
     readTier,
     gateDecision,
     riskLabel,
+    approvalPlan,
     enforce,
 };

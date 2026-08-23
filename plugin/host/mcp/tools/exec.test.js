@@ -9,6 +9,7 @@ const { CheckpointStore } = require('../checkpoint-store');
 const { RecoveryStore } = require('../recovery-store');
 const { PROJECT_PATH_CODE } = require('../checkpoint-ops');
 const execTool = require('./exec');
+const execRecoverTool = require('./exec-recover');
 
 function context(tier) {
     return {
@@ -96,17 +97,25 @@ function fixture() {
     };
 }
 
-test('ae_exec schema advertises recovery without top-level combinators and validates call forms', async () => {
+test('ae_exec accepts only new executions and ae_execRecover owns the compact recovery form', async () => {
     assert.equal(Object.prototype.hasOwnProperty.call(execTool.definition.inputSchema, 'oneOf'), false);
-    assert.equal(Object.prototype.hasOwnProperty.call(execTool.definition.inputSchema, 'required'), false);
-    assert.equal(execTool.definition.inputSchema.properties.recoveryId.pattern, '^[a-z0-9]{6}$');
-    assert.deepEqual(execTool.definition.inputSchema.properties.retryMode.enum, ['restore', 'continue']);
+    assert.deepEqual(execTool.definition.inputSchema.required, ['code']);
+    assert.equal(Object.prototype.hasOwnProperty.call(execTool.definition.inputSchema.properties, 'recoveryId'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(execTool.definition.inputSchema.properties, 'retryMode'), false);
+    assert.deepEqual(execRecoverTool.definition.inputSchema.required, ['recoveryId']);
+    assert.equal(execRecoverTool.definition.inputSchema.properties.recoveryId.minLength, 6);
+    assert.equal(execRecoverTool.definition.inputSchema.properties.recoveryId.maxLength, 6);
+    assert.match(execRecoverTool.definition.inputSchema.properties.recoveryId.description, /Never invent|exact/i);
+    assert.deepEqual(execRecoverTool.definition.inputSchema.properties.retryMode.enum, ['restore', 'continue']);
+    assert.ok(Buffer.byteLength(JSON.stringify(execRecoverTool.definition), 'utf8') < 2500);
     const missing = value(await execTool.call({}, context(null), {}));
     assert.equal(missing.error, 'missing or empty `code`');
-    const retryWithoutRecovery = value(await execTool.call({
+    const misplacedRecovery = value(await execTool.call({
         code: '1', retryMode: 'continue',
     }, context(null), {}));
-    assert.equal(retryWithoutRecovery.error, '`retryMode` requires `recoveryId`');
+    assert.equal(misplacedRecovery.error, 'recovery fields are only accepted by `ae_execRecover`');
+    const missingRecoveryId = value(await execRecoverTool.call({ code: 'fixed' }, context(null), {}));
+    assert.match(missingRecoveryId.error, /recoveryId.*must match/);
 });
 
 test('initial dispatched failure writes byte-identical recovery script and attempt metadata', async () => {
@@ -198,7 +207,7 @@ test('retry restores checkpoint, restores viewer, checkpoints again, then runs e
                 revision: { before: 1, after: 2 }, projectPath: f.project,
             });
         });
-        const retried = value(await execTool.call({ recoveryId: first.recoveryId }, context('manual'), f.deps));
+        const retried = value(await execRecoverTool.call({ recoveryId: first.recoveryId }, context('manual'), f.deps));
         assert.equal(retried.ok, true);
         assert.equal(retried.recoveryId, first.recoveryId);
         assert.equal(retried.attempt, 2);
@@ -231,7 +240,7 @@ test('continue skips restore and inline code replaces the recovery script', asyn
         };
         f.calls.length = 0;
         f.deps.setUserHandler(async function () { return success({ ok: true }); });
-        const retried = value(await execTool.call({
+        const retried = value(await execRecoverTool.call({
             recoveryId: first.recoveryId,
             retryMode: 'continue',
             code: 'inline-fixed',
@@ -250,14 +259,14 @@ test('retry rejects unknown ids, project mismatch, and changed projects without 
     const f = fixture();
     try {
         assert.match(
-            value(await execTool.call({ recoveryId: 'abc123' }, context(null), f.deps)).error,
+            value(await execRecoverTool.call({ recoveryId: 'abc123' }, context(null), f.deps)).error,
             /unknown recoveryId/,
         );
         f.deps.setUserHandler(async function () {
             return failed('boom', { revision: { before: 3, after: 4 }, projectPath: f.project });
         });
         const noCheckpoint = value(await execTool.call({ code: 'changed' }, context(null), f.deps));
-        const unavailable = value(await execTool.call({ recoveryId: noCheckpoint.recoveryId }, context(null), f.deps));
+        const unavailable = value(await execRecoverTool.call({ recoveryId: noCheckpoint.recoveryId }, context(null), f.deps));
         assert.equal(unavailable.code, 'RECOVERY_RESTORE_UNAVAILABLE');
 
         const withCheckpoint = value(await execTool.call({
@@ -270,9 +279,27 @@ test('retry rejects unknown ids, project mismatch, and changed projects without 
             if (input.code === PROJECT_PATH_CODE) return reply({ ok: true, path: other });
             return originalExecute(input);
         };
-        const mismatch = value(await execTool.call({ recoveryId: withCheckpoint.recoveryId }, context(null), f.deps));
+        const mismatch = value(await execRecoverTool.call({ recoveryId: withCheckpoint.recoveryId }, context(null), f.deps));
         assert.equal(mismatch.code, 'RECOVERY_PROJECT_MISMATCH');
         assert.equal(f.calls.some(function (entry) { return entry === 'close'; }), false);
+    } finally {
+        f.close();
+    }
+});
+
+test('malformed or unknown recovery ids never execute accompanying code', async () => {
+    const f = fixture();
+    try {
+        const malformed = value(await execRecoverTool.call({ recoveryId: 'BAD-ID', code: 'must-not-run' }, context(null), f.deps));
+        assert.match(malformed.error, /must match/);
+        assert.match(malformed.error, /code was not executed/);
+        assert.match(malformed.error, /exact id returned by ae_exec/);
+
+        const unknown = value(await execRecoverTool.call({ recoveryId: 'abc123', code: 'must-not-run' }, context(null), f.deps));
+        assert.match(unknown.error, /unknown recoveryId/);
+        assert.match(unknown.error, /code was not executed/);
+        assert.match(unknown.error, /exact id returned by ae_exec/);
+        assert.deepEqual(f.calls, []);
     } finally {
         f.close();
     }
@@ -295,7 +322,7 @@ test('unchanged revision retries without a checkpoint and repeated failure reuse
                 })
                 : success({ ok: true }, { revision: { before: 5, after: 5 }, projectPath: f.project });
         });
-        const successful = value(await execTool.call({
+        const successful = value(await execRecoverTool.call({
             recoveryId: first.recoveryId, code: 'fixed',
         }, context(null), f.deps));
         assert.equal(successful.restored, 'not-needed');
@@ -309,7 +336,7 @@ test('unchanged revision retries without a checkpoint and repeated failure reuse
         });
         const second = value(await execTool.call({ code: 'broken-again' }, context(null), f.deps));
         failAgain = true;
-        const failedRetry = value(await execTool.call({
+        const failedRetry = value(await execRecoverTool.call({
             recoveryId: second.recoveryId, code: 'line1\nstill-broken',
         }, context(null), f.deps));
         assert.equal(failedRetry.recoveryId, second.recoveryId);
@@ -324,7 +351,7 @@ test('unchanged revision retries without a checkpoint and repeated failure reuse
     }
 });
 
-test('retry uses one ae_exec approval with complete code and recovery summary fields', async () => {
+test('retry uses one ae_execRecover approval with complete code and recovery summary fields', async () => {
     const f = fixture();
     try {
         const code = 'x'.repeat(250);
@@ -337,7 +364,7 @@ test('retry uses one ae_exec approval with complete code and recovery summary fi
                 attempts: [{ n: 1, revision: { before: 1, after: 1 } }],
             },
         });
-        const readonly = value(await execTool.call({ recoveryId: entry.recoveryId }, context('readonly'), f.deps));
+        const readonly = value(await execRecoverTool.call({ recoveryId: entry.recoveryId }, context('readonly'), f.deps));
         assert.match(readonly.error, /read-only approval tier/);
         let requested = null;
         f.deps.approvals = {
@@ -347,9 +374,9 @@ test('retry uses one ae_exec approval with complete code and recovery summary fi
             },
         };
         f.deps.setUserHandler(async function () { return success({ ok: true }); });
-        const approved = value(await execTool.call({ recoveryId: entry.recoveryId }, context('manual'), f.deps));
+        const approved = value(await execRecoverTool.call({ recoveryId: entry.recoveryId }, context('manual'), f.deps));
         assert.equal(approved.ok, true);
-        assert.equal(requested.tool, 'ae_exec');
+        assert.equal(requested.tool, 'ae_execRecover');
         assert.equal(requested.summary.code, code.slice(0, 200));
         assert.equal(requested.summary.recoveryId, entry.recoveryId);
         assert.equal(requested.summary.retryMode, 'restore');

@@ -12,6 +12,11 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### Unreleased
 
+- **失败恢复从 `ae_exec` 中拆出**——恢复操作改由独立的 `ae_execRecover` 接收 `recoveryId` 与可选修正脚本，`ae_exec` 只接受正常脚本执行参数，避免模型把恢复编号误当脚本内容。本项会把公开工具从 11 个增加到 12 个，并改变旧恢复调用方式，合并前仍需完成兼容性决策。
+- **OpenCode 自定义模型可按模型设置上下文窗口**——Provider 管理器为每个模型提供 32K / 64K / 128K（推荐）/ 200K 与自定义数值；旧配置自动沿用 128K。面板拒绝小于 32K 或大于 2M 的值，并按窗口自动预留合理的回复空间，避免把 32K 模型同时声明成 32K 输出而导致每轮都压缩。填大不会增加模型真实能力，界面明确提示过大可能来不及压缩、过小会更频繁压缩。
+- **Luna 的属性读取不再被本地拒绝**——`ae_read` 现在接受按属性完整路径排序；Luna 在真实长会话里生成这种合法请求时，可以直接读取而不会在到达 AE 前失败。
+- **低档模型的脚本返回要求更明确**——主机现在明确区分普通脚本末尾的结果与函数包装内必须 `return` 的结果，减少“AE 已执行、面板却只能判失败”的可避免恢复流程。
+
 ### [0.10.1] — 2026-08-23
 
 #### ✨ 新增
@@ -327,6 +332,11 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ## English
 
 ### Unreleased
+
+- **Failure recovery is split out of `ae_exec`** — a dedicated `ae_execRecover` now accepts `recoveryId` and optional corrected code, while `ae_exec` accepts only normal script-execution arguments so models cannot mistake a recovery id for script text. This increases the public surface from 11 tools to 12 and changes the previous recovery call shape; the compatibility decision remains required before merge.
+- **Per-model context windows for custom OpenCode models** — Provider Manager now offers 32K / 64K / 128K (recommended) / 200K presets plus a custom value for every model; existing configurations keep the 128K default. Values below 32K or above 2M are rejected, and the advertised output reserve scales with the chosen window so a 32K model is not also declared as having 32K of output capacity. The UI warns that a larger number cannot increase a provider's real capacity, while a smaller number compacts more often.
+- **Luna property reads no longer fail local validation** — `ae_read` now accepts sorting properties by their full match path, so this valid request shape from Luna reaches After Effects instead of failing before dispatch.
+- **Clearer script-result guidance for smaller models** — host instructions now distinguish a bare script's final value from the explicit `return` required inside an IIFE, reducing avoidable recoveries where AE changed but the panel received `undefined`.
 
 ### [0.10.1] — 2026-08-23
 

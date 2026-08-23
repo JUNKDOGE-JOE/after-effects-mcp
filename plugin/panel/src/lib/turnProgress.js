@@ -42,5 +42,8 @@ export function turnProgressText(stage, backend, lang = 'zh') {
   if (stage === 'dispatch') {
     return zh ? '等待模型回复…' : 'Waiting for the model…';
   }
+  if (stage === 'thinking') {
+    return zh ? '模型思考中…' : 'Model is thinking…';
+  }
   return '';
 }

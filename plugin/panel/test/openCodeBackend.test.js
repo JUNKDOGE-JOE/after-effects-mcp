@@ -1,10 +1,28 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createOpenCodeBackend } from '../src/cep/openCodeBackend.js';
+import {
+  createOpenCodeBackend,
+  OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES,
+} from '../src/cep/openCodeBackend.js';
+import {
+  OPEN_CODE_HISTORY_GUARD_FILENAME,
+  openCodeHistoryGuardPluginSource,
+} from '../src/cep/openCodeHistoryGuard.js';
 import { openCodeDescriptorFromModels, openCodeStaticDescriptor } from '../src/lib/backendCapabilities.js';
 
 async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function completeTurn(fetched, sessionID = 'session_1') {
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID, status: { type: 'busy' } },
+  });
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID, status: { type: 'idle' } },
+  });
 }
 
 function makeProc(pid = 7001) {
@@ -12,9 +30,11 @@ function makeProc(pid = 7001) {
   const stderrHandlers = [];
   const exitHandlers = [];
   const errorHandlers = [];
+  const encodings = [];
   let killed = false;
   return {
     pid,
+    encodings,
     get killed() {
       return killed;
     },
@@ -22,10 +42,16 @@ function makeProc(pid = 7001) {
       on(event, handler) {
         if (event === 'data') stdoutHandlers.push(handler);
       },
+      setEncoding(value) {
+        encodings.push(['stdout', value]);
+      },
     },
     stderr: {
       on(event, handler) {
         if (event === 'data') stderrHandlers.push(handler);
+      },
+      setEncoding(value) {
+        encodings.push(['stderr', value]);
       },
     },
     on(event, handler) {
@@ -75,6 +101,9 @@ function makeSseStream() {
     push(event) {
       const frame = 'event: message\ndata: ' + JSON.stringify(event) + '\n\n';
       const chunk = new TextEncoder().encode(frame);
+      this.pushBytes(chunk);
+    },
+    pushBytes(chunk) {
       const waiter = waiters.shift();
       if (waiter) waiter({ done: false, value: chunk });
       else chunks.push(chunk);
@@ -120,11 +149,13 @@ function makeFetch() {
     if (parsed.pathname === '/session' && options.method === 'POST') return jsonResponse({ id: 'session_1' });
     if (parsed.pathname === '/config/providers') {
       return jsonResponse({
-        opencode: {
+        providers: [{
           id: 'opencode',
           name: 'OpenCode Zen',
-          models: { 'north-mini-code-free': { name: 'North Mini Code Free' } },
-        },
+          models: { 'hy3-free': { name: 'HY 3 Free' } },
+          options: { apiKey: 'must-never-leave-the-backend' },
+        }],
+        default: { opencode: 'hy3-free' },
       });
     }
     return jsonResponse({ ok: true });
@@ -185,6 +216,11 @@ const TOOL_META = {
   },
 };
 
+const OPEN_CODE_PROBE = {
+  loggedIn: true,
+  providers: [{ id: 'opencode', modelIds: ['hy3-free'], needsApiKey: false }],
+};
+
 function makeBackend(options = {}) {
   const events = [];
   const spawned = makeSpawn();
@@ -223,7 +259,7 @@ function makeBackend(options = {}) {
       name: 'ae',
     }),
     getToolMeta: async () => TOOL_META,
-    getModel: () => 'north-mini-code-free',
+    getModel: () => 'hy3-free',
     getPermissionMode: () => 'manual',
     onEvent: (evt) => events.push(evt),
     env: { PATH: 'C:\\Node' },
@@ -297,9 +333,19 @@ function makeStableFs(marker) {
 test('OpenCode reclaims a stable marker owned by this panel before spawn', async () => {
   const fsImpl = makeStableFs({ owner: 'ae-mcp-panel', ownerPid: 4100, pid: 7101 });
   const h = makeBackend({ fsImpl });
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   assert.deepEqual(h.terminated, [{ pid: 7101, executableName: 'opencode' }]);
   assert.equal(fsImpl.removals.includes(fsImpl.markerPath), true);
+});
+
+test('OpenCode decodes both child-process streams as UTF-8', async () => {
+  const h = makeBackend();
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
+  assert.deepEqual(h.spawned.procs[0].encodings, [
+    ['stdout', 'utf8'],
+    ['stderr', 'utf8'],
+  ]);
+  h.backend.reset();
 });
 
 test('OpenCode does not terminate a stable marker owned by another live panel', async () => {
@@ -309,7 +355,7 @@ test('OpenCode does not terminate a stable marker owned by another live panel', 
     fsImpl,
     processAlive: async (request) => { aliveRequests.push(request); return true; },
   });
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   assert.deepEqual(aliveRequests, [{ pid: 5100 }]);
   assert.equal(h.terminated.length, 0);
   assert.equal(fsImpl.removals.includes(fsImpl.markerPath), true);
@@ -322,7 +368,7 @@ test('OpenCode terminates a stable marker after its owner process exits', async 
     fsImpl,
     processAlive: async (request) => { aliveRequests.push(request); return false; },
   });
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   assert.deepEqual(aliveRequests, [{ pid: 5101 }]);
   assert.deepEqual(h.terminated, [{ pid: 7103, executableName: 'opencode' }]);
   assert.equal(fsImpl.removals.includes(fsImpl.markerPath), true);
@@ -332,14 +378,14 @@ test('OpenCode reset and unexpected exit remove only the stable instance marker'
   const configHome = 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488';
   const resetFs = makeStableFs(null);
   const resetBackend = makeBackend({ fsImpl: resetFs });
-  assert.deepEqual(await resetBackend.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await resetBackend.backend.probeAccount(), OPEN_CODE_PROBE);
   resetBackend.backend.reset();
   assert.equal(resetFs.removals.includes(resetFs.markerPath), true);
   assert.equal(resetFs.removals.includes(configHome), false);
 
   const exitFs = makeStableFs(null);
   const exited = makeBackend({ fsImpl: exitFs });
-  assert.deepEqual(await exited.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await exited.backend.probeAccount(), OPEN_CODE_PROBE);
   exited.spawned.procs[0].exit(1);
   await flush();
   assert.equal(exitFs.removals.includes(exitFs.markerPath), true);
@@ -377,10 +423,7 @@ test('OpenCode keeps reasoning parts out of assistant text', async () => {
     type: 'message.part.updated',
     properties: { sessionID: 'session_1', part: { id: 'prt_B', type: 'text', text: 'OK' } },
   });
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await pending;
 
   const textEvents = events.filter((event) => event.type === 'text-delta');
@@ -401,10 +444,7 @@ test('OpenCode falls back to delta field when the part type is unknown', async (
     type: 'message.part.delta',
     properties: { sessionID: 'session_1', partID: 'unknown', field: 'text', delta: 'legacy' },
   });
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await pending;
   assert.equal(events.filter((event) => event.type === 'text-delta').map((event) => event.text).join(''), 'legacy');
   assert.deepEqual(backend.getMessages().at(-1), { role: 'assistant', text: 'legacy' });
@@ -429,7 +469,7 @@ test('OpenCode startup does not wait for asynchronous stale-directory removal', 
     probe,
     new Promise((resolve) => setTimeout(() => resolve('blocked'), 500)),
   ]);
-  assert.deepEqual(result, { loggedIn: true });
+  assert.deepEqual(result, OPEN_CODE_PROBE);
   assert.equal(fsImpl.syncRemovals.some((dir) => dir.startsWith('C:\\tmp\\ae-opencode-')), false);
   finishRemove();
   await swept;
@@ -443,7 +483,7 @@ test('OpenCode startup survives an asynchronous stale-directory removal failure'
   let sweepDone;
   const swept = new Promise((resolve) => { sweepDone = resolve; });
   const h = makeBackend({ fsImpl, onSweepComplete: sweepDone });
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   await swept;
   assert.equal(fsImpl.removals.filter((dir) => dir === 'C:\\tmp\\ae-opencode-old').length, 1);
   assert.equal(fsImpl.syncRemovals.some((dir) => dir.startsWith('C:\\tmp\\ae-opencode-')), false);
@@ -484,7 +524,7 @@ test('OpenCode sweep skips an instance owned by another live panel', async () =>
     processAlive: async (request) => { aliveRequests.push(request); return true; },
     onSweepComplete: sweepDone,
   });
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   await swept;
   assert.deepEqual(aliveRequests, [{ pid: 5200 }]);
   assert.equal(h.terminated.length, 0);
@@ -496,7 +536,7 @@ test('OpenCode sweep terminates an instance owned by the same panel process', as
   let sweepDone;
   const swept = new Promise((resolve) => { sweepDone = resolve; });
   const h = makeBackend({ fsImpl, onSweepComplete: sweepDone });
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   await swept;
   assert.deepEqual(h.terminated, [{ pid: 6201, executableName: 'opencode' }]);
   assert.equal(fsImpl.removals.filter((dir) => dir === 'C:\\tmp\\ae-opencode-old').length, 1);
@@ -512,7 +552,7 @@ test('OpenCode sweep terminates an instance whose owner process is gone', async 
     processAlive: async (request) => { aliveRequests.push(request); return false; },
     onSweepComplete: sweepDone,
   });
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   await swept;
   assert.deepEqual(aliveRequests, [{ pid: 5300 }]);
   assert.deepEqual(h.terminated, [{ pid: 6202, executableName: 'opencode' }]);
@@ -554,10 +594,7 @@ test('createOpenCodeBackend sends official file parts and accepts at dispatch', 
   });
   assert.equal(JSON.stringify(events).includes('C:\\tmp'), false);
 
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await pending;
   assert.deepEqual(backend.getMessages()[0], { role: 'user', text: 'inspect' });
 });
@@ -588,10 +625,7 @@ test('createOpenCodeBackend redacts an attachment path split across output and t
     type: 'message.part.delta',
     properties: { sessionID: 'session_1', field: 'text', delta: 'customer.mov' },
   });
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await pending;
 
   const rendered = JSON.stringify({ events, messages: backend.getMessages() });
@@ -644,10 +678,7 @@ test('createOpenCodeBackend keeps attachment stderr redaction until the persiste
     }],
   });
   await flush();
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await first;
 
   const proc = spawned.procs[0];
@@ -703,7 +734,7 @@ test('createOpenCodeBackend correlates a failed message POST as uncertain withou
     kind: 'backend',
     code: 'TURN_START_FAILED',
     message: 'OpenCode turn could not be started.',
-    detail: { endpoint: '/session/session_1/message' },
+    detail: { endpoint: '/session/session_1/message', sessionReset: true },
     turnId: 'turn-post-failed',
     dispatchState: 'uncertain',
   });
@@ -717,7 +748,9 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
 
   assert.equal(spawned.calls.length, 1);
   assert.equal(spawned.calls[0].command, 'C:\\Tools\\opencode.exe');
-  assert.deepEqual(spawned.calls[0].args, ['serve', '--port', '4567']);
+  assert.deepEqual(spawned.calls[0].args, [
+    'serve', '--print-logs', '--log-level', 'INFO', '--port', '4567',
+  ]);
   assert.equal(spawned.calls[0].options.shell, undefined);
   assert.equal(spawned.calls[0].options.windowsHide, true);
   // OpenCode scopes project context to cwd; inheriting AE's cwd ballooned
@@ -732,6 +765,10 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
     entry.dir === 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\opencode'
       && entry.options.recursive === true
   )), true);
+  assert.equal(fsImpl.dirs.some((entry) => (
+    entry.dir === 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\opencode\\plugins'
+      && entry.options.recursive === true
+  )), true);
 
   const configWrite = fsImpl.writes.find((write) => write.file.endsWith('opencode\\opencode.json'));
   assert.equal(configWrite.file, 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\opencode\\opencode.json');
@@ -740,6 +777,12 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
     url: 'http://127.0.0.1:11488/mcp/c/opencode-default-token',
     enabled: true,
   });
+  const pluginWrite = fsImpl.writes.find((write) => write.file.endsWith(OPEN_CODE_HISTORY_GUARD_FILENAME));
+  assert.equal(
+    pluginWrite.file,
+    'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\opencode\\plugins\\' + OPEN_CODE_HISTORY_GUARD_FILENAME,
+  );
+  assert.equal(pluginWrite.text, openCodeHistoryGuardPluginSource());
   const markerWrite = fsImpl.writes.find((write) => write.file.endsWith('instance.json'));
   assert.equal(markerWrite.file, 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\instance.json');
   assert.deepEqual(JSON.parse(markerWrite.text), {
@@ -753,14 +796,11 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
 
   await flush();
   const sessionCall = fetched.calls.find((call) => call.path === '/session');
-  assert.deepEqual(sessionCall.body.model, { id: 'north-mini-code-free', providerID: 'opencode' });
+  assert.deepEqual(sessionCall.body.model, { id: 'hy3-free', providerID: 'opencode' });
   assert.equal('permission' in sessionCall.body, false);
   assert.equal(fetched.calls.some((call) => call.path === '/session/session_1/message' && call.body.parts[0].text === 'hello'), true);
 
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await pending;
 });
 
@@ -781,7 +821,7 @@ test('OpenCode sweeps marked and unmarked stale homes while preserving the selec
   const swept = new Promise((resolve) => { sweepDone = resolve; });
   const h = makeBackend({ fsImpl, onSweepComplete: sweepDone });
 
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   await swept;
   assert.deepEqual(h.terminated, [{ pid: 41, executableName: 'opencode' }]);
   assert.ok(fsImpl.removals.includes(markedHome));
@@ -798,7 +838,7 @@ test('OpenCode ignores stale-home removal failures and still starts the server',
   });
   const h = makeBackend({ fsImpl });
 
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   assert.equal(h.spawned.calls.length, 1);
   assert.ok(fsImpl.removals.includes(staleHome));
   h.backend.reset();
@@ -856,7 +896,7 @@ test('OpenCode cancels an old starting generation without letting its exit clear
 
   h.backend.reset();
   const secondProbe = await h.backend.probeAccount();
-  assert.deepEqual(secondProbe, { loggedIn: true });
+  assert.deepEqual(secondProbe, OPEN_CODE_PROBE);
   assert.equal(h.spawned.calls.length, 2);
   resolveFirstMcp(jsonResponse({ ae: { status: 'connected' } }));
   assert.equal((await firstProbe).loggedIn, false);
@@ -870,10 +910,7 @@ test('OpenCode cancels an old starting generation without letting its exit clear
     await flush();
   }
   assert.equal(h.spawned.calls.length, 2);
-  base.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(base);
   await pending;
 });
 
@@ -923,10 +960,7 @@ test('OpenCode reports cold-start stages before model output and omits spawn on 
     type: 'message.part.delta',
     properties: { sessionID: 'session_1', field: 'text', delta: 'hello' },
   });
-  h.fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(h.fetched);
   await first;
   const textIndex = h.events.findIndex((event) => event.type === 'text-delta');
   assert.ok(coldStages.every((event) => h.events.indexOf(event) < textIndex));
@@ -941,10 +975,7 @@ test('OpenCode reports cold-start stages before model output and omits spawn on 
     h.events.slice(boundary).filter((event) => event.type === 'turn-progress').map((event) => event.stage),
     ['dispatch'],
   );
-  h.fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(h.fetched);
   await second;
   assert.equal(h.spawned.calls.length, 1);
 });
@@ -964,7 +995,7 @@ test('createOpenCodeBackend writes only a per-conversation remote MCP URL', asyn
     enabled: true,
   });
   assert.match(JSON.parse(config.text).mcp.ae.url, /\/mcp\/c\//);
-  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
+  completeTurn(fetched);
   await pending;
 });
 
@@ -975,6 +1006,7 @@ test('createOpenCodeBackend injects panel-managed OpenCode provider definitions'
       name: 'Relay',
       baseUrl: 'https://relay.example/v1',
       modelId: 'claude-test',
+      modelContexts: { 'claude-test': 64000 },
       allowInsecureHttp: false,
       needsApiKey: false,
     }],
@@ -987,12 +1019,47 @@ test('createOpenCodeBackend injects panel-managed OpenCode provider definitions'
     write.file.endsWith('opencode\\opencode.json')
   )).text);
   assert.deepEqual(config.permission, { '*': 'allow' });
+  assert.deepEqual(OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES, [
+    'apply_patch',
+    'bash',
+    'batch',
+    'codesearch',
+    'edit',
+    'glob',
+    'grep',
+    'invalid',
+    'list',
+    'lsp',
+    'plan_enter',
+    'plan_exit',
+    'read',
+    'skill',
+    'task',
+    'todoread',
+    'todowrite',
+    'webfetch',
+    'websearch',
+    'write',
+  ]);
+  assert.deepEqual(
+    config.tools,
+    Object.fromEntries(OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES.map((name) => [name, false])),
+  );
+  assert.equal(Object.values(config.tools).every((enabled) => enabled === false), true);
+  assert.equal(Object.keys(config.tools).some((name) => name.startsWith('ae_')), false);
+  assert.equal('question' in config.tools, false);
+  assert.equal(config.mcp.ae.enabled, true);
   assert.deepEqual(config.provider, {
     'aemcp-relay': {
       npm: '@ai-sdk/anthropic',
       name: 'Relay',
       options: { baseURL: 'https://relay.example/v1' },
-      models: { 'claude-test': { name: 'claude-test' } },
+      models: {
+        'claude-test': {
+          name: 'claude-test',
+          limit: { context: 64000, output: 16000 },
+        },
+      },
     },
   });
   assert.deepEqual(fetched.calls.find((call) => call.path === '/session').body.model, {
@@ -1000,10 +1067,7 @@ test('createOpenCodeBackend injects panel-managed OpenCode provider definitions'
     providerID: 'aemcp-relay',
   });
 
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await pending;
 });
 
@@ -1036,6 +1100,257 @@ test('createOpenCodeBackend maps text, reasoning, tool, and idle SSE events to p
     { type: 'tool-result', toolUseId: 'tool_1', name: 'mcp__ae__ae_ping', ok: true, text: '{"ok":true}', durationMs: 25 },
     { type: 'turn-end', stopReason: 'end_turn' },
   ]);
+});
+
+test('OpenCode SSE preserves Chinese text split inside a UTF-8 character', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser('utf8');
+  await flush();
+
+  const event = {
+    type: 'message.part.delta',
+    properties: { sessionID: 'session_1', field: 'text', delta: '做个炫酷文字动画' },
+  };
+  const bytes = new TextEncoder().encode(`event: message\ndata: ${JSON.stringify(event)}\n\n`);
+  const marker = new TextEncoder().encode('炫')[0];
+  const start = bytes.indexOf(marker);
+  assert.ok(start > 0);
+  fetched.sse.pushBytes(bytes.slice(0, start + 1));
+  fetched.sse.pushBytes(bytes.slice(start + 1));
+  completeTurn(fetched);
+  await pending;
+
+  assert.equal(
+    events.filter((item) => item.type === 'text-delta').map((item) => item.text).join(''),
+    '做个炫酷文字动画',
+  );
+});
+
+test('OpenCode renders built-in questions and posts ordered answer arrays without a fake MCP tool', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser('create a title animation');
+  await flush();
+
+  fetched.sse.push({
+    type: 'message.part.updated',
+    properties: {
+      sessionID: 'session_1',
+      part: {
+        type: 'tool',
+        tool: 'question',
+        callID: 'call_question',
+        state: { status: 'running', input: {} },
+      },
+    },
+  });
+  fetched.sse.push({
+    type: 'question.asked',
+    properties: {
+      id: 'que_title',
+      sessionID: 'session_1',
+      questions: [
+        {
+          question: 'What title text should I use?',
+          header: 'Title',
+          options: [],
+          multiple: false,
+          custom: true,
+        },
+        {
+          question: 'Which animation styles?',
+          header: 'Style',
+          options: [
+            { label: 'Fade', description: 'Fade in' },
+            { label: 'Scale', description: 'Scale up' },
+          ],
+          multiple: true,
+          custom: false,
+        },
+      ],
+      tool: { messageID: 'msg_1', callID: 'call_question' },
+    },
+  });
+  await flush();
+
+  const required = events.find((event) => event.type === 'question-required');
+  assert.deepEqual(required, {
+    type: 'question-required',
+    toolUseId: 'que_title',
+    source: 'opencode-question',
+    title: '',
+    questions: [
+      {
+        id: 'q0',
+        key: 'What title text should I use?',
+        prompt: 'What title text should I use?',
+        header: 'Title',
+        options: [],
+        multiSelect: false,
+        allowCustom: true,
+        required: true,
+      },
+      {
+        id: 'q1',
+        key: 'Which animation styles?',
+        prompt: 'Which animation styles?',
+        header: 'Style',
+        options: [
+          { label: 'Fade', description: 'Fade in' },
+          { label: 'Scale', description: 'Scale up' },
+        ],
+        multiSelect: true,
+        allowCustom: false,
+        required: true,
+      },
+    ],
+  });
+  assert.equal(events.some((event) => (
+    (event.type === 'tool-start' || event.type === 'tool-result')
+      && event.name === 'mcp__ae__question'
+  )), false);
+
+  assert.equal(await backend.answerQuestion('que_title', {
+    action: 'submit',
+    values: { q0: 'LONGTURN', q1: ['Fade', 'Scale'] },
+  }), true);
+  assert.deepEqual(fetched.calls.at(-1), {
+    method: 'POST',
+    path: '/question/que_title/reply',
+    body: { answers: [['LONGTURN'], ['Fade', 'Scale']] },
+  });
+  assert.deepEqual(events.at(-1), {
+    type: 'question-resolved',
+    toolUseId: 'que_title',
+    outcome: 'answered',
+    answers: {
+      'What title text should I use?': 'LONGTURN',
+      'Which animation styles?': 'Fade, Scale',
+    },
+  });
+
+  fetched.sse.push({
+    type: 'message.part.updated',
+    properties: {
+      sessionID: 'session_1',
+      part: {
+        type: 'tool',
+        tool: 'question',
+        callID: 'call_question',
+        state: { status: 'completed', output: 'answered' },
+      },
+    },
+  });
+  completeTurn(fetched);
+  await pending;
+  assert.equal(events.some((event) => (
+    (event.type === 'tool-start' || event.type === 'tool-result')
+      && event.name === 'mcp__ae__question'
+  )), false);
+});
+
+test('OpenCode question cancel posts reject and settles the card', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser('ask');
+  await flush();
+  fetched.sse.push({
+    type: 'question.asked',
+    properties: {
+      id: 'que_cancel',
+      sessionID: 'session_1',
+      questions: [{ question: 'Continue?', header: 'Continue', options: [] }],
+    },
+  });
+  await flush();
+
+  assert.equal(await backend.answerQuestion('que_cancel', { action: 'cancel' }), true);
+  assert.deepEqual(fetched.calls.at(-1), {
+    method: 'POST',
+    path: '/question/que_cancel/reject',
+    body: {},
+  });
+  assert.deepEqual(events.at(-1), {
+    type: 'question-resolved',
+    toolUseId: 'que_cancel',
+    outcome: 'cancelled',
+  });
+
+  completeTurn(fetched);
+  await pending;
+});
+
+test('OpenCode stop rejects and settles a pending built-in question', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser('stop question');
+  await flush();
+  fetched.sse.push({
+    type: 'question.asked',
+    properties: {
+      id: 'que_stop',
+      sessionID: 'session_1',
+      questions: [{ question: 'Pick?', header: 'Pick', options: [] }],
+    },
+  });
+  await flush();
+
+  await backend.stop();
+  assert.equal(fetched.calls.some((call) => call.path === '/question/que_stop/reject'), true);
+  assert.ok(events.some((event) => (
+    event.type === 'question-resolved'
+      && event.toolUseId === 'que_stop'
+      && event.outcome === 'cancelled'
+  )));
+  assert.equal(events.filter((event) => event.code === 'TURN_ABORTED').length, 1);
+  await pending;
+});
+
+test('OpenCode reset and failed turns settle pending built-in questions', async () => {
+  const reset = makeBackend();
+  reset.backend.sendUser('reset question');
+  await flush();
+  reset.fetched.sse.push({
+    type: 'question.asked',
+    properties: {
+      id: 'que_reset',
+      sessionID: 'session_1',
+      questions: [{ question: 'Reset?', header: 'Reset', options: [] }],
+    },
+  });
+  await flush();
+  reset.backend.reset();
+  assert.ok(reset.events.some((event) => (
+    event.type === 'question-resolved'
+      && event.toolUseId === 'que_reset'
+      && event.outcome === 'cancelled'
+  )));
+
+  const failed = makeBackend();
+  const pending = failed.backend.sendUser('failed question');
+  await flush();
+  failed.fetched.sse.push({
+    type: 'question.asked',
+    properties: {
+      id: 'que_invalidated',
+      sessionID: 'session_1',
+      questions: [{ question: 'Retry?', header: 'Retry', options: [] }],
+    },
+  });
+  failed.fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: { name: 'APIError', data: { message: 'upstream failed' } },
+    },
+  });
+  await pending;
+  assert.ok(failed.events.some((event) => (
+    event.type === 'question-resolved'
+      && event.toolUseId === 'que_invalidated'
+      && event.outcome === 'cancelled'
+  )));
+  assert.deepEqual(failed.backend.getSessionRef(), {
+    kind: 'opencode-session',
+    id: 'session_1',
+  });
 });
 
 test('OpenCode approval adapter applies annotation tiers and posts approval replies', async () => {
@@ -1074,31 +1389,40 @@ test('OpenCode approval adapter applies annotation tiers and posts approval repl
   assert.equal(events.at(-1).type, 'tool-allowed');
   assert.equal(fetched.calls.at(-1).path, '/session/session_1/permission/perm_2');
 
-  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
+  completeTurn(fetched);
   await pending;
 });
 
-test('OpenCode stop interrupts the session, drains pending approvals, and emits one aborted error', async () => {
+test('OpenCode stop aborts the session, drains pending approvals, and emits one aborted error', async () => {
   const { backend, events, fetched } = makeBackend();
   const pending = backend.sendUser('stop');
   await flush();
   fetched.sse.push({ type: 'permission.asked', properties: { sessionID: 'session_1', permissionID: 'perm_stop', tool: 'ae_ae_exec', input: {} } });
   await flush();
 
-  await backend.stop();
-  assert.equal(fetched.calls.some((call) => call.path === '/session/session_1/interrupt'), true);
+  const stopping = backend.stop();
+  fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: { name: 'MessageAbortedError', data: { message: 'Aborted' } },
+    },
+  });
+  await stopping;
+  assert.equal(fetched.calls.some((call) => call.path === '/session/session_1/abort'), true);
   assert.deepEqual(events.slice(-2), [
     { type: 'tool-denied', toolUseId: 'perm_stop' },
     { type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.' },
   ]);
   await pending;
+  assert.equal(events.filter((event) => event.type === 'error').length, 1);
 });
 
 test('openCode descriptors use the free default and map provider model metadata', () => {
   const staticDescriptor = openCodeStaticDescriptor();
   assert.equal(staticDescriptor.id, 'opencode');
-  assert.equal(staticDescriptor.defaultModelId, 'north-mini-code-free');
-  assert.equal(staticDescriptor.supportsFast('north-mini-code-free'), false);
+  assert.equal(staticDescriptor.defaultModelId, 'hy3-free');
+  assert.equal(staticDescriptor.supportsFast('hy3-free'), false);
   assert.deepEqual(staticDescriptor.models[0].effortLevels, []);
 
   const descriptor = openCodeDescriptorFromModels({
@@ -1193,7 +1517,7 @@ test('OpenCode readiness retries after the first MCP request is accepted but nev
   });
   const startedAt = Date.now();
 
-  assert.deepEqual(await h.backend.probeAccount(), { loggedIn: true });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   assert.ok(Date.now() - startedAt < 1000);
   assert.equal(h.spawned.calls.length, 1);
   assert.equal(attempts, 2);
@@ -1280,10 +1604,7 @@ test('OpenCode captures stdout in the same bounded process tail', async () => {
   await flush();
   spawned.procs[0].pushStdout('server ready on stdout\n');
   assert.match(backend.getStderrTail(), /server ready on stdout/);
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await pending;
 });
 
@@ -1306,6 +1627,198 @@ test('OpenCode maps session.error HTTP status to an upstream HTTP category', asy
   assert.equal(error.code, 'UPSTREAM_HTTP_403');
   assert.equal(error.detail.httpStatus, 403);
   assert.equal(error.detail.upstreamMessage, 'unexpected status 403');
+  assert.equal('sessionReset' in error.detail, false);
+  assert.deepEqual(backend.getSessionRef(), { kind: 'opencode-session', id: 'session_1' });
+
+  const retry = backend.sendUser({ turnId: 'turn-http-retry', text: 'again', attachments: [] });
+  for (let index = 0; index < 30
+    && fetched.calls.filter((call) => call.path === '/session/session_1/message').length < 2; index += 1) {
+    await flush();
+  }
+  assert.equal(fetched.calls.filter((call) => (
+    call.method === 'POST' && call.path === '/session'
+  )).length, 1);
+  assert.equal(fetched.calls.filter((call) => (
+    call.path === '/session/session_1/message'
+  )).length, 2);
+  completeTurn(fetched);
+  await retry;
+});
+
+test('OpenCode exposes a nested socket-close cause and keeps the session', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser({ turnId: 'turn-socket-error', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: {
+        name: 'APIError',
+        data: {
+          message: 'Failed to process error response',
+          cause: { message: 'The socket connection was closed unexpectedly.' },
+        },
+      },
+    },
+  });
+  await pending;
+
+  const error = events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'UPSTREAM_CONNECTION_CLOSED');
+  assert.match(error.message, /connection was interrupted/i);
+  assert.ok(error.detail.causeChain.some((message) => /socket connection was closed/i.test(message)));
+  assert.equal('sessionReset' in error.detail, false);
+  assert.deepEqual(backend.getSessionRef(), { kind: 'opencode-session', id: 'session_1' });
+
+  const retry = backend.sendUser({ turnId: 'turn-socket-retry', text: 'again', attachments: [] });
+  for (let index = 0; index < 30
+    && fetched.calls.filter((call) => call.path === '/session/session_1/message').length < 2; index += 1) {
+    await flush();
+  }
+  assert.equal(fetched.calls.filter((call) => (
+    call.method === 'POST' && call.path === '/session'
+  )).length, 1);
+  completeTurn(fetched);
+  await retry;
+});
+
+test('OpenCode ignores a late idle after an upstream failure and clears failed-turn state', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const first = backend.sendUser({ turnId: 'turn-old-session', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'busy' } },
+  });
+  fetched.sse.push({
+    type: 'message.part.updated',
+    properties: {
+      sessionID: 'session_1',
+      part: {
+        type: 'tool',
+        tool: 'ae_ae_exec',
+        callID: 'call_reused',
+        state: { status: 'running', input: { code: 'old' } },
+      },
+    },
+  });
+  fetched.sse.push({
+    type: 'permission.asked',
+    properties: {
+      sessionID: 'session_1', permissionID: 'perm_old', tool: 'ae_ae_exec', input: { code: 'old' },
+    },
+  });
+  await flush();
+  assert.ok(events.some((event) => (
+    event.type === 'approval-required' && event.toolUseId === 'perm_old'
+  )));
+  fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: { name: 'APIError', data: { message: 'unexpected status 403' } },
+    },
+  });
+  await first;
+  assert.deepEqual(backend.getSessionRef(), { kind: 'opencode-session', id: 'session_1' });
+  assert.ok(events.some((event) => (
+    event.type === 'tool-denied' && event.toolUseId === 'perm_old'
+  )));
+
+  const boundary = events.length;
+  const second = backend.sendUser({ turnId: 'turn-same-session', text: 'again', attachments: [] });
+  for (let index = 0; index < 30
+    && fetched.calls.filter((call) => call.path === '/session/session_1/message').length < 2; index += 1) {
+    await flush();
+  }
+  assert.equal(fetched.calls.filter((call) => (
+    call.method === 'POST' && call.path === '/session'
+  )).length, 1);
+
+  // This idle belongs to the failed turn. The replacement turn has been
+  // dispatched, but has not emitted its own busy status yet.
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await flush();
+  assert.equal(events.slice(boundary).some((event) => event.type === 'turn-end'), false);
+
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'busy' } },
+  });
+  fetched.sse.push({
+    type: 'message.part.updated',
+    properties: {
+      sessionID: 'session_1',
+      part: {
+        type: 'tool',
+        tool: 'ae_ae_exec',
+        callID: 'call_reused',
+        state: { status: 'running', input: { code: 'new' } },
+      },
+    },
+  });
+  fetched.sse.push({
+    type: 'permission.asked',
+    properties: {
+      sessionID: 'session_1', permissionID: 'perm_new', tool: 'ae_ae_exec', input: { code: 'new' },
+    },
+  });
+  await flush();
+  assert.ok(events.some((event) => (
+    event.type === 'approval-required' && event.toolUseId === 'perm_new'
+  )));
+  assert.equal(events.filter((event) => (
+    event.type === 'tool-start' && event.toolUseId === 'call_reused'
+  )).length, 2);
+  await backend.approve('perm_new', 'deny');
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await second;
+  assert.equal(events.slice(boundary).filter((event) => event.type === 'turn-end').length, 1);
+});
+
+test('OpenCode redacts provider credentials from nested errors and process logs', async () => {
+  const secret = 'provider-secret-that-must-not-leak';
+  const { backend, events, fetched, spawned } = makeBackend({
+    getSensitiveValues: () => [secret],
+  });
+  const pending = backend.sendUser({ turnId: 'turn-secret-error', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  spawned.procs[0].pushStderr(`relay diagnostic ${secret}\n`);
+  fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: {
+        name: 'APIError',
+        data: {
+          message: `request failed for ${secret}`,
+          cause: { message: `socket closed after bearer ${secret}` },
+        },
+      },
+    },
+  });
+  await pending;
+
+  const serialized = JSON.stringify(events.find((event) => event.type === 'error'));
+  assert.equal(serialized.includes(secret), false);
+  assert.match(serialized, /\[redacted\]/);
+  assert.equal(backend.getStderrTail().includes(secret), false);
 });
 
 test('OpenCode SSE disconnect emits EVENT_STREAM_FAILED and settles the turn', async () => {
@@ -1342,12 +1855,38 @@ test('OpenCode restarts after an idle SSE disconnect without emitting a turn err
     await flush();
   }
   assert.equal(spawned.calls.length, 2);
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await pending;
   assert.equal(events.some((event) => event.type === 'error'), false);
+});
+
+test('OpenCode discards a decoder tail from an event stream invalidated by reset', async () => {
+  const OriginalTextDecoder = globalThis.TextDecoder;
+  const staleFrame = 'event: message\ndata: '
+    + JSON.stringify({ type: 'session.status', properties: { status: { type: 'idle' } } })
+    + '\n\n';
+  class DeferredTextDecoder {
+    decode(_chunk, options) {
+      return options?.stream ? '' : staleFrame;
+    }
+  }
+  globalThis.TextDecoder = DeferredTextDecoder;
+  try {
+    const { backend, events, fetched } = makeBackend();
+    await backend.probeAccount();
+    fetched.sse.pushBytes(new Uint8Array([0xc3]));
+    await flush();
+
+    const boundary = events.length;
+    backend.reset();
+    fetched.sse.close();
+    await flush();
+    await flush();
+
+    assert.equal(events.slice(boundary).some((event) => event.type === 'turn-end'), false);
+  } finally {
+    globalThis.TextDecoder = OriginalTextDecoder;
+  }
 });
 
 test('OpenCode reads getLang for each resolution failure without rebuilding the backend', async () => {
@@ -1398,10 +1937,7 @@ test('probe then send reuse one opencode instance and one event stream', async (
     await flush();
   }
   assert.equal(spawned.calls.length, 1);
-  fetched.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(fetched);
   await pending;
   assert.equal(spawned.calls.length, 1);
 });
@@ -1444,10 +1980,7 @@ test('OpenCode recreates an adopted session once after a message 503', async () 
   assert.equal(h.events.some((event) => (
     event.type === 'session-ref' && event.ref.id === 'session_1'
   )), true);
-  base.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(base);
   await run;
 });
 
@@ -1490,10 +2023,7 @@ test('OpenCode recreates an adopted session once after a message 404', async () 
   assert.equal(calls.filter((call) => call.path === '/session/session_missing/message').length, 1);
   assert.equal(calls.filter((call) => call.method === 'POST' && call.path === '/session').length, 1);
   assert.ok(h.events.some((event) => event.type === 'session-ref' && event.ref.id === 'session_1'));
-  base.sse.push({
-    type: 'session.status',
-    properties: { sessionID: 'session_1', status: { type: 'idle' } },
-  });
+  completeTurn(base);
   await run;
 });
 

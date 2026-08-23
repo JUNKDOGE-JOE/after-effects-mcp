@@ -13,6 +13,7 @@ function publicItem(item) {
         tool: item.tool,
         risk: item.risk,
         summary: Object.assign({}, item.summary),
+        plan: item.plan ? Object.assign({}, item.plan) : null,
         createdAt: item.createdAt,
     };
 }
@@ -36,12 +37,13 @@ class ApprovalQueue extends EventEmitter {
             tool: details.tool,
             risk: details.risk,
             summary: Object.assign({}, details.summary),
+            plan: details.plan ? Object.assign({}, details.plan) : null,
             createdAt: new Date(this.now()).toISOString(),
             timer: null,
             settle: null,
         };
         const promise = new Promise(function (resolve) { item.settle = resolve; });
-        item.timer = setTimeout(function () { self.resolve(item.id, 'decline'); }, this.timeoutMs);
+        item.timer = setTimeout(function () { self.resolve(item.id, 'timeout'); }, this.timeoutMs);
         if (item.timer && typeof item.timer.unref === 'function') item.timer.unref();
         this.pending.set(item.id, item);
         try {
@@ -54,7 +56,7 @@ class ApprovalQueue extends EventEmitter {
     }
 
     resolve(id, decision) {
-        if (decision !== 'accept' && decision !== 'decline') return false;
+        if (!['accept', 'decline', 'cancel', 'unavailable', 'timeout'].includes(decision)) return false;
         const item = typeof id === 'string' ? this.pending.get(id) : null;
         if (!item) return false;
         clearTimeout(item.timer);

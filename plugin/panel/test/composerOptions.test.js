@@ -23,7 +23,7 @@ test('OpenCode models omit unsupported effort and fast controls', () => {
   });
   assert.equal(chips.effort, null);
   assert.equal(chips.fast, null);
-  assert.equal(chips.model.current, 'North Mini Code Free');
+  assert.equal(chips.model.current, 'HY 3 Free');
   assert.equal(chips.approval.items.length, 4);
 });
 

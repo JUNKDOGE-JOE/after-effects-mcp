@@ -61,7 +61,7 @@ test('host conversation returns null without throwing before the host MCP API st
   assert.equal(manager.currentPath(), null);
 });
 
-test('host conversation does not return a stale path after the host MCP API disappears', () => {
+test('host conversation explicitly reports a failed rebind after the host MCP API disappears', () => {
   let host = {
     mcp: {
       conversations: {
@@ -74,6 +74,25 @@ test('host conversation does not return a stale path after the host MCP API disa
   const manager = createHostConversation({ getHost: () => host });
   assert.equal(manager.ensureConversation({ label: 'chat-0' }).path, '/mcp/c/token-1');
   host = null;
-  assert.equal(manager.ensureConversation({ label: 'chat-0' }), null);
-  assert.equal(manager.currentPath(), null);
+  assert.throws(() => manager.ensureConversation({ label: 'chat-0' }), {
+    code: 'CEP_HOST_CONVERSATION_REBIND_FAILED',
+  });
+  assert.equal(manager.currentPath(), '/mcp/c/token-1');
+});
+
+test('host conversation rebinds by id when the host API object changes', () => {
+  const first = {
+    create: () => ({ id: 'conversation-1', path: '/mcp/c/token-1', policy: {} }),
+  };
+  const second = {
+    getById: (id) => ({ id, path: '/mcp/c/token-2', policy: { approvalTier: 'manual' } }),
+    update: (id, patch) => ({ id, path: '/mcp/c/token-2', policy: patch }),
+    close: () => true,
+  };
+  let api = first;
+  const manager = createHostConversation({ getHost: () => ({ mcp: { conversations: api } }) });
+  manager.ensureConversation({ label: 'chat-0' });
+  api = second;
+  assert.equal(manager.ensureConversation({ label: 'chat-0' }).path, '/mcp/c/token-2');
+  assert.equal(manager.updatePolicy({ approvalTier: 'auto' }).policy.approvalTier, 'auto');
 });

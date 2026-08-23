@@ -47,6 +47,9 @@ const C = {
     failed: '失败',
     awaiting: '等待批准',
     thinking: '思考中…',
+    progressTokens: (tokens) => `预计 ${tokens} tokens`,
+    progressElapsed: (seconds) => `耗时 ${seconds}s`,
+    progressWarning: '超过 3 分钟没有新的进度，任务仍在运行；不会自动停止或重试。',
     attachmentAdd: '添加文件',
     attachmentDrop: '拖放或粘贴文件',
     attachmentStaging: '正在准备…',
@@ -75,6 +78,9 @@ const C = {
     failed: 'Failed',
     awaiting: 'Awaiting approval',
     thinking: 'Thinking…',
+    progressTokens: (tokens) => `~${tokens} tokens`,
+    progressElapsed: (seconds) => `${seconds}s elapsed`,
+    progressWarning: 'No new progress for 3 minutes. The task is still running; it will not be stopped or retried automatically.',
     attachmentAdd: 'Add files',
     attachmentDrop: 'Drop or paste files',
     attachmentStaging: 'Preparing…',
@@ -206,6 +212,10 @@ function menuItems(items, currentId, onSelect) {
   }));
 }
 
+function progressSeconds(ms) {
+  return Math.max(0, Math.round(Number(ms || 0) / 1000));
+}
+
 /* Chat tab. entries are folded from backend events by lib/chatEntries.js. */
 export function ChatScreen({
   lang = 'zh',
@@ -213,6 +223,7 @@ export function ChatScreen({
   streaming = false,
   thinking = false,
   turnStage = null,
+  turnProgress = null,
   turnBackend = 'subscription',
   sessionTitle = '',
   onOpenSessions,
@@ -294,7 +305,7 @@ export function ChatScreen({
   React.useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [entries, streaming, thinking, turnStage]);
+  }, [entries, streaming, thinking, turnStage, turnProgress]);
 
   React.useEffect(() => {
     if (typeof ResizeObserver !== 'function') return undefined;
@@ -403,15 +414,22 @@ export function ChatScreen({
           <Entry key={entry.sid || entry.id} entry={entry} lang={lang} onApprove={onApprove} onAnswerQuestion={onAnswerQuestion} />
         ))}
 
-        {streaming && thinking ? (
+        {streaming && thinking && !turnProgress ? (
           <div style={{ paddingLeft: 28, display: 'flex', alignItems: 'center', gap: 6, font: '400 11px/1.4 var(--font-ui)', color: 'var(--text-tertiary)' }}>
             <Spinner size={12} />
             <span>{t.thinking}</span>
           </div>
-        ) : turnStage ? (
-          <div style={{ paddingLeft: 28, display: 'flex', alignItems: 'center', gap: 6, font: '400 11px/1.4 var(--font-ui)', color: 'var(--text-tertiary)' }}>
+        ) : (turnStage || turnProgress) ? (
+          <div style={{ paddingLeft: 28, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, font: '400 11px/1.4 var(--font-ui)', color: 'var(--text-tertiary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Spinner size={12} />
-            <span>{turnProgressText(turnStage, turnBackend, lang)}</span>
+              <span>{turnProgressText(turnProgress?.stage || turnStage, turnBackend, lang)}</span>
+              {turnProgress?.estimatedTokens !== undefined ? <span>· {t.progressTokens(turnProgress.estimatedTokens)}</span> : null}
+              {turnProgress?.elapsedMs !== undefined ? <span>· {t.progressElapsed(progressSeconds(turnProgress.elapsedMs))}</span> : null}
+            </div>
+            {turnProgress?.warning ? (
+              <span style={{ color: 'var(--warning, var(--text-secondary))' }}>{t.progressWarning}</span>
+            ) : null}
           </div>
         ) : null}
       </div>

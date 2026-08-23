@@ -10,6 +10,7 @@ function ann(readOnlyHint, destructiveHint, idempotentHint) {
 
 const VERB_ANNOTATIONS = Object.freeze({
     ae_exec: ann(false, true, false),
+    ae_execRecover: ann(false, true, false),
     ae_status: ann(true, false, true),
     ae_previewFrame: ann(true, false, true),
     ae_read: ann(true, false, true),

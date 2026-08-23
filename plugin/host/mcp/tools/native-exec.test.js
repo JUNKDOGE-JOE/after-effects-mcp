@@ -8,8 +8,11 @@ const mountMcp = require('../index');
 const { VERB_ANNOTATIONS } = require('../annotations');
 const {
     CAPABILITY_ID,
+    NATIVE_EXEC_INPUT_SCHEMA,
+    PRIMITIVES,
     invokeRequestDigest,
     nativeProgramPostconditionDigest,
+    validateNativeProgramArguments,
 } = require('../native-program');
 const { definition, VALIDATION_MESSAGE } = require('./native-exec');
 
@@ -155,6 +158,21 @@ test('ae_nativeExec advertises the API-safe schema and central destructive annot
         },
         VERB_ANNOTATIONS.ae_nativeExec,
     );
+    assert.deepEqual(
+        definition.inputSchema.properties.operations.items.properties.op.enum,
+        PRIMITIVES.map(function (primitive) { return primitive.id; }),
+    );
+    assert.ok(
+        Buffer.byteLength(JSON.stringify(definition.inputSchema), 'utf8') < 5000,
+        'advertised native schema must stay compact because providers resend it every tool step',
+    );
+    assert.ok(
+        Buffer.byteLength(JSON.stringify(NATIVE_EXEC_INPUT_SCHEMA), 'utf8') > 20000,
+        'the full generated runtime contract must remain intact',
+    );
+    assert.ok(validateNativeProgramArguments({
+        operations: [{ op: 'project.items.list', args: { offset: -1, limit: 1 } }],
+    }).length > 0, 'runtime validation must still enforce operation-specific arguments');
 });
 
 test('real Express MCP route runs ae_nativeExec through fake negotiate/invoke', async () => {

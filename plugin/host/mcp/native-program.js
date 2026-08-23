@@ -34,12 +34,63 @@ const RESULT_VALIDATORS = new Map(PRIMITIVES.map(function (primitive) {
     })];
 }));
 
-const NATIVE_EXEC_ADVERTISED_INPUT_SCHEMA = JSON.parse(JSON.stringify(
-    NATIVE_EXEC_INPUT_SCHEMA,
-));
-['allOf', 'anyOf', 'else', 'if', 'not', 'oneOf', 'then'].forEach(function (key) {
-    delete NATIVE_EXEC_ADVERTISED_INPUT_SCHEMA[key];
-});
+// Providers resend every advertised tool schema on every agent loop. The full
+// generated native contract is intentionally strict, but advertising all 23
+// per-operation argument schemas adds roughly 25 KB to every model request.
+// Keep the wire-facing schema compact and let the unchanged generated
+// validator below remain authoritative for the exact operation arguments.
+// Models obtain those exact per-op contracts by calling ae_skillUse with
+// ae-execution-guide only when they actually choose the native route.
+const NATIVE_EXEC_ADVERTISED_INPUT_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['operations'],
+    properties: {
+        operationKey: {
+            type: 'string',
+            minLength: 16,
+            maxLength: 64,
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$',
+            description: 'Stable idempotency key for a write program. Reuse it only when safely retrying the same server-issued operation.',
+        },
+        undoGroup: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 128,
+            description: 'One real After Effects Undo-group label. Required for writes and omitted for read-only programs.',
+        },
+        operations: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 64,
+            description: 'Ordered native operations. Call ae_skillUse with name "ae-execution-guide" for the exact args contract before using this route.',
+            items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['op', 'args'],
+                properties: {
+                    op: {
+                        type: 'string',
+                        enum: PRIMITIVES.map(function (primitive) { return primitive.id; }),
+                        description: 'Curated native primitive ID from the ae-execution-guide returned by ae_skillUse.',
+                    },
+                    args: {
+                        type: 'object',
+                        description: 'Operation-specific arguments copied from the ae-execution-guide returned by ae_skillUse. The server validates the full generated contract.',
+                    },
+                    saveAs: {
+                        type: 'string', minLength: 1, maxLength: 64,
+                        description: 'Request-local handle name for a later operation.',
+                    },
+                    returnAs: {
+                        type: 'string', minLength: 1, maxLength: 64,
+                        description: 'Name under which an exportable result is returned.',
+                    },
+                },
+            },
+        },
+    },
+};
 
 function own(value, key) {
     return Object.prototype.hasOwnProperty.call(value, key);

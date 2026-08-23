@@ -1,4 +1,5 @@
 import { createSseParser } from '../lib/sse.js';
+import { openCodeCatalogId } from '../lib/openCodeCatalogId.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
 import {
@@ -8,17 +9,45 @@ import {
   trimStderrTail,
 } from '../lib/errorCodes.js';
 import { openCodeProviderDefinitions } from './openCodeProviderStore.js';
+import {
+  OPEN_CODE_HISTORY_GUARD_FILENAME,
+  openCodeHistoryGuardPluginSource,
+} from './openCodeHistoryGuard.js';
 import { attachmentFileUrl, normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
+import { displayAnswers, questionsFromUserInput } from '../lib/questionForm.js';
 
 const READY_TIMEOUT_MS = 30000;
 const PROBE_TIMEOUT_MS = 40000;
 const READY_POLL_MS = 250;
 const READY_REQUEST_TIMEOUT_MS = 1500;
 const DEFAULT_PROVIDER_ID = 'opencode';
-const DEFAULT_MODEL_ID = 'north-mini-code-free';
+const DEFAULT_MODEL_ID = 'hy3-free';
 const STDERR_TAIL_LIMIT = 4096;
 const STALE_TERMINATE_LIMIT = 8;
 const STALE_REMOVE_LIMIT = 64;
+
+export const OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES = Object.freeze([
+  'apply_patch',
+  'bash',
+  'batch',
+  'codesearch',
+  'edit',
+  'glob',
+  'grep',
+  'invalid',
+  'list',
+  'lsp',
+  'plan_enter',
+  'plan_exit',
+  'read',
+  'skill',
+  'task',
+  'todoread',
+  'todowrite',
+  'webfetch',
+  'websearch',
+  'write',
+]);
 
 function getCepRequire() {
   if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
@@ -94,11 +123,6 @@ function taggedError(error, property, value) {
   return result;
 }
 
-function decodeChunk(value) {
-  if (typeof value === 'string') return value;
-  return new TextDecoder().decode(value);
-}
-
 async function defaultGetPort() {
   const net = getCepRequire()('net');
   return new Promise((resolve, reject) => {
@@ -168,6 +192,74 @@ function eventOutputText(evt) {
   }
 }
 
+function boundedCauseChain(value, limit = 6) {
+  const messages = [];
+  const seen = new Set();
+  function visit(candidate, depth) {
+    if (candidate === undefined || candidate === null || depth > 5 || messages.length >= limit) return;
+    if (typeof candidate === 'string') {
+      const text = candidate.trim().slice(0, 500);
+      if (text && !messages.includes(text)) messages.push(text);
+      return;
+    }
+    if (typeof candidate !== 'object' || seen.has(candidate)) return;
+    seen.add(candidate);
+    for (const field of ['message', 'code', 'statusCode', 'status']) {
+      const item = candidate[field];
+      if (typeof item === 'string' || typeof item === 'number') visit(String(item), depth + 1);
+    }
+    visit(candidate.cause, depth + 1);
+    visit(candidate.error, depth + 1);
+    if (candidate.data && typeof candidate.data === 'object') {
+      visit(candidate.data.message, depth + 1);
+      visit(candidate.data.cause, depth + 1);
+      visit(candidate.data.error, depth + 1);
+      visit(candidate.data.statusCode, depth + 1);
+    }
+  }
+  visit(value, 0);
+  return messages;
+}
+
+// /config/providers may also contain provider options and credentials. Reduce
+// it immediately to the only facts the model picker needs, so secrets never
+// enter React state, diagnostics, or exported logs.
+export function sanitizeOpenCodeProviderFacts(value) {
+  const source = Array.isArray(value?.providers)
+    ? value.providers
+    : Array.isArray(value)
+      ? value
+      : value && typeof value === 'object'
+        ? Object.entries(value).filter(([key]) => key !== 'default').map(([key, provider]) => ({
+          ...(provider && typeof provider === 'object' ? provider : {}),
+          id: provider?.id || provider?.providerID || provider?.providerId || key,
+        }))
+        : [];
+  const providers = [];
+  for (const provider of source) {
+    if (!provider || typeof provider !== 'object') continue;
+    const id = openCodeCatalogId(
+      provider.id || provider.providerID || provider.providerId || provider.name,
+    );
+    if (!id) continue;
+    const rawModels = Array.isArray(provider.models)
+      ? provider.models
+      : provider.models && typeof provider.models === 'object'
+        ? Object.entries(provider.models).map(([key, model]) => ({
+          ...(model && typeof model === 'object' ? model : {}),
+          id: model?.id || model?.modelID || model?.modelId || key,
+        }))
+        : [];
+    const modelIds = Array.from(new Set(rawModels.map((model) => (
+      openCodeCatalogId(model && typeof model === 'object'
+        ? (model.id || model.modelID || model.modelId || model.name)
+        : model)
+    )).filter(Boolean)));
+    if (modelIds.length) providers.push({ id, modelIds, needsApiKey: false });
+  }
+  return providers;
+}
+
 function parseModel(value) {
   const raw = String(value || DEFAULT_MODEL_ID);
   if (raw.includes('/')) {
@@ -190,6 +282,51 @@ function permissionReplyPath(sessionId, permissionId) {
   return '/session/' + encodeURIComponent(sessionId) + '/permission/' + encodeURIComponent(permissionId);
 }
 
+function questionsFromOpenCode(value) {
+  const raw = Array.isArray(value) ? value : [];
+  const questions = questionsFromUserInput({
+    questions: raw.map((question) => ({
+      ...question,
+      multiSelect: Boolean(question && question.multiple),
+    })),
+  });
+  return questions.map((question, index) => ({
+    ...question,
+    allowCustom: raw[index]?.custom !== false,
+  }));
+}
+
+function answersForOpenCode(questions, values) {
+  return questions.map((question) => {
+    const value = values && typeof values === 'object' ? values[question.id] : undefined;
+    if (question.multiSelect) {
+      const list = Array.isArray(value) ? value : (value ? [value] : []);
+      return list.map((item) => String(item));
+    }
+    const selected = Array.isArray(value) ? value[0] : value;
+    return selected === undefined || selected === null || selected === ''
+      ? []
+      : [String(selected)];
+  });
+}
+
+function valuesFromOpenCodeAnswers(questions, answers) {
+  const values = {};
+  questions.forEach((question, index) => {
+    const list = Array.isArray(answers?.[index]) ? answers[index].map((item) => String(item)) : [];
+    values[question.id] = question.multiSelect ? list : (list[0] || '');
+  });
+  return values;
+}
+
+function questionReplyPath(questionId, action) {
+  return '/question/' + encodeURIComponent(questionId) + '/' + action;
+}
+
+function isBuiltInQuestionTool(part) {
+  return String(part?.tool || part?.name || '').toLowerCase() === 'question';
+}
+
 export function createOpenCodeBackend({
   platform,
   fetchImpl,
@@ -200,6 +337,7 @@ export function createOpenCodeBackend({
   getMcpSpec,
   getToolMeta,
   getProviders = () => [],
+  getSensitiveValues = () => [],
   getExpertGuidance = () => true,
   onEvent,
   env,
@@ -252,16 +390,57 @@ export function createOpenCodeBackend({
   let activeTurnAccepted = false;
   let messageDispatched = false;
   let turnStarted = false;
+  let stopRequested = false;
   let generation = 0;
   let toolMeta = { annotations: {} };
   const pendingApprovals = new Map();
+  const pendingQuestions = new Map();
   const sessionAllowedTools = new Set();
   const startedTools = new Set();
   const partTypes = new Map();
   const transcript = [];
 
+  function redactionValues(paths = []) {
+    let providerSecrets = [];
+    try {
+      providerSecrets = getSensitiveValues();
+    } catch {}
+    return Array.from(new Set([
+      ...(Array.isArray(providerSecrets) ? providerSecrets : []),
+      ...paths,
+    ].filter((item) => typeof item === 'string' && item)));
+  }
+
+  function invalidateSession() {
+    const invalidated = sessionId || adoptedSessionId;
+    settleFailedTurnInteractions();
+    sessionId = null;
+    adoptedSessionId = null;
+    sessionWasAdopted = false;
+    sessionPromise = null;
+    sessionAllowedTools.clear();
+    return Boolean(invalidated);
+  }
+
+  function settlePendingQuestions() {
+    for (const [questionId] of pendingQuestions) {
+      pendingQuestions.delete(questionId);
+      emit({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
+    }
+  }
+
+  function settleFailedTurnInteractions() {
+    settlePendingQuestions();
+    for (const [permissionId] of pendingApprovals) {
+      emit({ type: 'tool-denied', toolUseId: permissionId });
+    }
+    pendingApprovals.clear();
+    startedTools.clear();
+    partTypes.clear();
+  }
+
   function emit(evt) {
-    if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
+    if (onEvent) onEvent(redactValue(evt, redactionValues(activeAttachmentPaths)));
   }
 
   function emitTurnProgress(stage) {
@@ -275,7 +454,7 @@ export function createOpenCodeBackend({
 
   function resetAssistantDeltaRedactor() {
     assistantDeltaRedactor.discard();
-    assistantDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, (text) => {
+    assistantDeltaRedactor = createDeltaRedactor(redactionValues(activeAttachmentPaths), (text) => {
       activeAssistantText += text;
       emit({ type: 'text-delta', text });
     });
@@ -283,7 +462,7 @@ export function createOpenCodeBackend({
 
   function resetStderrRedactor() {
     stderrRedactor.discard();
-    stderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, (text) => {
+    stderrRedactor = createDeltaRedactor(redactionValues(processStderrAttachmentPaths), (text) => {
       stderrTail = appendTail(stderrTail, text);
     });
   }
@@ -292,7 +471,7 @@ export function createOpenCodeBackend({
     activeAttachmentPaths = Array.from(new Set((values || [])
       .filter((value) => typeof value === 'string' && value)))
       .sort((left, right) => right.length - left.length);
-    if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+    if (stderrTail) stderrTail = redactValue(stderrTail, redactionValues(activeAttachmentPaths));
     const previousProcessPathCount = processStderrAttachmentPaths.length;
     processStderrAttachmentPaths = Array.from(new Set([
       ...processStderrAttachmentPaths,
@@ -611,13 +790,25 @@ export function createOpenCodeBackend({
   function writeConfig(mcpSpec, home) {
     const fs = backendFs();
     const configDir = adapter.paths.join([home, 'opencode']);
+    const pluginDir = adapter.paths.join([configDir, 'plugins']);
     fs.mkdirSync(configDir, { recursive: true });
+    fs.mkdirSync(pluginDir, { recursive: true });
+    // OpenCode auto-loads local plugins from $XDG_CONFIG_HOME/opencode/plugins.
+    // This hook only transforms the outbound message copy; it never writes
+    // session history or changes tool results and call identity.
+    fs.writeFileSync(
+      adapter.paths.join([pluginDir, OPEN_CODE_HISTORY_GUARD_FILENAME]),
+      openCodeHistoryGuardPluginSource(),
+    );
     const mcpEntry = { type: 'remote', url: mcpSpec.url, enabled: true };
     const config = {
       $schema: 'https://opencode.ai/config.json',
       // OpenCode is only the CLI transport here. Host conversation approval
       // remains authoritative for writes through the tokenized MCP endpoint.
       permission: { '*': 'allow' },
+      // Explicit names leave dynamic `ae` MCP tools enabled while preventing
+      // this isolated transport from reading or changing the workspace itself.
+      tools: Object.fromEntries(OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES.map((name) => [name, false])),
       provider: openCodeProviderDefinitions(getProviders()),
       mcp: {
         ae: mcpEntry,
@@ -631,6 +822,7 @@ export function createOpenCodeBackend({
     if (processGeneration !== generation || proc !== exitedProc) return;
     const wasStopping = stopping;
     generation += 1;
+    settlePendingQuestions();
     stderrRedactor.flush();
     const tail = trimStderrTail(stderrTail);
     proc = null;
@@ -668,6 +860,7 @@ export function createOpenCodeBackend({
   function handleError(failedProc, processGeneration, home, error) {
     if (processGeneration !== generation || proc !== failedProc) return;
     generation += 1;
+    settlePendingQuestions();
     stderrRedactor.flush();
     proc = null;
     sessionPromise = null;
@@ -746,7 +939,9 @@ export function createOpenCodeBackend({
       stopping = false;
       sseClosed = false;
       try {
-        spawnedProc = adapter.spawn(executable, ['serve', '--port', String(startPort)], {
+        spawnedProc = adapter.spawn(executable, [
+          'serve', '--print-logs', '--log-level', 'INFO', '--port', String(startPort),
+        ], {
           stdio: 'pipe',
           windowsHide: true,
           // OpenCode scopes its project context to the cwd. Inheriting the CEP
@@ -765,6 +960,8 @@ export function createOpenCodeBackend({
       port = startPort;
       baseUrl = startBaseUrl;
       configHome = startHome;
+      spawnedProc.stdout?.setEncoding?.('utf8');
+      spawnedProc.stderr?.setEncoding?.('utf8');
       if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on('data', (chunk) => {
         if (startGeneration !== generation || proc !== spawnedProc) return;
         stderrRedactor.feed(chunk);
@@ -811,21 +1008,35 @@ export function createOpenCodeBackend({
 
   async function readSseBody(body, parser, isCurrent) {
     if (!body) return;
+    const decoder = typeof TextDecoder === 'function' ? new TextDecoder('utf-8') : null;
+    const feedChunk = (chunk) => {
+      if (!isCurrent()) return;
+      if (typeof chunk === 'string') parser.feed(chunk);
+      else if (decoder) parser.feed(decoder.decode(chunk, { stream: true }));
+      else parser.feed(String(chunk || ''));
+    };
+    const flushDecoder = () => {
+      if (!decoder) return;
+      const tail = decoder.decode();
+      if (tail) parser.feed(tail);
+    };
     if (body.getReader) {
       const reader = body.getReader();
       while (isCurrent()) {
         const next = await reader.read();
         if (!next || next.done) break;
         if (!isCurrent()) break;
-        parser.feed(decodeChunk(next.value));
+        feedChunk(next.value);
       }
+      if (isCurrent()) flushDecoder();
       return;
     }
     if (body[Symbol.asyncIterator]) {
       for await (const chunk of body) {
         if (!isCurrent()) break;
-        parser.feed(decodeChunk(chunk));
+        feedChunk(chunk);
       }
+      if (isCurrent()) flushDecoder();
     }
   }
 
@@ -834,7 +1045,9 @@ export function createOpenCodeBackend({
     sseStarted = true;
     const isCurrent = () => processGeneration === generation
       && proc === spawnedProc && !sseClosed;
-    const parser = createSseParser(({ data }) => handleOpenCodeEvent(data));
+    const parser = createSseParser(({ data }) => {
+      if (isCurrent()) handleOpenCodeEvent(data);
+    });
     request('/event', {}, requestBaseUrl).then(async (response) => {
       await readSseBody(response.body, parser, isCurrent);
       if (isCurrent()) throw new Error('OpenCode event stream closed.');
@@ -843,6 +1056,7 @@ export function createOpenCodeBackend({
         generation += 1;
         sseStarted = false;
         const wasActive = Boolean(activeRun);
+        settlePendingQuestions();
         sseClosed = true;
         proc = null;
         port = null;
@@ -985,6 +1199,10 @@ export function createOpenCodeBackend({
   }
 
   function handleToolPart(part) {
+    // `question` is an OpenCode built-in interaction, not an AE MCP tool. Its
+    // own question.asked event renders the form; showing this part as
+    // mcp__ae__question leaves a misleading, permanently-running tool card.
+    if (isBuiltInQuestionTool(part)) return;
     const toolUseId = String(part.callID || part.id || '');
     if (!toolUseId) return;
     const name = prefixedToolName(part.tool || part.name);
@@ -1017,13 +1235,16 @@ export function createOpenCodeBackend({
     const type = eventType(evt);
     if (!type) return;
     const p = (evt && evt.properties) || {};
-    if (sessionId && p.sessionID && p.sessionID !== sessionId) return;
+    if (p.sessionID && (!sessionId || p.sessionID !== sessionId)) return;
 
     if (type === 'session.status') {
       const st = (p.status && p.status.type) || '';
       if (st === 'busy') {
+        if (!activeRun) return;
         if (!turnStarted) { turnStarted = true; emit({ type: 'turn-start' }); }
       } else if (st === 'idle') {
+        if (stopRequested) return;
+        if (!activeRun || !turnStarted) return;
         assistantDeltaRedactor.flush();
         drainApprovals();
         emit({ type: 'turn-end', stopReason: 'end_turn' });
@@ -1059,18 +1280,70 @@ export function createOpenCodeBackend({
       else if (part.type === 'reasoning') emit({ type: 'thinking', active: true });
       return;
     }
+    if (type === 'question.asked') {
+      const questionId = String(p.id || '');
+      if (!questionId || pendingQuestions.has(questionId)) return;
+      const questions = questionsFromOpenCode(p.questions);
+      if (!questions.length) {
+        void postJson(questionReplyPath(questionId, 'reject'), {}).catch(() => {});
+        return;
+      }
+      pendingQuestions.set(questionId, { questions, settling: false });
+      emit({
+        type: 'question-required',
+        toolUseId: questionId,
+        source: 'opencode-question',
+        title: '',
+        questions,
+      });
+      return;
+    }
+    if (type === 'question.replied' || type === 'question.rejected') {
+      const questionId = String(p.requestID || p.requestId || '');
+      const pending = pendingQuestions.get(questionId);
+      if (!pending) return;
+      pendingQuestions.delete(questionId);
+      if (type === 'question.rejected') {
+        emit({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
+      } else {
+        const values = valuesFromOpenCodeAnswers(pending.questions, p.answers);
+        emit({
+          type: 'question-resolved',
+          toolUseId: questionId,
+          outcome: 'answered',
+          answers: displayAnswers(pending.questions, values),
+        });
+      }
+      return;
+    }
     if (type === 'session.error') {
       assistantDeltaRedactor.discard();
+      stderrRedactor.flush();
       const error = p.error || p;
       const detail = (error && error.data && error.data.message)
         || (error && error.message)
         || (typeof error === 'string' ? error : '');
-      const httpStatus = extractHttpStatus(detail);
+      if (stopRequested
+        && /abort(?:ed)?/i.test([error && error.name, detail].filter(Boolean).join(' '))) {
+        return;
+      }
+      const causeChain = boundedCauseChain(error);
+      const processTail = trimStderrTail(stderrTail);
+      const combined = [detail, ...causeChain, processTail].filter(Boolean).join('\n');
+      const httpStatus = extractHttpStatus(error?.statusCode)
+        || extractHttpStatus(error?.data?.statusCode)
+        || extractHttpStatus(combined);
       const classified = classifyErrorCode({
-        error: { message: detail },
+        error: { message: combined },
+        httpStatus,
         upstream: true,
-        upstreamText: detail,
+        upstreamText: combined,
       });
+      // A provider failure does not invalidate OpenCode's local conversation.
+      // Keep the session so a user retry preserves context; only settle
+      // interactions that belonged to the failed turn. Local 404/process/SSE
+      // failures still invalidate the session through their dedicated paths.
+      settleFailedTurnInteractions();
       emit({
         type: 'error',
         kind: classified.kind,
@@ -1079,12 +1352,20 @@ export function createOpenCodeBackend({
         // String() on that shape rendered "[object Object]" in the chat.
         message: httpStatus
           ? 'OpenCode upstream request failed.'
+          : classified.code === 'UPSTREAM_CONNECTION_CLOSED'
+            ? 'OpenCode upstream connection was interrupted.'
           : (detail || (error && error.name) || 'OpenCode session error'),
         detail: {
           ...(error?.name ? { errorName: error.name } : {}),
           ...(httpStatus ? { httpStatus } : {}),
-          ...(httpStatus && detail ? {
+          ...(detail ? {
             upstreamMessage: String(redactValue(detail, activeAttachmentPaths)).slice(0, 500),
+          } : {}),
+          ...(causeChain.length ? {
+            causeChain: redactValue(causeChain, activeAttachmentPaths),
+          } : {}),
+          ...(processTail ? {
+            stderrTail: redactValue(processTail, activeAttachmentPaths),
           } : {}),
         },
         ...activeTurnFailureFields(),
@@ -1123,6 +1404,7 @@ export function createOpenCodeBackend({
 
   async function sendUser(input) {
     if (activeRun) return activeRun;
+    stopRequested = false;
     let turn;
     try {
       turn = normalizeTurnInput(input);
@@ -1194,6 +1476,7 @@ export function createOpenCodeBackend({
         spawnError: e?.spawnError === true,
         fallbackCode,
       });
+      const sessionReset = messageDispatched ? invalidateSession() : false;
       let message = e && e.message ? e.message : 'Failed to start OpenCode turn.';
       if (classified.code.startsWith('UPSTREAM_HTTP_')) message = 'OpenCode upstream request failed.';
       else if (classified.code === 'AUTH_REQUIRED') message = 'OpenCode authentication is required.';
@@ -1209,6 +1492,7 @@ export function createOpenCodeBackend({
         ...(e?.responseExcerpt ? { responseExcerpt: redactValue(e.responseExcerpt, activeAttachmentPaths) } : {}),
         ...(e?.resolution ? { resolution: e.resolution } : {}),
         ...(e?.code && e?.spawnError ? { spawnCode: e.code } : {}),
+        ...(sessionReset ? { sessionReset: true } : {}),
       };
       emit({
         type: 'error',
@@ -1235,9 +1519,68 @@ export function createOpenCodeBackend({
     else emit({ type: 'tool-allowed', toolUseId: id });
   }
 
+  async function answerQuestion(toolUseId, result) {
+    const id = String(toolUseId || '');
+    const pending = pendingQuestions.get(id);
+    if (!pending || pending.settling) return false;
+    pending.settling = true;
+    const submitted = result && result.action === 'submit';
+    try {
+      if (submitted) {
+        await postJson(questionReplyPath(id, 'reply'), {
+          answers: answersForOpenCode(pending.questions, result.values),
+        });
+      } else {
+        await postJson(questionReplyPath(id, 'reject'), {});
+      }
+    } catch (error) {
+      if (pendingQuestions.get(id) === pending) pending.settling = false;
+      const httpStatus = extractHttpStatus(error?.httpStatus);
+      const classified = classifyErrorCode({ error, httpStatus, fallbackCode: 'BACKEND_ERROR' });
+      emit({
+        type: 'error',
+        kind: classified.kind,
+        code: classified.code,
+        message: submitted
+          ? 'Failed to answer OpenCode question.'
+          : 'Failed to dismiss OpenCode question.',
+        detail: {
+          ...(httpStatus ? { httpStatus } : {}),
+          ...(error?.endpoint ? { endpoint: error.endpoint } : {}),
+        },
+      });
+      return false;
+    }
+    // The matching SSE reply can arrive before the HTTP response. In that
+    // case it already settled the card, so do not emit a duplicate event.
+    if (pendingQuestions.get(id) !== pending) return true;
+    pendingQuestions.delete(id);
+    emit({
+      type: 'question-resolved',
+      toolUseId: id,
+      outcome: submitted ? 'answered' : 'cancelled',
+      ...(submitted ? { answers: displayAnswers(pending.questions, result.values) } : {}),
+    });
+    return true;
+  }
+
+  async function rejectPendingQuestions() {
+    const rejects = [];
+    for (const [questionId, pending] of Array.from(pendingQuestions.entries())) {
+      pendingQuestions.delete(questionId);
+      if (!pending.settling && baseUrl) {
+        rejects.push(postJson(questionReplyPath(questionId, 'reject'), {}));
+      }
+      emit({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
+    }
+    await Promise.allSettled(rejects);
+  }
+
   async function stop() {
+    if (activeRun) stopRequested = true;
+    await rejectPendingQuestions();
     if (sessionId) {
-      await postJson('/session/' + encodeURIComponent(sessionId) + '/interrupt', {}).catch(() => {});
+      await postJson('/session/' + encodeURIComponent(sessionId) + '/abort', {}).catch(() => {});
     }
     await drainApprovals();
     if (activeRun) {
@@ -1253,6 +1596,7 @@ export function createOpenCodeBackend({
     stopping = true;
     sseClosed = true;
     sseStarted = false;
+    settlePendingQuestions();
     pendingApprovals.clear();
     sessionAllowedTools.clear();
     sessionId = null;
@@ -1266,6 +1610,7 @@ export function createOpenCodeBackend({
     activeTurnAccepted = false;
     messageDispatched = false;
     turnStarted = false;
+    stopRequested = false;
     startedTools.clear();
     partTypes.clear();
     transcript.length = 0;
@@ -1295,19 +1640,20 @@ export function createOpenCodeBackend({
       }, totalProbeTimeoutMs);
     });
     try {
-      await Promise.race([
+      const providers = await Promise.race([
         (async () => {
           await startServer();
-          // Reachability check only. The payload embeds each provider's raw API
-          // key (OpenCode returns auth.json values verbatim), so never retain it.
-          await requestJson('/config/providers', { signal: controller.signal }).catch((error) => {
+          // This endpoint may also embed provider options and credentials.
+          // Sanitize in the backend before returning anything to React state.
+          const catalog = await requestJson('/config/providers', { signal: controller.signal }).catch((error) => {
             if (controller.signal.aborted) throw error;
             return requestJson('/provider', { signal: controller.signal });
           });
+          return sanitizeOpenCodeProviderFacts(catalog);
         })(),
         timeout,
       ]);
-      return { loggedIn: true };
+      return { loggedIn: true, providers };
     } catch (e) {
       if (timedOut) {
         if (!activeRun) reset();
@@ -1333,6 +1679,7 @@ export function createOpenCodeBackend({
   }
 
   function adoptSessionRef(ref) {
+    settlePendingQuestions();
     partTypes.clear();
     sessionId = null;
     adoptedSessionId = ref && ref.kind === 'opencode-session' && ref.id
@@ -1360,6 +1707,7 @@ export function createOpenCodeBackend({
   return {
     sendUser,
     approve,
+    answerQuestion,
     stop,
     reset,
     getSessionRef,

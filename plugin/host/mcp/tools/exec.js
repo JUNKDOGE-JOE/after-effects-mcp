@@ -19,17 +19,20 @@ let recentProjectPath = null;
 
 const definition = {
     name: 'ae_exec',
-    description: 'Run ExtendScript in After Effects. On a dispatched failure, the result includes a recoveryId and editable scriptPath. Edit that file with your normal editing tools, or pass corrected inline code, then call ae_exec({recoveryId}); it restores the pre-failure checkpoint by default. Use retryMode:"continue" to keep the current project state. A restorable point exists only when checkpoint_label created one. Successful content remains a string with contentType "json" or "text".',
+    description: 'Run a new ExtendScript in After Effects. Dispatched failures may return a recoveryId and editable scriptPath; retry those only with ae_execRecover. Successful content remains a string with contentType "json" or "text".',
     inputSchema: {
         type: 'object',
         properties: {
-            code: { type: 'string', minLength: 1 },
-            recoveryId: { type: 'string', pattern: '^[a-z0-9]{6}$' },
-            retryMode: { type: 'string', enum: ['restore', 'continue'], default: 'restore' },
+            code: {
+                type: 'string',
+                minLength: 1,
+                description: 'New ExtendScript to run.',
+            },
             undo_group_name: { type: 'string' },
             checkpoint_label: { type: 'string' },
             timeout_sec: { type: 'number', minimum: 1, maximum: 600 },
         },
+        required: ['code'],
         additionalProperties: false,
     },
     outputSchema: {
@@ -62,22 +65,24 @@ function hasOwn(value, field) {
     return Object.prototype.hasOwnProperty.call(value, field);
 }
 
-function validationError(args) {
-    const recovering = hasOwn(args, 'recoveryId');
-    if (!recovering && (typeof args.code !== 'string' || args.code.length === 0)) {
-        return 'missing or empty `code`';
+function recoveryIdHint(args) {
+    return hasOwn(args, 'code')
+        ? '; corrected code was not executed; use the exact id returned by ae_exec, or call ae_exec with code to start a new execution'
+        : '';
+}
+
+const EXEC_FIELDS = ['code', 'undo_group_name', 'checkpoint_label', 'timeout_sec'];
+const RECOVERY_FIELDS = EXEC_FIELDS.concat(['recoveryId', 'retryMode']);
+
+function unsupportedField(args, allowed) {
+    const names = Object.keys(args);
+    for (let i = 0; i < names.length; i += 1) {
+        if (allowed.indexOf(names[i]) === -1) return names[i];
     }
-    if (recovering && (typeof args.recoveryId !== 'string' || !RECOVERY_ID.test(args.recoveryId))) {
-        return '`recoveryId` must match ^[a-z0-9]{6}$';
-    }
-    if (hasOwn(args, 'code') && (typeof args.code !== 'string' || args.code.length === 0)) {
-        return 'missing or empty `code`';
-    }
-    if (!recovering && hasOwn(args, 'retryMode')) return '`retryMode` requires `recoveryId`';
-    if (recovering && hasOwn(args, 'retryMode')
-        && ['restore', 'continue'].indexOf(args.retryMode) === -1) {
-        return '`retryMode` must be restore or continue';
-    }
+    return null;
+}
+
+function executionArgsError(args) {
     if (args.undo_group_name !== undefined && typeof args.undo_group_name !== 'string') {
         return '`undo_group_name` must be a string';
     }
@@ -89,6 +94,34 @@ function validationError(args) {
         return '`timeout_sec` must be between 1 and 600';
     }
     return null;
+}
+
+function initialValidationError(args) {
+    if (hasOwn(args, 'recoveryId') || hasOwn(args, 'retryMode')) {
+        return 'recovery fields are only accepted by `ae_execRecover`';
+    }
+    const unsupported = unsupportedField(args, EXEC_FIELDS);
+    if (unsupported) return 'unsupported argument: `' + unsupported + '`';
+    if (typeof args.code !== 'string' || args.code.length === 0) {
+        return 'missing or empty `code`';
+    }
+    return executionArgsError(args);
+}
+
+function recoveryValidationError(args) {
+    const unsupported = unsupportedField(args, RECOVERY_FIELDS);
+    if (unsupported) return 'unsupported argument: `' + unsupported + '`';
+    if (typeof args.recoveryId !== 'string' || !RECOVERY_ID.test(args.recoveryId)) {
+        return '`recoveryId` must match ^[a-z0-9]{6}$' + recoveryIdHint(args);
+    }
+    if (hasOwn(args, 'code') && (typeof args.code !== 'string' || args.code.length === 0)) {
+        return 'missing or empty `code`';
+    }
+    if (hasOwn(args, 'retryMode')
+        && ['restore', 'continue'].indexOf(args.retryMode) === -1) {
+        return '`retryMode` must be restore or continue';
+    }
+    return executionArgsError(args);
 }
 
 function sha256(code) {
@@ -316,7 +349,12 @@ async function restoreForRetry(recoveryId, retryMode, meta, context, deps) {
 async function runRecovery(args, context, deps) {
     const store = deps.getRecoveryStore();
     const entry = store.lookup(args.recoveryId, recentProjectPath);
-    if (!entry) return { ok: false, error: 'unknown recoveryId: ' + args.recoveryId };
+    if (!entry) {
+        return {
+            ok: false,
+            error: 'unknown recoveryId: ' + args.recoveryId + recoveryIdHint(args),
+        };
+    }
     const meta = store.readMeta(entry);
     const code = hasOwn(args, 'code') ? args.code : store.readScript(entry);
     if (!code) return { ok: false, error: 'recovery script is empty: ' + args.recoveryId };
@@ -330,7 +368,7 @@ async function runRecovery(args, context, deps) {
         restoreCheckpointId: meta.checkpointId || null,
     });
     const denied = await enforce(
-        'ae_exec',
+        'ae_execRecover',
         Object.assign({}, context, { arguments: approvalArguments }),
         deps,
     );
@@ -383,12 +421,24 @@ async function runRecovery(args, context, deps) {
 
 async function call(args, context, deps) {
     const input = args || {};
-    const invalid = validationError(input);
+    const invalid = initialValidationError(input);
     if (invalid) return { result: textResult({ ok: false, error: invalid }, true) };
     try {
-        const value = hasOwn(input, 'recoveryId')
-            ? await runRecovery(input, context, deps)
-            : await runInitial(input, context, deps);
+        const value = await runInitial(input, context, deps);
+        return { result: textResult(value, record(value) && value.ok === false) };
+    } catch (error) {
+        const payload = { ok: false, error: error && error.message ? error.message : String(error) };
+        if (error && typeof error.disposition === 'string') payload.disposition = error.disposition;
+        return { result: textResult(payload, true) };
+    }
+}
+
+async function recover(args, context, deps) {
+    const input = args || {};
+    const invalid = recoveryValidationError(input);
+    if (invalid) return { result: textResult({ ok: false, error: invalid }, true) };
+    try {
+        const value = await runRecovery(input, context, deps);
         return { result: textResult(value, record(value) && value.ok === false) };
     } catch (error) {
         const payload = { ok: false, error: error && error.message ? error.message : String(error) };
@@ -400,5 +450,6 @@ async function call(args, context, deps) {
 module.exports = {
     definition,
     call,
+    recover,
     _resetRecentProjectPathForTest: function () { recentProjectPath = null; },
 };
