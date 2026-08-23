@@ -26850,7 +26850,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: sessionTitle })
           }
         ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { variant: "ghost", size: "sm", icon: "plus", onClick: onNewSession, children: t.newSession })
+        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { variant: "ghost", size: "sm", icon: "plus", onClick: () => onNewSession(), children: t.newSession })
       ] }) : null,
       /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
         !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(import_react39.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
@@ -26908,12 +26908,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || (() => onNewSession()) }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
             Notice,
             {
               text: attachmentDraft.dispatchState === "uncertain" ? t.uncertainTurn : sendError.message,
               actionLabel: attachmentDraft.dispatchState === "uncertain" ? t.newSession : null,
-              onAction: attachmentDraft.dispatchState === "uncertain" ? onNewSession : null
+              onAction: attachmentDraft.dispatchState === "uncertain" ? () => onNewSession() : null
             }
           ) : null,
           height: composerSize.height,

@@ -359,6 +359,7 @@ export function ChatScreen({
     remove: t.attachmentRemove,
   };
 
+  // Keep event objects out of onNewSession; its optional first argument explicitly bypasses the running-turn confirmation.
   return (
     <div ref={layoutRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {sessionTitle ? (
@@ -375,7 +376,7 @@ export function ChatScreen({
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sessionTitle}</span>
             </Button>
           </div>
-          <Button variant="ghost" size="sm" icon="plus" onClick={onNewSession}>{t.newSession}</Button>
+          <Button variant="ghost" size="sm" icon="plus" onClick={() => onNewSession()}>{t.newSession}</Button>
         </div>
       ) : null}
       <div ref={logRef} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
@@ -445,13 +446,13 @@ export function ChatScreen({
           placeholder={t.placeholder}
           options={composerOptions}
           notice={disabledHint
-            ? <Notice text={disabledHint} actionLabel={noticeActionLabel || t.noticeAction} onAction={onNoticeAction || onNewSession} />
+            ? <Notice text={disabledHint} actionLabel={noticeActionLabel || t.noticeAction} onAction={onNoticeAction || (() => onNewSession())} />
             : sendError
               ? (
                 <Notice
                   text={attachmentDraft.dispatchState === 'uncertain' ? t.uncertainTurn : sendError.message}
                   actionLabel={attachmentDraft.dispatchState === 'uncertain' ? t.newSession : null}
-                  onAction={attachmentDraft.dispatchState === 'uncertain' ? onNewSession : null}
+                  onAction={attachmentDraft.dispatchState === 'uncertain' ? () => onNewSession() : null}
                 />
               )
               : null}

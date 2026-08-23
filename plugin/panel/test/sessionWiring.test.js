@@ -35,9 +35,16 @@ test('unload flushes first and controlled backend switches guard restored entrie
 
 test('chat screen exposes session history and new-session actions', () => {
   assert.match(CHAT_SCREEN, /icon="history"[\s\S]*?title=\{sessionTitle\}[\s\S]*?onClick=\{onOpenSessions\}/);
-  assert.match(CHAT_SCREEN, /icon="plus"[\s\S]*?onClick=\{onNewSession\}/);
+  assert.match(CHAT_SCREEN, /icon="plus"[\s\S]*?onClick=\{\(\) => onNewSession\(\)\}/);
   assert.match(APP, /sessionTitle=\{sessionTitle\}/);
   assert.match(APP, /onOpenSessions=\{\(\) => setSessionsOpen\(true\)\}/);
+});
+
+test('ChatScreen new-session actions discard component click events', () => {
+  assert.match(CHAT_SCREEN, /icon="plus"[\s\S]*?onClick=\{\(\) => onNewSession\(\)\}/);
+  assert.match(CHAT_SCREEN, /onAction=\{onNoticeAction \|\| \(\(\) => onNewSession\(\)\)\}/);
+  assert.match(CHAT_SCREEN, /onAction=\{attachmentDraft\.dispatchState === 'uncertain' \? \(\) => onNewSession\(\) : null\}/);
+  assert.doesNotMatch(CHAT_SCREEN, /on(?:Click|Action)=\{onNewSession\}/);
 });
 
 test('OpenCode pending probes become retryable and stale rechecks reset idle runtime', () => {
