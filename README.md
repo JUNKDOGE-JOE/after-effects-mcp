@@ -5,7 +5,7 @@ English | [简体中文](README.zh-CN.md)
 **One-line setup prompt — paste this into Claude Code or another AI agent:**
 
 ```text
-Install the ae-mcp ZXP and the native plug-in for my platform from the v0.10.1
+Install the ae-mcp ZXP and the native plug-in for my platform from the v0.10.2
 release, open Window > Extensions
 > ae-mcp in After Effects, then connect Claude Code with `claude mcp add
 --transport http ae http://127.0.0.1:11488/mcp`; for Claude Desktop, configure

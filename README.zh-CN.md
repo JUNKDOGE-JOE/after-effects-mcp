@@ -5,7 +5,7 @@
 **一行安装提示词——复制给 Claude Code 或其它 AI agent：**
 
 ```text
-请从 v0.10.1 发布页安装 ae-mcp 的 ZXP 和对应平台的原生插件，在 After Effects
+请从 v0.10.2 发布页安装 ae-mcp 的 ZXP 和对应平台的原生插件，在 After Effects
 中打开
 Window > Extensions > ae-mcp，然后用 `claude mcp add --transport http ae
 http://127.0.0.1:11488/mcp` 接入 Claude Code；Claude Desktop 则使用系统 Node
