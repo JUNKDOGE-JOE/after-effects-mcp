@@ -272,7 +272,7 @@ function nativeGateError(code, message, retryable, action, hint) {
     };
 }
 
-function nativeRequestGate(req, res) {
+function nativeRequestGate(req, res, tool) {
     const provided = req.get(authToken.HEADER);
     if (!authToken.tokenMatches(provided, execToken)) {
         res.status(401).json({
@@ -284,10 +284,10 @@ function nativeRequestGate(req, res) {
         });
         return null;
     }
-    const client = req.get('x-ae-mcp-client') || 'unknown';
+    const client = req.get('x-ae-mcp-client') || 'http-direct';
     if (client !== INTERNAL_CLIENT) touchClient(client);
     if (blocked.has(client)) {
-        activity.record({ client, engine: 'native-aegp', ok: false, denied: 'blocked' });
+        activity.record({ client, tool, transport: 'http', engine: 'native-aegp', ok: false, denied: 'blocked' });
         res.status(403).json({
             ok: false,
             error: nativeGateError(
@@ -298,7 +298,7 @@ function nativeRequestGate(req, res) {
         return null;
     }
     if (paused) {
-        activity.record({ client, engine: 'native-aegp', ok: false, denied: 'paused' });
+        activity.record({ client, tool, transport: 'http', engine: 'native-aegp', ok: false, denied: 'paused' });
         res.status(503).json({
             ok: false,
             error: nativeGateError(
@@ -648,22 +648,35 @@ async function executeJsx(request) {
     const undoGroup = input.undoGroup;
     const nativeProjectGraphEffect = input.nativeProjectGraphEffect === undefined
         ? 'invalidate' : input.nativeProjectGraphEffect;
-    const client = input.client || 'unknown';
+    const transport = input.transport || 'internal';
+    const tool = input.tool || (transport === 'http' ? 'exec-http' : 'internal');
+    const client = input.client || (transport === 'http'
+        ? 'http-direct'
+        : (transport === 'mcp' ? 'mcp-session' : 'internal'));
+    const activityRef = input.activityRef && typeof input.activityRef === 'object' ? input.activityRef : null;
+    const scriptEvidence = typeof code === 'string' && code.length > 0
+        ? { scriptChars: code.length, scriptHead: code.replace(/\s+/g, ' ').trim().slice(0, 200) }
+        : {};
+    const recordExecution = function (event) {
+        const result = activity.record(Object.assign({ client, tool, transport }, event));
+        if (activityRef) activityRef.id = result.id;
+        return result;
+    };
     if (client !== INTERNAL_CLIENT) touchClient(client);
     if (blocked.has(client)) {
-        activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'blocked' });
+        recordExecution({ undoGroup: undoGroup || null, ok: false, denied: 'blocked', ...scriptEvidence });
         return { status: 403, payload: { ok: false, error: 'blocked: this client is blocked in the panel' } };
     }
     if (paused) {
-        activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'paused' });
+        recordExecution({ undoGroup: undoGroup || null, ok: false, denied: 'paused', ...scriptEvidence });
         return { status: 503, payload: { ok: false, error: 'paused: AI actions are blocked by the panel kill switch' } };
     }
     if (typeof code !== 'string' || code.length === 0) {
-        activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
+        recordExecution({ undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
         return { status: 400, payload: { ok: false, error: 'missing or empty `code`' } };
     }
     if (!['invalidate', 'preserve'].includes(nativeProjectGraphEffect)) {
-        activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
+        recordExecution({ undoGroup: undoGroup || null, ok: false, denied: 'invalid_request', ...scriptEvidence });
         return {
             status: 400,
             payload: { ok: false, error: '`nativeProjectGraphEffect` must be invalidate or preserve' },
@@ -687,8 +700,7 @@ async function executeJsx(request) {
         dispatched = true;
         const encoded = await jsxBridge.evalScript(transported, t);
         const decoded = decodeEvalScriptTransportResult(encoded);
-        activity.record({
-            client,
+        recordExecution({
             undoGroup: undoGroup || null,
             ok: true,
             durationMs: Date.now() - startedAt,
@@ -714,13 +726,13 @@ async function executeJsx(request) {
             ? e.disposition
             : (dispatched ? 'uncertain' : 'not_dispatched');
         const bridgeState = jsxBridge.getState();
-        activity.record({
-            client,
+        recordExecution({
             undoGroup: undoGroup || null,
             ok: false,
             error: e.message,
             disposition,
             durationMs: Date.now() - startedAt,
+            ...scriptEvidence,
         });
         const payload = {
             ok: false,
@@ -802,6 +814,7 @@ function buildApp() {
         isClientBlocked,
         isPaused,
         recordMcpActivity: function (event) { activity.record(event); },
+        updateActivity: function (id, patch) { return activity.update(id, patch); },
     });
 
     a.get('/health', (req, res) => {
@@ -825,7 +838,7 @@ function buildApp() {
     });
 
     a.get('/native/status', (req, res) => {
-        if (nativeRequestGate(req, res) === null) return;
+        if (nativeRequestGate(req, res, 'native-status') === null) return;
         try {
             const status = makeNativeAegpClient().status();
             res.json({ ok: true, status });
@@ -835,7 +848,7 @@ function buildApp() {
     });
 
     a.post('/native/negotiate', async (req, res) => {
-        const clientLabel = nativeRequestGate(req, res);
+        const clientLabel = nativeRequestGate(req, res, 'native-negotiate');
         if (clientLabel === null) return;
         const body = req.body || {};
         if (!exactBody(body, ['deadlineUnixMs']) || !validDeadline(body.deadlineUnixMs)) {
@@ -864,6 +877,8 @@ function buildApp() {
             };
             activity.record({
                 client: clientLabel,
+                tool: 'native-negotiate',
+                transport: 'http',
                 engine: 'native-aegp',
                 operation: 'negotiate',
                 ok: true,
@@ -875,6 +890,8 @@ function buildApp() {
         } catch (error) {
             activity.record({
                 client: clientLabel,
+                tool: 'native-negotiate',
+                transport: 'http',
                 engine: 'native-aegp',
                 operation: 'negotiate',
                 ok: false,
@@ -886,7 +903,7 @@ function buildApp() {
     });
 
     a.post('/native/capabilities', async (req, res) => {
-        const clientLabel = nativeRequestGate(req, res);
+        const clientLabel = nativeRequestGate(req, res, 'native-capabilities');
         if (clientLabel === null) return;
         const body = req.body || {};
         const validIds = !Object.hasOwn(body, 'ids')
@@ -919,6 +936,8 @@ function buildApp() {
             const result = { sessionId: client.status().sessionId, ...nativeResult };
             activity.record({
                 client: clientLabel,
+                tool: 'native-capabilities',
+                transport: 'http',
                 engine: 'native-aegp',
                 operation: 'capabilities',
                 ok: true,
@@ -929,6 +948,8 @@ function buildApp() {
         } catch (error) {
             activity.record({
                 client: clientLabel,
+                tool: 'native-capabilities',
+                transport: 'http',
                 engine: 'native-aegp',
                 operation: 'capabilities',
                 ok: false,
@@ -940,7 +961,7 @@ function buildApp() {
     });
 
     a.post('/native/invoke', async (req, res) => {
-        const clientLabel = nativeRequestGate(req, res);
+        const clientLabel = nativeRequestGate(req, res, 'native-invoke');
         if (clientLabel === null) return;
         const body = req.body || {};
         if (!validNativeInvokeBody(body)) {
@@ -958,6 +979,8 @@ function buildApp() {
             const result = await client.invoke(body);
             activity.record({
                 client: clientLabel,
+                tool: 'native-invoke',
+                transport: 'http',
                 engine: 'native-aegp',
                 capabilityId: body.capabilityId,
                 requestId: body.requestId,
@@ -968,6 +991,8 @@ function buildApp() {
         } catch (error) {
             activity.record({
                 client: clientLabel,
+                tool: 'native-invoke',
+                transport: 'http',
                 engine: 'native-aegp',
                 capabilityId: body.capabilityId,
                 requestId: body.requestId,
@@ -980,7 +1005,7 @@ function buildApp() {
     });
 
     a.post('/native/cancel', async (req, res) => {
-        const clientLabel = nativeRequestGate(req, res);
+        const clientLabel = nativeRequestGate(req, res, 'native-cancel');
         if (clientLabel === null) return;
         const body = req.body || {};
         if (!validNativeCancelBody(body)) {
@@ -998,6 +1023,8 @@ function buildApp() {
             const result = await client.cancel(body);
             activity.record({
                 client: clientLabel,
+                tool: 'native-cancel',
+                transport: 'http',
                 engine: 'native-aegp',
                 operation: 'cancel',
                 requestId: body.requestId,
@@ -1009,6 +1036,8 @@ function buildApp() {
         } catch (error) {
             activity.record({
                 client: clientLabel,
+                tool: 'native-cancel',
+                transport: 'http',
                 engine: 'native-aegp',
                 operation: 'cancel',
                 requestId: body.requestId,
@@ -1037,7 +1066,7 @@ function buildApp() {
             timeoutMs,
             nativeProjectGraphEffect = 'invalidate',
         } = req.body || {};
-        const client = req.get('x-ae-mcp-client') || 'unknown';
+        const client = req.get('x-ae-mcp-client') || 'http-direct';
         // checkpointLabel remains accepted but deliberately unused until the
         // Phase 1 checkpoint store arrives.
         const output = await executeJsx({
@@ -1047,6 +1076,8 @@ function buildApp() {
             timeoutMs,
             nativeProjectGraphEffect,
             client,
+            tool: 'exec-http',
+            transport: 'http',
         });
         res.status(output.status).json(output.payload);
     });

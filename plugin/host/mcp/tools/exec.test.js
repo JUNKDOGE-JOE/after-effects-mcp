@@ -385,3 +385,49 @@ test('retry uses one ae_execRecover approval with complete code and recovery sum
         f.close();
     }
 });
+
+test('history-guard placeholder code is rejected before execution and never overwrites a stored recovery script', async () => {
+    const f = fixture();
+    try {
+        const freshMarker = '/* ae-mcp: script body hidden from history to save tokens. Never send this comment back as code. */';
+        const rejected = value(await execTool.call({ code: freshMarker }, context(null), f.deps));
+        assert.equal(rejected.ok, false);
+        assert.match(rejected.error, /redaction placeholder/);
+        assert.equal(f.calls.length, 0);
+
+        f.deps.setUserHandler(async function () {
+            return failed('ExtendScript error: bad (line 2)', { errorLine: 2 });
+        });
+        const failure = value(await execTool.call({ code: 'var broken = 1;\nthrow new Error("bad");' }, context(null), f.deps));
+        assert.ok(failure.recoveryId);
+        const stored = fs.readFileSync(failure.scriptPath, 'utf8');
+
+        const callsBefore = f.calls.length;
+        const blocked = value(await execRecoverTool.call({
+            recoveryId: failure.recoveryId,
+            code: '/* executed AE script omitted from prior model history */',
+        }, context(null), f.deps));
+        assert.equal(blocked.ok, false);
+        assert.match(blocked.error, /redaction placeholder/);
+        assert.match(blocked.error, /omit `code`/);
+        assert.equal(f.calls.length, callsBefore);
+        assert.equal(fs.readFileSync(failure.scriptPath, 'utf8'), stored);
+    } finally {
+        f.close();
+    }
+});
+
+test('a thrown ExtendScript error reaches the tool result with an appended hint', async () => {
+    const f = fixture();
+    try {
+        f.deps.setUserHandler(async function () {
+            return failed('ExtendScript error: TypeError: null 不是对象 (line 3)', { errorLine: 3 });
+        });
+        const failure = value(await execTool.call({ code: 'var v = comp.layer(99);\nv.name;\nv.x;' }, context(null), f.deps));
+        assert.equal(failure.ok, false);
+        assert.match(failure.error, /\[hint\]/);
+        assert.match(failure.error, /lookup returned null/);
+    } finally {
+        f.close();
+    }
+});

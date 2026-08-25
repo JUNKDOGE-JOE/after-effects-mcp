@@ -117,3 +117,21 @@ test('ae_exec preserves bridge disposition in structured tool errors', async () 
         disposition: 'possibly-side-effecting',
     });
 });
+
+test('registry passes the MCP tool identity to the execution dependency', async () => {
+    let request;
+    const registry = buildTools({
+        getStatus: function () { return { ok: true }; },
+        executeJsx: async function (value) {
+            request = value;
+            return { payload: { ok: true, resultType: 'string', result: 'ok' } };
+        },
+        sessionCount: function () { return 1; },
+    });
+    await registry.call({ name: 'ae_exec', arguments: { code: '1 + 1' } }, {
+        session: { clientName: 'cursor' },
+        port: 1,
+    });
+    assert.equal(request.tool, 'ae_exec');
+    assert.equal(request.transport, 'mcp');
+});

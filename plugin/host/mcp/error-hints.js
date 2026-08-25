@@ -37,6 +37,22 @@ const HINTS = [
         /0\.1\s*至\s*1296|out of range[^\n]{0,12}1296/i,
         'fontSize hard-caps at 1296; clamp the value before setValue.',
     ],
+    [
+        /值\s+\S+\s+在\s+-?1000000\s+至\s+1000000\s+的范围外|value\s+\S+\s+is outside the range\s+-?1000000\s+to\s+1000000/i,
+        'AE Slider Controls hard-clamp to ±1,000,000; for larger numbers drive a text layer sourceText expression or split digits into separate layers or sliders.',
+    ],
+    [
+        /颜色数组没有\s*3\s*个值|color array does not have 3 values/i,
+        'colors are [r,g,b] (0-1 floats), with alpha passed separately; a text fillColor takes exactly 3 values.',
+    ],
+    [
+        /对象无效|object is invalid/i,
+        'the referenced AE object was deleted or its collection index shifted; re-acquire comps, layers, and properties by name right before use instead of holding references across edits.',
+    ],
+    [
+        /PropertyValueType\.NO_VALUE/i,
+        'that match name is a GROUP, not a leaf property; set values on its child leaf properties by walking with AEMCP.propByMatchPath or numeric indices.',
+    ],
 ];
 
 const HINT_MARK = '[hint]';
@@ -44,10 +60,16 @@ const HINT_MARK = '[hint]';
 function appendHint(error) {
     const text = String(error || '');
     if (text.indexOf(HINT_MARK) !== -1) return text;
-    for (let i = 0; i < HINTS.length; i += 1) {
-        if (HINTS[i][0].test(text)) return text + '\n' + HINT_MARK + ' ' + HINTS[i][1];
-    }
-    return text;
+    const match = matchHint(text);
+    return match ? text + '\n' + HINT_MARK + ' ' + match.hint : text;
 }
 
-module.exports = { HINTS, HINT_MARK, appendHint };
+function matchHint(error) {
+    const text = String(error || '');
+    for (let i = 0; i < HINTS.length; i += 1) {
+        if (HINTS[i][0].test(text)) return { index: i, hint: HINTS[i][1] };
+    }
+    return null;
+}
+
+module.exports = { HINTS, HINT_MARK, appendHint, matchHint };

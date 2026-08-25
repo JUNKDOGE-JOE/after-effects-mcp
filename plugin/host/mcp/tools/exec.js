@@ -5,6 +5,23 @@ const { textResult } = require('../tool-result');
 const { VERB_ANNOTATIONS } = require('../annotations');
 const { enforce } = require('../approval-gate');
 const { parseExecResult } = require('../jsx-result');
+const { matchHint } = require('../error-hints');
+
+const HISTORY_REDACTION_MARKERS = [
+    'omitted from prior model history',
+    'hidden from history to save tokens'
+];
+
+function isHistoryRedactionPlaceholder(value) {
+    return typeof value === 'string' && HISTORY_REDACTION_MARKERS.some((marker) => value.includes(marker));
+}
+
+function placeholderError(recovery) {
+    const suffix = recovery
+        ? ' omit `code` entirely to rerun the stored recovery script, or pass a full replacement script.'
+        : '';
+    return `\`code\` is a redaction placeholder from the conversation history, not runnable code (earlier scripts are hidden to save tokens). Write the complete script again from scratch.${suffix}`;
+}
 const {
     autoCheckpoint,
     executionFailure,
@@ -159,6 +176,22 @@ function executionDisposition(execution, failure) {
     return null;
 }
 
+function recordMcpFailure(execution, failure, code, deps, tool) {
+    if (!execution || !execution.payload || execution.payload.ok !== true || !failure || failure.ok !== false || !deps || typeof deps.recordMcpActivity !== 'function') return;
+    const error = typeof failure.error === 'string' ? failure.error : String(failure.error || 'MCP execution failed');
+    const match = matchHint(error);
+    deps.recordMcpActivity({
+        tool: tool || 'ae_exec',
+        transport: 'mcp',
+        ok: false,
+        verdict: 'mcp_failed',
+        error,
+        scriptChars: typeof code === 'string' ? code.length : undefined,
+        scriptHead: typeof code === 'string' ? code.replace(/\s+/g, ' ').trim().slice(0, 200) : undefined,
+        ...(match ? { hinted: true, hintIndex: match.index } : {})
+    });
+}
+
 function resultFailure(execution) {
     if (!execution || !execution.payload || execution.payload.ok !== true) {
         return executionFailure(execution);
@@ -268,6 +301,7 @@ async function runInitial(args, context, deps) {
         recentProjectPath = execution.payload.projectPath || null;
     }
     const failure = withErrorSource(resultFailure(execution), args.code);
+    recordMcpFailure(execution, failure, args.code, deps, 'ae_exec');
     if (failure) {
         annotateCheckpoint(failure, checkpointRun);
         const disposition = executionDisposition(execution, failure);
@@ -388,6 +422,7 @@ async function runRecovery(args, context, deps) {
         recentProjectPath = execution.payload.projectPath || null;
     }
     const failure = withErrorSource(resultFailure(execution), code);
+    recordMcpFailure(execution, failure, code, deps, 'ae_execRecover');
     const attemptNumber = Array.isArray(meta.attempts) ? meta.attempts.length + 1 : 1;
     const checkpointId = checkpoint ? checkpoint.id : (meta.checkpointId || null);
     const attempt = attemptRecord({
@@ -420,6 +455,9 @@ async function runRecovery(args, context, deps) {
 }
 
 async function call(args, context, deps) {
+    if (isHistoryRedactionPlaceholder(args && args.code)) {
+        return { result: textResult({ ok: false, error: placeholderError(false) }, true) };
+    }
     const input = args || {};
     const invalid = initialValidationError(input);
     if (invalid) return { result: textResult({ ok: false, error: invalid }, true) };
@@ -434,6 +472,9 @@ async function call(args, context, deps) {
 }
 
 async function recover(args, context, deps) {
+    if (isHistoryRedactionPlaceholder(args && args.code)) {
+        return { result: textResult({ ok: false, error: placeholderError(true) }, true) };
+    }
     const input = args || {};
     const invalid = recoveryValidationError(input);
     if (invalid) return { result: textResult({ ok: false, error: invalid }, true) };

@@ -1292,6 +1292,27 @@ test('/exec reports a completed ExtendScript error as failed, not uncertain', as
     }
 });
 
+test('/exec activity attributes direct HTTP failures and preserves bounded script evidence', async () => {
+    const fixture = await startApp({
+        evalScript: function (_jsx, callback) {
+            callback('{"ok":false,"error":"Error: boom (line 1)"}');
+        },
+    });
+    try {
+        const code = 'var value = 1;\nthrow new Error("boom");';
+        const response = await post(fixture.port, '/exec', { 'X-AE-MCP-Token': TOKEN }, { code });
+        assert.equal(response.body.ok, false);
+        const event = fixture.server.activity.list().find(function (item) { return item.ok === false; });
+        assert.equal(event.client, 'http-direct');
+        assert.equal(event.tool, 'exec-http');
+        assert.equal(event.transport, 'http');
+        assert.equal(event.scriptChars, code.length);
+        assert.equal(event.scriptHead, 'var value = 1; throw new Error("boom");');
+    } finally {
+        await closeFixture(fixture);
+    }
+});
+
 test('/exec distinguishes uncertain timeout from a queued not_dispatched call', async () => {
     const evalCalls = [];
     let sentinelCallback = null;

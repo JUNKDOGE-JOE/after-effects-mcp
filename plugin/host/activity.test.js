@@ -39,3 +39,14 @@ test('activity list filters by since id', () => {
     const c = activity.record({ ok: true, n: 3 });
     assert.deepStrictEqual(activity.list(a.id), [b, c]);
 });
+
+test('activity supplies attribution defaults and can enrich a recorded failure', () => {
+    activity._reset();
+    const event = activity.record({ ok: false, error: 'boom' });
+    assert.deepEqual(
+        { client: event.client, tool: event.tool, transport: event.transport },
+        { client: 'internal', tool: 'internal', transport: 'internal' },
+    );
+    assert.equal(activity.update(event.id, { hinted: true, hintIndex: 3 }).hintIndex, 3);
+    assert.equal(activity.list()[0].hinted, true);
+});

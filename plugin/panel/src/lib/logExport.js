@@ -61,6 +61,12 @@ function formatActivity(event) {
     event.error !== undefined ? 'error=' + scalar(event.error) : null,
     event.durationMs !== undefined ? 'durationMs=' + scalar(event.durationMs) : null,
     event.undoGroup !== undefined ? 'undoGroup=' + scalar(event.undoGroup) : null,
+    event.tool !== undefined ? 'tool=' + scalar(event.tool) : null,
+    event.transport !== undefined ? 'transport=' + scalar(event.transport) : null,
+    event.scriptChars !== undefined ? 'scriptChars=' + scalar(event.scriptChars) : null,
+    event.scriptHead !== undefined ? 'scriptHead=' + scalar(event.scriptHead) : null,
+    event.hinted !== undefined ? 'hinted=' + scalar(event.hinted) : null,
+    event.hintIndex !== undefined ? 'hintIndex=' + scalar(event.hintIndex) : null,
   ].filter(Boolean).join(' ');
 }
 
@@ -111,12 +117,43 @@ function formatBackendError(event, exactSecrets) {
   if (!event || typeof event !== 'object') return '-';
   return [
     iso(event.ts),
+    'pid=' + scalar(redactedField(event.pid, exactSecrets)),
     'backend=' + scalar(redactedField(event.backend, exactSecrets)),
     'code=' + scalar(redactedField(event.code, exactSecrets)),
     'kind=' + scalar(redactedField(event.kind, exactSecrets)),
     'message=' + scalar(redactedBackendErrorField(event.message, exactSecrets)),
     event.detail ? 'detail=' + scalar(redactedBackendErrorField(event.detail, exactSecrets)) : null,
   ].filter(Boolean).join(' ');
+}
+
+function backendErrorKey(event) {
+  return [event.ts, event.backend, event.code, event.kind, event.message].map((value) => String(value ?? '')).join('\u0000');
+}
+
+function mergedBackendErrors(memoryErrors, diskEvents) {
+  const merged = [];
+  const positions = new Map();
+  const add = (event) => {
+    if (!event || typeof event !== 'object') return;
+    const key = backendErrorKey(event);
+    if (positions.has(key)) {
+      const index = positions.get(key);
+      if (event.pid !== undefined && merged[index].pid === undefined) merged[index] = event;
+      return;
+    }
+    positions.set(key, merged.length);
+    merged.push(event);
+  };
+  if (Array.isArray(memoryErrors)) memoryErrors.forEach(add);
+  if (Array.isArray(diskEvents)) diskEvents
+    .filter((event) => event && event.level === 'error' && event.source === 'chat')
+    .forEach(add);
+  return merged.sort((a, b) => {
+    const left = Date.parse(a.ts);
+    const right = Date.parse(b.ts);
+    if (Number.isFinite(left) && Number.isFinite(right)) return left - right;
+    return 0;
+  });
 }
 
 function section(lines, title, producer, exactSecrets, alreadyRedacted = false) {
@@ -255,9 +292,10 @@ export function buildLogExport({
     return hostLogDisk.slice(-500).map((event) => formatHostLog(event, exactSecrets));
   }, exactSecrets, true);
   section(lines, '## panel log (' + panelLogs.length + ')', () => panelLogs.map(String), exactSecrets);
-  section(lines, '## backend errors (last 50)', () => {
-    if (!Array.isArray(backendErrors)) return unavailable('backend error history is unavailable');
-    return backendErrors.slice(-50).map((event) => formatBackendError(event, exactSecrets));
+  section(lines, '## backend errors (last 50, memory + disk)', () => {
+    if (!Array.isArray(backendErrors) && !Array.isArray(hostLogDisk)) return unavailable('backend error history is unavailable');
+    return mergedBackendErrors(backendErrors, hostLogDisk).slice(-50)
+      .map((event) => formatBackendError(event, exactSecrets));
   }, exactSecrets, true);
   section(lines, '## backend stderr tails', () => {
     const tails = backendStderrTails;
