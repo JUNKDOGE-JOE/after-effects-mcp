@@ -21295,6 +21295,14 @@
       }
       const hasExplicitEnv = Object.prototype.hasOwnProperty.call(options, "env");
       const environment = hasExplicitEnv ? completeEnvironment(options.env || {}) : completeSpawnEnv();
+      if (windows && (executable.source === "registry-path" || executable.source === "standard")) {
+        const pathKey = environmentKey(environment, "PATH", true) || "Path";
+        const executableDirectory = paths.dirname(executable.path);
+        const pathDirectories = String(environment[pathKey] || "").split(separator).filter(Boolean);
+        if (!pathDirectories.some((directory) => windowsPathEqual(directory, executableDirectory))) {
+          environment[pathKey] = [executableDirectory, ...pathDirectories].join(separator);
+        }
+      }
       const commandArgs = [...executable.argsPrefix || [], ...args];
       return deps.spawnImpl(executable.path, commandArgs, {
         ...options,
@@ -21457,6 +21465,64 @@
       }
       return result;
     }
+    function windowsPathEqual(left, right) {
+      return String(left).replace(/[\\/]+$/, "").toLowerCase() === String(right).replace(/[\\/]+$/, "").toLowerCase();
+    }
+    function expandedRegistryPath(value, type, env) {
+      if (type.toUpperCase() !== "REG_EXPAND_SZ") return value;
+      return value.replace(/%([^%]+)%/g, (match, name) => {
+        const replacement = environmentValue(env, name, true);
+        return replacement === void 0 ? match : String(replacement);
+      });
+    }
+    function registryPathValue(output, env) {
+      const line = String(output || "").split(/\r?\n/).find((value) => {
+        return /^\s*Path\s+REG_(?:SZ|EXPAND_SZ)\s+/i.test(value);
+      });
+      if (!line) return null;
+      const match = line.match(/^\s*Path\s+(REG_(?:SZ|EXPAND_SZ))\s+(.*)$/i);
+      return match ? expandedRegistryPath(match[2], match[1], env) : null;
+    }
+    async function registryPathCandidates(id, env) {
+      if (!windows) return [];
+      const systemRoot = String(environmentValue(env, "SystemRoot", true) || environmentValue(env, "WINDIR", true) || "C:\\Windows");
+      const executable = {
+        ok: true,
+        id: "reg",
+        path: paths.join([systemRoot, "System32", "reg.exe"]),
+        argsPrefix: [],
+        source: "registry-path",
+        version: null,
+        arch: null
+      };
+      const queries = [
+        ["HKCU\\Environment", "/v", "Path"],
+        ["HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", "/v", "Path"]
+      ];
+      const values = [];
+      for (const args of queries) {
+        const result = await run({
+          executable,
+          args: ["query", ...args],
+          env,
+          timeoutMs: DEFAULT_TIMEOUT_MS,
+          maxOutputBytes: DEFAULT_OUTPUT_LIMIT
+        });
+        if (result.exitCode !== 0 || result.timedOut || result.aborted) continue;
+        const value = registryPathValue(result.stdout, env);
+        if (value !== null) values.push(value);
+      }
+      const inherited = String(environmentValue(env, "PATH", true) || "").split(separator).filter(Boolean);
+      const directories = [];
+      for (const value of values) {
+        for (const directory of value.split(separator).filter(Boolean)) {
+          if (inherited.some((entry2) => windowsPathEqual(entry2, directory))) continue;
+          if (!directories.some((entry2) => windowsPathEqual(entry2, directory))) directories.push(directory);
+        }
+      }
+      const extensions = ["", ".exe", ".com", ".cmd", ".bat"];
+      return directories.flatMap((directory) => extensions.map((extension) => paths.join([directory, id + extension])));
+    }
     function standardCandidates(id, env) {
       if (!windows) {
         const values2 = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].map((root) => paths.join([root, id]));
@@ -21471,6 +21537,10 @@
       if (id === "winget") values.unshift(paths.join([local, "Microsoft", "WindowsApps", "winget.exe"]));
       if (id === "powershell") values.unshift(paths.join([systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"]));
       values.push(paths.join([local, "Programs", id, id + ".exe"]));
+      values.push(paths.join([paths.home, ".local", "bin", id + ".exe"]));
+      values.push(paths.join([paths.home, "scoop", "shims", id + ".exe"]));
+      values.push(paths.join([paths.home, "scoop", "shims", id + ".cmd"]));
+      if (id === "opencode") values.push(paths.join([paths.home, ".opencode", "bin", "opencode.exe"]));
       return values;
     }
     function windowsPathInside(root, candidate) {
@@ -21756,6 +21826,22 @@
       for (const group of groups) {
         for (const path of group.values) {
           const rawCandidate = fileCandidate(path, group.source, env, id !== "node");
+          if (!rawCandidate) continue;
+          const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);
+          const candidate = materialized.candidate;
+          if (!candidate) {
+            if (materialized.failure === "ARCH_MISMATCH") strongestFailure = "ARCH_MISMATCH";
+            else if (materialized.failure === "VERSION_TOO_OLD" && strongestFailure !== "ARCH_MISMATCH") strongestFailure = "VERSION_TOO_OLD";
+            continue;
+          }
+          const result = await probe(candidate, id, { ...options, env }, attempts);
+          if (result.success) return result.success;
+          strongestFailure = result.failure === "ARCH_MISMATCH" ? result.failure : strongestFailure === "NOT_FOUND" || strongestFailure === "PROBE_FAILED" && result.failure === "VERSION_TOO_OLD" ? result.failure : strongestFailure;
+        }
+      }
+      if (windows && !hasExplicitEnv) {
+        for (const path of await registryPathCandidates(id, env)) {
+          const rawCandidate = fileCandidate(path, "registry-path", env, id !== "node");
           if (!rawCandidate) continue;
           const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);
           const candidate = materialized.candidate;
@@ -28754,6 +28840,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         ]));
       }
     }
+    function emitAfterText(evt) {
+      providerDeltaRedactor.flush();
+      emit(evt);
+    }
     function clearNoProgressWarning() {
       if (noProgressWarningTimer !== null) {
         clearTimeoutImpl(noProgressWarningTimer);
@@ -28891,7 +28981,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       for (const [toolUseId, pending] of pendingQuestions) {
         pendingQuestions.delete(toolUseId);
         if (writeResponses) denyControl(pending.requestId, message);
-        emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
+        emitAfterText({ type: "question-resolved", toolUseId, outcome: "cancelled" });
       }
     }
     function finishActive() {
@@ -28918,7 +29008,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       pendingQuestions.delete(id);
       if (!result || result.action !== "submit") {
         denyControl(pending.requestId, "User dismissed the question.");
-        emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
+        emitAfterText({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
         return true;
       }
       const answers = answersForAskUserQuestion(pending.questions, result.values);
@@ -28927,7 +29017,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         questions: pending.originalQuestions,
         answers
       });
-      emit({
+      emitAfterText({
         type: "question-resolved",
         toolUseId: id,
         outcome: "answered",
@@ -29005,7 +29095,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (activeRun) {
         providerDeltaRedactor.flush();
         const classified = classifyErrorCode(classificationInput);
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -29075,7 +29165,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           name,
           startedAt: now()
         });
-        emit({
+        emitAfterText({
           type: "tool-start",
           toolUseId,
           name,
@@ -29091,7 +29181,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         const toolUseId = String(block.tool_use_id || "");
         const tool = startedTools.get(toolUseId);
         if (!tool) continue;
-        emit({
+        emitAfterText({
           type: "tool-result",
           toolUseId,
           ok: block.is_error !== true,
@@ -29166,7 +29256,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         originalQuestions,
         questions
       });
-      emit({
+      emitAfterText({
         type: "question-required",
         toolUseId,
         source: "claude-ask-user-question",
@@ -29197,7 +29287,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const toolUseId = String(request.tool_use_id || requestId);
       const annotation = activeTurn.toolMeta.annotations[name] || {};
       pendingApprovals.set(toolUseId, { requestId, name, input });
-      emit({
+      emitAfterText({
         type: "approval-required",
         toolUseId,
         name,
@@ -29252,7 +29342,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           upstreamText: safeMessage
         });
         const kindReference = classifyError(safeMessage);
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.code === "UPSTREAM_ERROR" && ["auth", "model"].includes(kindReference) ? kindReference : classified.kind,
           code: classified.code,
@@ -29413,7 +29503,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (!(resolved == null ? void 0 : resolved.ok)) {
           const classification = classifyErrorCode({ resolutionCode: resolved == null ? void 0 : resolved.code });
           const resolution = boundedResolution((resolved == null ? void 0 : resolved.resolution) || resolved);
-          emit({
+          emitAfterText({
             type: "error",
             kind: classification.kind,
             code: classification.code,
@@ -29500,7 +29590,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           let message = (error == null ? void 0 : error.message) || "Failed to start Claude CLI.";
           if (classification.code === "SPAWN_FAILED") message = "Claude CLI process could not be started.";
           else if (classification.code === "MCP_UNREACHABLE") message = "Claude could not prepare the panel MCP connection.";
-          emit({
+          emitAfterText({
             type: "error",
             kind: classification.kind,
             code: classification.code,
@@ -29564,7 +29654,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             fallbackCode: "BACKEND_ERROR"
           });
           const message = classification.code === "MCP_UNREACHABLE" ? "Claude could not prepare the panel MCP connection." : (error == null ? void 0 : error.message) || "Failed to start Claude CLI.";
-          emit({
+          emitAfterText({
             type: "error",
             kind: classification.kind,
             code: classification.code,
@@ -29620,7 +29710,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         turn = canonicalTurn(input);
       } catch (error) {
         const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
-        emit({
+        emitAfterText({
           type: "error",
           kind: "attachment",
           code: "TURN_INPUT_INVALID",
@@ -29668,7 +29758,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       providerDeltaRedactor.flush();
       setThinking(false);
       drainControls("Turn was stopped.");
-      emit({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted." });
+      emitAfterText({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted." });
       finishActive();
       void discardRuntime();
     }
@@ -30081,6 +30171,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function emit(evt) {
       if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
     }
+    function emitAfterText(evt) {
+      providerDeltaRedactor.flush();
+      emit(evt);
+    }
     function emitTurnProgress(stage) {
       if (!activeRun || !activeTurn) return;
       emit({
@@ -30167,7 +30261,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       for (const [toolUseId, pending] of Array.from(pendingUserInputs.entries())) {
         pendingUserInputs.delete(toolUseId);
         if (rpc) rpc.respond(pending.rpcId, { answers: {} });
-        emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
+        emitAfterText({ type: "question-resolved", toolUseId, outcome: "cancelled" });
       }
     }
     function answerQuestion(toolUseId, result) {
@@ -30177,12 +30271,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       pendingUserInputs.delete(id);
       if (!result || result.action !== "submit") {
         if (rpc) rpc.respond(pending.rpcId, { answers: {} });
-        emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
+        emitAfterText({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
         return true;
       }
       const answers = answersForCodexUserInput(pending.questions, result.values);
       if (rpc) rpc.respond(pending.rpcId, { answers });
-      emit({
+      emitAfterText({
         type: "question-resolved",
         toolUseId: id,
         outcome: "answered",
@@ -30218,7 +30312,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           return;
         }
         if (item.type !== "mcpToolCall") return;
-        emit({
+        emitAfterText({
           type: "tool-start",
           toolUseId: String(item.id || ""),
           name: mcpToolName(item),
@@ -30233,7 +30327,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           return;
         }
         if (item.type !== "mcpToolCall") return;
-        emit({
+        emitAfterText({
           type: "tool-result",
           toolUseId: String(item.id || ""),
           name: mcpToolName(item),
@@ -30283,7 +30377,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       const toolUseId = "ask_" + String(message.id);
       pendingUserInputs.set(toolUseId, { rpcId: message.id, questions });
-      emit({
+      emitAfterText({
         type: "question-required",
         toolUseId,
         source: "codex-user-input",
@@ -30330,7 +30424,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           plan,
           allowSession: policy.allowSession
         });
-        emit({
+        emitAfterText({
           type: "approval-required",
           toolUseId,
           name: "mcp__ae__ae_toolUse",
@@ -30362,7 +30456,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         input
       };
       pendingApprovals.set(toolUseId, approval);
-      emit({
+      emitAfterText({
         type: "approval-required",
         toolUseId,
         name: approval.name,
@@ -30390,7 +30484,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       if (activeRun) {
         const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -30422,7 +30516,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       drainApprovals();
       if (activeRun) {
         const classified = classifyErrorCode({ error: err, spawnError: true });
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -30704,7 +30798,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (message !== rawMessage && rawMessage) {
           detail.upstreamMessage = String(rawMessage).slice(0, 500);
         }
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -30724,7 +30818,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         turn = normalizeTurnInput(input);
       } catch (error) {
         const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
-        emit({
+        emitAfterText({
           type: "error",
           kind: "attachment",
           code: "TURN_INPUT_INVALID",
@@ -30780,7 +30874,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       drainApprovals();
       providerDeltaRedactor.discard();
       if (activeRun) {
-        emit({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
+        emitAfterText({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
       }
     }
@@ -31334,7 +31428,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   // src/cep/openCodeHistoryGuard.js
   init_cep_runtime_inject();
   var OPEN_CODE_HISTORY_GUARD_FILENAME = "ae-mcp-history-guard.js";
-  var OPEN_CODE_HISTORY_GUARD_MARKER = "/* executed AE script omitted from prior model history */";
+  var OPEN_CODE_HISTORY_GUARD_MARKER = "/* ae-mcp: script body hidden from history to save tokens. Never send this comment back as code \u2014 write the full script again, or rerun the stored script via ae_execRecover with its recoveryId. */";
   var AE_EXEC_TOOL_NAMES = Object.freeze([
     "ae_exec",
     "ae_execRecover",
@@ -31475,6 +31569,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const text = String(raw || "");
     if (!text) return "";
     if (text.startsWith("mcp__")) return text;
+    if (!text.startsWith("ae_")) return text;
     return "mcp__ae__" + text.replace(/^ae_/, "");
   }
   function eventType(evt) {
@@ -31711,7 +31806,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function settlePendingQuestions() {
       for (const [questionId] of pendingQuestions) {
         pendingQuestions.delete(questionId);
-        emit({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
+        emitAfterText({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
       }
     }
     function settleFailedTurnInteractions() {
@@ -31725,6 +31820,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function emit(evt) {
       if (onEvent) onEvent(redactValue(evt, redactionValues(activeAttachmentPaths)));
+    }
+    function emitAfterText(evt) {
+      assistantDeltaRedactor.flush();
+      emit(evt);
     }
     function emitTurnProgress(stage) {
       if (!activeRun || !activeTurn) return;
@@ -32090,7 +32189,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       removeInstanceMarker(home);
       if (activeRun) {
         const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -32123,7 +32222,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (activeRun) {
         const tail = trimStderrTail(stderrTail);
         const classified = classifyErrorCode({ error, spawnError: true, stderrTail: tail });
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -32319,7 +32418,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           baseUrl = "";
           configHome = "";
           if (wasActive) {
-            emit({
+            emitAfterText({
               type: "error",
               kind: "network",
               code: "EVENT_STREAM_FAILED",
@@ -32404,7 +32503,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           httpStatus,
           fallbackCode: "BACKEND_ERROR"
         });
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -32435,7 +32534,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return;
       }
       pendingApprovals.set(permissionId, { name, input });
-      emit({
+      emitAfterText({
         type: "approval-required",
         toolUseId: permissionId,
         name,
@@ -32452,7 +32551,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const status = state.status;
       if (status === "completed" || status === "error") {
         const ms = state.time && Number.isFinite(state.time.start) && Number.isFinite(state.time.end) ? state.time.end - state.time.start : void 0;
-        emit({
+        emitAfterText({
           type: "tool-result",
           toolUseId,
           name,
@@ -32464,7 +32563,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       if (startedTools.has(toolUseId)) return;
       startedTools.add(toolUseId);
-      emit({ type: "tool-start", toolUseId, name, input: state.input || {} });
+      emitAfterText({ type: "tool-start", toolUseId, name, input: state.input || {} });
     }
     function handleOpenCodeEvent(evt) {
       var _a;
@@ -32528,7 +32627,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           return;
         }
         pendingQuestions.set(questionId, { questions, settling: false });
-        emit({
+        emitAfterText({
           type: "question-required",
           toolUseId: questionId,
           source: "opencode-question",
@@ -32543,10 +32642,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (!pending) return;
         pendingQuestions.delete(questionId);
         if (type === "question.rejected") {
-          emit({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
+          emitAfterText({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
         } else {
           const values = valuesFromOpenCodeAnswers(pending.questions, p.answers);
-          emit({
+          emitAfterText({
             type: "question-resolved",
             toolUseId: questionId,
             outcome: "answered",
@@ -32574,7 +32673,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           upstreamText: combined
         });
         settleFailedTurnInteractions();
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -32631,7 +32730,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         turn = normalizeTurnInput(input);
       } catch (error) {
         const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
-        emit({
+        emitAfterText({
           type: "error",
           kind: "attachment",
           code: "TURN_INPUT_INVALID",
@@ -32708,7 +32807,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           ...(e == null ? void 0 : e.code) && (e == null ? void 0 : e.spawnError) ? { spawnCode: e.code } : {},
           ...sessionReset ? { sessionReset: true } : {}
         };
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -32749,7 +32848,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (pendingQuestions.get(id) === pending) pending.settling = false;
         const httpStatus = extractHttpStatus(error == null ? void 0 : error.httpStatus);
         const classified = classifyErrorCode({ error, httpStatus, fallbackCode: "BACKEND_ERROR" });
-        emit({
+        emitAfterText({
           type: "error",
           kind: classified.kind,
           code: classified.code,
@@ -32763,7 +32862,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       if (pendingQuestions.get(id) !== pending) return true;
       pendingQuestions.delete(id);
-      emit({
+      emitAfterText({
         type: "question-resolved",
         toolUseId: id,
         outcome: submitted ? "answered" : "cancelled",
@@ -32778,7 +32877,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (!pending.settling && baseUrl) {
           rejects.push(postJson(questionReplyPath(questionId, "reject"), {}));
         }
-        emit({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
+        emitAfterText({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
       }
       await Promise.allSettled(rejects);
     }
@@ -32791,7 +32890,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       await drainApprovals();
       if (activeRun) {
-        emit({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
+        emitAfterText({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
       }
     }
@@ -34382,9 +34481,12 @@ ${command}`
     const sessions = host && typeof host.getMcpSessions === "function" ? host.getMcpSessions() : [];
     const latest = sessions.reduce((value, session) => Math.max(value, Number(session.lastActivityAt) || 0), 0);
     const age = latest ? Date.now() - latest : Infinity;
+    if (!latest || age >= 10 * 60 * 1e3) {
+      return { ok: true, detail: "No recent MCP session" };
+    }
     return {
-      ok: age < 10 * 60 * 1e3,
-      detail: latest ? "Last MCP session activity " + Math.round(age / 1e3) + "s ago" : "No MCP session activity yet"
+      ok: true,
+      detail: "Last MCP session activity " + Math.round(age / 1e3) + "s ago"
     };
   }
   async function runDiagnostics({
@@ -34831,7 +34933,13 @@ ${command}`
       event.disposition !== void 0 ? "disposition=" + scalar2(event.disposition) : null,
       event.error !== void 0 ? "error=" + scalar2(event.error) : null,
       event.durationMs !== void 0 ? "durationMs=" + scalar2(event.durationMs) : null,
-      event.undoGroup !== void 0 ? "undoGroup=" + scalar2(event.undoGroup) : null
+      event.undoGroup !== void 0 ? "undoGroup=" + scalar2(event.undoGroup) : null,
+      event.tool !== void 0 ? "tool=" + scalar2(event.tool) : null,
+      event.transport !== void 0 ? "transport=" + scalar2(event.transport) : null,
+      event.scriptChars !== void 0 ? "scriptChars=" + scalar2(event.scriptChars) : null,
+      event.scriptHead !== void 0 ? "scriptHead=" + scalar2(event.scriptHead) : null,
+      event.hinted !== void 0 ? "hinted=" + scalar2(event.hinted) : null,
+      event.hintIndex !== void 0 ? "hintIndex=" + scalar2(event.hintIndex) : null
     ].filter(Boolean).join(" ");
   }
   function redactedField(value, exactSecrets) {
@@ -34881,12 +34989,39 @@ ${command}`
     if (!event || typeof event !== "object") return "-";
     return [
       iso(event.ts),
+      "pid=" + scalar2(redactedField(event.pid, exactSecrets)),
       "backend=" + scalar2(redactedField(event.backend, exactSecrets)),
       "code=" + scalar2(redactedField(event.code, exactSecrets)),
       "kind=" + scalar2(redactedField(event.kind, exactSecrets)),
       "message=" + scalar2(redactedBackendErrorField(event.message, exactSecrets)),
       event.detail ? "detail=" + scalar2(redactedBackendErrorField(event.detail, exactSecrets)) : null
     ].filter(Boolean).join(" ");
+  }
+  function backendErrorKey(event) {
+    return [event.ts, event.backend, event.code, event.kind, event.message].map((value) => String(value != null ? value : "")).join("\0");
+  }
+  function mergedBackendErrors(memoryErrors, diskEvents) {
+    const merged = [];
+    const positions = /* @__PURE__ */ new Map();
+    const add = (event) => {
+      if (!event || typeof event !== "object") return;
+      const key = backendErrorKey(event);
+      if (positions.has(key)) {
+        const index = positions.get(key);
+        if (event.pid !== void 0 && merged[index].pid === void 0) merged[index] = event;
+        return;
+      }
+      positions.set(key, merged.length);
+      merged.push(event);
+    };
+    if (Array.isArray(memoryErrors)) memoryErrors.forEach(add);
+    if (Array.isArray(diskEvents)) diskEvents.filter((event) => event && event.level === "error" && event.source === "chat").forEach(add);
+    return merged.sort((a, b) => {
+      const left = Date.parse(a.ts);
+      const right = Date.parse(b.ts);
+      if (Number.isFinite(left) && Number.isFinite(right)) return left - right;
+      return 0;
+    });
   }
   function section(lines, title, producer, exactSecrets, alreadyRedacted = false) {
     lines.push(title);
@@ -35002,9 +35137,9 @@ ${command}`
       return hostLogDisk.slice(-500).map((event) => formatHostLog(event, exactSecrets));
     }, exactSecrets, true);
     section(lines, "## panel log (" + panelLogs.length + ")", () => panelLogs.map(String), exactSecrets);
-    section(lines, "## backend errors (last 50)", () => {
-      if (!Array.isArray(backendErrors)) return unavailable("backend error history is unavailable");
-      return backendErrors.slice(-50).map((event) => formatBackendError(event, exactSecrets));
+    section(lines, "## backend errors (last 50, memory + disk)", () => {
+      if (!Array.isArray(backendErrors) && !Array.isArray(hostLogDisk)) return unavailable("backend error history is unavailable");
+      return mergedBackendErrors(backendErrors, hostLogDisk).slice(-50).map((event) => formatBackendError(event, exactSecrets));
     }, exactSecrets, true);
     section(lines, "## backend stderr tails", () => {
       const tails = backendStderrTails;
