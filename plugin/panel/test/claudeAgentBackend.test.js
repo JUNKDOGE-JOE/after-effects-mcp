@@ -514,6 +514,68 @@ test('real assistant and user wire map AE tool start and result events', async (
   });
 });
 
+test('Claude flushes redacted assistant text before tool_use events', async () => {
+  const selected = 'C:\\' + 's'.repeat(61);
+  assert.equal(selected.length, 64);
+  const h = makeHarness();
+  h.fs.files.add(selected);
+  const run = h.backend.sendUser({
+    turnId: 'turn-text-order',
+    text: 'use a tool',
+    attachments: [{
+      id: 'att-sensitive',
+      name: 'sensitive.txt',
+      mediaType: 'text/plain',
+      size: 1,
+      temporary: false,
+      localPath: selected,
+    }],
+  });
+  await flush();
+
+  const beforeToolChunks = [
+    'The composition is ready, and the expression setup is complete up to globalA',
+    'lpha 0.7 before the tool runs.',
+  ];
+  for (const text of beforeToolChunks) {
+    emitWire(h.processes[0], {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        delta: { type: 'text_delta', text },
+      },
+    });
+  }
+  emitWire(h.processes[0], {
+    type: 'assistant',
+    message: {
+      content: [{
+        type: 'tool_use',
+        id: 'tool_text_order',
+        name: 'mcp__ae__ae_exec',
+        input: { value: 1 },
+      }],
+    },
+  });
+
+  const toolIndex = h.events.findIndex((event) => event.type === 'tool-start');
+  assert.ok(toolIndex >= 0);
+  assert.equal(
+    h.events.slice(0, toolIndex)
+      .filter((event) => event.type === 'text-delta')
+      .map((event) => event.text)
+      .join(''),
+    beforeToolChunks.join(''),
+  );
+
+  finishTurn(h.processes[0]);
+  await run;
+  assert.equal(
+    h.events.filter((event) => event.type === 'text-delta').map((event) => event.text).join(''),
+    beforeToolChunks.join(''),
+  );
+});
+
 test('manual can_use_tool allow and deny use the real control wire shape', async () => {
   for (const decision of ['allow', 'deny']) {
     const h = makeHarness();

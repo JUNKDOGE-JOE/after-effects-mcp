@@ -1,5 +1,5 @@
 export const OPEN_CODE_HISTORY_GUARD_FILENAME = 'ae-mcp-history-guard.js';
-export const OPEN_CODE_HISTORY_GUARD_MARKER = '/* executed AE script omitted from prior model history */';
+export const OPEN_CODE_HISTORY_GUARD_MARKER = '/* ae-mcp: script body hidden from history to save tokens. Never send this comment back as code — write the full script again, or rerun the stored script via ae_execRecover with its recoveryId. */';
 
 const AE_EXEC_TOOL_NAMES = Object.freeze([
   'ae_exec',

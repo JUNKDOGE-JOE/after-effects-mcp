@@ -140,6 +140,7 @@ function prefixedToolName(raw) {
   const text = String(raw || '');
   if (!text) return '';
   if (text.startsWith('mcp__')) return text;
+  if (!text.startsWith('ae_')) return text;
   // opencode names an MCP tool "<server>_<tool>" — ae's ae_ping becomes
   // "ae_ae_ping". Strip the single "ae_" server prefix once -> "ae_ping".
   return 'mcp__ae__' + text.replace(/^ae_/, '');
@@ -425,7 +426,7 @@ export function createOpenCodeBackend({
   function settlePendingQuestions() {
     for (const [questionId] of pendingQuestions) {
       pendingQuestions.delete(questionId);
-      emit({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
+      emitAfterText({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
     }
   }
 
@@ -441,6 +442,11 @@ export function createOpenCodeBackend({
 
   function emit(evt) {
     if (onEvent) onEvent(redactValue(evt, redactionValues(activeAttachmentPaths)));
+  }
+
+  function emitAfterText(evt) {
+    assistantDeltaRedactor.flush();
+    emit(evt);
   }
 
   function emitTurnProgress(stage) {
@@ -840,7 +846,7 @@ export function createOpenCodeBackend({
     removeInstanceMarker(home);
     if (activeRun) {
       const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -874,7 +880,7 @@ export function createOpenCodeBackend({
     if (activeRun) {
       const tail = trimStderrTail(stderrTail);
       const classified = classifyErrorCode({ error, spawnError: true, stderrTail: tail });
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -1065,7 +1071,7 @@ export function createOpenCodeBackend({
         baseUrl = '';
         configHome = '';
         if (wasActive) {
-          emit({
+          emitAfterText({
             type: 'error',
             kind: 'network',
             code: 'EVENT_STREAM_FAILED',
@@ -1155,7 +1161,7 @@ export function createOpenCodeBackend({
         httpStatus,
         fallbackCode: 'BACKEND_ERROR',
       });
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -1189,7 +1195,7 @@ export function createOpenCodeBackend({
     }
 
     pendingApprovals.set(permissionId, { name, input });
-    emit({
+    emitAfterText({
       type: 'approval-required',
       toolUseId: permissionId,
       name,
@@ -1212,7 +1218,7 @@ export function createOpenCodeBackend({
       const ms = state.time && Number.isFinite(state.time.start) && Number.isFinite(state.time.end)
         ? state.time.end - state.time.start
         : undefined;
-      emit({
+      emitAfterText({
         type: 'tool-result',
         toolUseId,
         name,
@@ -1225,7 +1231,7 @@ export function createOpenCodeBackend({
     // pending / running -> tool-start (once)
     if (startedTools.has(toolUseId)) return;
     startedTools.add(toolUseId);
-    emit({ type: 'tool-start', toolUseId, name, input: state.input || {} });
+    emitAfterText({ type: 'tool-start', toolUseId, name, input: state.input || {} });
   }
 
   // OpenCode SSE events arrive as { type, properties } with dotted lowercase
@@ -1289,7 +1295,7 @@ export function createOpenCodeBackend({
         return;
       }
       pendingQuestions.set(questionId, { questions, settling: false });
-      emit({
+      emitAfterText({
         type: 'question-required',
         toolUseId: questionId,
         source: 'opencode-question',
@@ -1304,10 +1310,10 @@ export function createOpenCodeBackend({
       if (!pending) return;
       pendingQuestions.delete(questionId);
       if (type === 'question.rejected') {
-        emit({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
+        emitAfterText({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
       } else {
         const values = valuesFromOpenCodeAnswers(pending.questions, p.answers);
-        emit({
+        emitAfterText({
           type: 'question-resolved',
           toolUseId: questionId,
           outcome: 'answered',
@@ -1344,7 +1350,7 @@ export function createOpenCodeBackend({
       // interactions that belonged to the failed turn. Local 404/process/SSE
       // failures still invalidate the session through their dedicated paths.
       settleFailedTurnInteractions();
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -1410,7 +1416,7 @@ export function createOpenCodeBackend({
       turn = normalizeTurnInput(input);
     } catch (error) {
       const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
-      emit({
+      emitAfterText({
         type: 'error',
         kind: 'attachment',
         code: 'TURN_INPUT_INVALID',
@@ -1494,7 +1500,7 @@ export function createOpenCodeBackend({
         ...(e?.code && e?.spawnError ? { spawnCode: e.code } : {}),
         ...(sessionReset ? { sessionReset: true } : {}),
       };
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -1537,7 +1543,7 @@ export function createOpenCodeBackend({
       if (pendingQuestions.get(id) === pending) pending.settling = false;
       const httpStatus = extractHttpStatus(error?.httpStatus);
       const classified = classifyErrorCode({ error, httpStatus, fallbackCode: 'BACKEND_ERROR' });
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -1555,7 +1561,7 @@ export function createOpenCodeBackend({
     // case it already settled the card, so do not emit a duplicate event.
     if (pendingQuestions.get(id) !== pending) return true;
     pendingQuestions.delete(id);
-    emit({
+    emitAfterText({
       type: 'question-resolved',
       toolUseId: id,
       outcome: submitted ? 'answered' : 'cancelled',
@@ -1571,7 +1577,7 @@ export function createOpenCodeBackend({
       if (!pending.settling && baseUrl) {
         rejects.push(postJson(questionReplyPath(questionId, 'reject'), {}));
       }
-      emit({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
+      emitAfterText({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
     }
     await Promise.allSettled(rejects);
   }
@@ -1584,7 +1590,7 @@ export function createOpenCodeBackend({
     }
     await drainApprovals();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.', ...activeTurnFailureFields() });
+      emitAfterText({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }

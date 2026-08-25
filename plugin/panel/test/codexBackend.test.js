@@ -110,8 +110,12 @@ function makeBackend(overrides = {}) {
   return { backend, platform, spawned, mkdirs, events };
 }
 
-async function startTurn(backend, spawned) {
-  const pending = backend.sendUser({ turnId: 'turn_1', text: 'hello', attachments: [] });
+async function startTurn(
+  backend,
+  spawned,
+  input = { turnId: 'turn_1', text: 'hello', attachments: [] },
+) {
+  const pending = backend.sendUser(input);
   await flush();
   const proc = spawned[0].proc;
   const initialize = parseWrites(proc)[0];
@@ -238,6 +242,64 @@ test('Codex reports cold-start stages before output and omits spawn on a warm tu
     assert.equal(spawned.length, 1);
   } finally {
     backend.reset();
+  }
+});
+
+test('Codex flushes redacted assistant text before MCP tool start events', async () => {
+  const sensitivePath = 'C:\\' + 's'.repeat(61);
+  assert.equal(sensitivePath.length, 64);
+  const h = makeBackend();
+  try {
+    const { pending, proc } = await startTurn(h.backend, h.spawned, {
+      turnId: 'turn_text_order',
+      text: 'use a tool',
+      attachments: [{
+        id: 'att-sensitive',
+        name: 'sensitive.txt',
+        mediaType: 'text/plain',
+        size: 1,
+        temporary: false,
+        localPath: sensitivePath,
+      }],
+    });
+    proc.emit({ method: 'turn/started', params: { turn: { id: 'remote_text_order' } } });
+    const beforeToolChunks = [
+      'The composition is ready, and the expression setup is complete up to globalA',
+      'lpha 0.7 before the tool runs.',
+    ];
+    for (const delta of beforeToolChunks) {
+      proc.emit({ method: 'item/agentMessage/delta', params: { delta } });
+    }
+    proc.emit({
+      method: 'item/started',
+      params: {
+        item: {
+          type: 'mcpToolCall',
+          id: 'tool_text_order',
+          tool: 'ae_exec',
+          arguments: { value: 1 },
+        },
+      },
+    });
+
+    const toolIndex = h.events.findIndex((event) => event.type === 'tool-start');
+    assert.ok(toolIndex >= 0);
+    assert.equal(
+      h.events.slice(0, toolIndex)
+        .filter((event) => event.type === 'text-delta')
+        .map((event) => event.text)
+        .join(''),
+      beforeToolChunks.join(''),
+    );
+
+    proc.emit({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+    await pending;
+    assert.equal(
+      h.events.filter((event) => event.type === 'text-delta').map((event) => event.text).join(''),
+      beforeToolChunks.join(''),
+    );
+  } finally {
+    h.backend.reset();
   }
 });
 

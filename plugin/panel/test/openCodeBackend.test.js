@@ -1102,6 +1102,177 @@ test('createOpenCodeBackend maps text, reasoning, tool, and idle SSE events to p
   ]);
 });
 
+test('OpenCode prefixes only ae server tool names', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser('map tool names');
+  await flush();
+
+  const mappings = [
+    ['tool_ae', 'ae_ae_ping', 'mcp__ae__ae_ping'],
+    ['tool_prefixed', 'mcp__ae__x', 'mcp__ae__x'],
+    ['tool_patch', 'apply_patch', 'apply_patch'],
+    ['tool_read', 'read', 'read'],
+  ];
+  for (const [callID, tool] of mappings) {
+    fetched.sse.push({
+      type: 'message.part.updated',
+      properties: {
+        sessionID: 'session_1',
+        part: {
+          type: 'tool',
+          tool,
+          callID,
+          state: { status: 'running', input: {} },
+        },
+      },
+    });
+  }
+  completeTurn(fetched);
+  await pending;
+
+  assert.deepEqual(
+    events.filter((event) => event.type === 'tool-start').map((event) => [
+      event.toolUseId,
+      event.name,
+    ]),
+    mappings.map(([callID, , expected]) => [callID, expected]),
+  );
+});
+
+test('OpenCode flushes redacted assistant text before built-in question events', async () => {
+  const providerSecret = 'p'.repeat(64);
+  assert.equal(providerSecret.length, 64);
+  const { backend, events, fetched } = makeBackend({
+    getSensitiveValues: () => [providerSecret],
+  });
+  const pending = backend.sendUser('ask before continuing');
+  await flush();
+
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'busy' } },
+  });
+  const beforeQuestionChunks = [
+    'The composition is ready, and the expression setup is complete up to globalA',
+    'lpha 0.7 before I need one detail.',
+  ];
+  for (const delta of beforeQuestionChunks) {
+    fetched.sse.push({
+      type: 'message.part.delta',
+      properties: { sessionID: 'session_1', field: 'text', delta },
+    });
+  }
+  fetched.sse.push({
+    type: 'question.asked',
+    properties: {
+      id: 'que_order',
+      sessionID: 'session_1',
+      questions: [{ question: 'Continue?', header: 'Continue', options: [] }],
+    },
+  });
+  await flush();
+
+  const questionIndex = events.findIndex((event) => event.type === 'question-required');
+  assert.ok(questionIndex >= 0);
+  assert.equal(
+    events.slice(0, questionIndex)
+      .filter((event) => event.type === 'text-delta')
+      .map((event) => event.text)
+      .join(''),
+    beforeQuestionChunks.join(''),
+  );
+
+  fetched.sse.push({
+    type: 'question.replied',
+    properties: {
+      requestID: 'que_order',
+      sessionID: 'session_1',
+      answers: [['Proceed']],
+    },
+  });
+  await flush();
+  const resolvedIndex = events.findIndex((event) => event.type === 'question-resolved');
+  assert.ok(resolvedIndex > questionIndex);
+
+  const afterQuestion = ' Continuing after the answer.';
+  fetched.sse.push({
+    type: 'message.part.delta',
+    properties: { sessionID: 'session_1', field: 'text', delta: afterQuestion },
+  });
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+
+  const postAnswerText = events.findIndex((event, index) => (
+    index > resolvedIndex && event.type === 'text-delta'
+  ));
+  assert.ok(postAnswerText > resolvedIndex);
+  assert.equal(
+    events.filter((event) => event.type === 'text-delta').map((event) => event.text).join(''),
+    beforeQuestionChunks.join('') + afterQuestion,
+  );
+});
+
+test('OpenCode flushes redacted assistant text before tool start events', async () => {
+  const providerSecret = 'p'.repeat(64);
+  assert.equal(providerSecret.length, 64);
+  const { backend, events, fetched } = makeBackend({
+    getSensitiveValues: () => [providerSecret],
+  });
+  const pending = backend.sendUser('use a tool');
+  await flush();
+
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'busy' } },
+  });
+  const beforeToolChunks = [
+    'The composition is ready, and the expression setup is complete up to globalA',
+    'lpha 0.7 before the tool runs.',
+  ];
+  for (const delta of beforeToolChunks) {
+    fetched.sse.push({
+      type: 'message.part.delta',
+      properties: { sessionID: 'session_1', field: 'text', delta },
+    });
+  }
+  fetched.sse.push({
+    type: 'message.part.updated',
+    properties: {
+      sessionID: 'session_1',
+      part: {
+        type: 'tool',
+        tool: 'ae_ae_ping',
+        callID: 'tool_order',
+        state: { status: 'running', input: { value: 1 } },
+      },
+    },
+  });
+  await flush();
+
+  const toolIndex = events.findIndex((event) => event.type === 'tool-start');
+  assert.ok(toolIndex >= 0);
+  assert.equal(
+    events.slice(0, toolIndex)
+      .filter((event) => event.type === 'text-delta')
+      .map((event) => event.text)
+      .join(''),
+    beforeToolChunks.join(''),
+  );
+
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+  assert.equal(
+    events.filter((event) => event.type === 'text-delta').map((event) => event.text).join(''),
+    beforeToolChunks.join(''),
+  );
+});
+
 test('OpenCode SSE preserves Chinese text split inside a UTF-8 character', async () => {
   const { backend, events, fetched } = makeBackend();
   const pending = backend.sendUser('utf8');
