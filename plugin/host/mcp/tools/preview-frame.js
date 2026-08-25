@@ -203,7 +203,7 @@ function validateArgs(args) {
     if (args.time !== undefined && (!Number.isFinite(args.time) || args.time < 0)) throw new Error('`time` must be a non-negative number');
     if (args.range !== undefined) {
         validateExactKeys(args.range, ['start', 'end', 'count'], 'range');
-        if (args.time !== undefined || args.times !== undefined) throw new Error('`range` cannot be combined with `time` or `times`');
+        if (args.time !== undefined || args.times !== undefined) throw new Error('`range` cannot be combined with `time` or `times` — pass exactly one of: {time: 1.5} | {times: [0, 1, 2]} | {range: {start: 0, end: 2, count: 5}}');
         if (!Number.isFinite(args.range.start) || args.range.start < 0 || !Number.isFinite(args.range.end) || args.range.end < 0) throw new Error('`range.start` and `range.end` must be non-negative numbers');
         if (!Number.isInteger(args.range.count) || args.range.count < 2 || args.range.count > 16) throw new Error('`range.count` must be an integer between 2 and 16');
         if (args.range.count > timesLimit) throw new Error('`range.count` must be at most ' + timesLimit + ' with layout `' + layout + '`');
@@ -211,7 +211,7 @@ function validateArgs(args) {
     if (args.grid_max_side !== undefined && (!Number.isInteger(args.grid_max_side) || args.grid_max_side < 256 || args.grid_max_side > 2048)) throw new Error('`grid_max_side` must be an integer between 256 and 2048');
     if (args.compare !== undefined) {
         validateExactKeys(args.compare, ['a', 'b', 'mode', 'threshold'], 'compare');
-        if (args.time !== undefined || args.times !== undefined || args.range !== undefined || args.layout !== undefined) throw new Error('`compare` cannot be combined with `time`, `times`, `range`, or `layout`');
+        if (args.time !== undefined || args.times !== undefined || args.range !== undefined || args.layout !== undefined) throw new Error('`compare` cannot be combined with `time`, `times`, `range`, or `layout` — compare takes exactly {compare: {a: <selector>, b: <selector>}} plus optional mode/threshold');
         validateSelector(args.compare.a, 'compare.a');
         validateSelector(args.compare.b, 'compare.b');
         const mode = args.compare.mode === undefined ? 'both' : args.compare.mode;

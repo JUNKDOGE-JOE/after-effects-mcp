@@ -323,6 +323,11 @@ export function createCodexBackend({
     if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
   }
 
+  function emitAfterText(evt) {
+    providerDeltaRedactor.flush();
+    emit(evt);
+  }
+
   function emitTurnProgress(stage) {
     if (!activeRun || !activeTurn) return;
     emit({
@@ -422,7 +427,7 @@ export function createCodexBackend({
     for (const [toolUseId, pending] of Array.from(pendingUserInputs.entries())) {
       pendingUserInputs.delete(toolUseId);
       if (rpc) rpc.respond(pending.rpcId, { answers: {} });
-      emit({ type: 'question-resolved', toolUseId, outcome: 'cancelled' });
+      emitAfterText({ type: 'question-resolved', toolUseId, outcome: 'cancelled' });
     }
   }
 
@@ -436,7 +441,7 @@ export function createCodexBackend({
     pendingUserInputs.delete(id);
     if (!result || result.action !== 'submit') {
       if (rpc) rpc.respond(pending.rpcId, { answers: {} });
-      emit({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
+      emitAfterText({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
       return true;
     }
     const answers = answersForCodexUserInput(pending.questions, result.values);
@@ -444,7 +449,7 @@ export function createCodexBackend({
     // The event carries the display shape (plain strings), not the wire shape —
     // QuestionCard joins the values, and `{answers:[...]}` objects would render
     // as "[object Object]".
-    emit({
+    emitAfterText({
       type: 'question-resolved',
       toolUseId: id,
       outcome: 'answered',
@@ -481,7 +486,7 @@ export function createCodexBackend({
         return;
       }
       if (item.type !== 'mcpToolCall') return;
-      emit({
+      emitAfterText({
         type: 'tool-start',
         toolUseId: String(item.id || ''),
         name: mcpToolName(item),
@@ -496,7 +501,7 @@ export function createCodexBackend({
         return;
       }
       if (item.type !== 'mcpToolCall') return;
-      emit({
+      emitAfterText({
         type: 'tool-result',
         toolUseId: String(item.id || ''),
         name: mcpToolName(item),
@@ -555,7 +560,7 @@ export function createCodexBackend({
     }
     const toolUseId = 'ask_' + String(message.id);
     pendingUserInputs.set(toolUseId, { rpcId: message.id, questions });
-    emit({
+    emitAfterText({
       type: 'question-required',
       toolUseId,
       source: 'codex-user-input',
@@ -609,7 +614,7 @@ export function createCodexBackend({
         plan,
         allowSession: policy.allowSession,
       });
-      emit({
+      emitAfterText({
         type: 'approval-required',
         toolUseId,
         name: 'mcp__ae__ae_toolUse',
@@ -646,7 +651,7 @@ export function createCodexBackend({
       input,
     };
     pendingApprovals.set(toolUseId, approval);
-    emit({
+    emitAfterText({
       type: 'approval-required',
       toolUseId,
       name: approval.name,
@@ -678,7 +683,7 @@ export function createCodexBackend({
     }
     if (activeRun) {
       const classified = classifyErrorCode({ exitCode: code, signal, stderrTail: tail });
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -711,7 +716,7 @@ export function createCodexBackend({
     drainApprovals();
     if (activeRun) {
       const classified = classifyErrorCode({ error: err, spawnError: true });
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -996,7 +1001,7 @@ export function createCodexBackend({
       if (message !== rawMessage && rawMessage) {
         detail.upstreamMessage = String(rawMessage).slice(0, 500);
       }
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -1017,7 +1022,7 @@ export function createCodexBackend({
       turn = normalizeTurnInput(input);
     } catch (error) {
       const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
-      emit({
+      emitAfterText({
         type: 'error',
         kind: 'attachment',
         code: 'TURN_INPUT_INVALID',
@@ -1080,7 +1085,7 @@ export function createCodexBackend({
     drainApprovals();
     providerDeltaRedactor.discard();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.', ...activeTurnFailureFields() });
+      emitAfterText({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }

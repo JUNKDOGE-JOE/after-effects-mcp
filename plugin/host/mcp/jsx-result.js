@@ -4,6 +4,7 @@ const { appendHint } = require('./error-hints');
 
 const NO_VALUE_SENTINELS = ['undefined', 'null'];
 const EVALSCRIPT_ERR_SENTINEL = 'EvalScript error.';
+const MISSING_COMPLETION_VALUE = "jsx evaluated to undefined: the script's last statement must be a bare expression, e.g. end with JSON.stringify(result); — a trailing var/if/for statement yields undefined, and a top-level return is invalid";
 
 function fail(error, raw) {
     return { ok: false, error: appendHint(error), raw };
@@ -47,13 +48,17 @@ function parseExecResult(resultType, text) {
         return fail('ae_exec returned an invalid result type', text);
     }
     if (!text || String(text).trim() === '') {
-        return fail('jsx returned no value (empty output)', text);
+        return fail(
+            'jsx returned no value (empty output); an uncaught ExtendScript throw can '
+                + 'surface as empty evalScript output — wrap risky code in try/catch '
+                + 'and return the error as JSON',
+            text,
+        );
     }
     const stripped = String(text).trim();
     if (NO_VALUE_SENTINELS.indexOf(stripped) !== -1) {
         return fail(
-            'jsx evaluated to ' + stripped
-                + '; ensure your code returns JSON.stringify(...) or a value',
+            MISSING_COMPLETION_VALUE.replace('jsx evaluated to undefined', 'jsx evaluated to ' + stripped),
             text,
         );
     }

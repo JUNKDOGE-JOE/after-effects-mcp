@@ -28,7 +28,7 @@ function toolPart(tool, status, input, extras = {}) {
 test('history guard matches only exact AE exec and recovery tool names', () => {
   assert.equal(
     OPEN_CODE_HISTORY_GUARD_MARKER,
-    '/* executed AE script omitted from prior model history */',
+    '/* ae-mcp: script body hidden from history to save tokens. Never send this comment back as code — write the full script again, or rerun the stored script via ae_execRecover with its recoveryId. */',
   );
   assert.doesNotThrow(() => new Function(OPEN_CODE_HISTORY_GUARD_MARKER));
   for (const name of [
@@ -52,6 +52,10 @@ test('history guard matches only exact AE exec and recovery tool names', () => {
   ]) {
     assert.equal(isOpenCodeAeExecToolName(name), false, String(name));
   }
+});
+
+test('history guard marker retains the host rejection tripwire phrase', () => {
+  assert.ok(OPEN_CODE_HISTORY_GUARD_MARKER.includes('hidden from history to save tokens'));
 });
 
 test('history guard changes only outbound completed or errored AE scripts', () => {
@@ -95,6 +99,7 @@ test('history guard changes only outbound completed or errored AE scripts', () =
 
 test('generated OpenCode plugin is dependency-free, executable, and mutates hook output in place', async () => {
   const source = openCodeHistoryGuardPluginSource();
+  assert.ok(source.includes(OPEN_CODE_HISTORY_GUARD_MARKER));
   assert.doesNotMatch(source, /(?:from\s+['"]|require\s*\()/);
   const url = 'data:text/javascript;base64,' + Buffer.from(source, 'utf8').toString('base64');
   const plugin = await import(url);

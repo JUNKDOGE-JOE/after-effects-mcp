@@ -248,7 +248,7 @@ test('backend stderr is redacted line by line without losing later diagnostics',
     }],
   });
 
-  assert.match(text, /## backend errors \(last 50\)/);
+  assert.match(text, /## backend errors \(last 50, memory \+ disk\)/);
   assert.match(text, /code=AUTH_REQUIRED/);
   assert.match(text, /## backend stderr tails/);
   assert.equal(text.includes('relay.example'), false);
@@ -258,6 +258,24 @@ test('backend stderr is redacted line by line without losing later diagnostics',
   assert.equal(text.includes('http'), false);
   assert.match(text, /ECONNREFUSED 127\.0\.0\.1:443/);
   assert.match(text, /at connect \(node:net:123:4\)/);
+});
+
+test('backend errors merge disk chat failures from earlier host processes and dedupe memory copies', () => {
+  const text = buildLogExport({
+    backendErrors: [{
+      ts: '2026-08-22T10:00:00Z', backend: 'claude', code: 'AUTH_REQUIRED', kind: 'auth', message: 'login required',
+    }],
+    hostLogDisk: [
+      { ts: '2026-08-21T09:00:00Z', pid: 41, level: 'error', source: 'chat', backend: 'codex', code: 'TIMEOUT', kind: 'backend', message: 'old timeout', detail: 'disk detail' },
+      { ts: '2026-08-22T10:00:00Z', pid: 42, level: 'error', source: 'chat', backend: 'claude', code: 'AUTH_REQUIRED', kind: 'auth', message: 'login required', detail: 'disk copy' },
+      { ts: '2026-08-22T11:00:00Z', pid: 43, level: 'info', source: 'chat', backend: 'opencode', code: 'NOPE', kind: 'backend', message: 'not an error' },
+    ],
+  });
+  assert.match(text, /pid=41 backend=codex code=TIMEOUT/);
+  assert.match(text, /pid=42 backend=claude code=AUTH_REQUIRED/);
+  const backendSection = text.split('## backend errors (last 50, memory + disk)\n')[1].split('\n\n## backend stderr tails')[0];
+  assert.equal((backendSection.match(/login required/g) || []).length, 1);
+  assert.doesNotMatch(backendSection, /not an error/);
 });
 
 test('a sensitive host extra does not truncate sibling message and error fields', () => {

@@ -153,6 +153,14 @@ export function createProcessBoundary({ deps, paths, platform }) {
     }
     const hasExplicitEnv = Object.prototype.hasOwnProperty.call(options, 'env');
     const environment = hasExplicitEnv ? completeEnvironment(options.env || {}) : completeSpawnEnv();
+    if (windows && (executable.source === 'registry-path' || executable.source === 'standard')) {
+      const pathKey = environmentKey(environment, 'PATH', true) || 'Path';
+      const executableDirectory = paths.dirname(executable.path);
+      const pathDirectories = String(environment[pathKey] || '').split(separator).filter(Boolean);
+      if (!pathDirectories.some((directory) => windowsPathEqual(directory, executableDirectory))) {
+        environment[pathKey] = [executableDirectory, ...pathDirectories].join(separator);
+      }
+    }
     const commandArgs = [...(executable.argsPrefix || []), ...args];
     return deps.spawnImpl(executable.path, commandArgs, {
       ...options,
@@ -327,6 +335,69 @@ export function createProcessBoundary({ deps, paths, platform }) {
     return result;
   }
 
+  function windowsPathEqual(left, right) {
+    return String(left).replace(/[\\/]+$/, '').toLowerCase()
+      === String(right).replace(/[\\/]+$/, '').toLowerCase();
+  }
+
+  function expandedRegistryPath(value, type, env) {
+    if (type.toUpperCase() !== 'REG_EXPAND_SZ') return value;
+    return value.replace(/%([^%]+)%/g, (match, name) => {
+      const replacement = environmentValue(env, name, true);
+      return replacement === undefined ? match : String(replacement);
+    });
+  }
+
+  function registryPathValue(output, env) {
+    const line = String(output || '').split(/\r?\n/).find((value) => {
+      return /^\s*Path\s+REG_(?:SZ|EXPAND_SZ)\s+/i.test(value);
+    });
+    if (!line) return null;
+    const match = line.match(/^\s*Path\s+(REG_(?:SZ|EXPAND_SZ))\s+(.*)$/i);
+    return match ? expandedRegistryPath(match[2], match[1], env) : null;
+  }
+
+  async function registryPathCandidates(id, env) {
+    if (!windows) return [];
+    const systemRoot = String(environmentValue(env, 'SystemRoot', true) || environmentValue(env, 'WINDIR', true) || 'C:\\Windows');
+    const executable = {
+      ok: true,
+      id: 'reg',
+      path: paths.join([systemRoot, 'System32', 'reg.exe']),
+      argsPrefix: [],
+      source: 'registry-path',
+      version: null,
+      arch: null,
+    };
+    const queries = [
+      ['HKCU\\Environment', '/v', 'Path'],
+      ['HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', '/v', 'Path'],
+    ];
+    const values = [];
+    for (const args of queries) {
+      const result = await run({
+        executable,
+        args: ['query', ...args],
+        env,
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+        maxOutputBytes: DEFAULT_OUTPUT_LIMIT,
+      });
+      if (result.exitCode !== 0 || result.timedOut || result.aborted) continue;
+      const value = registryPathValue(result.stdout, env);
+      if (value !== null) values.push(value);
+    }
+    const inherited = String(environmentValue(env, 'PATH', true) || '').split(separator).filter(Boolean);
+    const directories = [];
+    for (const value of values) {
+      for (const directory of value.split(separator).filter(Boolean)) {
+        if (inherited.some((entry) => windowsPathEqual(entry, directory))) continue;
+        if (!directories.some((entry) => windowsPathEqual(entry, directory))) directories.push(directory);
+      }
+    }
+    const extensions = ['', '.exe', '.com', '.cmd', '.bat'];
+    return directories.flatMap((directory) => extensions.map((extension) => paths.join([directory, id + extension])));
+  }
+
   function standardCandidates(id, env) {
     if (!windows) {
       const values = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'].map((root) => paths.join([root, id]));
@@ -341,6 +412,10 @@ export function createProcessBoundary({ deps, paths, platform }) {
     if (id === 'winget') values.unshift(paths.join([local, 'Microsoft', 'WindowsApps', 'winget.exe']));
     if (id === 'powershell') values.unshift(paths.join([systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe']));
     values.push(paths.join([local, 'Programs', id, id + '.exe']));
+    values.push(paths.join([paths.home, '.local', 'bin', id + '.exe']));
+    values.push(paths.join([paths.home, 'scoop', 'shims', id + '.exe']));
+    values.push(paths.join([paths.home, 'scoop', 'shims', id + '.cmd']));
+    if (id === 'opencode') values.push(paths.join([paths.home, '.opencode', 'bin', 'opencode.exe']));
     return values;
   }
 
@@ -659,6 +734,23 @@ export function createProcessBoundary({ deps, paths, platform }) {
     for (const group of groups) {
       for (const path of group.values) {
         const rawCandidate = fileCandidate(path, group.source, env, id !== 'node');
+        if (!rawCandidate) continue;
+        const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);
+        const candidate = materialized.candidate;
+        if (!candidate) {
+          if (materialized.failure === 'ARCH_MISMATCH') strongestFailure = 'ARCH_MISMATCH';
+          else if (materialized.failure === 'VERSION_TOO_OLD' && strongestFailure !== 'ARCH_MISMATCH') strongestFailure = 'VERSION_TOO_OLD';
+          continue;
+        }
+        const result = await probe(candidate, id, { ...options, env }, attempts);
+        if (result.success) return result.success;
+        strongestFailure = result.failure === 'ARCH_MISMATCH' ? result.failure
+          : (strongestFailure === 'NOT_FOUND' || (strongestFailure === 'PROBE_FAILED' && result.failure === 'VERSION_TOO_OLD') ? result.failure : strongestFailure);
+      }
+    }
+    if (windows && !hasExplicitEnv) {
+      for (const path of await registryPathCandidates(id, env)) {
+        const rawCandidate = fileCandidate(path, 'registry-path', env, id !== 'node');
         if (!rawCandidate) continue;
         const materialized = await materializeScriptCandidate(rawCandidate, id, { ...options, env }, attempts);
         const candidate = materialized.candidate;

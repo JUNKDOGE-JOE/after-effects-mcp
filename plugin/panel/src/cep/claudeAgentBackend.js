@@ -418,6 +418,11 @@ export function createClaudeAgentBackend({
     }
   }
 
+  function emitAfterText(evt) {
+    providerDeltaRedactor.flush();
+    emit(evt);
+  }
+
   function clearNoProgressWarning() {
     if (noProgressWarningTimer !== null) {
       clearTimeoutImpl(noProgressWarningTimer);
@@ -573,7 +578,7 @@ export function createClaudeAgentBackend({
     for (const [toolUseId, pending] of pendingQuestions) {
       pendingQuestions.delete(toolUseId);
       if (writeResponses) denyControl(pending.requestId, message);
-      emit({ type: 'question-resolved', toolUseId, outcome: 'cancelled' });
+      emitAfterText({ type: 'question-resolved', toolUseId, outcome: 'cancelled' });
     }
   }
 
@@ -602,7 +607,7 @@ export function createClaudeAgentBackend({
     pendingQuestions.delete(id);
     if (!result || result.action !== 'submit') {
       denyControl(pending.requestId, 'User dismissed the question.');
-      emit({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
+      emitAfterText({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
       return true;
     }
     const answers = answersForAskUserQuestion(pending.questions, result.values);
@@ -611,7 +616,7 @@ export function createClaudeAgentBackend({
       questions: pending.originalQuestions,
       answers,
     });
-    emit({
+    emitAfterText({
       type: 'question-resolved',
       toolUseId: id,
       outcome: 'answered',
@@ -687,7 +692,7 @@ export function createClaudeAgentBackend({
     if (activeRun) {
       providerDeltaRedactor.flush();
       const classified = classifyErrorCode(classificationInput);
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.kind,
         code: classified.code,
@@ -762,7 +767,7 @@ export function createClaudeAgentBackend({
         name,
         startedAt: now(),
       });
-      emit({
+      emitAfterText({
         type: 'tool-start',
         toolUseId,
         name,
@@ -780,7 +785,7 @@ export function createClaudeAgentBackend({
       const toolUseId = String(block.tool_use_id || '');
       const tool = startedTools.get(toolUseId);
       if (!tool) continue;
-      emit({
+      emitAfterText({
         type: 'tool-result',
         toolUseId,
         ok: block.is_error !== true,
@@ -860,7 +865,7 @@ export function createClaudeAgentBackend({
       originalQuestions,
       questions,
     });
-    emit({
+    emitAfterText({
       type: 'question-required',
       toolUseId,
       source: 'claude-ask-user-question',
@@ -892,7 +897,7 @@ export function createClaudeAgentBackend({
     const toolUseId = String(request.tool_use_id || requestId);
     const annotation = activeTurn.toolMeta.annotations[name] || {};
     pendingApprovals.set(toolUseId, { requestId, name, input });
-    emit({
+    emitAfterText({
       type: 'approval-required',
       toolUseId,
       name,
@@ -948,7 +953,7 @@ export function createClaudeAgentBackend({
         upstreamText: safeMessage,
       });
       const kindReference = classifyError(safeMessage);
-      emit({
+      emitAfterText({
         type: 'error',
         kind: classified.code === 'UPSTREAM_ERROR' && ['auth', 'model'].includes(kindReference)
           ? kindReference
@@ -1113,7 +1118,7 @@ export function createClaudeAgentBackend({
       if (!resolved?.ok) {
         const classification = classifyErrorCode({ resolutionCode: resolved?.code });
         const resolution = boundedResolution(resolved?.resolution || resolved);
-        emit({
+        emitAfterText({
           type: 'error',
           kind: classification.kind,
           code: classification.code,
@@ -1202,7 +1207,7 @@ export function createClaudeAgentBackend({
         let message = error?.message || 'Failed to start Claude CLI.';
         if (classification.code === 'SPAWN_FAILED') message = 'Claude CLI process could not be started.';
         else if (classification.code === 'MCP_UNREACHABLE') message = 'Claude could not prepare the panel MCP connection.';
-        emit({
+        emitAfterText({
           type: 'error',
           kind: classification.kind,
           code: classification.code,
@@ -1276,7 +1281,7 @@ export function createClaudeAgentBackend({
         const message = classification.code === 'MCP_UNREACHABLE'
           ? 'Claude could not prepare the panel MCP connection.'
           : (error?.message || 'Failed to start Claude CLI.');
-        emit({
+        emitAfterText({
           type: 'error',
           kind: classification.kind,
           code: classification.code,
@@ -1331,7 +1336,7 @@ export function createClaudeAgentBackend({
       turn = canonicalTurn(input);
     } catch (error) {
       const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
-      emit({
+      emitAfterText({
         type: 'error',
         kind: 'attachment',
         code: 'TURN_INPUT_INVALID',
@@ -1378,7 +1383,7 @@ export function createClaudeAgentBackend({
     providerDeltaRedactor.flush();
     setThinking(false);
     drainControls('Turn was stopped.');
-    emit({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.' });
+    emitAfterText({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.' });
     finishActive();
     void discardRuntime();
   }

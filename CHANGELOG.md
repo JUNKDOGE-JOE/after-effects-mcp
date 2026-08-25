@@ -10,6 +10,14 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### Unreleased
+
+- **AI 回复不再被工具卡撕成两截（#322）**——三条通道统一在插入工具、审批、提问卡片之前先把已生成的文字完整落屏。此前配置了 API Key 时，最后几十个字符会被扣在防泄漏缓冲里，等你答完问题才出现在卡片下面，甚至把一个单词拆成两半。
+- **AE 开着也能装好 CLI（#321）**——Windows 上「重新检测」现在会重读注册表里的用户/系统 PATH，并认识 Claude 官方安装器（`~\.local\bin`）、scoop、OpenCode 官方安装器的默认位置。装完 CLI 直接点重新检测即可，不必重启 After Effects。
+- **智能体不再被自己的历史带进死循环（#323）**——修复一起真实事故：为省 token 而脱敏的历史脚本占位符被模型当成代码原样发回，先是执行一句注释永远失败，重试时还会把存档的恢复脚本覆写掉，单个任务连败四十余次。现在主机直接拦下占位符并明确告知重写完整脚本，恢复存档不再会被覆写；占位符文本也改为自带「不要把这句注释当代码发回」的指令。
+- **报错终于带上修复提示（#323）**——错误提示此前只在「脚本跑完但没返回值」的旁路上生效，真正抛 ExtendScript 异常时从未附带；现已修复,并新增滑块 ±100 万上限、颜色数组、失效对象、NO_VALUE 属性组四条实战提示。返回值约定（最后一条语句必须是裸表达式）与 `ae_previewFrame` 参数冲突的报错现在会直接给出正确写法示例。
+- **诊断包能还原真实故障了（#323）**——活动日志新增工具名、调用通道、客户端归因；失败时记录脚本摘要与命中的提示；宿主执行成功但被判失败的调用（如返回 undefined）不再伪装成成功；skill 调用留痕；导出包合并历史进程的错误。OpenCode 内建工具（read/apply_patch 等）在界面与导出中不再被误标为 `mcp__ae__` 前缀（#324）。
+
 ### [0.10.2] — 2026-08-23
 
 - **失败恢复从 `ae_exec` 中拆出**——恢复操作改由独立的 `ae_execRecover` 接收 `recoveryId` 与可选修正脚本，`ae_exec` 只接受正常脚本执行参数，避免模型把恢复编号误当脚本内容。本项把公开工具从 11 个增加到 12 个。旧的 `ae_exec({recoveryId})` 调用方式不再受理，会返回一条指明改用 `ae_execRecover` 的错误；不提供兼容垫片——在同一个 schema 里并列两个可选字段正是这次要消除的歧义来源。
@@ -335,6 +343,14 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### Unreleased
+
+- **AI replies are no longer torn apart by tool cards (#322)** — all three channels flush pending assistant text before inserting a tool, approval, or question card. Previously, with an API key configured, the last few dozen characters were withheld in the leak-prevention buffer and only appeared below the card after you answered — sometimes splitting a word in half.
+- **CLIs installed while AE is open are now detected (#321)** — on Windows, Re-check re-reads the registry user/system PATH and knows the official install locations (Claude's `~\.local\bin`, scoop shims, OpenCode's `~\.opencode\bin`). No more restarting After Effects after installing a CLI.
+- **Agents can no longer be trapped by their own redacted history (#323)** — fixes a real incident: the placeholder that hides old scripts from history (to save tokens) was imitated by the model and sent back as code, executing a bare comment forever and even overwriting the stored recovery script on retry — one task failed 40+ times. The host now rejects placeholder code with clear guidance, recovery scripts can no longer be overwritten by it, and the placeholder text itself now says never to send it back.
+- **Errors finally carry fix hints (#323)** — hints previously fired only on the "ran but returned nothing" side path, never on actual ExtendScript exceptions; that is fixed, with four new field-driven hints (slider ±1,000,000 clamp, color arity, invalid object, NO_VALUE groups). The completion-value contract (the last statement must be a bare expression) and `ae_previewFrame` parameter conflicts now state the correct call shapes inline.
+- **Diagnostics bundles can reconstruct real failures (#323)** — activity entries now carry the tool name, transport, and client attribution; failures record a bounded script head and which hint fired; calls the bridge saw as success but the MCP layer failed (e.g. undefined results) are no longer disguised as successes; skill invocations leave a trace; exports merge errors from prior panel processes. OpenCode built-in tools (read/apply_patch/…) are no longer mislabeled with an `mcp__ae__` prefix (#324).
 
 ### [0.10.2] — 2026-08-23
 

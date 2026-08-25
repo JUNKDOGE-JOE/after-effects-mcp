@@ -70,14 +70,19 @@ test('parseExecResult maps explicit transport types without sniffing JSON-like t
 });
 
 test('parseExecResult preserves empty, undefined, and EvalScript sentinel errors', () => {
-    assert.deepEqual(parseExecResult('string', ''), {
-        ok: false,
-        error: 'jsx returned no value (empty output)',
-        raw: '',
-    });
+    const emptyResult = parseExecResult('string', '');
+    assert.equal(emptyResult.ok, false);
+    assert.match(emptyResult.error, /^jsx returned no value \(empty output\)/);
+    assert.match(emptyResult.error, /uncaught ExtendScript throw/);
+    assert.equal(emptyResult.raw, '');
     const undefinedResult = parseExecResult('string', 'undefined');
     assert.equal(undefinedResult.ok, false);
-    assert.match(undefinedResult.error, /evaluated to undefined/);
+    assert.match(undefinedResult.error, /^jsx evaluated to undefined/);
+    assert.match(undefinedResult.error, /last statement must be a bare expression/);
+    const nullResult = parseExecResult('string', 'null');
+    assert.equal(nullResult.ok, false);
+    assert.match(nullResult.error, /^jsx evaluated to null/);
+    assert.match(nullResult.error, /last statement must be a bare expression/);
     assert.deepEqual(parseExecResult('string', 'EvalScript error.'), {
         ok: false,
         error: 'EvalScript error.',
