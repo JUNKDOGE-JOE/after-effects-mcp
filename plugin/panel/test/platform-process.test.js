@@ -74,6 +74,11 @@ function processFactory(steps, calls) {
   };
 }
 
+function assertOnlyRegistryQueries(calls, message) {
+  assert.equal(calls.length, 2, message);
+  assert.equal(calls.every((call) => /reg\.exe$/i.test(call.file)), true, message);
+}
+
 function macHarness({ files = [], realpaths = {}, steps = [] } = {}) {
   const calls = [];
   const adapter = createMacosAdapter({
@@ -137,6 +142,129 @@ test('macOS login-shell probe accepts exactly one clean sentinel result', async 
   });
   const stderrRejected = await stderrPolluted.adapter.resolveExecutable('codex', { env: { PATH: '' } });
   assert.equal(stderrRejected.ok, false);
+});
+
+test('Windows standard candidates find common fresh CLI installer directories', async () => {
+  const cases = [
+    { id: 'claude', executable: 'C:\\Users\\a\\.local\\bin\\claude.exe' },
+    { id: 'opencode', executable: 'C:\\Users\\a\\scoop\\shims\\opencode.exe' },
+    { id: 'opencode', executable: 'C:\\Users\\a\\.opencode\\bin\\opencode.exe' },
+  ];
+
+  for (const fixture of cases) {
+    const calls = [];
+    const adapter = createWindowsAdapter({
+      platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: { PATH: '' },
+      fs: fakeFs(new Set([fixture.executable])),
+      spawnImpl: processFactory([{ code: 1 }, { code: 1 }, { stdout: fixture.id + ' 1.0.0' }], calls), now: () => 0,
+    });
+
+    const result = await adapter.resolveExecutable(fixture.id);
+
+    assert.equal(result.ok, true, fixture.executable);
+    assert.equal(result.path, fixture.executable);
+    assert.equal(result.source, 'standard');
+    assert.equal(calls.filter((call) => /reg\.exe$/i.test(call.file)).length, 2);
+  }
+});
+
+test('Windows resolution reads expanded registry PATH entries for default environments', async () => {
+  const calls = [];
+  const executable = 'C:\\Users\\a\\.local\\bin\\claude.exe';
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp',
+    env: { PATH: 'C:\\Inherited', USERPROFILE: 'C:\\Users\\a' },
+    fs: fakeFs(new Set([executable])),
+    spawnImpl: processFactory([
+      { stdout: '\r\nHKEY_CURRENT_USER\\Environment\r\n    Path    REG_EXPAND_SZ    %USERPROFILE%\\.local\\bin;C:\\Custom Tools\r\n' },
+      { stdout: '\r\nHKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment\r\n    Path    REG_SZ    C:\\System Tools\r\n' },
+      { stdout: 'claude 1.0.0' },
+    ], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('claude');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, executable);
+  assert.equal(result.source, 'registry-path');
+  assert.deepEqual(calls.slice(0, 2).map((call) => call.args), [
+    ['query', 'HKCU\\Environment', '/v', 'Path'],
+    ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', '/v', 'Path'],
+  ]);
+});
+
+test('Windows explicit resolver environments do not read the registry PATH', async () => {
+  const calls = [];
+  const executable = 'C:\\Users\\a\\.local\\bin\\claude.exe';
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: { PATH: 'C:\\Inherited' },
+    fs: fakeFs(new Set([executable])), spawnImpl: processFactory([{ stdout: 'claude 1.0.0' }], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('claude', { env: { PATH: '' } });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.source, 'standard');
+  assert.equal(calls.some((call) => /reg\.exe$/i.test(call.file)), false);
+});
+
+test('Windows spawn prepends registry and standard executable directories without changing PATH resolutions', async () => {
+  const registryCalls = [];
+  const registryExecutable = 'C:\\Registry Bin\\claude.exe';
+  const registry = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: { PATH: 'C:\\Inherited', KEEP: 'yes' },
+    fs: fakeFs(new Set([registryExecutable])),
+    spawnImpl: processFactory([
+      { stdout: '\r\nHKEY_CURRENT_USER\\Environment\r\n    Path    REG_SZ    C:\\Registry Bin\r\n' },
+      { code: 1 },
+      { stdout: 'claude 1.0.0' },
+      {},
+    ], registryCalls), now: () => 0,
+  });
+  const registryResult = await registry.resolveExecutable('claude');
+  registry.spawn(registryResult);
+  assert.equal(registryCalls.at(-1).options.env.PATH, 'C:\\Registry Bin;C:\\Inherited');
+  assert.equal(registryCalls.at(-1).options.env.KEEP, 'yes');
+
+  const standardCalls = [];
+  const standardExecutable = 'C:\\Users\\a\\.local\\bin\\claude.exe';
+  const standard = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: { Path: 'C:\\Inherited', KEEP: 'yes' },
+    fs: fakeFs(new Set([standardExecutable])),
+    spawnImpl: processFactory([{ code: 1 }, { code: 1 }, { stdout: 'claude 1.0.0' }, {}], standardCalls), now: () => 0,
+  });
+  const standardResult = await standard.resolveExecutable('claude');
+  standard.spawn(standardResult);
+  assert.equal(standardCalls.at(-1).options.env.Path, 'C:\\Users\\a\\.local\\bin;C:\\Inherited');
+  assert.equal(standardCalls.at(-1).options.env.PATH, undefined);
+
+  const pathCalls = [];
+  const pathExecutable = 'C:\\Path Bin\\claude.exe';
+  const path = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: { PATH: 'C:\\Path Bin;C:\\Inherited' },
+    fs: fakeFs(new Set([pathExecutable])), spawnImpl: processFactory([{ stdout: 'claude 1.0.0' }, {}], pathCalls), now: () => 0,
+  });
+  const pathResult = await path.resolveExecutable('claude');
+  path.spawn(pathResult);
+  assert.equal(pathCalls.at(-1).options.env.PATH, 'C:\\Path Bin;C:\\Inherited');
+});
+
+test('Windows registry PATH candidates skip directories already in the inherited PATH', async () => {
+  const calls = [];
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: { PATH: 'C:\\Existing Bin\\' },
+    fs: fakeFs(new Set()),
+    spawnImpl: processFactory([
+      { stdout: '\r\nHKEY_CURRENT_USER\\Environment\r\n    Path    REG_SZ    c:\\existing bin\r\n' },
+      { stdout: '\r\nHKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment\r\n    Path    REG_SZ    C:\\Existing Bin\\\r\n' },
+    ], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('claude');
+
+  assert.equal(result.ok, false);
+  assert.equal(calls.length, 2);
+  assert.equal(calls.every((call) => /reg\.exe$/i.test(call.file)), true);
 });
 
 test('run is shell-free, preserves nonzero exits and caps combined output', async () => {
@@ -337,7 +465,7 @@ test('a node.cmd candidate fails closed without recursively resolving Node', asy
 
   assert.equal(result.ok, false);
   assert.equal(result.code, 'NOT_FOUND');
-  assert.deepEqual(calls, []);
+  assertOnlyRegistryQueries(calls);
 });
 
 test('requiredArch rejects an arbitrary Windows command wrapper before probing Node', async () => {
@@ -357,7 +485,7 @@ test('requiredArch rejects an arbitrary Windows command wrapper before probing N
   const result = await adapter.resolveExecutable('codex', { requiredArch: 'x64' });
 
   assert.equal(result.ok, false);
-  assert.deepEqual(calls, []);
+  assertOnlyRegistryQueries(calls);
 });
 
 test('Windows command wrappers are rejected even when the caller omits requiredArch', async () => {
@@ -377,7 +505,7 @@ test('Windows command wrappers are rejected even when the caller omits requiredA
   const result = await adapter.resolveExecutable('codex');
 
   assert.equal(result.ok, false);
-  assert.deepEqual(calls, []);
+  assertOnlyRegistryQueries(calls);
 });
 
 test('strict npm cmd-shims use native Node even when the caller omits requiredArch', async () => {
@@ -471,7 +599,7 @@ test('direct-exe npm cmd-shims reject escape, non-exe, and mangled-prefix varian
     const result = await adapter.resolveExecutable('opencode', { requiredArch: 'x64' });
 
     assert.equal(result.ok, false, golden.name);
-    assert.deepEqual(calls, [], golden.name);
+    assertOnlyRegistryQueries(calls, golden.name);
   }
 });
 
@@ -496,7 +624,7 @@ test('requiredArch rejects an npm shim when its verified Node has the wrong nati
 
   assert.equal(result.ok, false);
   assert.equal(result.code, 'ARCH_MISMATCH');
-  assert.deepEqual(calls, []);
+  assertOnlyRegistryQueries(calls);
 });
 
 test('requiredArch rejects ambiguous or escaping cmd-shim entries', async () => {
@@ -519,7 +647,7 @@ test('requiredArch rejects ambiguous or escaping cmd-shim entries', async () => 
     });
     const result = await adapter.resolveExecutable('codex', { requiredArch: 'x64' });
     assert.equal(result.ok, false);
-    assert.deepEqual(calls, []);
+    assertOnlyRegistryQueries(calls);
   }
 });
 
@@ -712,7 +840,7 @@ test('Windows resolution rejects incomplete cmd wrappers instead of invoking cmd
   });
   const result = await adapter.resolveExecutable('codex');
   assert.equal(result.ok, false);
-  assert.deepEqual(calls, []);
+  assertOnlyRegistryQueries(calls);
 });
 
 test('Windows spawn rejects a forged command-script resolution', () => {
