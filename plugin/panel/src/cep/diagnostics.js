@@ -70,11 +70,12 @@ function recentMcpSession(getHost) {
     Math.max(value, Number(session.lastActivityAt) || 0)
   ), 0);
   const age = latest ? Date.now() - latest : Infinity;
+  if (!latest || age >= 10 * 60 * 1000) {
+    return { ok: true, detail: 'No recent MCP session' };
+  }
   return {
-    ok: age < 10 * 60 * 1000,
-    detail: latest
-      ? 'Last MCP session activity ' + Math.round(age / 1000) + 's ago'
-      : 'No MCP session activity yet',
+    ok: true,
+    detail: 'Last MCP session activity ' + Math.round(age / 1000) + 's ago',
   };
 }
 

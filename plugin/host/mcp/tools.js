@@ -8,6 +8,7 @@
 
 const jsonrpc = require('./jsonrpc');
 const { textResult, noTopLevelCombinator } = require('./tool-result');
+const { HINT_MARK, matchHint } = require('./error-hints');
 
 function assertPatternDescriptions(schema, toolName, path) {
     if (schema === null || typeof schema !== 'object') return;
@@ -67,7 +68,57 @@ function buildTools(deps) {
         if (!mod) {
             return { result: textResult({ ok: false, error: 'unknown tool: ' + params.name }, true) };
         }
-        return mod.call(args, context, deps);
+        const activityRef = {};
+        const callContext = Object.assign({}, context, { tool: params.name, transport: 'mcp' });
+        const callDeps = Object.assign({}, deps, {
+            executeJsx: typeof deps.executeJsx === 'function'
+                ? async function (request) {
+                    const input = Object.assign({}, request, {
+                        tool: params.name,
+                        transport: 'mcp',
+                        activityRef,
+                    });
+                    if (typeof input.code === 'string') activityRef.code = input.code;
+                    return deps.executeJsx(input);
+                }
+                : deps.executeJsx,
+        });
+        let output;
+        try {
+            output = await mod.call(args, callContext, callDeps);
+        } catch (error) {
+            output = { result: textResult({ ok: false, error: error && error.message ? error.message : String(error) }, true) };
+        }
+        const structured = output && output.result && output.result.structuredContent;
+        const errorText = structured && typeof structured.error === 'string' ? structured.error : '';
+        if (activityRef.id && errorText.indexOf(HINT_MARK) !== -1
+            && typeof deps.updateActivity === 'function') {
+            const match = matchHint(errorText);
+            if (match) {
+                deps.updateActivity(activityRef.id, {
+                    ok: false,
+                    error: errorText,
+                    hinted: true,
+                    hintIndex: match.index,
+                    ...(typeof activityRef.code === 'string'
+                        ? {
+                            scriptChars: activityRef.code.length,
+                            scriptHead: activityRef.code.replace(/\s+/g, ' ').trim().slice(0, 200),
+                        } : {}),
+                });
+            }
+        }
+        if (!activityRef.id && typeof deps.recordMcpActivity === 'function') {
+            deps.recordMcpActivity({
+                client: callContext.session && callContext.session.clientName,
+                tool: params.name,
+                transport: 'mcp',
+                engine: 'mcp',
+                ok: !(structured && structured.ok === false),
+                ...(structured && structured.error ? { error: structured.error } : {}),
+            });
+        }
+        return output;
     }
 
     return { list: function () { return definitions; }, call };

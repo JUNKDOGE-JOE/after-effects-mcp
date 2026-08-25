@@ -96,7 +96,7 @@ test('runDiagnostics checks host, MCP session, AE, and the three optional CLIs',
   assert.doesNotMatch(JSON.stringify(items), /offline service|repair-service/i);
 });
 
-test('runDiagnostics reports missing token and stale MCP activity independently', async () => {
+test('runDiagnostics reports missing token while stale MCP activity stays neutral', async () => {
   const stale = Date.now() - (11 * 60 * 1000);
   const items = await runDiagnostics({
     ...makeDeps({ token: null, sessionAt: stale }),
@@ -104,9 +104,15 @@ test('runDiagnostics reports missing token and stale MCP activity independently'
   });
   assert.equal(items.find((item) => item.id === 'token-file').ok, false);
   const session = items.find((item) => item.id === 'mcp-session');
-  assert.equal(session.ok, false);
-  assert.match(session.fixHint.zh, /MCP/);
-  assert.match(session.fixHint.en, /MCP/);
+  assert.equal(session.ok, true);
+  assert.equal(session.detail, 'No recent MCP session');
+});
+
+test('runDiagnostics treats a never-used MCP session as neutral', async () => {
+  const items = await runDiagnostics({ ...makeDeps({ sessionAt: 0 }), port: 11488 });
+  const session = items.find((item) => item.id === 'mcp-session');
+  assert.equal(session.ok, true);
+  assert.equal(session.detail, 'No recent MCP session');
 });
 
 test('runDiagnostics exec probes identify as the panel-internal client', async () => {

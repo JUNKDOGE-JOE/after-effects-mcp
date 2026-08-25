@@ -1,4 +1,5 @@
 'use strict';
+const { appendHint } = require('./error-hints');
 
 // Shared checkpoint mechanics. ae_exec uses the best-effort wrapper while
 // ae_checkpoint and ae_revert use the explicit result-producing primitives.
@@ -28,6 +29,11 @@ function executionFailure(execution) {
         },
     );
     if (execution && execution.disposition) payload.disposition = execution.disposition;
+    // Hint on the copy only: the caller's execution object stays untouched, and
+    // appendHint is idempotent so re-entry cannot stack markers.
+    if (typeof payload.error === 'string' && payload.error.trim()) {
+        payload.error = appendHint(payload.error);
+    }
     return payload;
 }
 

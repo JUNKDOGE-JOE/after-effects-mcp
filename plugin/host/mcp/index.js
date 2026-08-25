@@ -121,6 +121,8 @@ function mountMcp(app, deps) {
             return recoveryStore;
         },
         sessionCount: function () { return sessions.size; },
+        recordMcpActivity: deps.recordMcpActivity,
+        updateActivity: deps.updateActivity,
     });
 
     function routeConversation(req, res, next) {
@@ -156,10 +158,12 @@ function mountMcp(app, deps) {
             && deps.isClientBlocked(session.clientInfo && session.clientInfo.name);
     }
 
-    function recordDenied(session, reason) {
+    function recordDenied(session, reason, tool) {
         if (typeof deps.recordMcpActivity !== 'function') return;
         deps.recordMcpActivity({
             client: session.clientName,
+            tool: tool || 'mcp',
+            transport: 'mcp',
             sessionId: session.id,
             clientInfo: session.clientInfo,
             conversationId: session.conversationId,
@@ -190,7 +194,7 @@ function mountMcp(app, deps) {
             session.conversationToken = conversation ? conversation.token : null;
             if (typeof deps.isClientBlocked === 'function'
                 && deps.isClientBlocked(session.clientInfo.name)) {
-                recordDenied(session, 'blocked');
+                recordDenied(session, 'blocked', 'mcp-initialize');
                 sessions.delete(session.id);
                 return {
                     status: 200,
@@ -215,11 +219,11 @@ function mountMcp(app, deps) {
         if (!session) return missingSession(message, 404, 'Mcp-Session-Id is unknown');
         touchSession(session);
         if (message.method === 'tools/call' && isBlocked(session)) {
-            recordDenied(session, 'blocked');
+            recordDenied(session, 'blocked', params.name || 'mcp');
             return { status: 200, session, response: blockedError(message, session, 'blocked') };
         }
         if (message.method === 'tools/call' && typeof deps.isPaused === 'function' && deps.isPaused()) {
-            recordDenied(session, 'paused');
+            recordDenied(session, 'paused', params.name || 'mcp');
             return { status: 200, session, response: blockedError(message, session, 'paused') };
         }
         if (message.method === 'notifications/initialized') {

@@ -147,7 +147,7 @@ test('conversation tiers isolate calls, external calls bypass, updates are live,
         }, toolCall(5, 'empty'));
         assert.equal(empty.body.result.isError, true);
         assert.equal(empty.body.result.structuredContent.ok, false);
-        assert.equal(empty.body.result.structuredContent.error, 'jsx returned no value (empty output)');
+        assert.match(empty.body.result.structuredContent.error, /^jsx returned no value \(empty output\)/);
         assert.equal(empty.body.result.structuredContent.raw, '');
         assert.match(empty.body.result.structuredContent.recoveryId, /^[a-z0-9]{6}$/);
         assert.equal(fs.existsSync(empty.body.result.structuredContent.scriptPath), true);

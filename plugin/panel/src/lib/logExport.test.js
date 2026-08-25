@@ -15,7 +15,7 @@ test('buildLogExport includes all diagnostic sections and sources', () => {
       logsDir: '/home/user/.ae-mcp/logs', logLevel: 'info',
     },
     diagnostics: [{ id: 'host-listening', ok: true, detail: 'Host is ready' }],
-    hostActivity: [{ id: 4, ts: Date.parse('2026-08-19T10:00:00Z'), client: 'claude', engine: 'jsx', ok: true }, { id: 5, ts: Date.parse('2026-08-19T10:00:01Z'), client: 'claude', ok: false, error: 'JSX timeout after 3000ms', disposition: 'uncertain' }],
+    hostActivity: [{ id: 4, ts: Date.parse('2026-08-19T10:00:00Z'), client: 'claude', engine: 'jsx', ok: true }, { id: 5, ts: Date.parse('2026-08-19T10:00:01Z'), client: 'claude', ok: false, error: 'JSX timeout after 3000ms', disposition: 'uncertain', tool: 'ae_exec', transport: 'mcp', scriptChars: 42, scriptHead: 'throw new Error("boom")', hinted: true, hintIndex: 6 }],
     hostLogMemory: [{
       ts: '2026-08-19T10:01:00Z',
       pid: 10,
@@ -36,6 +36,8 @@ test('buildLogExport includes all diagnostic sections and sources', () => {
   ]) assert.match(text, new RegExp(heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(text, /summary: comp\/saveFrameToPng=1\s+failed=0/);
   assert.match(text, /#5 2026-08-19T10:00:01\.000Z client=claude engine=- ok=false disposition=uncertain error="JSX timeout after 3000ms"/);
+  assert.ok(text.includes('tool=ae_exec transport=mcp scriptChars=42 scriptHead="throw new Error(\\"boom\\")" hinted=true hintIndex=6'));
+  assert.match(text, /## backend errors \(last 50, memory \+ disk\)/);
 });
 
 test('a missing source only makes its own section unavailable', () => {
