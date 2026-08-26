@@ -51,12 +51,15 @@ test('the public setup text names the two supported connection forms', async () 
   assert.match(readmeZh, /claude mcp add --transport http ae http:\/\/127\.0\.0\.1:11488\/mcp/u);
 });
 
-test('the direct ZXP package script has no retired payload staging', async () => {
+test('the direct ZXP package script stages only the bundled runtime, no retired payloads', async () => {
   const source = await text('scripts/package-zxp.ps1');
   assert.match(source, /\$payloadRoots = @\('client', 'CSXS', 'host', 'icons', 'jsx', 'shared'\)/u);
   assert.match(source, /npm ci --omit=dev/u);
   assert.match(source, /Signing ZXP once/u);
-  assert.doesNotMatch(source, /sidecar|runtime\\|helper|ae-mcp\.exe/iu);
+  // The bundled OpenCode runtime is a supported payload since 0.10.3; the
+  // retired sidecar/helper executables must never return to this script.
+  assert.match(source, /runtime-staging\\opencode\\opencode\.exe/u);
+  assert.doesNotMatch(source, /sidecar|helper|ae-mcp\.exe/iu);
 });
 
 test('CI has no package-server workflow', async () => {
