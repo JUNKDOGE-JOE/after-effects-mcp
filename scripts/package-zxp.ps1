@@ -51,6 +51,17 @@ foreach ($payload in $payloadRoots) {
         -Destination (Join-Path $stageDir $payload) -Recurse -Force
 }
 
+# The release ZXP ships the bundled OpenCode runtime; only the executable
+# enters the payload (the staging receipt stays local). This script is the
+# release-grade path, so a missing staged runtime is a hard failure.
+$openCodeRuntime = Join-Path $repoRoot 'scripts\package\runtime-staging\opencode\opencode.exe'
+if (-not (Test-Path -LiteralPath $openCodeRuntime -PathType Leaf)) {
+    throw "Bundled OpenCode runtime is missing: $openCodeRuntime - run 'node scripts/package/fetch-opencode-runtime.mjs' first"
+}
+New-Item -ItemType Directory -Force -Path (Join-Path $stageDir 'runtime\opencode') | Out-Null
+Copy-Item -LiteralPath $openCodeRuntime `
+    -Destination (Join-Path $stageDir 'runtime\opencode\opencode.exe') -Force
+
 # Tests and development-only fixtures never belong in the signed host payload.
 $hostTests = Join-Path $stageDir 'host\tests'
 if (Test-Path $hostTests) {
@@ -112,9 +123,11 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     throw 'ZXP signature verification failed'
 }
+# The bundled OpenCode runtime puts the signed payload around 60 MB; the
+# ceiling exists only to catch runaway bloat, not to police the runtime.
 $zxpSize = (Get-Item -LiteralPath $OutputPath).Length
-if ($zxpSize -ge 20MB) {
-    throw "ZXP exceeds the 20 MB limit: $zxpSize bytes"
+if ($zxpSize -ge 80MB) {
+    throw "ZXP exceeds the 80 MB limit: $zxpSize bytes"
 }
 
 Write-Host "Wrote $OutputPath"
