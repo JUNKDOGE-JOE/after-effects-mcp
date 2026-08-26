@@ -18,7 +18,7 @@ export const ERROR_CODES = Object.freeze({
   CLI_MISSING: entry('CLI_MISSING', 'backend', '请安装对应 CLI，并确认面板进程能从 PATH 找到它。', 'Install the CLI and make sure it is visible on the panel PATH.'),
   CLI_TOO_OLD: entry('CLI_TOO_OLD', 'backend', '请升级对应 CLI 后重新检测。', 'Upgrade the CLI and re-check.'),
   CLI_ARCH_MISMATCH: entry('CLI_ARCH_MISMATCH', 'backend', '请安装与当前 After Effects 主机架构一致的 CLI。', 'Install a CLI build matching the After Effects host architecture.'),
-  CLI_PROBE_FAILED: entry('CLI_PROBE_FAILED', 'backend', 'CLI 已找到但探针失败；请在终端确认它能正常启动。', 'The CLI was found but its probe failed; confirm it starts normally in a terminal.'),
+  CLI_PROBE_FAILED: entry('CLI_PROBE_FAILED', 'backend', 'CLI 已找到但探针失败；请回到“设置 → AI”使用通道卡上的操作重试。', 'The CLI was found but its probe failed. Return to Settings → AI and retry from the channel card.'),
   SPAWN_FAILED: entry('SPAWN_FAILED', 'backend', '请检查 CLI 路径、执行权限和安全软件拦截。', 'Check the CLI path, execute permission, and security-software blocks.'),
   PROCESS_EXITED: entry('PROCESS_EXITED', 'backend', '请查看折叠详情中的退出信息与 stderr 尾部。', 'Inspect the exit information and stderr tail in the collapsed details.'),
   AUTH_REQUIRED: entry('AUTH_REQUIRED', 'auth', '请按「设置 → AI」通道卡上的登录指引完成对应 CLI 登录后重新检测。', 'Follow the sign-in guidance on the channel card under Settings → AI for this CLI, then re-check.'),

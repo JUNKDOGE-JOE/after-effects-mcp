@@ -310,6 +310,8 @@ export function SettingsScreen({
   selectedChannel = '',
   onSelectChannel,
   onRecheckBackend,
+  onLoginChannel,
+  loginState = null,
   recheckDisabled = false,
   providerManager = null,
   providerInit = { state: 'checking', error: '' },
@@ -368,6 +370,8 @@ export function SettingsScreen({
           selectedChannel={selectedChannel}
           onSelectChannel={onSelectChannel}
           onRecheck={onRecheckBackend}
+          onLogin={onLoginChannel}
+          loginState={loginState}
           recheckLabel={t.recheck}
           recheckDisabled={recheckDisabled}
         />
