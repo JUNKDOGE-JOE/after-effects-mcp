@@ -12,7 +12,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### Unreleased
 
-- **新增 `ae-mcp-jkdg` npm 连接器与官方 MCP Registry 清单**——Claude Desktop 等仅支持 stdio 的客户端可通过 `npx -y ae-mcp-jkdg` 连接本机 AE 面板；连接器与产品版本同步发布，扩展本体仍须从 GitHub Releases 单独安装。
+- **新增 `ae-mcp-jkdg` npm 连接器与官方 MCP Registry 清单**——Claude Desktop 等仅支持 stdio 的客户端可通过 `npx -y ae-mcp-jkdg` 连接本机 AE 面板；连接器与产品 major.minor 配对，扩展本体仍须从 GitHub Releases 单独安装。
 - **面板不可达时给出可执行修复提示**——stdio 连接失败会直接提醒安装 ae-mcp 扩展并保持 After Effects 面板打开，不再只返回底层网络错误。
 - **接入文档更准确**——README 新增 Glama 徽章和 npx 接入方式，并清理已退役的 `ae_ping`、`ae_snapshot` 工具名。
 
@@ -358,7 +358,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ### Unreleased
 
-- **Added the `ae-mcp-jkdg` npm connector and official MCP Registry manifest** — stdio-only clients such as Claude Desktop can connect to the local AE panel with `npx -y ae-mcp-jkdg`. The connector ships in lockstep with the product; the extension itself still comes separately from GitHub Releases.
+- **Added the `ae-mcp-jkdg` npm connector and official MCP Registry manifest** — stdio-only clients such as Claude Desktop can connect to the local AE panel with `npx -y ae-mcp-jkdg`. The connector is paired with the product by major.minor; the extension itself still comes separately from GitHub Releases.
 - **Unreachable-panel errors now include an actionable fix** — stdio connection failures tell users to install the ae-mcp extension and keep the After Effects panel open instead of exposing only a low-level network error.
 - **Connection docs are more accurate** — the READMEs add the Glama badge and npx setup while removing the retired `ae_ping` and `ae_snapshot` tool names.
 
