@@ -2,6 +2,10 @@
 
 English | [简体中文](README.zh-CN.md)
 
+<a href="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp/badge" alt="ae-mcp MCP server" />
+</a>
+
 **One-line setup prompt — paste this into Claude Code or another AI agent:**
 
 ```text
@@ -10,7 +14,7 @@ release, open Window > Extensions
 > ae-mcp in After Effects, then connect Claude Code with `claude mcp add
 --transport http ae http://127.0.0.1:11488/mcp`; for Claude Desktop, configure
 the extension's `host/stdio-shim.js` with the system Node executable and ask me
-to start a new client session before testing `ae_ping`.
+to start a new client session before testing `ae_status`.
 ```
 
 ae-mcp connects an After Effects CEP panel to AI clients through a local MCP
@@ -45,9 +49,25 @@ Claude Code uses the URL transport:
 claude mcp add --transport http ae http://127.0.0.1:11488/mcp
 ```
 
-Claude Desktop uses the dependency-free stdio shim shipped in the installed
-extension. Set `command` to the system Node executable and point `args` at the
-extension directory's `host/stdio-shim.js`:
+Claude Desktop can use the published connector through the system Node
+installation, without needing access to the installed extension directory.
+This `npx -y ae-mcp-jkdg` form wraps the same dependency-free
+`host/stdio-shim.js`:
+
+```json
+{
+  "mcpServers": {
+    "ae": {
+      "command": "npx",
+      "args": ["-y", "ae-mcp-jkdg"]
+    }
+  }
+}
+```
+
+Alternatively, Claude Desktop can run the dependency-free stdio shim shipped
+in the installed extension. Set `command` to the system Node executable and
+point `args` at the extension directory's `host/stdio-shim.js`:
 
 ```json
 {
@@ -71,7 +91,7 @@ stdio request queue and forwards MCP responses to the panel host.
 - `ae_exec` for maintained ExtendScript operations.
 - `ae_execRecover` for retrying a dispatched `ae_exec` failure by its returned id.
 - `ae_nativeExec` for the frozen native AEGP primitives.
-- `ae_previewFrame`, `ae_validateExpressions`, `ae_snapshot`, and checkpoints.
+- `ae_previewFrame`, `ae_validateExpressions`, structured `ae_read`, and checkpoints.
 - Bundled skills plus the local JSX Tool Library.
 - Approval modes, activity history, diagnostics, and log export.
 - Built-in Claude, Codex, and OpenCode channels when their local CLI login is

@@ -2,6 +2,10 @@
 
 [English](README.md) | 简体中文
 
+<a href="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp/badge" alt="ae-mcp MCP server" />
+</a>
+
 **一行安装提示词——复制给 Claude Code 或其它 AI agent：**
 
 ```text
@@ -9,7 +13,7 @@
 中打开
 Window > Extensions > ae-mcp，然后用 `claude mcp add --transport http ae
 http://127.0.0.1:11488/mcp` 接入 Claude Code；Claude Desktop 则使用系统 Node
-执行扩展目录里的 `host/stdio-shim.js`，并在测试 `ae_ping` 前提醒我重新启动
+执行扩展目录里的 `host/stdio-shim.js`，并在测试 `ae_status` 前提醒我重新启动
 客户端会话。
 ```
 
@@ -40,8 +44,22 @@ Claude Code 使用 URL transport：
 claude mcp add --transport http ae http://127.0.0.1:11488/mcp
 ```
 
-Claude Desktop 使用安装扩展中自带的无依赖 stdio shim。`command` 填系统
-Node 可执行文件，`args` 指向扩展目录中的 `host/stdio-shim.js`：
+Claude Desktop 可以通过系统 Node 使用已发布的连接器，无需访问已安装的扩展
+目录。`npx -y ae-mcp-jkdg` 与无依赖的 `host/stdio-shim.js` 等价：
+
+```json
+{
+  "mcpServers": {
+    "ae": {
+      "command": "npx",
+      "args": ["-y", "ae-mcp-jkdg"]
+    }
+  }
+}
+```
+
+也可以直接运行安装扩展中自带的无依赖 stdio shim。`command` 填系统 Node
+可执行文件，`args` 指向扩展目录中的 `host/stdio-shim.js`：
 
 ```json
 {
@@ -65,7 +83,7 @@ MCP 响应转发给面板宿主。
 - `ae_exec`：执行维护中的 ExtendScript 操作。
 - `ae_execRecover`：按失败返回的编号重试一次已派发的 `ae_exec`。
 - `ae_nativeExec`：执行冻结的原生 AEGP primitive。
-- `ae_previewFrame`、`ae_validateExpressions`、`ae_snapshot` 和检查点。
+- `ae_previewFrame`、`ae_validateExpressions`、结构化 `ae_read` 和检查点。
 - 内置 skills 与本地 JSX Tool Library。
 - 审批模式、活动记录、诊断和日志导出。
 - 在本机 CLI 已登录时，可使用 Claude、Codex、OpenCode 内嵌通道。

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.junkdoge-joe/ae-mcp",
+  "description": "The After Effects panel hosts the MCP server; this stdio connector requires the ae-mcp extension to be installed separately.",
+  "repository": {
+    "url": "https://github.com/JUNKDOGE-JOE/after-effects-mcp",
+    "source": "github"
+  },
+  "version": "0.10.3",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "ae-mcp-jkdg",
+      "version": "0.10.3",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
