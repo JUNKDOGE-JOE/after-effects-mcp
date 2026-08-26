@@ -19,8 +19,9 @@ import {
 } from './lib/identity-verification-profile.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const PAYLOAD_ROOTS = new Set(['CSXS', 'client', 'host', 'icons', 'jsx', 'metadata', 'shared']);
-const FORBIDDEN_ROOTS = new Set(['bin', 'helper', 'panel', 'platform', 'runtime', 'sidecar']);
+const PAYLOAD_ROOTS = new Set(['CSXS', 'client', 'host', 'icons', 'jsx', 'metadata', 'runtime', 'shared']);
+const FORBIDDEN_ROOTS = new Set(['bin', 'helper', 'panel', 'platform', 'sidecar']);
+const OPENCODE_RUNTIME_PATH = 'runtime/opencode/opencode.exe';
 
 async function verifyEntry(expected, actual, exactIdentity) {
   if (!actual || expected.type !== actual.type || expected.size !== actual.size
@@ -33,7 +34,7 @@ async function verifyEntry(expected, actual, exactIdentity) {
   }
 }
 
-function assertProductionFileSet(entries) {
+function assertProductionFileSet(platform, entries) {
   for (const entry of entries) {
     const root = entry.path.split('/')[0];
     if (FORBIDDEN_ROOTS.has(root)) {
@@ -42,8 +43,12 @@ function assertProductionFileSet(entries) {
     if (!PAYLOAD_ROOTS.has(root) && root !== 'artifacts') {
       throw bundleError('BUNDLE_UNEXPECTED_ROOT', `unexpected staged root: ${entry.path}`);
     }
+    if (root === 'runtime' && (platform !== 'windows-x64' || entry.path !== OPENCODE_RUNTIME_PATH)) {
+      throw bundleError('BUNDLE_RUNTIME_PAYLOAD_INVALID', `unexpected runtime payload: ${entry.path}`);
+    }
     if (/(?:\.dll|\.dylib|\.node|\.pyd|\.so|\.exe)$/i.test(entry.path)
-        && !entry.path.startsWith(`${NATIVE_PLUGIN_ROOT}/`)) {
+        && !entry.path.startsWith(`${NATIVE_PLUGIN_ROOT}/`)
+        && entry.path !== OPENCODE_RUNTIME_PATH) {
       throw bundleError(
         'BUNDLE_NATIVE_PAYLOAD_FORBIDDEN',
         `nested native payload is forbidden: ${entry.path}`,
@@ -118,7 +123,7 @@ export async function verifyPlatformBundle({
     throw bundleError('BUNDLE_FILE_SET_MISMATCH', 'bundle file set does not match manifest');
   }
   for (const entry of manifest.files) await verifyEntry(entry, actualByPath.get(entry.path), exactIdentity);
-  assertProductionFileSet(actual);
+  assertProductionFileSet(platform, actual);
   await verifyHostContract(resolvedRoot, actual);
 
   const nativeEntries = actual.filter((entry) => (

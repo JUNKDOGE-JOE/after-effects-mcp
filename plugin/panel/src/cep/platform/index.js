@@ -21,6 +21,26 @@ function windowsEnvValue(environment, name) {
   return key === undefined ? undefined : environment[key];
 }
 
+function extensionRootFromPage() {
+  try {
+    const root = globalThis.window?.__adobe_cep__?.getSystemPath?.('extension');
+    if (typeof root === 'string' && root.trim()) return root;
+  } catch {
+    // CEP hosts may expose the page before their system-path bridge is ready.
+  }
+  try {
+    const location = globalThis.location;
+    if (typeof location?.href !== 'string' || !location.href.startsWith('file:')) return null;
+    let pagePath = decodeURIComponent(new URL(location.href).pathname);
+    pagePath = pagePath.replace(/^\/([A-Za-z]:\/)/, '$1');
+    const clientDirectory = pagePath.slice(0, pagePath.lastIndexOf('/'));
+    const root = clientDirectory.slice(0, clientDirectory.lastIndexOf('/'));
+    return root || null;
+  } catch {
+    return null;
+  }
+}
+
 export function defaultPlatformDependencies() {
   const require = cepRequire();
   const processImpl = globalThis.window?.cep_node?.process || globalThis.process;
@@ -35,6 +55,7 @@ export function defaultPlatformDependencies() {
     pid: processImpl.pid,
     home,
     temp: os.tmpdir(),
+    extensionRoot: extensionRootFromPage(),
     env,
     fs: require('fs'),
     httpImpl: require('http'),

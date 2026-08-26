@@ -120,7 +120,7 @@ function isNodeScript(path, bytes) {
   return /^#!.*\bnode(?:\.exe)?(?:\s|$)/i.test(firstLine);
 }
 
-export function createProcessBoundary({ deps, paths, platform }) {
+export function createProcessBoundary({ deps, paths, platform, extensionRoot = deps.extensionRoot }) {
   const windows = platform === 'win32';
   const separator = windows ? ';' : ':';
 
@@ -322,7 +322,9 @@ export function createProcessBoundary({ deps, paths, platform }) {
   }
 
   function runtimeCandidates(id) {
-    return [];
+    if (!windows || id !== 'opencode' || !extensionRoot) return [];
+    // The packaged CLI is the supported baseline; an explicit override still wins.
+    return [paths.join([extensionRoot, 'runtime', 'opencode', 'opencode.exe'])];
   }
 
   function pathCandidates(id, env) {
