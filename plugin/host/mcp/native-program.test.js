@@ -9,6 +9,7 @@ const {
     invokeNativeProgram,
     invokeRequestDigest,
     nativeErrorPayload,
+    nativeProgramResponse,
     nativeProgramPostconditionDigest,
     sha256ClosedJson,
     validateInvokeErrorBinding,
@@ -180,6 +181,23 @@ test('valid read and write program results map to the Python response shape', as
     assert.equal(write.result.evidence.effect, 'committed');
     assert.equal(write.result.undo.available, true);
     assert.equal(write.result.undo.groupLabel, 'Set exact time');
+});
+
+test('outward responses omit wire-only Undo verification from result and audit', async () => {
+    const read = await run(readArgs());
+    const readResponse = nativeProgramResponse(read);
+    assert.deepEqual(readResponse.undo, { available: false });
+    assert.equal(Object.hasOwn(readResponse.audit, 'undoVerified'), false);
+
+    const write = await run(writeArgs());
+    const writeResponse = nativeProgramResponse(write);
+    assert.deepEqual(writeResponse.undo, { available: true, groupLabel: 'Set exact time' });
+    assert.equal(Object.hasOwn(writeResponse.audit, 'undoVerified'), false);
+    assert.deepEqual(write.result.undo, {
+        available: true,
+        verified: false,
+        groupLabel: 'Set exact time',
+    });
 });
 
 test('each native result binding check rejects its own mismatch', async () => {
