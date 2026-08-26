@@ -9,7 +9,9 @@ function normalizedExecutableName(value) {
 export function createMacosAdapter(deps) {
   if (!deps || deps.platform !== 'darwin' || deps.arch !== 'arm64') throw new Error('macOS arm64 dependencies are required');
   const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
-  const boundary = createProcessBoundary({ deps, paths, platform: deps.platform });
+  const boundary = createProcessBoundary({
+    deps, paths, platform: deps.platform, extensionRoot: deps.extensionRoot,
+  });
   const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: 'standard', version: null, arch: 'arm64' });
   return Object.freeze({
     id: 'macos-arm64',

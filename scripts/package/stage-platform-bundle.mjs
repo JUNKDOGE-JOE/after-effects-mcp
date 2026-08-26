@@ -12,6 +12,7 @@ import {
   bundleError,
   collectManifestEntries,
   copyTree,
+  copyRegularFileStable,
   sha256File,
   validateBundleManifest,
   writeCanonicalJson,
@@ -22,12 +23,14 @@ import {
 } from './lib/native-plugin-manifest.mjs';
 import {
   DEVELOPMENT_IDENTITY_PROFILE,
+  RELEASE_AUDIT_IDENTITY_PROFILE,
   normalizeIdentityVerificationProfile,
 } from './lib/identity-verification-profile.mjs';
 import { verifyPlatformBundle } from './verify-platform-bundle.mjs';
 
 const execFileAsync = promisify(execFile);
 const PAYLOAD_DIRECTORIES = Object.freeze(['client', 'CSXS', 'host', 'icons', 'jsx', 'shared']);
+const OPENCODE_RUNTIME_RELATIVE_PATH = 'runtime/opencode/opencode.exe';
 
 function payloadFilter(relative) {
   const segments = relative.split('/');
@@ -91,6 +94,8 @@ export async function stagePlatformBundle({
   );
   const nativePluginRoot = inputs.nativePluginRoot === undefined
     ? undefined : path.resolve(inputs.nativePluginRoot);
+  const runtimeStagingRoot = path.resolve(inputs.runtimeStagingRoot
+    ?? path.join(resolvedRepoRoot, 'scripts', 'package', 'runtime-staging', 'opencode'));
   if (nativePluginRoot !== undefined && platform !== 'macos-arm64') {
     throw bundleError(
       'BUNDLE_NATIVE_PLUGIN_PLATFORM_INVALID',
@@ -114,6 +119,21 @@ export async function stagePlatformBundle({
         path.join(temporary, directory),
         { filter: payloadFilter },
       );
+    }
+    if (platform === 'windows-x64') {
+      const stagedRuntime = path.join(runtimeStagingRoot, 'opencode.exe');
+      const runtimeStats = await fs.promises.lstat(stagedRuntime).catch(() => null);
+      if (runtimeStats?.isFile() && !runtimeStats.isSymbolicLink() && runtimeStats.nlink === 1) {
+        const destinationRuntime = path.join(temporary, ...OPENCODE_RUNTIME_RELATIVE_PATH.split('/'));
+        await fs.promises.mkdir(path.dirname(destinationRuntime), { recursive: true });
+        await copyRegularFileStable(stagedRuntime, destinationRuntime, { expectedStats: runtimeStats });
+      } else {
+        const message = 'WARNING: OpenCode runtime is not staged; run node scripts/package/fetch-opencode-runtime.mjs before packaging.';
+        (dependencies.warnImpl ?? console.warn)(message);
+        if (profile === RELEASE_AUDIT_IDENTITY_PROFILE) {
+          throw bundleError('BUNDLE_OPENCODE_RUNTIME_MISSING', message);
+        }
+      }
     }
     await fs.promises.mkdir(path.join(temporary, 'metadata'), { recursive: true });
     await fs.promises.copyFile(

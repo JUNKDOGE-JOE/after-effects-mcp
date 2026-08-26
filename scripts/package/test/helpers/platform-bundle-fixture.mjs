@@ -129,6 +129,11 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
   await fs.promises.mkdir(repoRoot, { recursive: true });
   await writePlugin(repoRoot);
   await writePackaging(repoRoot);
+  const runtimeStagingRoot = path.join(root, 'runtime-staging', 'opencode');
+  if (platform === 'windows-x64') {
+    await writeFixtureFile(runtimeStagingRoot, 'opencode.exe', 'fixture opencode runtime\n', 0o755);
+  }
+  const defaultInputs = platform === 'windows-x64' ? { runtimeStagingRoot } : {};
   const input = {
     platform,
     version: PRODUCT_VERSION,
@@ -137,6 +142,7 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
     sourceCommitSha: SOURCE_COMMIT_SHA,
     verificationProfile: 'release-audit',
     ...overrides,
+    inputs: { ...defaultInputs, ...(overrides.inputs || {}) },
   };
   return {
     root,

@@ -30,6 +30,7 @@ async function fixture(t) {
     'jsx/runtime.jsx',
     'shared/chat-attachments.mjs',
     'shared/tool-approval.mjs',
+    'runtime/opencode/opencode.exe',
   ];
   for (const file of files) {
     let value = '{}\n';
@@ -51,7 +52,7 @@ test('accepts the direct host and panel ZXP payload', async (t) => {
   const result = verifyWindowsZxpStage({ stageRoot: root, version: VERSION });
   assert.equal(result.platform, 'windows-x64');
   assert.equal(result.version, VERSION);
-  assert.equal(result.fileCount, 13);
+  assert.equal(result.fileCount, 14);
 });
 
 test('rejects retired roots and nested native binaries', async (t) => {
@@ -59,7 +60,7 @@ test('rejects retired roots and nested native binaries', async (t) => {
   await write(root, 'runtime/windows-x64/node/node.exe', 'node');
   assert.throws(
     () => verifyWindowsZxpStage({ stageRoot: root, version: VERSION }),
-    /retired ZXP payload root/,
+    /unexpected runtime payload/,
   );
 
   const nativeRoot = await fixture(t);

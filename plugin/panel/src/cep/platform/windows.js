@@ -20,7 +20,9 @@ function tasklistImage(stdout) {
 export function createWindowsAdapter(deps) {
   if (!deps || deps.platform !== 'win32' || deps.arch !== 'x64') throw new Error('Windows x64 dependencies are required');
   const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
-  const boundary = createProcessBoundary({ deps, paths, platform: deps.platform });
+  const boundary = createProcessBoundary({
+    deps, paths, platform: deps.platform, extensionRoot: deps.extensionRoot,
+  });
   const systemRoot = String(envValue(deps.env, 'SystemRoot') || envValue(deps.env, 'WINDIR') || 'C:\\Windows');
   const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: 'standard', version: null, arch: 'x64' });
   return Object.freeze({

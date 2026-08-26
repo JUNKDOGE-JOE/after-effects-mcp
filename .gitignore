@@ -28,6 +28,7 @@ Thumbs.db
 .local-workspace-archive/
 .superpowers/sdd/
 .cache/capability-package-index/
+scripts/package/runtime-staging/
 plugin/panel/ae_viewer_*.png
 /.install-panel.ps1
 /.restart-ae.ps1

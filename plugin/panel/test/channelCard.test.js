@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   channelChoiceState,
   channelCopiedLabel,
@@ -52,4 +53,24 @@ test('channelChoiceState marks exactly the enabled row (#229)', () => {
   assert.deepEqual(channelChoiceState('custom', 'cli', 'zh'), { label: '使用此通道', active: false });
   assert.deepEqual(channelChoiceState('cli', 'cli', 'en'), { label: 'In use', active: true });
   assert.deepEqual(channelChoiceState('custom', 'cli', 'en'), { label: 'Use this channel', active: false });
+});
+
+test('ChannelCard renders settled login actions as primary buttons with waiting state', () => {
+  const source = readFileSync(
+    new URL('../src/components/settings/ChannelCard.jsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /probe\.loginAction/);
+  assert.match(source, /variant="primary"/);
+  assert.match(source, /loginWaiting/);
+  assert.match(source, /onLogin\(probe, loginAction\)/);
+});
+
+test('Settings login actions are wired to App-level side effects', () => {
+  const settings = readFileSync(new URL('../src/screens/SettingsScreen.jsx', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../src/app/App.jsx', import.meta.url), 'utf8');
+  assert.match(settings, /onLogin=\{onLoginChannel\}/);
+  assert.match(app, /platform\.openLoginTerminal\('claude'\)/);
+  assert.match(app, /startCodexLogin\(\{/);
+  assert.match(app, /LOGIN_POLL_INTERVAL_MS = 5000/);
 });
