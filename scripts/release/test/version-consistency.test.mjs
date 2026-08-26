@@ -12,6 +12,12 @@ async function json(relative) {
   return JSON.parse(await text(relative));
 }
 
+function majorMinor(version) {
+  const match = /^(\d+)\.(\d+)\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.exec(version);
+  assert.ok(match, `expected semantic version, got ${version}`);
+  return `${match[1]}.${match[2]}`;
+}
+
 test('active Node package versions agree with the release version', async () => {
   const [host, hostLock, panel, connector, registry] = await Promise.all([
     json('plugin/host/package.json'),
@@ -24,9 +30,10 @@ test('active Node package versions agree with the release version', async () => 
   assert.equal(hostLock.version, VERSION);
   assert.equal(hostLock.packages[''].version, VERSION);
   assert.equal(panel.version, VERSION);
-  assert.equal(connector.version, host.version);
-  assert.equal(registry.version, host.version);
-  assert.equal(registry.packages[0].version, host.version);
+  assert.equal(registry.version, connector.version);
+  assert.equal(registry.packages[0].version, connector.version);
+  // npm versions are immutable, so connector-only fixes may advance its patch while remaining paired by major.minor.
+  assert.equal(majorMinor(connector.version), majorMinor(host.version));
   assert.equal(host.dependencies.express, '4.22.2');
 });
 

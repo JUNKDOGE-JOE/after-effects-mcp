@@ -14,10 +14,12 @@ no retired package tree, private executable payload, or nested native binary.
 
 ## npm connector & MCP Registry
 
-Keep `plugin/host/package.json`, `plugin/panel/package.json`,
-`clients/ae-mcp-jkdg/package.json`, and both version fields in the root
-`server.json` in lockstep. The release version consistency test guards this
-contract.
+Keep the connector and product versions paired by major.minor. Both version
+fields in the root `server.json` must always equal
+`clients/ae-mcp-jkdg/package.json`. When a connector-only fix is needed, bump
+only the connector patch version and both `server.json` version fields; the
+product host and panel patch versions remain unchanged. The release version
+consistency test guards this contract.
 
 After the product release is ready, the owner publishes the connector and then
 the Registry entry in this order:
