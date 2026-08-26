@@ -187,6 +187,14 @@ test('real Express MCP route runs ae_nativeExec through fake negotiate/invoke', 
         assert.equal(content.provenance.sessionId, NEGOTIATION.sessionId);
         assert.equal(content.audit.capabilityId, CAPABILITY_ID);
         assert.equal(content.audit.undoAvailable, false);
+        assert.deepEqual(content.undo, { available: false });
+        assert.equal(Object.hasOwn(content.audit, 'undoVerified'), false);
+
+        const writeResponse = await callTool(host, session, 'ae_nativeExec', writeArguments());
+        const write = writeResponse.body.result.structuredContent;
+        assert.equal(writeResponse.status, 200);
+        assert.deepEqual(write.undo, { available: true, groupLabel: 'Native write' });
+        assert.equal(Object.hasOwn(write.audit, 'undoVerified'), false);
     } finally {
         await new Promise(function (resolve) { host.listener.close(resolve); });
     }

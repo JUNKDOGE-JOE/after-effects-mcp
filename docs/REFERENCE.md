@@ -50,9 +50,12 @@ Claude Desktop:
 
 `ae_exec` is the default route for maintained scripting semantics. Use
 `ae_nativeExec` for the frozen native primitives. Native writes require an
-operation key and Undo group, followed by an independent readback. A result
-that may have dispatched a write must be reconciled against After Effects
-state and audit evidence before retrying.
+operation key and Undo group, followed by an independent readback.
+`undo.available` means AEGP opened and closed a real After Effects Undo group
+with StartUndoGroup/EndUndoGroup; the response envelope does not certify that
+Undo restores state. Release discipline proves restoration separately through
+an explicit Undo and state readback. A result that may have dispatched a write
+must be reconciled against After Effects state and audit evidence before retrying.
 
 ### `ae_exec` failure recovery
 

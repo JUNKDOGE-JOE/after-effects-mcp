@@ -503,6 +503,8 @@ function nativeProgramResponse(execution) {
     const negotiation = execution.negotiation;
     const request = execution.request;
     const response = Object.assign({ ok: true }, result);
+    response.undo = { available: result.undo.available };
+    if (result.undo.groupLabel !== undefined) response.undo.groupLabel = result.undo.groupLabel;
     response.provenance = {
         engine: result.evidence.engine,
         selectedWireVersion: negotiation.selectedWireVersion,
@@ -524,7 +526,6 @@ function nativeProgramResponse(execution) {
         postconditionDigest: result.evidence.postcondition.digest,
         effect: result.evidence.effect,
         undoAvailable: result.undo.available,
-        undoVerified: result.undo.verified,
         replayed: result.replayed,
         startedAtUnixMs: result.evidence.startedAtUnixMs,
         completedAtUnixMs: result.evidence.completedAtUnixMs,
