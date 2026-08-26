@@ -7,9 +7,10 @@ import {
   runAction,
 } from '../src/cep/wizardActions.js';
 
-function platform(resolutions = {}) {
+function platform(resolutions = {}, id = 'windows-x64') {
   const calls = [];
   return {
+    id,
     calls,
     resolveExecutable: async (id, options) => {
       calls.push({ kind: 'resolve', id, options });
@@ -114,10 +115,24 @@ test('detectTool uses existing platform probes for all three AI CLIs', async () 
   assert.deepEqual(p.calls[3].options, { minimumVersion: '18.0.0' });
 });
 
-test('buildInstallCommands retains only the optional system Node command', () => {
+test('buildInstallCommands includes the official Claude installer on Windows', () => {
   const commands = buildInstallCommands({ platform: platform() });
-  assert.deepEqual(Object.keys(commands), ['node']);
+  assert.deepEqual(Object.keys(commands), ['node', 'claude']);
   assert.deepEqual(commands.node.args, ['install', '--id', 'OpenJS.NodeJS.LTS']);
+  assert.deepEqual(commands.claude, {
+    file: 'powershell',
+    executableId: 'powershell',
+    args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://claude.ai/install.ps1 | iex'],
+  });
+  assert.equal(
+    commandPreview(commands.claude),
+    'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://claude.ai/install.ps1 | iex"',
+  );
+});
+
+test('buildInstallCommands omits the Windows-only Claude installer on macOS', () => {
+  const commands = buildInstallCommands({ platform: platform({}, 'macos-arm64') });
+  assert.deepEqual(Object.keys(commands), ['node']);
 });
 
 test('runAction resolves the fixed installer and retains streamed output', async () => {

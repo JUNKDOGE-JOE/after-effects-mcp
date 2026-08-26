@@ -6,6 +6,12 @@ import {
   runAction,
 } from '../cep/wizardActions.js';
 import {
+  addUserPathEntry,
+  isWindowsPlatform,
+  pathIncludesEntry,
+  readUserPath,
+} from '../cep/registryPath.js';
+import {
   CLI_STEPS,
   HOST_STEPS,
   OPTIONAL_CLIENT_STEPS,
@@ -19,13 +25,49 @@ export function useWizardWiring({
   platform,
 } = {}) {
   const [stepStates, dispatch] = React.useReducer(stepReducer, null, initialStepStates);
+  const [pathOffers, setPathOffers] = React.useState({});
   const commands = React.useMemo(
     () => buildInstallCommands({ platform }),
     [platform],
   );
   const commandPreviews = React.useMemo(() => ({
     node: commandPreview(commands.node),
+    claude: commandPreview(commands.claude),
   }), [commands]);
+
+  const updatePathOffer = React.useCallback(async (id, result) => {
+    if (!isWindowsPlatform(platform) || !result.ok || !result.path) {
+      setPathOffers((current) => {
+        if (!current[id]) return current;
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      return;
+    }
+    const directory = platform.paths?.dirname
+      ? platform.paths.dirname(result.path)
+      : String(result.path).replace(/[\\/][^\\/]*$/, '');
+    try {
+      const userPath = await readUserPath(platform);
+      const environment = platform.paths?.home
+        ? { USERPROFILE: platform.paths.home, HOME: platform.paths.home }
+        : {};
+      setPathOffers((current) => {
+        const next = { ...current };
+        if (pathIncludesEntry(userPath.value, directory, environment)) delete next[id];
+        else next[id] = { directory };
+        return next;
+      });
+    } catch {
+      setPathOffers((current) => {
+        if (!current[id]) return current;
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+    }
+  }, [platform]);
 
   const detect = React.useCallback(async (id) => {
     dispatch({ type: 'detect-start', id });
@@ -40,9 +82,12 @@ export function useWizardWiring({
       ok: result.ok,
       version: result.version || '',
       detail: result.detail || '',
+      path: result.path || '',
+      source: result.source || '',
     });
+    await updatePathOffer(id, result);
     return result;
-  }, [fetchImpl, platform, port]);
+  }, [fetchImpl, platform, port, updatePathOffer]);
 
   const install = React.useCallback(async (id) => {
     const command = commands[id];
@@ -57,6 +102,21 @@ export function useWizardWiring({
     await detect(id);
     return result;
   }, [commands, detect, platform]);
+
+  const addToPath = React.useCallback(async (id) => {
+    const offer = pathOffers[id];
+    if (!offer) return { changed: false };
+    const result = await addUserPathEntry(platform, offer.directory);
+    if (result.changed) {
+      setPathOffers((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      await detect(id);
+    }
+    return result;
+  }, [detect, pathOffers, platform]);
 
   const bootDetectRef = React.useRef(false);
   React.useEffect(() => {
@@ -74,6 +134,8 @@ export function useWizardWiring({
       commandPreviews,
       onDetect: detect,
       onInstall: install,
+      pathOffers,
+      onAddToPath: addToPath,
     },
   };
 }
