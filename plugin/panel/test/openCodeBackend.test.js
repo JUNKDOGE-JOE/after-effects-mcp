@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   createOpenCodeBackend,
   OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES,
+  OPENCODE_STALL_WARNING_MS,
+  OPENCODE_STALL_TIMEOUT_MS,
 } from '../src/cep/openCodeBackend.js';
 import {
   OPEN_CODE_HISTORY_GUARD_FILENAME,
@@ -132,7 +134,7 @@ function jsonResponse(value, ok = true, status = 200) {
   };
 }
 
-function makeFetch() {
+function makeFetch({ holdMessage = false } = {}) {
   const calls = [];
   const sseStreams = [];
   let sse = null;
@@ -147,6 +149,11 @@ function makeFetch() {
     }
     if (parsed.pathname === '/mcp') return jsonResponse({ ae: { status: 'connected' } });
     if (parsed.pathname === '/session' && options.method === 'POST') return jsonResponse({ id: 'session_1' });
+    if (parsed.pathname === '/session/session_1/message' && holdMessage) {
+      return new Promise((_resolve, reject) => {
+        options.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      });
+    }
     if (parsed.pathname === '/config/providers') {
       return jsonResponse({
         providers: [{
@@ -224,7 +231,7 @@ const OPEN_CODE_PROBE = {
 function makeBackend(options = {}) {
   const events = [];
   const spawned = makeSpawn();
-  const fetched = makeFetch();
+  const fetched = makeFetch(options.fetchOptions);
   const fsImpl = options.fsImpl || makeFs(options.fsOptions);
   const terminated = [];
   const platform = {
@@ -2211,4 +2218,179 @@ test('OpenCode deleteSessionRef deletes only while its server URL is live', asyn
   assert.deepEqual(await live.backend.deleteSessionRef({ kind: 'opencode-session', id: 'session_1' }), { ok: true });
   assert.ok(live.fetched.calls.some((call) => call.method === 'DELETE' && call.path === '/session/session_1'));
   live.backend.reset();
+});
+
+function watchdogTimers() {
+  const timers = [];
+  const cleared = [];
+  return {
+    timers,
+    cleared,
+    setTimeoutImpl(callback, delay) {
+      const timer = { callback, delay, cleared: false };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimeoutImpl(timer) {
+      timer.cleared = true;
+      cleared.push(timer);
+    },
+    latest() {
+      return timers.filter((timer) => !timer.cleared).at(-1);
+    },
+  };
+}
+
+test('OpenCode stream watchdog warns then aborts a silent dispatched turn once', async () => {
+  let clock = 0;
+  const timers = watchdogTimers();
+  const h = makeBackend({
+    fetchOptions: { holdMessage: true },
+    now: () => clock,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+  });
+  const run = h.backend.sendUser({ turnId: 'turn-stalled', text: 'wait', attachments: [] });
+  await flush();
+  await flush();
+
+  clock = OPENCODE_STALL_WARNING_MS;
+  timers.latest().callback();
+  assert.deepEqual(h.events.find((event) => event.type === 'turn-progress-warning'), {
+    type: 'turn-progress-warning',
+    turnId: 'turn-stalled',
+    elapsedMs: OPENCODE_STALL_WARNING_MS,
+    warningMs: OPENCODE_STALL_WARNING_MS,
+  });
+  assert.equal(h.events.filter((event) => event.type === 'error').length, 0);
+
+  clock = OPENCODE_STALL_TIMEOUT_MS;
+  timers.latest().callback();
+  await flush();
+  assert.ok(h.fetched.calls.some((call) => call.method === 'POST' && call.path === '/session/session_1/abort'));
+  assert.equal(h.events.filter((event) => event.type === 'error' && event.code === 'PROVIDER_STREAM_STALLED').length, 1);
+  h.fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
+  await run;
+  assert.equal(h.events.filter((event) => event.type === 'error').length, 1);
+});
+
+test('OpenCode stream watchdog is reset by relevant SSE deltas', async () => {
+  let clock = 0;
+  const timers = watchdogTimers();
+  const h = makeBackend({
+    fetchOptions: { holdMessage: true },
+    now: () => clock,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+  });
+  const run = h.backend.sendUser({ turnId: 'turn-active-stream', text: 'wait', attachments: [] });
+  await flush();
+  await flush();
+  for (const time of [150000, 300000, 450000, 600000]) {
+    clock = time;
+    h.fetched.sse.push({ type: 'message.part.delta', properties: { sessionID: 'session_1', field: 'text', delta: '.' } });
+    await flush();
+  }
+  assert.equal(h.events.some((event) => event.type === 'turn-progress-warning'), false);
+  assert.equal(h.events.some((event) => event.type === 'error'), false);
+  await h.backend.stop();
+  await run;
+});
+
+test('OpenCode stream watchdog suspends for a pending question and resumes after it resolves', async () => {
+  let clock = 0;
+  const timers = watchdogTimers();
+  const h = makeBackend({
+    fetchOptions: { holdMessage: true },
+    now: () => clock,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+  });
+  const run = h.backend.sendUser({ turnId: 'turn-question-pending', text: 'wait', attachments: [] });
+  await flush();
+  await flush();
+  h.fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'busy' } },
+  });
+  h.fetched.sse.push({
+    type: 'question.asked',
+    properties: {
+      sessionID: 'session_1',
+      id: 'que_stall',
+      questions: [{ question: 'Continue?', header: 'Continue', options: [] }],
+    },
+  });
+  await flush();
+
+  // A stray relevant event must not re-arm the suspended watchdog.
+  h.fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'busy' } },
+  });
+  await flush();
+  clock = OPENCODE_STALL_TIMEOUT_MS * 2;
+  assert.equal(timers.latest(), undefined);
+  assert.equal(h.events.some((event) => event.type === 'turn-progress-warning'), false);
+  assert.equal(h.events.some((event) => event.type === 'error'), false);
+
+  h.fetched.sse.push({
+    type: 'question.replied',
+    properties: { sessionID: 'session_1', requestID: 'que_stall', answers: [['Continue']] },
+  });
+  await flush();
+
+  clock += OPENCODE_STALL_WARNING_MS;
+  timers.latest().callback();
+  assert.equal(h.events.filter((event) => event.type === 'turn-progress-warning').length, 1);
+  clock += OPENCODE_STALL_TIMEOUT_MS - OPENCODE_STALL_WARNING_MS;
+  timers.latest().callback();
+  await flush();
+  await run;
+  assert.equal(h.events.filter((event) => event.code === 'PROVIDER_STREAM_STALLED').length, 1);
+});
+
+test('OpenCode stream watchdog suspends for a pending approval and resumes after a decision', async () => {
+  let clock = 0;
+  const timers = watchdogTimers();
+  const h = makeBackend({
+    fetchOptions: { holdMessage: true },
+    now: () => clock,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+  });
+  const run = h.backend.sendUser({ turnId: 'turn-approval-pending', text: 'wait', attachments: [] });
+  await flush();
+  await flush();
+  h.fetched.sse.push({
+    type: 'permission.asked',
+    properties: { sessionID: 'session_1', permissionID: 'perm_stall', tool: 'ae_ae_exec', input: {} },
+  });
+  await flush();
+
+  clock = OPENCODE_STALL_TIMEOUT_MS * 2;
+  assert.equal(timers.latest(), undefined);
+  assert.equal(h.events.some((event) => event.type === 'turn-progress-warning'), false);
+  assert.equal(h.events.some((event) => event.type === 'error'), false);
+
+  await h.backend.approve('perm_stall', 'allow');
+  clock += OPENCODE_STALL_WARNING_MS;
+  timers.latest().callback();
+  assert.equal(h.events.filter((event) => event.type === 'turn-progress-warning').length, 1);
+  clock += OPENCODE_STALL_TIMEOUT_MS - OPENCODE_STALL_WARNING_MS;
+  timers.latest().callback();
+  await flush();
+  await run;
+  assert.equal(h.events.filter((event) => event.code === 'PROVIDER_STREAM_STALLED').length, 1);
+});
+
+test('OpenCode completion clears the stream watchdog timer', async () => {
+  const timers = watchdogTimers();
+  const h = makeBackend({ setTimeoutImpl: timers.setTimeoutImpl, clearTimeoutImpl: timers.clearTimeoutImpl });
+  const run = h.backend.sendUser({ turnId: 'turn-complete-watchdog', text: 'done', attachments: [] });
+  await flush();
+  completeTurn(h.fetched);
+  await run;
+  assert.ok(timers.cleared.length > 0);
+  assert.equal(timers.latest(), undefined);
 });

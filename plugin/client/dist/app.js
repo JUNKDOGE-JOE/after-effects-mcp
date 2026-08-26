@@ -26003,6 +26003,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     UPSTREAM_ERROR: entry("UPSTREAM_ERROR", "model", "\u4E0A\u6E38\u6216\u6A21\u578B\u8FD4\u56DE\u5931\u8D25\uFF1B\u8BF7\u68C0\u67E5\u6A21\u578B\u53EF\u7528\u6027\u4E0E\u670D\u52A1\u72B6\u6001\u3002", "The upstream or model failed; check model availability and service status."),
     UPSTREAM_CONNECTION_CLOSED: entry("UPSTREAM_CONNECTION_CLOSED", "network", "\u4E0A\u6E38\u8FDE\u63A5\u5728\u8FD4\u56DE\u9519\u8BEF\u65F6\u88AB\u4E2D\u65AD\uFF1B\u672C\u8F6E\u4E0D\u4F1A\u81EA\u52A8\u91CD\u53D1\uFF0C\u4E0B\u4E00\u6761\u6D88\u606F\u5C06\u4F7F\u7528\u65B0\u4F1A\u8BDD\u3002", "The upstream connection closed while returning an error. This turn is not retried automatically; the next message uses a fresh session."),
     EVENT_STREAM_FAILED: entry("EVENT_STREAM_FAILED", "network", "\u4E8B\u4EF6\u6D41\u5DF2\u65AD\u5F00\uFF1B\u8BF7\u68C0\u67E5 OpenCode \u8FDB\u7A0B\u4E0E\u672C\u5730\u7F51\u7EDC\u3002", "The event stream disconnected; check the OpenCode process and local network."),
+    PROVIDER_STREAM_STALLED: entry("PROVIDER_STREAM_STALLED", "network", "\u63D0\u4F9B\u65B9\u6D41\u8D85\u8FC7 5 \u5206\u949F\u6CA1\u6709\u54CD\u5E94\uFF0C\u672C\u56DE\u5408\u5DF2\u505C\u6B62\uFF1B\u8BF7\u68C0\u67E5\u4E2D\u8F6C\u6216\u4EE3\u7406\u8FDE\u901A\u6027\u540E\u91CD\u8BD5\u3002", "The provider stream was silent for over five minutes, so the turn was stopped; check relay or proxy connectivity and retry."),
     TURN_INPUT_INVALID: entry("TURN_INPUT_INVALID", "attachment", "\u8BF7\u79FB\u9664\u4E0D\u53EF\u7528\u9644\u4EF6\u6216\u91CD\u65B0\u9009\u62E9\u6587\u4EF6\u3002", "Remove unavailable attachments or select the files again."),
     TURN_ABORTED: entry("TURN_ABORTED", "aborted", "\u672C\u56DE\u5408\u5DF2\u505C\u6B62\uFF0C\u53EF\u5728\u786E\u8BA4\u6CA1\u6709\u672A\u51B3\u5199\u5165\u540E\u91CD\u65B0\u53D1\u9001\u3002", "The turn was stopped; resend after confirming there is no unresolved write."),
     CANCELLED: entry("CANCELLED", "backend", "\u540E\u7AEF\u53D6\u6D88\u4E86\u8BF7\u6C42\uFF1B\u8BF7\u786E\u8BA4\u4F1A\u8BDD\u4ECD\u53EF\u7528\u540E\u91CD\u8BD5\u3002", "The backend cancelled the request; confirm the session is still usable before retrying."),
@@ -31687,6 +31688,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   var PROBE_TIMEOUT_MS = 4e4;
   var READY_POLL_MS = 250;
   var READY_REQUEST_TIMEOUT_MS = 1500;
+  var OPENCODE_STALL_WARNING_MS = 18e4;
+  var OPENCODE_STALL_TIMEOUT_MS = 3e5;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "hy3-free";
   var STDERR_TAIL_LIMIT3 = 4096;
@@ -31945,12 +31948,20 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     probeTimeoutMs = PROBE_TIMEOUT_MS,
     readyPollMs = READY_POLL_MS,
     readyRequestTimeoutMs = READY_REQUEST_TIMEOUT_MS,
+    stallWarningMs = OPENCODE_STALL_WARNING_MS,
+    stallTimeoutMs = OPENCODE_STALL_TIMEOUT_MS,
+    now = () => Date.now(),
+    setTimeoutImpl = setTimeout,
+    clearTimeoutImpl = clearTimeout,
     sleepImpl = sleep,
     onSweepComplete
   } = {}) {
     const adapter = platform || createPlatformAdapter();
     if (!Number.isFinite(readyRequestTimeoutMs) || readyRequestTimeoutMs <= 0 || readyRequestTimeoutMs < readyPollMs) {
       throw new RangeError("OpenCode readiness request timeout must be at least the poll interval");
+    }
+    if (!Number.isFinite(stallWarningMs) || !Number.isFinite(stallTimeoutMs) || stallWarningMs <= 0 || stallTimeoutMs <= stallWarningMs) {
+      throw new RangeError("OpenCode stall timeout must be greater than its warning timeout");
     }
     const openCodeRoot = adapter.paths.join([adapter.paths.configRoot, "opencode"]);
     const workspaceDir = adapter.paths.join([openCodeRoot, "workspace"]);
@@ -31987,6 +31998,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let messageDispatched = false;
     let turnStarted = false;
     let stopRequested = false;
+    let stallTimer = null;
+    let stallLastActivityAt = 0;
+    let stallWarningEmitted = false;
+    let messageAbortController = null;
     let generation = 0;
     let toolMeta = { annotations: {} };
     const pendingApprovals = /* @__PURE__ */ new Map();
@@ -32037,6 +32052,70 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function emitAfterText(evt) {
       assistantDeltaRedactor.flush();
       emit(evt);
+    }
+    function clearStallWatchdog() {
+      if (stallTimer !== null) clearTimeoutImpl(stallTimer);
+      stallTimer = null;
+      stallLastActivityAt = 0;
+      stallWarningEmitted = false;
+    }
+    function armStallWatchdog() {
+      if (!activeRun || stopRequested || pendingQuestions.size > 0 || pendingApprovals.size > 0) return;
+      if (stallTimer !== null) clearTimeoutImpl(stallTimer);
+      stallLastActivityAt = now();
+      stallWarningEmitted = false;
+      scheduleStallWatchdog();
+    }
+    function touchStallWatchdog() {
+      if (activeRun && !stopRequested) armStallWatchdog();
+    }
+    function suspendStallWatchdogForPendingInteraction() {
+      clearStallWatchdog();
+    }
+    function resumeStallWatchdogAfterPendingInteraction() {
+      if (pendingQuestions.size === 0 && pendingApprovals.size === 0) {
+        armStallWatchdog();
+      }
+    }
+    function scheduleStallWatchdog() {
+      if (!activeRun || stopRequested) return;
+      const elapsedMs = Math.max(0, now() - stallLastActivityAt);
+      const deadline = stallWarningEmitted ? stallTimeoutMs : stallWarningMs;
+      stallTimer = setTimeoutImpl(() => {
+        stallTimer = null;
+        if (!activeRun || stopRequested) return;
+        const currentElapsedMs = Math.max(0, now() - stallLastActivityAt);
+        if (!stallWarningEmitted && currentElapsedMs >= stallWarningMs) {
+          stallWarningEmitted = true;
+          emit({ type: "turn-progress-warning", turnId: activeTurn == null ? void 0 : activeTurn.turnId, elapsedMs: currentElapsedMs, warningMs: stallWarningMs });
+        }
+        if (currentElapsedMs >= stallTimeoutMs) {
+          void terminateStalledTurn();
+        } else {
+          scheduleStallWatchdog();
+        }
+      }, Math.max(1, deadline - elapsedMs));
+    }
+    async function terminateStalledTurn() {
+      if (!activeRun || stopRequested) return;
+      stopRequested = true;
+      messageAbortController == null ? void 0 : messageAbortController.abort();
+      await rejectPendingQuestions();
+      if (sessionId) {
+        await postJson("/session/" + encodeURIComponent(sessionId) + "/abort", {}).catch(() => {
+        });
+      }
+      await drainApprovals();
+      if (activeRun) {
+        emitAfterText({
+          type: "error",
+          kind: "network",
+          code: "PROVIDER_STREAM_STALLED",
+          message: "The OpenCode provider stream was silent for over five minutes, so this turn was stopped.",
+          ...activeTurnFailureFields()
+        });
+        finishActive();
+      }
     }
     function emitTurnProgress(stage) {
       if (!activeRun || !activeTurn) return;
@@ -32248,6 +32327,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return error;
     }
     function finishActive() {
+      clearStallWatchdog();
       if (!activeResolve) {
         activeRun = null;
         activeAssistantText = "";
@@ -32309,11 +32389,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const response = await request(path, options, requestBaseUrl);
       return response.json ? response.json() : {};
     }
-    async function postJson(path, body) {
+    async function postJson(path, body, signal) {
       return requestJson(path, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(body || {})
+        body: JSON.stringify(body || {}),
+        ...signal ? { signal } : {}
       });
     }
     async function waitForMcp(requestBaseUrl, isCancelled = () => false) {
@@ -32747,6 +32828,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return;
       }
       pendingApprovals.set(permissionId, { name, input });
+      suspendStallWatchdogForPendingInteraction();
       emitAfterText({
         type: "approval-required",
         toolUseId: permissionId,
@@ -32784,6 +32866,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (!type) return;
       const p = evt && evt.properties || {};
       if (p.sessionID && (!sessionId || p.sessionID !== sessionId)) return;
+      touchStallWatchdog();
       if (type === "session.status") {
         const st = p.status && p.status.type || "";
         if (st === "busy") {
@@ -32840,6 +32923,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           return;
         }
         pendingQuestions.set(questionId, { questions, settling: false });
+        suspendStallWatchdogForPendingInteraction();
         emitAfterText({
           type: "question-required",
           toolUseId: questionId,
@@ -32854,6 +32938,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         const pending = pendingQuestions.get(questionId);
         if (!pending) return;
         pendingQuestions.delete(questionId);
+        resumeStallWatchdogAfterPendingInteraction();
         if (type === "question.rejected") {
           emitAfterText({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
         } else {
@@ -32976,7 +33061,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         const messageBody = { parts: openCodeParts(turn) };
         try {
           messageDispatched = true;
-          const messageRequest = postJson("/session/" + encodeURIComponent(id) + "/message", messageBody);
+          armStallWatchdog();
+          const controller = new AbortController();
+          messageAbortController = controller;
+          const messageRequest = postJson("/session/" + encodeURIComponent(id) + "/message", messageBody, controller.signal);
           emitTurnProgress("dispatch");
           await messageRequest;
         } catch (error) {
@@ -32985,14 +33073,18 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           adoptedSessionId = null;
           sessionWasAdopted = false;
           const replacementId = await ensureSession();
+          const controller = new AbortController();
+          messageAbortController = controller;
           const replacementRequest = postJson(
             "/session/" + encodeURIComponent(replacementId) + "/message",
-            messageBody
+            messageBody,
+            controller.signal
           );
           emitTurnProgress("dispatch");
           await replacementRequest;
         }
       } catch (e) {
+        if (stopRequested || !activeRun) return;
         const httpStatus = extractHttpStatus(e == null ? void 0 : e.httpStatus);
         const fallbackCode = (e == null ? void 0 : e.fallbackCode) || (messageDispatched ? "TURN_START_FAILED" : "SESSION_START_FAILED");
         const classified = classifyErrorCode({
@@ -33038,6 +33130,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const approval = pendingApprovals.get(id);
       if (!approval) return;
       pendingApprovals.delete(id);
+      resumeStallWatchdogAfterPendingInteraction();
       if (decision === "allow-session") sessionAllowedTools.add(approval.name);
       await replyPermission(id, decision);
       if (decision === "deny") emit({ type: "tool-denied", toolUseId: id });
@@ -33075,6 +33168,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       if (pendingQuestions.get(id) !== pending) return true;
       pendingQuestions.delete(id);
+      resumeStallWatchdogAfterPendingInteraction();
       emitAfterText({
         type: "question-resolved",
         toolUseId: id,
@@ -33096,6 +33190,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     async function stop() {
       if (activeRun) stopRequested = true;
+      messageAbortController == null ? void 0 : messageAbortController.abort();
       await rejectPendingQuestions();
       if (sessionId) {
         await postJson("/session/" + encodeURIComponent(sessionId) + "/abort", {}).catch(() => {
@@ -33115,6 +33210,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       stopping = true;
       sseClosed = true;
       sseStarted = false;
+      clearStallWatchdog();
+      messageAbortController == null ? void 0 : messageAbortController.abort();
+      messageAbortController = null;
       settlePendingQuestions();
       pendingApprovals.clear();
       sessionAllowedTools.clear();

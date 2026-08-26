@@ -156,6 +156,7 @@ stderr evidence is available.
 | `UPSTREAM_HTTP_<status>` | An upstream service returned a three-digit HTTP status. `401`/`403` are authentication failures. | Use the numeric status to check login, quota, model access, or relay health. |
 | `UPSTREAM_ERROR` | The model/upstream failed without a usable HTTP status. | Check model availability and provider service status. |
 | `EVENT_STREAM_FAILED` | The OpenCode SSE event stream disconnected. | Check the OpenCode process and local network. |
+| `PROVIDER_STREAM_STALLED` | The provider stream was silent for more than five minutes and the turn was stopped. | Check relay or proxy connectivity, then retry. |
 | `TURN_INPUT_INVALID` | The turn or one of its attachments is invalid/unavailable. | Re-select or remove the unavailable attachment. |
 | `TURN_ABORTED` | The user stopped the active turn. | Confirm no write remains unresolved before resending. |
 | `CANCELLED` | The backend cancelled, canceled, or interrupted the request. | Confirm the session is still usable, then retry. |
