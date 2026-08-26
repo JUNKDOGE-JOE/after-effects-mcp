@@ -20,7 +20,7 @@ const MAC_COMMANDS = [
 ];
 
 function report(platform = 'windows-x64', result = 'PASS') {
-  const name = `ae-mcp-panel-v0.10.2-${platform}.${platform === 'macos-arm64' ? 'dmg' : 'zxp'}`;
+  const name = `ae-mcp-panel-v0.10.3-${platform}.${platform === 'macos-arm64' ? 'dmg' : 'zxp'}`;
   return {
     schemaVersion: 1,
     platform,

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { verifyWindowsZxpStage } from '../verify-windows-zxp-stage.mjs';
 
-const VERSION = '0.10.2';
+const VERSION = '0.10.3';
 
 async function write(root, relative, value) {
   const file = path.join(root, ...relative.split('/'));
