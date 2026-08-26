@@ -20660,6 +20660,8 @@
     selectedChannel = "",
     onSelectChannel,
     onRecheck,
+    onLogin,
+    loginState = null,
     recheckLabel,
     recheckDisabled = false,
     readOnly = false,
@@ -20689,9 +20691,14 @@
     };
     return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
       channels.map((probe) => {
+        var _a, _b;
         const texts = channelTexts(probe, lang);
         const isActive = probe.channel === activeChannel;
         const choice = channelChoiceState(probe.channel, selectedChannel, lang);
+        const loginAction = !probe.ok && !probe.checking ? probe.loginAction : null;
+        const activeLogin = (loginState == null ? void 0 : loginState.channel) === probe.channel ? loginState : null;
+        const loginWaiting = ["launching", "waiting", "verifying"].includes(activeLogin == null ? void 0 : activeLogin.status);
+        const loginLabel = loginWaiting ? lang === "en" ? "Waiting for sign-in\u2026" : "\u7B49\u5F85\u767B\u5F55\u2026" : ((_a = loginAction == null ? void 0 : loginAction.label) == null ? void 0 : _a[lang]) || ((_b = loginAction == null ? void 0 : loginAction.label) == null ? void 0 : _b.zh) || "";
         return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", border: `1px solid ${isActive ? "var(--border-strong)" : "var(--border-subtle)"}`, borderRadius: "var(--radius-md)", background: "var(--bg-well)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(ChannelDot, { token: channelDot(probe) }),
@@ -20700,6 +20707,8 @@
             !readOnly && onSelectChannel ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: choice.active ? "secondary" : "ghost", size: "sm", disabled: choice.active, onClick: () => onSelectChannel(probe.channel), children: choice.label }) : null
           ] }),
           texts.fixHint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)", whiteSpace: "pre-wrap" }, children: texts.fixHint }) : null,
+          (activeLogin == null ? void 0 : activeLogin.detail) ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { role: "status", style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-secondary)" }, children: activeLogin.detail }) : null,
+          !readOnly && loginAction && onLogin ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: "primary", size: "sm", disabled: loginWaiting, onClick: () => onLogin(probe, loginAction), children: loginLabel }) }) : null,
           !readOnly && texts.copyText ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyLoginCommand(probe.channel, texts.copyText), children: copied === probe.channel ? channelCopiedLabel(lang) : texts.copyLabel }) }) : null,
           !readOnly && renderChannelBody ? renderChannelBody(probe.channel) : null
         ] }, probe.channel);
@@ -21265,7 +21274,7 @@
     const firstLine = bytes.toString("utf8", 0, Math.min(bytes.length, 512)).split(/\r?\n/, 1)[0];
     return /^#!.*\bnode(?:\.exe)?(?:\s|$)/i.test(firstLine);
   }
-  function createProcessBoundary({ deps, paths, platform }) {
+  function createProcessBoundary({ deps, paths, platform, extensionRoot = deps.extensionRoot }) {
     const windows = platform === "win32";
     const separator = windows ? ";" : ":";
     function completeEnvironment(...sources) {
@@ -21454,7 +21463,8 @@
       }
     }
     function runtimeCandidates(id) {
-      return [];
+      if (!windows || id !== "opencode" || !extensionRoot) return [];
+      return [paths.join([extensionRoot, "runtime", "opencode", "opencode.exe"])];
     }
     function pathCandidates(id, env) {
       const raw = windows ? environmentValue(env, "PATH", true) || "" : env.PATH || "";
@@ -21934,7 +21944,12 @@
   function createMacosAdapter(deps) {
     if (!deps || deps.platform !== "darwin" || deps.arch !== "arm64") throw new Error("macOS arm64 dependencies are required");
     const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
-    const boundary = createProcessBoundary({ deps, paths, platform: deps.platform });
+    const boundary = createProcessBoundary({
+      deps,
+      paths,
+      platform: deps.platform,
+      extensionRoot: deps.extensionRoot
+    });
     const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "arm64" });
     return Object.freeze({
       id: "macos-arm64",
@@ -22029,7 +22044,12 @@
   function createWindowsAdapter(deps) {
     if (!deps || deps.platform !== "win32" || deps.arch !== "x64") throw new Error("Windows x64 dependencies are required");
     const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
-    const boundary = createProcessBoundary({ deps, paths, platform: deps.platform });
+    const boundary = createProcessBoundary({
+      deps,
+      paths,
+      platform: deps.platform,
+      extensionRoot: deps.extensionRoot
+    });
     const systemRoot = String(envValue(deps.env, "SystemRoot") || envValue(deps.env, "WINDIR") || "C:\\Windows");
     const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "x64" });
     return Object.freeze({
@@ -22131,6 +22151,25 @@
     const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
     return key === void 0 ? void 0 : environment[key];
   }
+  function extensionRootFromPage() {
+    var _a, _b, _c;
+    try {
+      const root = (_c = (_b = (_a = globalThis.window) == null ? void 0 : _a.__adobe_cep__) == null ? void 0 : _b.getSystemPath) == null ? void 0 : _c.call(_b, "extension");
+      if (typeof root === "string" && root.trim()) return root;
+    } catch {
+    }
+    try {
+      const location2 = globalThis.location;
+      if (typeof (location2 == null ? void 0 : location2.href) !== "string" || !location2.href.startsWith("file:")) return null;
+      let pagePath = decodeURIComponent(new URL(location2.href).pathname);
+      pagePath = pagePath.replace(/^\/([A-Za-z]:\/)/, "$1");
+      const clientDirectory = pagePath.slice(0, pagePath.lastIndexOf("/"));
+      const root = clientDirectory.slice(0, clientDirectory.lastIndexOf("/"));
+      return root || null;
+    } catch {
+      return null;
+    }
+  }
   function defaultPlatformDependencies() {
     var _a, _b;
     const require2 = cepRequire();
@@ -22146,6 +22185,7 @@
       pid: processImpl.pid,
       home,
       temp: os.tmpdir(),
+      extensionRoot: extensionRootFromPage(),
       env,
       fs: require2("fs"),
       httpImpl: require2("http"),
@@ -22459,6 +22499,8 @@
     selectedChannel = "",
     onSelectChannel,
     onRecheckBackend,
+    onLoginChannel,
+    loginState = null,
     recheckDisabled = false,
     providerManager = null,
     providerInit = { state: "checking", error: "" },
@@ -22514,6 +22556,8 @@
             selectedChannel,
             onSelectChannel,
             onRecheck: onRecheckBackend,
+            onLogin: onLoginChannel,
+            loginState,
             recheckLabel: t.recheck,
             recheckDisabled
           }
@@ -22983,7 +23027,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   var LOG_TAIL = 4096;
   var ALL_STEPS = [...HOST_STEPS, ...CLI_STEPS, ...OPTIONAL_CLIENT_STEPS];
   function emptyState() {
-    return { status: "idle", version: "", logTail: "" };
+    return { status: "idle", version: "", path: "", source: "", logTail: "" };
   }
   function initialStepStates() {
     return ALL_STEPS.reduce((acc, id) => {
@@ -23013,7 +23057,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
         return patchStep(state, action.id, {
           status: action.ok ? "ok" : "missing",
           version: action.ok ? action.version || "" : "",
-          logTail: action.detail || current.logTail
+          logTail: action.detail || current.logTail,
+          path: action.ok ? action.path || "" : "",
+          source: action.ok ? action.source || "" : ""
         });
       case "run-start":
         return patchStep(state, action.id, { status: "running", logTail: "" });
@@ -23053,6 +23099,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
       copyLog: "\u590D\u5236\u65E5\u5FD7",
       optionalNode: "\u7CFB\u7EDF Node\uFF08stdio \u5BA2\u6237\u7AEF\u53EF\u9009\uFF09",
       optionalNodeHint: "\u53EA\u6709 Claude Desktop \u8FD9\u7C7B\u53EA\u652F\u6301 stdio \u7684\u5BA2\u6237\u7AEF\u624D\u9700\u8981\u3002",
+      claudeInstallHint: "\u8FD9\u4F1A\u4ECE claude.ai \u4E0B\u8F7D\u5E76\u8FD0\u884C Anthropic \u5B98\u65B9\u5B89\u88C5\u7A0B\u5E8F\uFF1B\u9762\u677F\u4F7F\u7528\u5DF2\u68C0\u6D4B\u5230\u7684\u7EDD\u5BF9\u8DEF\u5F84\uFF0C\u4E0D\u4F9D\u8D56\u7CFB\u7EDF PATH\u3002",
+      pathHint: "\u52A0\u5165\u540E\u53EF\u5728\u4F60\u81EA\u5DF1\u7684\u7EC8\u7AEF\u4F7F\u7528\uFF1B\u9762\u677F\u4F7F\u7528\u5DF2\u68C0\u6D4B\u5230\u7684\u7EDD\u5BF9\u8DEF\u5F84\uFF0C\u4E0D\u4F9D\u8D56\u7CFB\u7EDF PATH\u3002",
+      addToPath: "\u52A0\u5165\u7CFB\u7EDF PATH\uFF08\u53EF\u9009\uFF0C\u65B9\u4FBF\u4F60\u5728\u81EA\u5DF1\u7684\u7EC8\u7AEF\u91CC\u4F7F\u7528\uFF09",
       panelOpenNote: "\u9762\u677F\u5F00\u7740\u624D\u80FD\u8FDE\u63A5\uFF1B\u5173\u95ED\u6216\u91CD\u8F7D\u9762\u677F\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002",
       directUrl: "\u6216\u76F4\u63A5\u4F7F\u7528\u8FD9\u4E2A\u5730\u5740"
     },
@@ -23075,6 +23124,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
       copyLog: "Copy log",
       optionalNode: "System Node (optional for stdio clients)",
       optionalNodeHint: "Only stdio-only clients such as Claude Desktop need this step.",
+      claudeInstallHint: "This downloads and runs Anthropic's official installer from claude.ai; the panel uses the detected absolute path and does not require PATH.",
+      pathHint: "Add it to use this CLI in your own terminal; the panel uses the detected absolute path and does not require PATH.",
+      addToPath: "Add to user PATH (optional, for your terminal)",
       panelOpenNote: "The panel must stay open. Clients reconnect after it closes or reloads.",
       directUrl: "Or use this address directly"
     }
@@ -23133,7 +23185,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       }
     );
   }
-  function CheckRow({ label, state, t, onDetect, onInstall, commandPreview: commandPreview2, hint }) {
+  function CheckRow({ label, state, t, onDetect, onInstall, commandPreview: commandPreview2, hint, pathEntry, onAddToPath }) {
     const status = state && state.status ? state.status : "idle";
     const busy = status === "checking" || status === "running";
     const problem = status === "missing" || status === "fail";
@@ -23198,7 +23250,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 }
               ),
               /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: t.install })
-            ] }) : null
+            ] }) : null,
+            pathEntry && onAddToPath ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "secondary", size: "sm", onClick: onAddToPath, children: t.addToPath }) }) : null
           ] })
         ]
       }
@@ -23219,7 +23272,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
     stepStates = EMPTY_STEPS,
     onDetect,
     onInstall,
-    commandPreviews = {}
+    commandPreviews = {},
+    pathOffers = {},
+    onAddToPath
   }) {
     const t = W[lang] || W.zh;
     const promptText = mcpReady ? externalClientSetupPrompt({
@@ -23278,7 +23333,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
                       label: STEP_LABELS[id],
                       state: stepStates[id] || EMPTY_STEPS[id],
                       t,
-                      onDetect: () => onDetect && onDetect(id)
+                      onDetect: () => onDetect && onDetect(id),
+                      hint: id === "claude" ? t.claudeInstallHint : pathOffers[id] ? t.pathHint : "",
+                      commandPreview: commandPreviews[id] || "",
+                      onInstall: () => onInstall && onInstall(id),
+                      pathEntry: pathOffers[id],
+                      onAddToPath: () => onAddToPath && onAddToPath(id)
                     },
                     id
                   )),
@@ -23352,10 +23412,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
                       label: t.optionalNode,
                       state: stepStates[id] || EMPTY_STEPS[id],
                       t,
-                      hint: t.optionalNodeHint,
+                      hint: pathOffers[id] ? `${t.optionalNodeHint} ${t.pathHint}` : t.optionalNodeHint,
                       commandPreview: commandPreviews[id] || "",
                       onDetect: () => onDetect && onDetect(id),
-                      onInstall: () => onInstall && onInstall(id)
+                      onInstall: () => onInstall && onInstall(id),
+                      pathEntry: pathOffers[id],
+                      onAddToPath: () => onAddToPath && onAddToPath(id)
                     },
                     id
                   ))
@@ -25929,7 +25991,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     CLI_MISSING: entry("CLI_MISSING", "backend", "\u8BF7\u5B89\u88C5\u5BF9\u5E94 CLI\uFF0C\u5E76\u786E\u8BA4\u9762\u677F\u8FDB\u7A0B\u80FD\u4ECE PATH \u627E\u5230\u5B83\u3002", "Install the CLI and make sure it is visible on the panel PATH."),
     CLI_TOO_OLD: entry("CLI_TOO_OLD", "backend", "\u8BF7\u5347\u7EA7\u5BF9\u5E94 CLI \u540E\u91CD\u65B0\u68C0\u6D4B\u3002", "Upgrade the CLI and re-check."),
     CLI_ARCH_MISMATCH: entry("CLI_ARCH_MISMATCH", "backend", "\u8BF7\u5B89\u88C5\u4E0E\u5F53\u524D After Effects \u4E3B\u673A\u67B6\u6784\u4E00\u81F4\u7684 CLI\u3002", "Install a CLI build matching the After Effects host architecture."),
-    CLI_PROBE_FAILED: entry("CLI_PROBE_FAILED", "backend", "CLI \u5DF2\u627E\u5230\u4F46\u63A2\u9488\u5931\u8D25\uFF1B\u8BF7\u5728\u7EC8\u7AEF\u786E\u8BA4\u5B83\u80FD\u6B63\u5E38\u542F\u52A8\u3002", "The CLI was found but its probe failed; confirm it starts normally in a terminal."),
+    CLI_PROBE_FAILED: entry("CLI_PROBE_FAILED", "backend", "CLI \u5DF2\u627E\u5230\u4F46\u63A2\u9488\u5931\u8D25\uFF1B\u8BF7\u56DE\u5230\u201C\u8BBE\u7F6E \u2192 AI\u201D\u4F7F\u7528\u901A\u9053\u5361\u4E0A\u7684\u64CD\u4F5C\u91CD\u8BD5\u3002", "The CLI was found but its probe failed. Return to Settings \u2192 AI and retry from the channel card."),
     SPAWN_FAILED: entry("SPAWN_FAILED", "backend", "\u8BF7\u68C0\u67E5 CLI \u8DEF\u5F84\u3001\u6267\u884C\u6743\u9650\u548C\u5B89\u5168\u8F6F\u4EF6\u62E6\u622A\u3002", "Check the CLI path, execute permission, and security-software blocks."),
     PROCESS_EXITED: entry("PROCESS_EXITED", "backend", "\u8BF7\u67E5\u770B\u6298\u53E0\u8BE6\u60C5\u4E2D\u7684\u9000\u51FA\u4FE1\u606F\u4E0E stderr \u5C3E\u90E8\u3002", "Inspect the exit information and stderr tail in the collapsed details."),
     AUTH_REQUIRED: entry("AUTH_REQUIRED", "auth", "\u8BF7\u6309\u300C\u8BBE\u7F6E \u2192 AI\u300D\u901A\u9053\u5361\u4E0A\u7684\u767B\u5F55\u6307\u5F15\u5B8C\u6210\u5BF9\u5E94 CLI \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", "Follow the sign-in guidance on the channel card under Settings \u2192 AI for this CLI, then re-check."),
@@ -29931,6 +29993,157 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     });
   }
 
+  // src/cep/codexHeadlessLogin.js
+  init_cep_runtime_inject();
+  var DEFAULT_LOGIN_TIMEOUT_MS = 5 * 60 * 1e3;
+  var DEFAULT_URL_TIMEOUT_MS = 20 * 1e3;
+  var URL_PATTERN = /https:\/\/[^\s<>"'`]+/;
+  function loginError(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+  function startCodexLogin({
+    adapter,
+    codexHome,
+    onUrl = () => {
+    },
+    onDone = () => {
+    },
+    timeoutMs = DEFAULT_LOGIN_TIMEOUT_MS,
+    urlTimeoutMs = DEFAULT_URL_TIMEOUT_MS
+  } = {}) {
+    if (!adapter || typeof adapter.resolveExecutable !== "function" || typeof adapter.spawn !== "function") {
+      throw new TypeError("A platform adapter is required");
+    }
+    if (!codexHome) throw new TypeError("codexHome is required");
+    let child = null;
+    let settled = false;
+    let cancelled = false;
+    let sawUrl = false;
+    let resolvePromise;
+    let rejectPromise;
+    let overallTimer = null;
+    let urlTimer = null;
+    const lineBuffers = { stdout: "", stderr: "" };
+    const promise = new Promise((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    function killChild() {
+      if (!child || typeof child.kill !== "function") return;
+      try {
+        child.kill();
+      } catch {
+      }
+    }
+    function clearTimers() {
+      if (overallTimer) clearTimeout(overallTimer);
+      if (urlTimer) clearTimeout(urlTimer);
+      overallTimer = null;
+      urlTimer = null;
+    }
+    function finishError(error, { kill = true } = {}) {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      if (kill) killChild();
+      rejectPromise(error);
+    }
+    function finishSuccess(result) {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      try {
+        onDone(result);
+      } catch (error) {
+        rejectPromise(error);
+        return;
+      }
+      resolvePromise(result);
+    }
+    function inspectLine(line) {
+      if (sawUrl) return;
+      const match = String(line || "").match(URL_PATTERN);
+      if (!match) return;
+      sawUrl = true;
+      if (urlTimer) clearTimeout(urlTimer);
+      urlTimer = null;
+      try {
+        onUrl(match[0]);
+      } catch (error) {
+        finishError(error);
+      }
+    }
+    function readLines(streamName, chunk, flush = false) {
+      lineBuffers[streamName] += String(chunk || "");
+      const lines = lineBuffers[streamName].split(/\r?\n/);
+      if (!flush) lineBuffers[streamName] = lines.pop() || "";
+      else lineBuffers[streamName] = "";
+      for (const line of lines) inspectLine(line);
+    }
+    function handleExit(code, signal) {
+      if (settled) return;
+      readLines("stdout", "", true);
+      readLines("stderr", "", true);
+      if (code !== 0) {
+        finishError(loginError(
+          "CODEX_LOGIN_EXITED",
+          `codex login exited with ${code === null || code === void 0 ? signal || "an unknown status" : `code ${code}`}`
+        ), { kill: false });
+        return;
+      }
+      if (!sawUrl) {
+        finishError(loginError("CODEX_LOGIN_URL_MISSING", "codex login exited without a sign-in URL"), { kill: false });
+        return;
+      }
+      finishSuccess({ exitCode: 0, urlSeen: true });
+    }
+    overallTimer = setTimeout(() => {
+      finishError(loginError("CODEX_LOGIN_TIMEOUT", "codex login timed out"));
+    }, Math.max(0, Number(timeoutMs)));
+    (async () => {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+      try {
+        const env = adapter.completeSpawnEnv({}, { CODEX_HOME: codexHome });
+        const executable = await adapter.resolveExecutable("codex", { env });
+        if (cancelled || settled) return;
+        if (!executable || executable.ok !== true) {
+          finishError(loginError(
+            (executable == null ? void 0 : executable.code) || "CODEX_LOGIN_RESOLUTION_FAILED",
+            (executable == null ? void 0 : executable.detail) || "Codex CLI could not be resolved"
+          ), { kill: false });
+          return;
+        }
+        child = adapter.spawn(executable, ["login"], {
+          stdio: "pipe",
+          windowsHide: true,
+          env
+        });
+        (_b = (_a = child.stdout) == null ? void 0 : _a.setEncoding) == null ? void 0 : _b.call(_a, "utf8");
+        (_d = (_c = child.stderr) == null ? void 0 : _c.setEncoding) == null ? void 0 : _d.call(_c, "utf8");
+        (_f = (_e = child.stdout) == null ? void 0 : _e.on) == null ? void 0 : _f.call(_e, "data", (chunk) => readLines("stdout", chunk));
+        (_h = (_g = child.stderr) == null ? void 0 : _g.on) == null ? void 0 : _h.call(_g, "data", (chunk) => readLines("stderr", chunk));
+        (_i = child.on) == null ? void 0 : _i.call(child, "error", (error) => finishError(error));
+        (_j = child.on) == null ? void 0 : _j.call(child, "exit", handleExit);
+        (_k = child.on) == null ? void 0 : _k.call(child, "close", handleExit);
+        urlTimer = setTimeout(() => {
+          finishError(loginError("CODEX_LOGIN_URL_TIMEOUT", "codex login did not provide a sign-in URL"));
+        }, Math.max(0, Number(urlTimeoutMs)));
+      } catch (error) {
+        finishError(error);
+      }
+    })();
+    return {
+      promise,
+      cancel() {
+        if (settled) return;
+        cancelled = true;
+        finishError(loginError("CODEX_LOGIN_CANCELLED", "codex login was cancelled"));
+      }
+    };
+  }
+
   // src/cep/codexBackend.js
   init_cep_runtime_inject();
   var RPC_TIMEOUT_MS = 3e4;
@@ -33039,8 +33252,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   }
 
   // src/lib/channels.js
-  function claudeChannels({ probe } = {}) {
+  function claudeChannels({ probe, canOpenLoginTerminal = true } = {}) {
     const probeFailed = ["probe-timeout", "probe-failed"].includes(probe == null ? void 0 : probe.reason);
+    const needsLogin = Boolean(
+      probe && probe.cliOk === true && !probe.loggedIn && !probeFailed && probe.reason !== "cli-too-old"
+    );
     return [{
       channel: "subscription",
       source: { zh: "\u8BA2\u9605\u767B\u5F55", en: "Subscription login" },
@@ -33057,15 +33273,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         zh: "\u672A\u627E\u5230 Claude CLI\uFF1A\u8BF7\u5B89\u88C5 Claude Code 2.x\uFF1B\u82E5\u9762\u677F PATH \u4E0D\u542B claude\uFF0C\u53EF\u8BBE\u7F6E AE_MCP_CLAUDE_CLI \u540E\u91CD\u542F AE\u3002",
         en: "Claude CLI was not found. Install Claude Code 2.x; if claude is not on the panel PATH, set AE_MCP_CLAUDE_CLI and restart AE."
       } : {
-        zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528 OpenCode Provider \u901A\u9053\u3002",
-        en: "Not logged in: run claude /login in a terminal and re-check, or use the OpenCode Provider channel."
-      }
+        zh: canOpenLoginTerminal ? "\u5728\u6253\u5F00\u7684\u7A97\u53E3\u4E2D\u8F93\u5165 /login \u5B8C\u6210\u767B\u5F55\uFF0C\u672C\u9875\u4F1A\u81EA\u52A8\u5237\u65B0\u3002" : "\u5F53\u524D\u5E73\u53F0\u65E0\u6CD5\u4ECE\u9762\u677F\u6253\u5F00 Claude \u767B\u5F55\u7A97\u53E3\uFF0C\u53EF\u6539\u7528 OpenCode Provider \u901A\u9053\u3002",
+        en: canOpenLoginTerminal ? "Enter /login in the window that opens. This page refreshes automatically after sign-in." : "This platform cannot open the Claude sign-in window from the panel. Use the OpenCode Provider channel instead."
+      },
+      ...needsLogin && canOpenLoginTerminal ? {
+        loginAction: {
+          label: { zh: "\u6253\u5F00\u767B\u5F55\u7A97\u53E3", en: "Open sign-in window" },
+          kind: "terminal"
+        }
+      } : {}
     }];
   }
-  function codexChannels({ codexProbe } = {}) {
+  function codexChannels({ codexProbe, loginFallback = false } = {}) {
     const cliFixHint = {
-      zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002",
-      en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE."
+      zh: "\u8BF7\u5148\u5B89\u88C5 Codex CLI\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002",
+      en: "Install Codex CLI first. If codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE."
     };
     const needsIsolatedLogin = Boolean(
       codexProbe && !codexProbe.loggedIn && codexProbe.runtimeOk !== false && codexProbe.codexHome
@@ -33085,16 +33307,25 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         codexProbe.cliPath,
         codexProbe.cliVersion
       ].filter(Boolean).join(" \xB7 ") : codexProbe.detail || "" : "",
-      fixHint: needsIsolatedLogin ? {
-        zh: `\u9762\u677F\u7684 Codex \u8FD0\u884C\u5728\u9694\u79BB\u76EE\u5F55 ${codexProbe.codexHome}\uFF08\u4E0D\u8BFB\u53D6 ~/.codex\uFF09\uFF0C\u7CFB\u7EDF\u91CC\u5DF2\u767B\u5F55\u7684 codex \u5BF9\u9762\u677F\u65E0\u6548\u3002\u5728\u7EC8\u7AEF\u8FD0\u884C\u4E0B\u9762\u547D\u4EE4\u5B8C\u6210\u767B\u5F55\u540E\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\uFF1A
+      fixHint: needsIsolatedLogin ? loginFallback ? {
+        zh: `\u81EA\u52A8\u767B\u5F55\u672A\u80FD\u6253\u5F00\u9A8C\u8BC1\u9875\u9762\u3002\u53EF\u91CD\u8BD5\u300C\u4E00\u952E\u767B\u5F55\u300D\uFF1B\u5982\u4ECD\u5931\u8D25\uFF0C\u8BF7\u590D\u5236\u767B\u5F55\u547D\u4EE4\u5B8C\u6210\u9762\u677F\u9694\u79BB\u767B\u5F55\uFF1A
 ${command}`,
-        en: `The panel runs Codex with its own CODEX_HOME at ${codexProbe.codexHome} (it never reads ~/.codex), so a system-wide codex login does not apply here. Run this in a terminal, then re-check:
+        en: `Automatic sign-in could not open the verification page. Retry One-click sign-in; if it still fails, copy the command to sign in to the panel's isolated Codex home:
 ${command}`
+      } : {
+        zh: `\u9762\u677F\u7684 Codex \u8FD0\u884C\u5728\u9694\u79BB\u76EE\u5F55 ${codexProbe.codexHome}\uFF08\u4E0D\u8BFB\u53D6 ~/.codex\uFF09\uFF0C\u7CFB\u7EDF\u767B\u5F55\u6001\u5BF9\u9762\u677F\u65E0\u6548\u3002\u70B9\u51FB\u300C\u4E00\u952E\u767B\u5F55\u300D\u540E\u5728\u6D4F\u89C8\u5668\u4E2D\u5B8C\u6210\u9A8C\u8BC1\uFF0C\u672C\u9875\u4F1A\u81EA\u52A8\u5237\u65B0\u3002`,
+        en: `The panel runs Codex with its own CODEX_HOME at ${codexProbe.codexHome} (it never reads ~/.codex), so the system login does not apply. Choose One-click sign-in and finish verification in the browser; this page refreshes automatically.`
       } : cliFixHint,
-      ...needsIsolatedLogin ? {
+      ...needsIsolatedLogin && loginFallback ? {
         copyAction: {
           label: { zh: "\u590D\u5236\u767B\u5F55\u547D\u4EE4", en: "Copy login command" },
           text: command
+        }
+      } : {},
+      ...needsIsolatedLogin ? {
+        loginAction: {
+          label: { zh: "\u4E00\u952E\u767B\u5F55", en: "One-click sign-in" },
+          kind: "headless"
         }
       } : {}
     };
@@ -33120,15 +33351,17 @@ ${command}`
   var CLAUDE_CHANNEL_IDS = ["subscription"];
   var CODEX_CHANNEL_IDS = ["cli"];
   function migrateBackendPref(storage) {
-    let pref = "subscription";
+    let pref = "opencode";
     const channelChoices = { claude: "subscription", codex: "cli", opencode: "provider" };
     try {
-      const raw = storage.getItem("ae_mcp_backend") || "subscription";
+      const storedBackend = storage.getItem("ae_mcp_backend");
+      const raw = storedBackend || "";
       const storedClaude = storage.getItem("ae_mcp_channel_claude") || "";
       const storedCodex = storage.getItem("ae_mcp_channel_codex") || "";
       if (raw === "opencode" || raw === "codex" || raw === "subscription") {
         pref = raw;
-      } else {
+      } else if (raw) {
+        pref = "subscription";
         storage.setItem("ae_mcp_backend", pref);
       }
       if (CLAUDE_CHANNEL_IDS.includes(storedClaude)) channelChoices.claude = storedClaude;
@@ -34283,13 +34516,26 @@ ${command}`
   }
   function buildInstallCommands({ platform } = {}) {
     const adapter = platform || createPlatformAdapter();
-    if (typeof adapter.legacyWizardInstallCommands !== "function") return {};
-    const commands = adapter.legacyWizardInstallCommands({
+    const commands = typeof adapter.legacyWizardInstallCommands === "function" ? adapter.legacyWizardInstallCommands({
       panelVersion: "",
       repoRoot: "",
       repo: ""
-    });
-    return commands && commands.node ? { node: commands.node } : {};
+    }) : {};
+    const result = commands && commands.node ? { node: commands.node } : {};
+    if (adapter.id === "windows-x64" || adapter.platform === "win32") {
+      result.claude = {
+        file: "powershell",
+        executableId: "powershell",
+        args: [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-Command",
+          "irm https://claude.ai/install.ps1 | iex"
+        ]
+      };
+    }
+    return result;
   }
   async function runAction({
     file,
@@ -34356,6 +34602,146 @@ ${command}`
     return [file, ...(args || []).map((value) => /\s/.test(value) ? `"${value}"` : value)].join(" ");
   }
 
+  // src/cep/registryPath.js
+  init_cep_runtime_inject();
+  var REG_EXECUTABLE = {
+    ok: true,
+    id: "reg",
+    path: "reg.exe",
+    argsPrefix: [],
+    source: "override",
+    version: null,
+    arch: "x64"
+  };
+  var USER_PATH_QUERY = ["query", "HKCU\\Environment", "/v", "Path"];
+  var USER_PATH_DEFAULT = { value: "", type: "REG_EXPAND_SZ" };
+  function isWindowsPlatform(adapter) {
+    return (adapter == null ? void 0 : adapter.id) === "windows-x64" || (adapter == null ? void 0 : adapter.platform) === "win32";
+  }
+  function requireWindows(adapter) {
+    if (!isWindowsPlatform(adapter)) {
+      throw new Error("User PATH updates are only supported on Windows");
+    }
+  }
+  function normalizedPathEntry(value) {
+    let result = String(value || "").trim().replace(/\//g, "\\");
+    while (result.length > 3 && result.endsWith("\\")) result = result.slice(0, -1);
+    return result.toLowerCase();
+  }
+  function expandEnvironmentEntry(value, environment) {
+    return String(value || "").replace(/%([^%]+)%/g, (match, name) => {
+      const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+      return key === void 0 ? match : String(environment[key]);
+    });
+  }
+  function pathIncludesEntry(rawValue, directory, environment = {}) {
+    const expected = normalizedPathEntry(directory);
+    if (!expected) return false;
+    return String(rawValue || "").split(";").some((entry2) => normalizedPathEntry(entry2) === expected || normalizedPathEntry(expandEnvironmentEntry(entry2, environment)) === expected);
+  }
+  async function resolvePowerShell(adapter) {
+    const executable = await adapter.resolveExecutable("powershell");
+    if (!executable || !executable.ok) {
+      throw new Error("powershell resolution failed: " + ((executable == null ? void 0 : executable.code) || "NOT_FOUND"));
+    }
+    return executable;
+  }
+  function spawnAndCollect(adapter, executable, args) {
+    return new Promise((resolve, reject) => {
+      var _a, _b, _c, _d, _e, _f;
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+      const finish = (result, error) => {
+        if (settled) return;
+        settled = true;
+        if (error) reject(error);
+        else resolve({ ...result, stdout, stderr });
+      };
+      try {
+        const child = adapter.spawn(executable, args, { windowsHide: true });
+        (_b = (_a = child.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", (chunk) => {
+          stdout += String(chunk || "");
+        });
+        (_d = (_c = child.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", (chunk) => {
+          stderr += String(chunk || "");
+        });
+        (_e = child.on) == null ? void 0 : _e.call(child, "error", (error) => finish({}, error));
+        (_f = child.on) == null ? void 0 : _f.call(child, "close", (code) => finish({ code }, null));
+      } catch (error) {
+        finish({}, error);
+      }
+    });
+  }
+  function parseUserPath(output) {
+    const line = String(output || "").split(/\r?\n/).find((entry2) => /^\s*Path\s+REG_(?:SZ|EXPAND_SZ)\s+/i.test(entry2));
+    if (!line) return null;
+    const match = line.match(/^\s*Path\s+(REG_(?:SZ|EXPAND_SZ))\s+(.*)$/i);
+    return match ? { value: match[2].trim(), type: match[1].toUpperCase() } : null;
+  }
+  async function readUserPath(adapter) {
+    requireWindows(adapter);
+    const result = await spawnAndCollect(adapter, REG_EXECUTABLE, USER_PATH_QUERY);
+    if (result.code !== 0) return { ...USER_PATH_DEFAULT };
+    return parseUserPath(result.stdout) || { ...USER_PATH_DEFAULT };
+  }
+  async function addRegistryPath(adapter, value, type) {
+    const result = await spawnAndCollect(adapter, REG_EXECUTABLE, [
+      "add",
+      "HKCU\\Environment",
+      "/v",
+      "Path",
+      "/t",
+      type,
+      "/d",
+      value,
+      "/f"
+    ]);
+    if (result.code !== 0) {
+      throw new Error((result.stderr || result.stdout || "reg add failed").trim());
+    }
+  }
+  var BROADCAST_SCRIPT = [
+    "Add-Type @'",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public static class EnvironmentChange {",
+    "  public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);",
+    "  public const uint WM_SETTINGCHANGE = 0x001A;",
+    "  public const uint SMTO_ABORTIFHUNG = 0x0002;",
+    '  [DllImport("user32.dll", CharSet = CharSet.Unicode)]',
+    "  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);",
+    "}",
+    "'@",
+    "$result = [UIntPtr]::Zero",
+    '[EnvironmentChange]::SendMessageTimeout([EnvironmentChange]::HWND_BROADCAST, [EnvironmentChange]::WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", [EnvironmentChange]::SMTO_ABORTIFHUNG, 2000, [ref]$result) | Out-Null'
+  ].join("\n");
+  async function broadcastEnvironmentChange(adapter) {
+    const executable = await resolvePowerShell(adapter);
+    const result = await spawnAndCollect(adapter, executable, [
+      "-NoProfile",
+      "-Command",
+      BROADCAST_SCRIPT
+    ]);
+    if (result.code !== 0) throw new Error((result.stderr || result.stdout || "broadcast failed").trim());
+  }
+  async function addUserPathEntry(adapter, directory) {
+    var _a, _b;
+    requireWindows(adapter);
+    const entry2 = String(directory || "").trim();
+    if (!entry2) throw new Error("A non-empty PATH directory is required");
+    const current = await readUserPath(adapter);
+    if (pathIncludesEntry(current.value, entry2)) return { changed: false };
+    const newValue = current.value ? current.value + ";" + entry2 : entry2;
+    await addRegistryPath(adapter, newValue, current.type);
+    try {
+      await broadcastEnvironmentChange(adapter);
+    } catch (error) {
+      (_b = (_a = globalThis.console) == null ? void 0 : _a.warn) == null ? void 0 : _b.call(_a, "User PATH broadcast failed:", error);
+    }
+    return { changed: true };
+  }
+
   // src/app/wizardWiring.js
   function useWizardWiring({
     port = 11488,
@@ -34363,13 +34749,45 @@ ${command}`
     platform
   } = {}) {
     const [stepStates, dispatch] = import_react46.default.useReducer(stepReducer, null, initialStepStates);
+    const [pathOffers, setPathOffers] = import_react46.default.useState({});
     const commands = import_react46.default.useMemo(
       () => buildInstallCommands({ platform }),
       [platform]
     );
     const commandPreviews = import_react46.default.useMemo(() => ({
-      node: commandPreview(commands.node)
+      node: commandPreview(commands.node),
+      claude: commandPreview(commands.claude)
     }), [commands]);
+    const updatePathOffer = import_react46.default.useCallback(async (id, result) => {
+      var _a, _b;
+      if (!isWindowsPlatform(platform) || !result.ok || !result.path) {
+        setPathOffers((current) => {
+          if (!current[id]) return current;
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+        return;
+      }
+      const directory = ((_a = platform.paths) == null ? void 0 : _a.dirname) ? platform.paths.dirname(result.path) : String(result.path).replace(/[\\/][^\\/]*$/, "");
+      try {
+        const userPath = await readUserPath(platform);
+        const environment = ((_b = platform.paths) == null ? void 0 : _b.home) ? { USERPROFILE: platform.paths.home, HOME: platform.paths.home } : {};
+        setPathOffers((current) => {
+          const next = { ...current };
+          if (pathIncludesEntry(userPath.value, directory, environment)) delete next[id];
+          else next[id] = { directory };
+          return next;
+        });
+      } catch {
+        setPathOffers((current) => {
+          if (!current[id]) return current;
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+      }
+    }, [platform]);
     const detect = import_react46.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
       const result = await detectTool(id, {
@@ -34382,10 +34800,13 @@ ${command}`
         id,
         ok: result.ok,
         version: result.version || "",
-        detail: result.detail || ""
+        detail: result.detail || "",
+        path: result.path || "",
+        source: result.source || ""
       });
+      await updatePathOffer(id, result);
       return result;
-    }, [fetchImpl, platform, port]);
+    }, [fetchImpl, platform, port, updatePathOffer]);
     const install = import_react46.default.useCallback(async (id) => {
       const command = commands[id];
       if (!command) return { ok: false, output: "No install command configured for " + id };
@@ -34399,6 +34820,20 @@ ${command}`
       await detect(id);
       return result;
     }, [commands, detect, platform]);
+    const addToPath = import_react46.default.useCallback(async (id) => {
+      const offer = pathOffers[id];
+      if (!offer) return { changed: false };
+      const result = await addUserPathEntry(platform, offer.directory);
+      if (result.changed) {
+        setPathOffers((current) => {
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+        await detect(id);
+      }
+      return result;
+    }, [detect, pathOffers, platform]);
     const bootDetectRef = import_react46.default.useRef(false);
     import_react46.default.useEffect(() => {
       if (bootDetectRef.current) return;
@@ -34413,7 +34848,9 @@ ${command}`
         stepStates,
         commandPreviews,
         onDetect: detect,
-        onInstall: install
+        onInstall: install,
+        pathOffers,
+        onAddToPath: addToPath
       }
     };
   }
@@ -36375,6 +36812,8 @@ ${command}`
   };
   var pkgVersion = package_default.version;
   var PROBE_PENDING_GRACE_MS = 8e3;
+  var LOGIN_POLL_INTERVAL_MS = 5e3;
+  var LOGIN_POLL_LIMIT_MS = 5 * 60 * 1e3;
   function readPref(key, fallback) {
     try {
       const v = window.localStorage.getItem(key);
@@ -36388,6 +36827,13 @@ ${command}`
       window.localStorage.setItem(key, value);
     } catch (e) {
     }
+  }
+  function openLoginUrl(url) {
+    var _a, _b;
+    if (typeof ((_b = (_a = window == null ? void 0 : window.cep) == null ? void 0 : _a.util) == null ? void 0 : _b.openURLInDefaultBrowser) !== "function") {
+      throw new Error("CEP browser opener is unavailable");
+    }
+    window.cep.util.openURLInDefaultBrowser(url);
   }
   var DEFAULT_MODEL = claudeSubDescriptor().defaultModelId;
   function cepRequire2(mod) {
@@ -36570,6 +37016,8 @@ ${command}`
     const [probe, setProbe] = import_react47.default.useState(null);
     const [codexProbe, setCodexProbe] = import_react47.default.useState(null);
     const [codexModels, setCodexModels] = import_react47.default.useState(null);
+    const [loginState, setLoginState] = import_react47.default.useState({ channel: "", status: "idle", detail: "" });
+    const codexLoginRef = import_react47.default.useRef(null);
     const [openCodeProbe, setOpenCodeProbe] = import_react47.default.useState(null);
     const [openCodeProbeStale, setOpenCodeProbeStale] = import_react47.default.useState(false);
     const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = import_react47.default.useState(0);
@@ -36647,8 +37095,14 @@ ${draft.baseUrl}`)) return;
       }
     );
     const channels = import_react47.default.useMemo(() => ({
-      claude: claudeChannels({ probe }),
-      codex: codexChannels({ codexProbe }),
+      claude: claudeChannels({
+        probe,
+        canOpenLoginTerminal: typeof platform.openLoginTerminal === "function"
+      }),
+      codex: codexChannels({
+        codexProbe,
+        loginFallback: loginState.channel === "cli" && loginState.status === "fallback"
+      }),
       opencode: openCodeChannels({
         probe: openCodeProbe,
         providers: openCodeAvailableProviders
@@ -36656,8 +37110,11 @@ ${draft.baseUrl}`)) return;
     }), [
       probe,
       codexProbe,
+      loginState.channel,
+      loginState.status,
       openCodeProbe,
-      openCodeAvailableProviders
+      openCodeAvailableProviders,
+      platform
     ]);
     const effective = pickBackend({ pref: backendPref, channels, channelChoices });
     const effectiveBackendRef = import_react47.default.useRef(effective.backend);
@@ -37087,6 +37544,120 @@ ${draft.baseUrl}`)) return;
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
+    const onLoginChannel = import_react47.default.useCallback((_channel, action) => {
+      if ((action == null ? void 0 : action.kind) === "terminal") {
+        setLoginState({
+          channel: "subscription",
+          status: "launching",
+          detail: langRef.current === "en" ? "Opening the sign-in window\u2026" : "\u6B63\u5728\u6253\u5F00\u767B\u5F55\u7A97\u53E3\u2026"
+        });
+        Promise.resolve().then(() => platform.openLoginTerminal("claude")).then((result) => {
+          if (result && result.exitCode !== void 0 && result.exitCode !== 0) {
+            throw new Error(result.stderr || "The sign-in window could not be opened");
+          }
+          setLoginState({
+            channel: "subscription",
+            status: "waiting",
+            detail: langRef.current === "en" ? "Waiting for Claude sign-in; status refreshes automatically." : "\u6B63\u5728\u7B49\u5F85 Claude \u767B\u5F55\uFF0C\u72B6\u6001\u4F1A\u81EA\u52A8\u5237\u65B0\u3002"
+          });
+        }).catch((error) => {
+          setLoginState({
+            channel: "subscription",
+            status: "fallback",
+            detail: (error == null ? void 0 : error.message) || String(error)
+          });
+        });
+        return;
+      }
+      if ((action == null ? void 0 : action.kind) !== "headless" || !(codexProbe == null ? void 0 : codexProbe.codexHome)) return;
+      if (codexLoginRef.current) codexLoginRef.current.cancel();
+      setLoginState({
+        channel: "cli",
+        status: "waiting",
+        detail: langRef.current === "en" ? "Starting Codex sign-in and waiting for browser verification\u2026" : "\u6B63\u5728\u542F\u52A8 Codex \u767B\u5F55\u5E76\u7B49\u5F85\u6D4F\u89C8\u5668\u9A8C\u8BC1\u2026"
+      });
+      const login = startCodexLogin({
+        adapter: platform,
+        codexHome: codexProbe.codexHome,
+        onUrl: openLoginUrl
+      });
+      codexLoginRef.current = login;
+      login.promise.then(() => {
+        if (codexLoginRef.current !== login) return;
+        codexLoginRef.current = null;
+        setLoginState({
+          channel: "cli",
+          status: "verifying",
+          detail: langRef.current === "en" ? "Verifying Codex sign-in\u2026" : "\u6B63\u5728\u9A8C\u8BC1 Codex \u767B\u5F55\u72B6\u6001\u2026"
+        });
+        codexBackend.reset();
+        runCodexProbe();
+      }).catch((error) => {
+        var _a;
+        if (codexLoginRef.current !== login) return;
+        codexLoginRef.current = null;
+        setLoginState({
+          channel: "cli",
+          status: "fallback",
+          detail: langRef.current === "en" ? "Automatic sign-in stopped safely. Retry or use the copy-command fallback below." : "\u81EA\u52A8\u767B\u5F55\u5DF2\u5B89\u5168\u505C\u6B62\u3002\u8BF7\u91CD\u8BD5\uFF0C\u6216\u4F7F\u7528\u4E0B\u65B9\u7684\u590D\u5236\u547D\u4EE4\u5907\u7528\u64CD\u4F5C\u3002"
+        });
+        (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, `Codex login failed: ${(error == null ? void 0 : error.message) || String(error)}`);
+      });
+    }, [codexBackend, codexProbe == null ? void 0 : codexProbe.codexHome, platform, runCodexProbe]);
+    import_react47.default.useEffect(() => {
+      if (loginState.channel !== "subscription" || loginState.status !== "waiting") return void 0;
+      if (tab !== "settings" || backendPref !== "subscription") return void 0;
+      let alive = true;
+      let timer = null;
+      const deadline = Date.now() + LOGIN_POLL_LIMIT_MS;
+      const poll = () => {
+        probeClaudeLogin({ platform }).then((result) => {
+          if (!alive) return;
+          setProbe(result);
+          if (result == null ? void 0 : result.loggedIn) {
+            setLoginState({ channel: "", status: "idle", detail: "" });
+            return;
+          }
+          if (Date.now() >= deadline) {
+            setLoginState({
+              channel: "subscription",
+              status: "fallback",
+              detail: langRef.current === "en" ? "Automatic refresh stopped after five minutes. Open the sign-in window again to retry." : "\u81EA\u52A8\u5237\u65B0\u5DF2\u5728\u4E94\u5206\u949F\u540E\u505C\u6B62\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u767B\u5F55\u7A97\u53E3\u91CD\u8BD5\u3002"
+            });
+            return;
+          }
+          timer = setTimeout(poll, LOGIN_POLL_INTERVAL_MS);
+        }).catch(() => {
+          if (alive) timer = setTimeout(poll, LOGIN_POLL_INTERVAL_MS);
+        });
+      };
+      timer = setTimeout(poll, LOGIN_POLL_INTERVAL_MS);
+      return () => {
+        alive = false;
+        if (timer) clearTimeout(timer);
+      };
+    }, [backendPref, loginState.channel, loginState.status, platform, tab]);
+    import_react47.default.useEffect(() => {
+      if (loginState.channel !== "cli" || loginState.status !== "verifying" || codexProbe === null) return;
+      setLoginState(codexProbe.loggedIn ? { channel: "", status: "idle", detail: "" } : {
+        channel: "cli",
+        status: "fallback",
+        detail: langRef.current === "en" ? "Codex sign-in could not be verified. Retry or use the copy-command fallback below." : "\u672A\u80FD\u9A8C\u8BC1 Codex \u767B\u5F55\u72B6\u6001\u3002\u8BF7\u91CD\u8BD5\uFF0C\u6216\u4F7F\u7528\u4E0B\u65B9\u7684\u590D\u5236\u547D\u4EE4\u5907\u7528\u64CD\u4F5C\u3002"
+      });
+    }, [codexProbe, loginState.channel, loginState.status]);
+    import_react47.default.useEffect(() => {
+      const loginBackend = loginState.channel === "cli" ? "codex" : "subscription";
+      if (loginState.status === "idle" || tab === "settings" && backendPref === loginBackend) return;
+      const current = codexLoginRef.current;
+      codexLoginRef.current = null;
+      if (current) current.cancel();
+      setLoginState({ channel: "", status: "idle", detail: "" });
+    }, [backendPref, loginState.channel, loginState.status, tab]);
+    import_react47.default.useEffect(() => () => {
+      const current = codexLoginRef.current;
+      codexLoginRef.current = null;
+      if (current) current.cancel();
+    }, []);
     const runOpenCodeProbe = import_react47.default.useCallback(() => {
       let alive = true;
       const runId = openCodeProbeRunRef.current + 1;
@@ -37662,6 +38233,8 @@ ${draft.baseUrl}`)) return;
                 runClaudeProbe();
               }
             },
+            onLoginChannel,
+            loginState,
             onRecheckBackend: () => {
               if (backendPref === "codex") runCodexProbe();
               else if (backendPref === "opencode") {

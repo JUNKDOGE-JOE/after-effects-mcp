@@ -12,6 +12,10 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### Unreleased
 
+- **ZXP 内置 OpenCode，全新安装开箱即有可用通道（#321）**——Windows 发布包随附经 SHA-256 校验的官方 OpenCode 可执行文件，面板自动优先使用内置版本（显式环境变量覆盖仍然最高优先），不再要求用户自行安装任何 CLI。构建期由钉版拉取脚本获取产物，正式构建缺产物会直接失败而不是悄悄发出不完整的包。
+- **登录不再需要终端**——Claude 通道新增「打开登录窗口」按钮（登录后本页自动刷新）；Codex 通道新增「一键登录」：面板在隔离环境里代跑登录、自动帮你打开浏览器验证页，失败时才回退为可复制命令。所有修复提示不再出现"请在终端运行 X"式的裸指令。
+- **向导一键安装 Claude Code**——首启向导可直接代跑 Anthropic 官方安装器（明确标注来源），装完点重新检测即可识别；另提供可选的「加入系统 PATH」按钮（免管理员、保留原有 PATH 变量类型、不用会截断 PATH 的 setx），方便你在自己的终端里也能使用。
+- **全新安装默认使用 OpenCode Provider 通道**——三个通道中唯一无需 CLI 登录的一个；已有用户的选择保持不变。
 - **AI 回复不再被工具卡撕成两截（#322）**——三条通道统一在插入工具、审批、提问卡片之前先把已生成的文字完整落屏。此前配置了 API Key 时，最后几十个字符会被扣在防泄漏缓冲里，等你答完问题才出现在卡片下面，甚至把一个单词拆成两半。
 - **AE 开着也能装好 CLI（#321）**——Windows 上「重新检测」现在会重读注册表里的用户/系统 PATH，并认识 Claude 官方安装器（`~\.local\bin`）、scoop、OpenCode 官方安装器的默认位置。装完 CLI 直接点重新检测即可，不必重启 After Effects。
 - **智能体不再被自己的历史带进死循环（#323）**——修复一起真实事故：为省 token 而脱敏的历史脚本占位符被模型当成代码原样发回，先是执行一句注释永远失败，重试时还会把存档的恢复脚本覆写掉，单个任务连败四十余次。现在主机直接拦下占位符并明确告知重写完整脚本，恢复存档不再会被覆写；占位符文本也改为自带「不要把这句注释当代码发回」的指令。
@@ -346,6 +350,10 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ### Unreleased
 
+- **OpenCode ships inside the ZXP — a fresh install has a working channel out of the box (#321)** — the Windows package bundles the official OpenCode executable (SHA-256-verified, pinned version fetched at build time; release builds fail rather than silently ship without it). The panel prefers the bundled copy automatically, with the explicit env-var override still winning.
+- **Signing in no longer needs a terminal** — the Claude channel gains an Open-sign-in-window button (the page refreshes automatically once you're in); the Codex channel gains one-click sign-in that runs the login inside the panel's isolated environment and opens the browser verification page for you, falling back to a copyable command only when that fails. No fix hint tells you to "run X in a terminal" anymore.
+- **The wizard installs Claude Code for you** — one click runs Anthropic's official installer (provenance clearly labeled); Re-check finds it immediately. An optional add-to-PATH button registers CLI directories on the user PATH without admin rights, preserving the value type and never using the PATH-truncating setx.
+- **Fresh installs default to the OpenCode Provider channel** — the only channel needing no CLI sign-in; existing users keep their stored choice.
 - **AI replies are no longer torn apart by tool cards (#322)** — all three channels flush pending assistant text before inserting a tool, approval, or question card. Previously, with an API key configured, the last few dozen characters were withheld in the leak-prevention buffer and only appeared below the card after you answered — sometimes splitting a word in half.
 - **CLIs installed while AE is open are now detected (#321)** — on Windows, Re-check re-reads the registry user/system PATH and knows the official install locations (Claude's `~\.local\bin`, scoop shims, OpenCode's `~\.opencode\bin`). No more restarting After Effects after installing a CLI.
 - **Agents can no longer be trapped by their own redacted history (#323)** — fixes a real incident: the placeholder that hides old scripts from history (to save tokens) was imitated by the model and sent back as code, executing a bare comment forever and even overwriting the stored recovery script on retry — one task failed 40+ times. The host now rejects placeholder code with clear guidance, recovery scripts can no longer be overwritten by it, and the placeholder text itself now says never to send it back.
