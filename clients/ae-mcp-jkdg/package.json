@@ -1,0 +1,29 @@
+{
+  "name": "ae-mcp-jkdg",
+  "version": "0.10.3",
+  "description": "A stdio connector for the local ae-mcp After Effects panel.",
+  "bin": {
+    "ae-mcp-jkdg": "bin/ae-mcp-jkdg.js"
+  },
+  "mcpName": "io.github.junkdoge-joe/ae-mcp",
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JUNKDOGE-JOE/after-effects-mcp"
+  },
+  "keywords": [
+    "mcp",
+    "after-effects",
+    "adobe",
+    "stdio",
+    "connector"
+  ],
+  "files": [
+    "bin/",
+    "vendor/",
+    "README.md"
+  ]
+}

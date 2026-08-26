@@ -13,15 +13,20 @@ async function json(relative) {
 }
 
 test('active Node package versions agree with the release version', async () => {
-  const [host, hostLock, panel] = await Promise.all([
+  const [host, hostLock, panel, connector, registry] = await Promise.all([
     json('plugin/host/package.json'),
     json('plugin/host/package-lock.json'),
     json('plugin/panel/package.json'),
+    json('clients/ae-mcp-jkdg/package.json'),
+    json('server.json'),
   ]);
   assert.equal(host.version, VERSION);
   assert.equal(hostLock.version, VERSION);
   assert.equal(hostLock.packages[''].version, VERSION);
   assert.equal(panel.version, VERSION);
+  assert.equal(connector.version, host.version);
+  assert.equal(registry.version, host.version);
+  assert.equal(registry.packages[0].version, host.version);
   assert.equal(host.dependencies.express, '4.22.2');
 });
 

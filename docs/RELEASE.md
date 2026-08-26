@@ -12,6 +12,27 @@ The ZXP payload consists of the panel, CEP manifest, Node host, JSX, shared
 modules, icons, generated host protocol files, and bundled skills. It contains
 no retired package tree, private executable payload, or nested native binary.
 
+## npm connector & MCP Registry
+
+Keep `plugin/host/package.json`, `plugin/panel/package.json`,
+`clients/ae-mcp-jkdg/package.json`, and both version fields in the root
+`server.json` in lockstep. The release version consistency test guards this
+contract.
+
+After the product release is ready, the owner publishes the connector and then
+the Registry entry in this order:
+
+```bash
+cd clients/ae-mcp-jkdg && npm publish --access public
+cd ../..
+mcp-publisher login github
+mcp-publisher publish
+```
+
+Run `mcp-publisher publish` from the repository root, where `server.json`
+resides. npm publication must happen first because the Registry verifies that
+the package exists and that its `mcpName` matches the Registry server name.
+
 ## Signing
 
 Run the ZXP signer once against the verified stage and then run its verification

@@ -27,6 +27,16 @@ function collectLines(child) {
     });
 }
 
+function collectText(stream, child) {
+    return new Promise(function (resolve, reject) {
+        let text = '';
+        stream.setEncoding('utf8');
+        stream.on('data', function (chunk) { text += chunk; });
+        child.on('error', reject);
+        child.on('close', function () { resolve(text); });
+    });
+}
+
 test('stdio shim bridges JSON lines to Streamable HTTP and forwards SSE', async () => {
     const requests = [];
     const server = http.createServer(function (req, res) {
@@ -116,15 +126,21 @@ test('stdio shim survives a failed request and keeps serving later lines', async
         stdio: ['pipe', 'pipe', 'pipe'],
     });
     const output = collectLines(child);
+    const errors = collectText(child.stderr, child);
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) + '\n');
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }) + '\n');
     child.stdin.end();
     try {
-        const lines = await output;
+        const [lines, stderr] = await Promise.all([output, errors]);
         assert.equal(lines.length, 2);
         assert.equal(lines[0].id, 1);
         assert.equal(typeof lines[0].error.message, 'string');
         assert.match(lines[0].error.message, /stdio-shim/);
+        assert.match(lines[0].error.message, new RegExp(
+            'After Effects panel is not reachable at http://127\\.0\\.0\\.1:' + port + '/mcp',
+        ));
+        assert.match(stderr, /install the ae-mcp extension from GitHub Releases/);
+        assert.match(stderr, /Window > Extensions > ae-mcp open/);
         assert.equal(lines[1].id, 2);
         assert.deepEqual(lines[1].result.tools, []);
     } finally {

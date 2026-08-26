@@ -39,6 +39,13 @@ jobs:
           node --test native/ae-plugin/protocol/protocol.test.mjs
           node --test scripts/package/test/windows-native-transport.test.mjs
 
+      - name: Run connector and release version contracts
+        run: |
+          node --test clients/ae-mcp-jkdg/test/bin.test.mjs
+          node --test clients/ae-mcp-jkdg/test/package.test.mjs
+          node --test clients/ae-mcp-jkdg/test/sync.test.mjs
+          node --test scripts/release/test/version-consistency.test.mjs
+
       - name: Run host tests
         working-directory: plugin/host
         run: |
