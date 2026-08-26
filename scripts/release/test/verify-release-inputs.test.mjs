@@ -26,7 +26,7 @@ const MAC_COMMANDS = [
 function artifact(platform, id) {
   return {
     artifactId: String(id),
-    name: `ae-mcp-panel-v0.10.2-${platform}.zxp`,
+    name: `ae-mcp-panel-v0.10.3-${platform}.zxp`,
     platform,
     role: 'zxp',
     sha256: String(id).repeat(64).slice(0, 64),
@@ -62,7 +62,7 @@ function fixture() {
   const windows = artifact('windows-x64', 102);
   const manifest = {
     schemaVersion: 1,
-    version: '0.10.2',
+    version: '0.10.3',
     candidateSha: CANDIDATE_SHA,
     workflowRunId: '42',
     artifacts: [mac, windows],

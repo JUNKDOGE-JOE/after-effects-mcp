@@ -176,7 +176,7 @@ function expectedOutputRoles(platform) {
 }
 
 function expectedOutputName(platform, role) {
-  return `ae-mcp-panel-v0.10.2-${platform}.${role}`;
+  return `ae-mcp-panel-v0.10.3-${platform}.${role}`;
 }
 
 function validateIdentityFields(input) {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import test from 'node:test';
 
-const VERSION = '0.10.2';
+const VERSION = '0.10.3';
 
 async function text(relative) {
   return fs.readFile(relative, 'utf8');

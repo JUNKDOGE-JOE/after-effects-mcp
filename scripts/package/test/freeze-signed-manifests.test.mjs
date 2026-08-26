@@ -22,7 +22,7 @@ test('writes canonical freeze evidence bound to the direct extension stage', asy
   const evidence = await freezeSignedManifestsWithEvidence({
     root: signingRoot,
     platform: 'windows-x64',
-    version: '0.10.2',
+    version: '0.10.3',
     sourceCommitSha: h.input.sourceCommitSha,
     sourceStageSha256,
     evidencePath,
@@ -56,21 +56,21 @@ test('freezes a changed direct payload without adding retired payload roots', as
   await assert.rejects(verifyPlatformBundle({
     root: signingRoot,
     platform: 'macos-arm64',
-    version: '0.10.2',
+    version: '0.10.3',
     sourceCommitSha: h.input.sourceCommitSha,
   }), { code: 'BUNDLE_FILE_METADATA_MISMATCH' });
 
   const result = await freezeSignedManifests({
     root: signingRoot,
     platform: 'macos-arm64',
-    version: '0.10.2',
+    version: '0.10.3',
     sourceCommitSha: h.input.sourceCommitSha,
     sourceStageSha256,
   });
   await verifyPlatformBundle({
     root: signingRoot,
     platform: 'macos-arm64',
-    version: '0.10.2',
+    version: '0.10.3',
     sourceCommitSha: h.input.sourceCommitSha,
   });
   assert.equal(result.signedBundleManifestSha256, await sha256File(
@@ -91,7 +91,7 @@ test('refuses to freeze when the asserted source digest is malformed', async (t)
   await assert.rejects(freezeSignedManifests({
     root: h.outDir,
     platform: 'windows-x64',
-    version: '0.10.2',
+    version: '0.10.3',
     sourceCommitSha: h.input.sourceCommitSha,
     sourceStageSha256: 'bad',
   }), /source stage digest/i);

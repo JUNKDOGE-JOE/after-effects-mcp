@@ -10,8 +10,10 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
-### Unreleased
+### [0.10.3] — 2026-08-26
 
+- **OpenCode 静默回合有了停顿看门狗（#327）**——provider 长时间无输出、无工具活动时，回合会被明确终止并给出原因，不再无限显示"生成中"。正常的长任务不受影响：只要模型仍在推进（哪怕几分钟不吐字），回合照常继续。
+- **`ae_nativeExec` 不再返回恒为 false 的 `undo.verified` 字段（#310）**——该字段承诺的验证从未实现，返回它只会误导调用方；现从协议中移除，文档同步更新。
 - **ZXP 内置 OpenCode，全新安装开箱即有可用通道（#321）**——Windows 发布包随附经 SHA-256 校验的官方 OpenCode 可执行文件，面板自动优先使用内置版本（显式环境变量覆盖仍然最高优先），不再要求用户自行安装任何 CLI。构建期由钉版拉取脚本获取产物，正式构建缺产物会直接失败而不是悄悄发出不完整的包。
 - **登录不再需要终端**——Claude 通道新增「打开登录窗口」按钮（登录后本页自动刷新）；Codex 通道新增「一键登录」：面板在隔离环境里代跑登录、自动帮你打开浏览器验证页，失败时才回退为可复制命令。所有修复提示不再出现"请在终端运行 X"式的裸指令。
 - **向导一键安装 Claude Code**——首启向导可直接代跑 Anthropic 官方安装器（明确标注来源），装完点重新检测即可识别；另提供可选的「加入系统 PATH」按钮（免管理员、保留原有 PATH 变量类型、不用会截断 PATH 的 setx），方便你在自己的终端里也能使用。
@@ -348,8 +350,10 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ## English
 
-### Unreleased
+### [0.10.3] — 2026-08-26
 
+- **Silent OpenCode turns get a stall watchdog (#327)** — when a provider produces no output and no tool activity for an extended period, the turn now ends with a clear reason instead of spinning "generating" forever. Healthy long tasks are unaffected: as long as the model keeps progressing, the turn continues.
+- **`ae_nativeExec` no longer returns the always-false `undo.verified` field (#310)** — the promised verification never existed, so the field only misled callers; it is removed from the protocol and the reference updated.
 - **OpenCode ships inside the ZXP — a fresh install has a working channel out of the box (#321)** — the Windows package bundles the official OpenCode executable (SHA-256-verified, pinned version fetched at build time; release builds fail rather than silently ship without it). The panel prefers the bundled copy automatically, with the explicit env-var override still winning.
 - **Signing in no longer needs a terminal** — the Claude channel gains an Open-sign-in-window button (the page refreshes automatically once you're in); the Codex channel gains one-click sign-in that runs the login inside the panel's isolated environment and opens the browser verification page for you, falling back to a copyable command only when that fails. No fix hint tells you to "run X in a terminal" anymore.
 - **The wizard installs Claude Code for you** — one click runs Anthropic's official installer (provenance clearly labeled); Re-check finds it immediately. An optional add-to-PATH button registers CLI directories on the user PATH without admin rights, preserving the value type and never using the PATH-truncating setx.
