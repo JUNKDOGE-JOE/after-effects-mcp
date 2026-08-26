@@ -24,6 +24,7 @@ import { firstErrorDetailLine, serializeErrorDetail } from '../lib/errorDetail.j
 import { createMcpClient } from '../cep/mcpClient';
 import { createToolsApi } from '../cep/toolsApi';
 import { probeClaudeLogin } from '../cep/claudeAuth';
+import { startCodexLogin } from '../cep/codexHeadlessLogin.js';
 import { createClaudeAgentBackend } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
@@ -134,6 +135,8 @@ const T = {
 
 const pkgVersion = pkg.version;
 const PROBE_PENDING_GRACE_MS = 8000;
+const LOGIN_POLL_INTERVAL_MS = 5000;
+const LOGIN_POLL_LIMIT_MS = 5 * 60 * 1000;
 
 function readPref(key, fallback) {
   try {
@@ -143,6 +146,13 @@ function readPref(key, fallback) {
 }
 function writePref(key, value) {
   try { window.localStorage.setItem(key, value); } catch (e) { /* best-effort */ }
+}
+
+function openLoginUrl(url) {
+  if (typeof window?.cep?.util?.openURLInDefaultBrowser !== 'function') {
+    throw new Error('CEP browser opener is unavailable');
+  }
+  window.cep.util.openURLInDefaultBrowser(url);
 }
 
 const DEFAULT_MODEL = claudeSubDescriptor().defaultModelId;
@@ -339,6 +349,8 @@ function Shell({ cs }) {
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(null);
+  const [loginState, setLoginState] = React.useState({ channel: '', status: 'idle', detail: '' });
+  const codexLoginRef = React.useRef(null);
   const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
   const [openCodeProbeStale, setOpenCodeProbeStale] = React.useState(false);
   const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = React.useState(0);
@@ -426,8 +438,14 @@ function Shell({ cs }) {
     />
   );
   const channels = React.useMemo(() => ({
-    claude: claudeChannels({ probe }),
-    codex: codexChannels({ codexProbe }),
+    claude: claudeChannels({
+      probe,
+      canOpenLoginTerminal: typeof platform.openLoginTerminal === 'function',
+    }),
+    codex: codexChannels({
+      codexProbe,
+      loginFallback: loginState.channel === 'cli' && loginState.status === 'fallback',
+    }),
     opencode: openCodeChannels({
       probe: openCodeProbe,
       providers: openCodeAvailableProviders,
@@ -435,8 +453,11 @@ function Shell({ cs }) {
   }), [
     probe,
     codexProbe,
+    loginState.channel,
+    loginState.status,
     openCodeProbe,
     openCodeAvailableProviders,
+    platform,
   ]);
   const effective = pickBackend({ pref: backendPref, channels, channelChoices });
   const effectiveBackendRef = React.useRef(effective.backend);
@@ -869,6 +890,137 @@ function Shell({ cs }) {
     if (backendPref !== 'codex') return undefined;
     return runCodexProbe();
   }, [backendPref, runCodexProbe]);
+
+  const onLoginChannel = React.useCallback((_channel, action) => {
+    if (action?.kind === 'terminal') {
+      setLoginState({
+        channel: 'subscription',
+        status: 'launching',
+        detail: langRef.current === 'en' ? 'Opening the sign-in window…' : '正在打开登录窗口…',
+      });
+      Promise.resolve().then(() => platform.openLoginTerminal('claude')).then((result) => {
+        if (result && result.exitCode !== undefined && result.exitCode !== 0) {
+          throw new Error(result.stderr || 'The sign-in window could not be opened');
+        }
+        setLoginState({
+          channel: 'subscription',
+          status: 'waiting',
+          detail: langRef.current === 'en'
+            ? 'Waiting for Claude sign-in; status refreshes automatically.'
+            : '正在等待 Claude 登录，状态会自动刷新。',
+        });
+      }).catch((error) => {
+        setLoginState({
+          channel: 'subscription',
+          status: 'fallback',
+          detail: error?.message || String(error),
+        });
+      });
+      return;
+    }
+    if (action?.kind !== 'headless' || !codexProbe?.codexHome) return;
+
+    if (codexLoginRef.current) codexLoginRef.current.cancel();
+    setLoginState({
+      channel: 'cli',
+      status: 'waiting',
+      detail: langRef.current === 'en'
+        ? 'Starting Codex sign-in and waiting for browser verification…'
+        : '正在启动 Codex 登录并等待浏览器验证…',
+    });
+    const login = startCodexLogin({
+      adapter: platform,
+      codexHome: codexProbe.codexHome,
+      onUrl: openLoginUrl,
+    });
+    codexLoginRef.current = login;
+    login.promise.then(() => {
+      if (codexLoginRef.current !== login) return;
+      codexLoginRef.current = null;
+      setLoginState({
+        channel: 'cli',
+        status: 'verifying',
+        detail: langRef.current === 'en' ? 'Verifying Codex sign-in…' : '正在验证 Codex 登录状态…',
+      });
+      codexBackend.reset();
+      runCodexProbe();
+    }).catch((error) => {
+      if (codexLoginRef.current !== login) return;
+      codexLoginRef.current = null;
+      setLoginState({
+        channel: 'cli',
+        status: 'fallback',
+        detail: langRef.current === 'en'
+          ? 'Automatic sign-in stopped safely. Retry or use the copy-command fallback below.'
+          : '自动登录已安全停止。请重试，或使用下方的复制命令备用操作。',
+      });
+      panelLogRef.current?.(`Codex login failed: ${error?.message || String(error)}`);
+    });
+  }, [codexBackend, codexProbe?.codexHome, platform, runCodexProbe]);
+
+  React.useEffect(() => {
+    if (loginState.channel !== 'subscription' || loginState.status !== 'waiting') return undefined;
+    if (tab !== 'settings' || backendPref !== 'subscription') return undefined;
+    let alive = true;
+    let timer = null;
+    const deadline = Date.now() + LOGIN_POLL_LIMIT_MS;
+    const poll = () => {
+      probeClaudeLogin({ platform }).then((result) => {
+        if (!alive) return;
+        setProbe(result);
+        if (result?.loggedIn) {
+          setLoginState({ channel: '', status: 'idle', detail: '' });
+          return;
+        }
+        if (Date.now() >= deadline) {
+          setLoginState({
+            channel: 'subscription',
+            status: 'fallback',
+            detail: langRef.current === 'en'
+              ? 'Automatic refresh stopped after five minutes. Open the sign-in window again to retry.'
+              : '自动刷新已在五分钟后停止，请重新打开登录窗口重试。',
+          });
+          return;
+        }
+        timer = setTimeout(poll, LOGIN_POLL_INTERVAL_MS);
+      }).catch(() => {
+        if (alive) timer = setTimeout(poll, LOGIN_POLL_INTERVAL_MS);
+      });
+    };
+    timer = setTimeout(poll, LOGIN_POLL_INTERVAL_MS);
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [backendPref, loginState.channel, loginState.status, platform, tab]);
+
+  React.useEffect(() => {
+    if (loginState.channel !== 'cli' || loginState.status !== 'verifying' || codexProbe === null) return;
+    setLoginState(codexProbe.loggedIn
+      ? { channel: '', status: 'idle', detail: '' }
+      : {
+        channel: 'cli',
+        status: 'fallback',
+        detail: langRef.current === 'en'
+          ? 'Codex sign-in could not be verified. Retry or use the copy-command fallback below.'
+          : '未能验证 Codex 登录状态。请重试，或使用下方的复制命令备用操作。',
+      });
+  }, [codexProbe, loginState.channel, loginState.status]);
+
+  React.useEffect(() => {
+    const loginBackend = loginState.channel === 'cli' ? 'codex' : 'subscription';
+    if (loginState.status === 'idle' || (tab === 'settings' && backendPref === loginBackend)) return;
+    const current = codexLoginRef.current;
+    codexLoginRef.current = null;
+    if (current) current.cancel();
+    setLoginState({ channel: '', status: 'idle', detail: '' });
+  }, [backendPref, loginState.channel, loginState.status, tab]);
+
+  React.useEffect(() => () => {
+    const current = codexLoginRef.current;
+    codexLoginRef.current = null;
+    if (current) current.cancel();
+  }, []);
 
   const runOpenCodeProbe = React.useCallback(() => {
     let alive = true;
@@ -1485,6 +1637,8 @@ function Shell({ cs }) {
                 runClaudeProbe();
               }
             }}
+            onLoginChannel={onLoginChannel}
+            loginState={loginState}
             onRecheckBackend={() => {
               if (backendPref === 'codex') runCodexProbe();
               else if (backendPref === 'opencode') {

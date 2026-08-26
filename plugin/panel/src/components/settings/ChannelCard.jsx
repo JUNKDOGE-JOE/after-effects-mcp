@@ -27,6 +27,8 @@ export function ChannelCard({
   selectedChannel = '',
   onSelectChannel,
   onRecheck,
+  onLogin,
+  loginState = null,
   recheckLabel,
   recheckDisabled = false,
   readOnly = false,
@@ -62,6 +64,12 @@ export function ChannelCard({
         const texts = channelTexts(probe, lang);
         const isActive = probe.channel === activeChannel;
         const choice = channelChoiceState(probe.channel, selectedChannel, lang);
+        const loginAction = !probe.ok && !probe.checking ? probe.loginAction : null;
+        const activeLogin = loginState?.channel === probe.channel ? loginState : null;
+        const loginWaiting = ['launching', 'waiting', 'verifying'].includes(activeLogin?.status);
+        const loginLabel = loginWaiting
+          ? (lang === 'en' ? 'Waiting for sign-in…' : '等待登录…')
+          : (loginAction?.label?.[lang] || loginAction?.label?.zh || '');
         return (
           <div key={probe.channel} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', border: `1px solid ${isActive ? 'var(--border-strong)' : 'var(--border-subtle)'}`, borderRadius: 'var(--radius-md)', background: 'var(--bg-well)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -75,6 +83,14 @@ export function ChannelCard({
               ) : null}
             </div>
             {texts.fixHint ? <div style={{ font: '400 10px/1.5 var(--font-ui)', color: 'var(--text-tertiary)', whiteSpace: 'pre-wrap' }}>{texts.fixHint}</div> : null}
+            {activeLogin?.detail ? <div role="status" style={{ font: '400 10px/1.5 var(--font-ui)', color: 'var(--text-secondary)' }}>{activeLogin.detail}</div> : null}
+            {!readOnly && loginAction && onLogin ? (
+              <div>
+                <Button variant="primary" size="sm" disabled={loginWaiting} onClick={() => onLogin(probe, loginAction)}>
+                  {loginLabel}
+                </Button>
+              </div>
+            ) : null}
             {!readOnly && texts.copyText ? (
               <div>
                 <Button variant="secondary" size="sm" icon="copy" onClick={() => copyLoginCommand(probe.channel, texts.copyText)}>
