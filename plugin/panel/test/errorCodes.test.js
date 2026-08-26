@@ -19,6 +19,7 @@ test('error code table is frozen and contains the complete panel vocabulary', ()
     'EVENT_STREAM_FAILED',
     'MCP_UNREACHABLE',
     'PROCESS_EXITED',
+    'PROVIDER_STREAM_STALLED',
     'RPC_TIMEOUT',
     'SESSION_START_FAILED',
     'SPAWN_FAILED',

@@ -20,6 +20,8 @@ const READY_TIMEOUT_MS = 30000;
 const PROBE_TIMEOUT_MS = 40000;
 const READY_POLL_MS = 250;
 const READY_REQUEST_TIMEOUT_MS = 1500;
+export const OPENCODE_STALL_WARNING_MS = 180000;
+export const OPENCODE_STALL_TIMEOUT_MS = 300000;
 const DEFAULT_PROVIDER_ID = 'opencode';
 const DEFAULT_MODEL_ID = 'hy3-free';
 const STDERR_TAIL_LIMIT = 4096;
@@ -348,6 +350,11 @@ export function createOpenCodeBackend({
   probeTimeoutMs = PROBE_TIMEOUT_MS,
   readyPollMs = READY_POLL_MS,
   readyRequestTimeoutMs = READY_REQUEST_TIMEOUT_MS,
+  stallWarningMs = OPENCODE_STALL_WARNING_MS,
+  stallTimeoutMs = OPENCODE_STALL_TIMEOUT_MS,
+  now = () => Date.now(),
+  setTimeoutImpl = setTimeout,
+  clearTimeoutImpl = clearTimeout,
   sleepImpl = sleep,
   onSweepComplete,
 } = {}) {
@@ -356,6 +363,10 @@ export function createOpenCodeBackend({
     || readyRequestTimeoutMs <= 0
     || readyRequestTimeoutMs < readyPollMs) {
     throw new RangeError('OpenCode readiness request timeout must be at least the poll interval');
+  }
+  if (!Number.isFinite(stallWarningMs) || !Number.isFinite(stallTimeoutMs)
+    || stallWarningMs <= 0 || stallTimeoutMs <= stallWarningMs) {
+    throw new RangeError('OpenCode stall timeout must be greater than its warning timeout');
   }
   // OpenCode isolates sessions and its event bus by request directory. Keep
   // the default cwd stable so resumed sessions publish to this panel's bus.
@@ -392,6 +403,10 @@ export function createOpenCodeBackend({
   let messageDispatched = false;
   let turnStarted = false;
   let stopRequested = false;
+  let stallTimer = null;
+  let stallLastActivityAt = 0;
+  let stallWarningEmitted = false;
+  let messageAbortController = null;
   let generation = 0;
   let toolMeta = { annotations: {} };
   const pendingApprovals = new Map();
@@ -447,6 +462,76 @@ export function createOpenCodeBackend({
   function emitAfterText(evt) {
     assistantDeltaRedactor.flush();
     emit(evt);
+  }
+
+  function clearStallWatchdog() {
+    if (stallTimer !== null) clearTimeoutImpl(stallTimer);
+    stallTimer = null;
+    stallLastActivityAt = 0;
+    stallWarningEmitted = false;
+  }
+
+  function armStallWatchdog() {
+    if (!activeRun || stopRequested || pendingQuestions.size > 0 || pendingApprovals.size > 0) return;
+    if (stallTimer !== null) clearTimeoutImpl(stallTimer);
+    stallLastActivityAt = now();
+    stallWarningEmitted = false;
+    scheduleStallWatchdog();
+  }
+
+  function touchStallWatchdog() {
+    if (activeRun && !stopRequested) armStallWatchdog();
+  }
+
+  function suspendStallWatchdogForPendingInteraction() {
+    clearStallWatchdog();
+  }
+
+  function resumeStallWatchdogAfterPendingInteraction() {
+    if (pendingQuestions.size === 0 && pendingApprovals.size === 0) {
+      armStallWatchdog();
+    }
+  }
+
+  function scheduleStallWatchdog() {
+    if (!activeRun || stopRequested) return;
+    const elapsedMs = Math.max(0, now() - stallLastActivityAt);
+    const deadline = stallWarningEmitted ? stallTimeoutMs : stallWarningMs;
+    stallTimer = setTimeoutImpl(() => {
+      stallTimer = null;
+      if (!activeRun || stopRequested) return;
+      const currentElapsedMs = Math.max(0, now() - stallLastActivityAt);
+      if (!stallWarningEmitted && currentElapsedMs >= stallWarningMs) {
+        stallWarningEmitted = true;
+        emit({ type: 'turn-progress-warning', turnId: activeTurn?.turnId, elapsedMs: currentElapsedMs, warningMs: stallWarningMs });
+      }
+      if (currentElapsedMs >= stallTimeoutMs) {
+        void terminateStalledTurn();
+      } else {
+        scheduleStallWatchdog();
+      }
+    }, Math.max(1, deadline - elapsedMs));
+  }
+
+  async function terminateStalledTurn() {
+    if (!activeRun || stopRequested) return;
+    stopRequested = true;
+    messageAbortController?.abort();
+    await rejectPendingQuestions();
+    if (sessionId) {
+      await postJson('/session/' + encodeURIComponent(sessionId) + '/abort', {}).catch(() => {});
+    }
+    await drainApprovals();
+    if (activeRun) {
+      emitAfterText({
+        type: 'error',
+        kind: 'network',
+        code: 'PROVIDER_STREAM_STALLED',
+        message: 'The OpenCode provider stream was silent for over five minutes, so this turn was stopped.',
+        ...activeTurnFailureFields(),
+      });
+      finishActive();
+    }
   }
 
   function emitTurnProgress(stage) {
@@ -682,6 +767,7 @@ export function createOpenCodeBackend({
   }
 
   function finishActive() {
+    clearStallWatchdog();
     if (!activeResolve) {
       activeRun = null;
       activeAssistantText = '';
@@ -746,11 +832,12 @@ export function createOpenCodeBackend({
     return response.json ? response.json() : {};
   }
 
-  async function postJson(path, body) {
+  async function postJson(path, body, signal) {
     return requestJson(path, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body || {}),
+      ...(signal ? { signal } : {}),
     });
   }
 
@@ -1195,6 +1282,7 @@ export function createOpenCodeBackend({
     }
 
     pendingApprovals.set(permissionId, { name, input });
+    suspendStallWatchdogForPendingInteraction();
     emitAfterText({
       type: 'approval-required',
       toolUseId: permissionId,
@@ -1242,6 +1330,7 @@ export function createOpenCodeBackend({
     if (!type) return;
     const p = (evt && evt.properties) || {};
     if (p.sessionID && (!sessionId || p.sessionID !== sessionId)) return;
+    touchStallWatchdog();
 
     if (type === 'session.status') {
       const st = (p.status && p.status.type) || '';
@@ -1295,6 +1384,7 @@ export function createOpenCodeBackend({
         return;
       }
       pendingQuestions.set(questionId, { questions, settling: false });
+      suspendStallWatchdogForPendingInteraction();
       emitAfterText({
         type: 'question-required',
         toolUseId: questionId,
@@ -1309,6 +1399,7 @@ export function createOpenCodeBackend({
       const pending = pendingQuestions.get(questionId);
       if (!pending) return;
       pendingQuestions.delete(questionId);
+      resumeStallWatchdogAfterPendingInteraction();
       if (type === 'question.rejected') {
         emitAfterText({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
       } else {
@@ -1455,7 +1546,10 @@ export function createOpenCodeBackend({
       const messageBody = { parts: openCodeParts(turn) };
       try {
         messageDispatched = true;
-        const messageRequest = postJson('/session/' + encodeURIComponent(id) + '/message', messageBody);
+        armStallWatchdog();
+        const controller = new AbortController();
+        messageAbortController = controller;
+        const messageRequest = postJson('/session/' + encodeURIComponent(id) + '/message', messageBody, controller.signal);
         emitTurnProgress('dispatch');
         await messageRequest;
       } catch (error) {
@@ -1464,14 +1558,18 @@ export function createOpenCodeBackend({
         adoptedSessionId = null;
         sessionWasAdopted = false;
         const replacementId = await ensureSession();
+        const controller = new AbortController();
+        messageAbortController = controller;
         const replacementRequest = postJson(
           '/session/' + encodeURIComponent(replacementId) + '/message',
           messageBody,
+          controller.signal,
         );
         emitTurnProgress('dispatch');
         await replacementRequest;
       }
     } catch (e) {
+      if (stopRequested || !activeRun) return;
       const httpStatus = extractHttpStatus(e?.httpStatus);
       const fallbackCode = e?.fallbackCode
         || (messageDispatched ? 'TURN_START_FAILED' : 'SESSION_START_FAILED');
@@ -1519,6 +1617,7 @@ export function createOpenCodeBackend({
     const approval = pendingApprovals.get(id);
     if (!approval) return;
     pendingApprovals.delete(id);
+    resumeStallWatchdogAfterPendingInteraction();
     if (decision === 'allow-session') sessionAllowedTools.add(approval.name);
     await replyPermission(id, decision);
     if (decision === 'deny') emit({ type: 'tool-denied', toolUseId: id });
@@ -1561,6 +1660,7 @@ export function createOpenCodeBackend({
     // case it already settled the card, so do not emit a duplicate event.
     if (pendingQuestions.get(id) !== pending) return true;
     pendingQuestions.delete(id);
+    resumeStallWatchdogAfterPendingInteraction();
     emitAfterText({
       type: 'question-resolved',
       toolUseId: id,
@@ -1584,6 +1684,7 @@ export function createOpenCodeBackend({
 
   async function stop() {
     if (activeRun) stopRequested = true;
+    messageAbortController?.abort();
     await rejectPendingQuestions();
     if (sessionId) {
       await postJson('/session/' + encodeURIComponent(sessionId) + '/abort', {}).catch(() => {});
@@ -1602,6 +1703,9 @@ export function createOpenCodeBackend({
     stopping = true;
     sseClosed = true;
     sseStarted = false;
+    clearStallWatchdog();
+    messageAbortController?.abort();
+    messageAbortController = null;
     settlePendingQuestions();
     pendingApprovals.clear();
     sessionAllowedTools.clear();

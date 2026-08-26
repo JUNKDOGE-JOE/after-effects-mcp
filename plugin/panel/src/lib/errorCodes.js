@@ -30,6 +30,7 @@ export const ERROR_CODES = Object.freeze({
   UPSTREAM_ERROR: entry('UPSTREAM_ERROR', 'model', '上游或模型返回失败；请检查模型可用性与服务状态。', 'The upstream or model failed; check model availability and service status.'),
   UPSTREAM_CONNECTION_CLOSED: entry('UPSTREAM_CONNECTION_CLOSED', 'network', '上游连接在返回错误时被中断；本轮不会自动重发，下一条消息将使用新会话。', 'The upstream connection closed while returning an error. This turn is not retried automatically; the next message uses a fresh session.'),
   EVENT_STREAM_FAILED: entry('EVENT_STREAM_FAILED', 'network', '事件流已断开；请检查 OpenCode 进程与本地网络。', 'The event stream disconnected; check the OpenCode process and local network.'),
+  PROVIDER_STREAM_STALLED: entry('PROVIDER_STREAM_STALLED', 'network', '提供方流超过 5 分钟没有响应，本回合已停止；请检查中转或代理连通性后重试。', 'The provider stream was silent for over five minutes, so the turn was stopped; check relay or proxy connectivity and retry.'),
   TURN_INPUT_INVALID: entry('TURN_INPUT_INVALID', 'attachment', '请移除不可用附件或重新选择文件。', 'Remove unavailable attachments or select the files again.'),
   TURN_ABORTED: entry('TURN_ABORTED', 'aborted', '本回合已停止，可在确认没有未决写入后重新发送。', 'The turn was stopped; resend after confirming there is no unresolved write.'),
   CANCELLED: entry('CANCELLED', 'backend', '后端取消了请求；请确认会话仍可用后重试。', 'The backend cancelled the request; confirm the session is still usable before retrying.'),
