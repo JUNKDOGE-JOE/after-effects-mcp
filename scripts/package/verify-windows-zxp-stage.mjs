@@ -26,9 +26,9 @@ const FORBIDDEN_TOP_LEVEL = new Set([
   'helper',
   'panel',
   'platform',
-  'runtime',
   'sidecar',
 ]);
+const OPENCODE_RUNTIME_PATH = 'runtime/opencode/opencode.exe';
 
 function contractError(message) {
   const error = new Error(message);
@@ -70,11 +70,15 @@ function validatePayloadBoundary(stageRoot, files) {
     if (FORBIDDEN_TOP_LEVEL.has(topLevel)) {
       throw contractError(`retired ZXP payload root is present: ${topLevel}`);
     }
-    if (/\.(?:dll|dylib|node|so|exe)$/i.test(relativePath)) {
+    if (topLevel === 'runtime' && relativePath !== OPENCODE_RUNTIME_PATH) {
+      throw contractError(`unexpected runtime payload is present: ${relativePath}`);
+    }
+    if (/\.(?:dll|dylib|node|so|exe)$/i.test(relativePath) && relativePath !== OPENCODE_RUNTIME_PATH) {
       throw contractError(`nested native binary is not allowed in ZXP: ${relativePath}`);
     }
   }
   for (const required of REQUIRED_FILES) regularFile(path.join(stageRoot, ...required.split('/')));
+  regularFile(path.join(stageRoot, ...OPENCODE_RUNTIME_PATH.split('/')));
   const manifest = JSON.parse(fs.readFileSync(path.join(stageRoot, 'host/package.json'), 'utf8'));
   if (manifest.dependencies?.express !== '4.22.2') {
     throw contractError('host Express dependency is not pinned to 4.22.2');

@@ -168,6 +168,71 @@ test('Windows standard candidates find common fresh CLI installer directories', 
   }
 });
 
+test('Windows prefers the bundled OpenCode runtime after an explicit override', async () => {
+  const calls = [];
+  const bundled = 'C:\\Extensions\\com.aemcp.panel\\runtime\\opencode\\opencode.exe';
+  const pathCopy = 'C:\\Tools\\opencode.exe';
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp',
+    extensionRoot: 'C:\\Extensions\\com.aemcp.panel', env: { Path: 'C:\\Tools' },
+    fs: fakeFs(new Set([bundled, pathCopy]), {}, { [bundled]: pe64(0x8664), [pathCopy]: pe64(0x8664) }),
+    spawnImpl: processFactory([{ stdout: 'opencode 1.18.23' }], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('opencode', { requiredArch: 'x64' });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, bundled);
+  assert.equal(result.source, 'runtime');
+  assert.deepEqual(calls.map((call) => call.file), [bundled]);
+});
+
+test('Windows OpenCode runtime lookup is empty without an extension root', async () => {
+  const calls = [];
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: { Path: '' },
+    fs: fakeFs(new Set()), spawnImpl: processFactory([{ code: 1 }, { code: 1 }], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('opencode');
+
+  assert.equal(result.ok, false);
+  assertOnlyRegistryQueries(calls);
+});
+
+test('Windows OpenCode override wins over the bundled runtime', async () => {
+  const calls = [];
+  const override = 'C:\\Override\\opencode.exe';
+  const bundled = 'C:\\Extensions\\com.aemcp.panel\\runtime\\opencode\\opencode.exe';
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp',
+    extensionRoot: 'C:\\Extensions\\com.aemcp.panel', env: { Path: '' },
+    fs: fakeFs(new Set([override, bundled]), {}, { [override]: pe64(0x8664), [bundled]: pe64(0x8664) }),
+    spawnImpl: processFactory([{ stdout: 'opencode 1.19.0' }], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('opencode', { overridePath: override, requiredArch: 'x64' });
+
+  assert.equal(result.path, override);
+  assert.equal(result.source, 'override');
+});
+
+test('Windows OpenCode falls back to PATH when the bundled runtime is absent', async () => {
+  const calls = [];
+  const pathCopy = 'C:\\Tools\\opencode.exe';
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp',
+    extensionRoot: 'C:\\Extensions\\com.aemcp.panel', env: { Path: 'C:\\Tools' },
+    fs: fakeFs(new Set([pathCopy]), {}, { [pathCopy]: pe64(0x8664) }),
+    spawnImpl: processFactory([{ stdout: 'opencode 1.19.0' }], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('opencode', { requiredArch: 'x64' });
+
+  assert.equal(result.path, pathCopy);
+  assert.equal(result.source, 'path');
+});
+
 test('Windows resolution reads expanded registry PATH entries for default environments', async () => {
   const calls = [];
   const executable = 'C:\\Users\\a\\.local\\bin\\claude.exe';
