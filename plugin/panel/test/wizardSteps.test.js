@@ -54,3 +54,16 @@ test('optional Node install failure keeps its log tail', () => {
   assert.equal(state.node.status, 'fail');
   assert.ok(state.node.logTail.includes('boom'));
 });
+
+test('reducer retains detected executable path provenance', () => {
+  const state = stepReducer(initialStepStates(), {
+    type: 'detect-result',
+    id: 'claude',
+    ok: true,
+    version: '2.1.0',
+    path: 'C:\\Users\\a\\.local\\bin\\claude.exe',
+    source: 'standard',
+  });
+  assert.equal(state.claude.path, 'C:\\Users\\a\\.local\\bin\\claude.exe');
+  assert.equal(state.claude.source, 'standard');
+});

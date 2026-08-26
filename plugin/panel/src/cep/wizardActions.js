@@ -49,13 +49,28 @@ export async function detectTool(id, options = {}) {
 
 export function buildInstallCommands({ platform } = {}) {
   const adapter = platform || createPlatformAdapter();
-  if (typeof adapter.legacyWizardInstallCommands !== 'function') return {};
-  const commands = adapter.legacyWizardInstallCommands({
-    panelVersion: '',
-    repoRoot: '',
-    repo: '',
-  });
-  return commands && commands.node ? { node: commands.node } : {};
+  const commands = typeof adapter.legacyWizardInstallCommands === 'function'
+    ? adapter.legacyWizardInstallCommands({
+      panelVersion: '',
+      repoRoot: '',
+      repo: '',
+    })
+    : {};
+  const result = commands && commands.node ? { node: commands.node } : {};
+  if (adapter.id === 'windows-x64' || adapter.platform === 'win32') {
+    result.claude = {
+      file: 'powershell',
+      executableId: 'powershell',
+      args: [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        'irm https://claude.ai/install.ps1 | iex',
+      ],
+    };
+  }
+  return result;
 }
 
 export async function runAction({

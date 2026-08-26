@@ -32,6 +32,9 @@ const W = {
     copyLog: '复制日志',
     optionalNode: '系统 Node（stdio 客户端可选）',
     optionalNodeHint: '只有 Claude Desktop 这类只支持 stdio 的客户端才需要。',
+    claudeInstallHint: '这会从 claude.ai 下载并运行 Anthropic 官方安装程序；面板使用已检测到的绝对路径，不依赖系统 PATH。',
+    pathHint: '加入后可在你自己的终端使用；面板使用已检测到的绝对路径，不依赖系统 PATH。',
+    addToPath: '加入系统 PATH（可选，方便你在自己的终端里使用）',
     panelOpenNote: '面板开着才能连接；关闭或重载面板后客户端需要重连。',
     directUrl: '或直接使用这个地址',
   },
@@ -54,6 +57,9 @@ const W = {
     copyLog: 'Copy log',
     optionalNode: 'System Node (optional for stdio clients)',
     optionalNodeHint: 'Only stdio-only clients such as Claude Desktop need this step.',
+    claudeInstallHint: "This downloads and runs Anthropic's official installer from claude.ai; the panel uses the detected absolute path and does not require PATH.",
+    pathHint: 'Add it to use this CLI in your own terminal; the panel uses the detected absolute path and does not require PATH.',
+    addToPath: 'Add to user PATH (optional, for your terminal)',
     panelOpenNote: 'The panel must stay open. Clients reconnect after it closes or reloads.',
     directUrl: 'Or use this address directly',
   },
@@ -109,7 +115,7 @@ function CodeBlock({ code, copyLabel, onCopy, wrap = false }) {
   );
 }
 
-function CheckRow({ label, state, t, onDetect, onInstall, commandPreview, hint }) {
+function CheckRow({ label, state, t, onDetect, onInstall, commandPreview, hint, pathEntry, onAddToPath }) {
   const status = state && state.status ? state.status : 'idle';
   const busy = status === 'checking' || status === 'running';
   const problem = status === 'missing' || status === 'fail';
@@ -183,6 +189,11 @@ function CheckRow({ label, state, t, onDetect, onInstall, commandPreview, hint }
             <Button variant="secondary" size="sm" onClick={onInstall}>{t.install}</Button>
           </div>
         ) : null}
+        {pathEntry && onAddToPath ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Button variant="secondary" size="sm" onClick={onAddToPath}>{t.addToPath}</Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -204,6 +215,8 @@ export function WizardScreen({
   onDetect,
   onInstall,
   commandPreviews = {},
+  pathOffers = {},
+  onAddToPath,
 }) {
   const t = W[lang] || W.zh;
   const promptText = mcpReady ? externalClientSetupPrompt({
@@ -271,6 +284,11 @@ export function WizardScreen({
                 state={stepStates[id] || EMPTY_STEPS[id]}
                 t={t}
                 onDetect={() => onDetect && onDetect(id)}
+                hint={id === 'claude' ? t.claudeInstallHint : (pathOffers[id] ? t.pathHint : '')}
+                commandPreview={commandPreviews[id] || ''}
+                onInstall={() => onInstall && onInstall(id)}
+                pathEntry={pathOffers[id]}
+                onAddToPath={() => onAddToPath && onAddToPath(id)}
               />
             ))}
             <div>
@@ -347,10 +365,12 @@ export function WizardScreen({
                 label={t.optionalNode}
                 state={stepStates[id] || EMPTY_STEPS[id]}
                 t={t}
-                hint={t.optionalNodeHint}
+                hint={pathOffers[id] ? `${t.optionalNodeHint} ${t.pathHint}` : t.optionalNodeHint}
                 commandPreview={commandPreviews[id] || ''}
                 onDetect={() => onDetect && onDetect(id)}
                 onInstall={() => onInstall && onInstall(id)}
+                pathEntry={pathOffers[id]}
+                onAddToPath={() => onAddToPath && onAddToPath(id)}
               />
             ))}
           </React.Fragment>

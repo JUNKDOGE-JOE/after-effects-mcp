@@ -6,7 +6,7 @@ const LOG_TAIL = 4096;
 const ALL_STEPS = [...HOST_STEPS, ...CLI_STEPS, ...OPTIONAL_CLIENT_STEPS];
 
 function emptyState() {
-  return { status: 'idle', version: '', logTail: '' };
+  return { status: 'idle', version: '', path: '', source: '', logTail: '' };
 }
 
 export function initialStepStates() {
@@ -41,6 +41,8 @@ export function stepReducer(state, action) {
         status: action.ok ? 'ok' : 'missing',
         version: action.ok ? (action.version || '') : '',
         logTail: action.detail || current.logTail,
+        path: action.ok ? (action.path || '') : '',
+        source: action.ok ? (action.source || '') : '',
       });
     case 'run-start':
       return patchStep(state, action.id, { status: 'running', logTail: '' });
