@@ -2,8 +2,12 @@
 
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const express = require('express');
+const { createStatePaths } = require('../state-paths');
 
 function request(port, headers, body) {
     return new Promise(function (resolve, reject) {
@@ -28,10 +32,20 @@ function request(port, headers, body) {
     });
 }
 
-async function fixture() {
+async function fixture(options) {
+    const input = options || {};
+    const stateRoot = input.stateRoot
+        || fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-server-integration-'));
     delete require.cache[require.resolve('../server')];
     const server = require('../server');
-    server.setRuntimeDependencies({ express });
+    server.setRuntimeDependencies({
+        express,
+        statePaths: createStatePaths({
+            stateDir: stateRoot,
+            home: input.home,
+            homedir: function () { throw new Error('integration tests must not resolve the real home'); },
+        }),
+    });
     server.activity._reset();
     server.setPaused(false);
     server.setCSInterface({
@@ -43,7 +57,7 @@ async function fixture() {
     const listener = await new Promise(function (resolve) {
         const value = app.listen(0, '127.0.0.1', function () { resolve(value); });
     });
-    return { server, listener, port: listener.address().port };
+    return { server, listener, port: listener.address().port, stateRoot };
 }
 
 async function initialize(port, name) {
@@ -96,5 +110,57 @@ test('MCP ae_exec shares paused/blocked gates and activity records with /exec', 
     } finally {
         host.server.setPaused(false);
         await new Promise(function (resolve) { host.listener.close(resolve); });
+        fs.rmSync(host.stateRoot, { recursive: true, force: true });
+    }
+});
+
+test('initialize rejects a client listed in the injected blocked-clients file', async () => {
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-blocked-state-'));
+    fs.writeFileSync(
+        path.join(stateRoot, 'blocked-clients.json'),
+        JSON.stringify(['mcp-exec-integration']),
+        'utf8',
+    );
+    const host = await fixture({ stateRoot });
+    try {
+        const rejected = await request(host.port, {}, {
+            jsonrpc: '2.0', id: 10, method: 'initialize',
+            params: { clientInfo: { name: 'mcp-exec-integration' } },
+        });
+        assert.equal(rejected.status, 200);
+        assert.equal(rejected.headers['mcp-session-id'], undefined);
+        assert.equal(rejected.body.error.data.code, 'CLIENT_BLOCKED');
+    } finally {
+        await new Promise(function (resolve) { host.listener.close(resolve); });
+        fs.rmSync(stateRoot, { recursive: true, force: true });
+    }
+});
+
+test('a polluted fake user home cannot affect an injected clean state root', async () => {
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-polluted-home-'));
+    const pollutedState = path.join(fakeHome, '.ae-mcp');
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-clean-state-'));
+    fs.mkdirSync(pollutedState, { recursive: true });
+    fs.writeFileSync(
+        path.join(pollutedState, 'blocked-clients.json'),
+        JSON.stringify(['mcp-exec-integration']),
+        'utf8',
+    );
+    const host = await fixture({ stateRoot, home: fakeHome });
+    try {
+        const initialized = await request(host.port, {}, {
+            jsonrpc: '2.0', id: 11, method: 'initialize',
+            params: { clientInfo: { name: 'mcp-exec-integration' } },
+        });
+        assert.equal(initialized.status, 200);
+        assert.match(initialized.headers['mcp-session-id'], /^[0-9a-f]{32}$/);
+        assert.deepEqual(JSON.parse(fs.readFileSync(
+            path.join(pollutedState, 'blocked-clients.json'),
+            'utf8',
+        )), ['mcp-exec-integration']);
+    } finally {
+        await new Promise(function (resolve) { host.listener.close(resolve); });
+        fs.rmSync(stateRoot, { recursive: true, force: true });
+        fs.rmSync(fakeHome, { recursive: true, force: true });
     }
 });

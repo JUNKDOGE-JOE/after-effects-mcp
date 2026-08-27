@@ -32,6 +32,7 @@ const definition = {
 };
 
 function library(deps) {
+    if (deps && typeof deps.getToolLibrary === 'function') return deps.getToolLibrary();
     return (deps && deps.toolLibrary) || defaultLibrary();
 }
 

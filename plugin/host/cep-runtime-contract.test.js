@@ -21,6 +21,7 @@ const test = require('node:test');
 const CEP_EXECUTED_FILES = [
     'cep-runtime-compat.js',
     'server.js',
+    'state-paths.js',
     'jsx-bridge.js',
     'auth-token.js',
     'activity.js',

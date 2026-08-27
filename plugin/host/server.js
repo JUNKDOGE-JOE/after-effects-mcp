@@ -10,12 +10,14 @@ const hostLog = require('./host-log');
 const nativeAegp = require('./native-aegp-client');
 const mountMcp = require('./mcp');
 const { createClientBlocklist } = require('./mcp/client-blocklist');
+const { createStatePaths } = require('./state-paths');
 const PKG_VERSION = require('./package.json').version;
 
 let app = null;
 let httpServer = null;
 let currentPort = null;
 let runtimeDependencies = null;
+let activeStatePaths = null;
 // The shared secret /exec requires. Populated in start() so the file is read
 // (and generated if missing) exactly once per host lifetime.
 let execToken = null;
@@ -38,7 +40,18 @@ function setRuntimeDependencies(dependencies) {
     if (!dependencies || typeof dependencies.express !== 'function') {
         throw new TypeError('runtime dependencies require an Express factory');
     }
-    runtimeDependencies = Object.freeze({ express: dependencies.express });
+    runtimeDependencies = Object.freeze({
+        express: dependencies.express,
+        statePaths: dependencies.statePaths || null,
+    });
+    activeStatePaths = runtimeDependencies.statePaths;
+    clientBlocklist = null;
+    blocked.clear();
+}
+
+function statePathsForHost() {
+    if (!activeStatePaths) activeStatePaths = createStatePaths();
+    return activeStatePaths;
 }
 
 function expressFactory() {
@@ -66,6 +79,7 @@ function touchClient(label) {
 function ensureClientBlocklist() {
     if (clientBlocklist) return clientBlocklist;
     clientBlocklist = createClientBlocklist({
+        statePaths: statePathsForHost(),
         logger: function (event) { hostLog.record(event); },
     });
     blocked.clear();
@@ -119,7 +133,7 @@ function getConnectionInfo() {
 
 function regenerateToken(cb) {
     try {
-        const token = authToken.regenerate();
+        const token = authToken.regenerate({ statePaths: statePathsForHost() });
         execToken = token;
         if (cb) cb(null, token);
         return token;
@@ -815,6 +829,7 @@ function buildApp() {
         isPaused,
         recordMcpActivity: function (event) { activity.record(event); },
         updateActivity: function (id, patch) { return activity.update(id, patch); },
+        statePaths: statePathsForHost(),
     });
 
     a.get('/health', (req, res) => {
@@ -1052,7 +1067,7 @@ function buildApp() {
 
     a.post('/exec', async (req, res) => {
         // Require the shared-secret token. /exec runs arbitrary ExtendScript, so
-        // every caller must prove it can read ~/.ae-mcp/auth-token. Constant-time
+    // every caller must prove it can read the configured host auth token. Constant-time
         // compare to avoid leaking the token via timing.
         const provided = req.get(authToken.HEADER);
         if (!authToken.tokenMatches(provided, execToken)) {
@@ -1089,13 +1104,13 @@ function start(port, callback) {
     if (httpServer) {
         return callback(new Error('already started; call restart() to change port'));
     }
-    hostLog.init();
+    hostLog.init({ statePaths: statePathsForHost() });
     restoreHostConsole = hostLog.captureConsole(console);
     unsubscribeHostActivity = hostLog.subscribeActivity(activity);
     // Ensure the shared-secret token exists (generate on first run) before we
     // accept any /exec request. Panel and host-side clients share this file.
     try {
-        execToken = authToken.ensureToken();
+        execToken = authToken.ensureToken({ statePaths: statePathsForHost() });
     } catch (e) {
         return callback(new Error('failed to initialize auth token: ' + e.message));
     }

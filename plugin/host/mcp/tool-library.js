@@ -6,8 +6,8 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { createStatePaths } = require('../state-paths');
 const { canonicalJson } = require('./canonical-json');
 
 const ARTIFACT_KEYS = [
@@ -32,11 +32,13 @@ const USER_ID = /^user:([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{
 const SHA256 = /^[0-9a-f]{64}$/;
 const MAX_SCAN_BYTES = 5 * 1024 * 1024;
 
-const ENVIRONMENT = Object.freeze({
-    home: process.env.AE_MCP_HOME || null,
-    toolRoot: process.env.AE_MCP_TOOL_DIR || path.join(os.homedir(), '.ae-mcp', 'tools'),
-    skillRoot: process.env.AE_MCP_SKILL_DIR || path.join(os.homedir(), '.ae-mcp', 'skills'),
+const ENVIRONMENT = {};
+Object.defineProperties(ENVIRONMENT, {
+    home: { enumerable: true, get: function () { return createStatePaths().stateDir; } },
+    toolRoot: { enumerable: true, get: function () { return createStatePaths().tools; } },
+    skillRoot: { enumerable: true, get: function () { return createStatePaths().skills; } },
 });
+Object.freeze(ENVIRONMENT);
 
 function own(value, key) {
     return Object.prototype.hasOwnProperty.call(value, key);
@@ -426,8 +428,16 @@ function skillFromWire(wire) {
 class ToolLibrary {
     constructor(options) {
         const input = options || {};
-        this.toolRoot = path.resolve(input.toolRoot || ENVIRONMENT.toolRoot);
-        this.skillRoot = path.resolve(input.skillRoot || ENVIRONMENT.skillRoot);
+        const statePaths = input.statePaths || createStatePaths({
+            stateDir: input.stateDir,
+            env: input.env,
+            home: input.home,
+            homedir: input.homedir,
+            toolDir: input.toolRoot,
+            skillDir: input.skillRoot,
+        });
+        this.toolRoot = path.resolve(input.toolRoot || statePaths.tools);
+        this.skillRoot = path.resolve(input.skillRoot || statePaths.skills);
         this.bundledRoot = input.bundledRoot || path.join(__dirname, 'skills_bundled');
         this.indexPath = path.join(this.toolRoot, 'index.json');
         this.artifactsRoot = path.join(this.toolRoot, 'artifacts');
@@ -760,8 +770,8 @@ class ToolLibrary {
 }
 
 let singleton;
-function defaultLibrary() {
-    if (!singleton) singleton = new ToolLibrary();
+function defaultLibrary(options) {
+    if (!singleton) singleton = new ToolLibrary(options);
     return singleton;
 }
 

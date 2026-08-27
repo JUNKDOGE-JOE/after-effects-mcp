@@ -1,9 +1,13 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const express = require('express');
+const { createStatePaths } = require('../state-paths');
 
 function request(port, headers, body) {
     return new Promise(function (resolve, reject) {
@@ -25,9 +29,16 @@ function request(port, headers, body) {
 }
 
 async function fixture() {
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-read-state-'));
     delete require.cache[require.resolve('../server')];
     const server = require('../server');
-    server.setRuntimeDependencies({ express });
+    server.setRuntimeDependencies({
+        express,
+        statePaths: createStatePaths({
+            stateDir: stateRoot,
+            homedir: function () { throw new Error('read integration must not resolve the real home'); },
+        }),
+    });
     server.setPaused(false);
     server.setCSInterface({
         evalScript: function (_jsx, callback) {
@@ -57,7 +68,7 @@ async function fixture() {
     const app = server.buildApp();
     const listener = await new Promise(function (resolve) { resolve(app.listen(0, '127.0.0.1')); });
     await new Promise(function (resolve) { listener.once('listening', resolve); });
-    return { server, listener, port: listener.address().port };
+    return { server, listener, port: listener.address().port, stateRoot };
 }
 
 async function initialize(port) {
@@ -81,5 +92,6 @@ test('MCP exposes ae_read through the real /mcp tools/call route', async () => {
         assert.equal(called.body.result.structuredContent.layers[0].name, 'Layer');
     } finally {
         await new Promise(function (resolve) { host.listener.close(resolve); });
+        fs.rmSync(host.stateRoot, { recursive: true, force: true });
     }
 });
