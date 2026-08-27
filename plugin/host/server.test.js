@@ -13,6 +13,7 @@ const FULL_REGISTRY = require(
     '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json'
 );
 const authToken = require('./auth-token');
+const { createStatePaths } = require('./state-paths');
 
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
@@ -43,8 +44,22 @@ function nativeInvokeBody() {
     };
 }
 
+const stateRoots = [];
+test.after(function () {
+    stateRoots.forEach(function (root) { fs.rmSync(root, { recursive: true, force: true }); });
+});
+
+function isolatedStatePaths() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-server-state-'));
+    stateRoots.push(root);
+    return createStatePaths({
+        stateDir: root,
+        homedir: function () { throw new Error('server tests must not resolve the real home'); },
+    });
+}
+
 function bindRuntimeDependencies(server) {
-    server.setRuntimeDependencies({ express });
+    server.setRuntimeDependencies({ express, statePaths: isolatedStatePaths() });
     return server;
 }
 
@@ -352,11 +367,11 @@ test('token matching is exact and rejects non-string input', () => {
 
 test('token creation is idempotent and regeneration replaces it', (t) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-token-'));
-    t.mock.method(os, 'homedir', function () { return root; });
-    const first = authToken.ensureToken();
+    const statePaths = createStatePaths({ stateDir: root });
+    const first = authToken.ensureToken({ statePaths });
     assert.match(first, /^[0-9a-f]{64}$/);
-    assert.equal(authToken.ensureToken(), first);
-    const second = authToken.regenerate();
+    assert.equal(authToken.ensureToken({ statePaths }), first);
+    const second = authToken.regenerate({ statePaths });
     assert.match(second, /^[0-9a-f]{64}$/);
     assert.notEqual(second, first);
     fs.rmSync(root, { recursive: true, force: true });

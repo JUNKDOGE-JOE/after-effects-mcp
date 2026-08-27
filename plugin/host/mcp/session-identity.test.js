@@ -8,6 +8,7 @@ const path = require('node:path');
 const test = require('node:test');
 const express = require('express');
 const { createClientBlocklist } = require('./client-blocklist');
+const { createStatePaths } = require('../state-paths');
 
 function request(port, method, pathname, headers, body) {
     return new Promise(function (resolve, reject) {
@@ -52,19 +53,16 @@ function initializeMessage(id, name, version) {
 }
 
 async function fixture() {
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-identity-state-'));
     delete require.cache[require.resolve('../server')];
     const server = require('../server');
-    const blocked = new Set();
-    server._setClientBlocklistForTest({
-        list: function () { return Array.from(blocked); },
-        has: function (name) { return blocked.has(name); },
-        set: function (name, value) {
-            if (value) blocked.add(name);
-            else blocked.delete(name);
-            return true;
-        },
+    server.setRuntimeDependencies({
+        express,
+        statePaths: createStatePaths({
+            stateDir: stateRoot,
+            homedir: function () { throw new Error('identity tests must not resolve the real home'); },
+        }),
     });
-    server.setRuntimeDependencies({ express });
     server.setPaused(false);
     server.setCSInterface({
         evalScript: function (_jsx, callback) { callback('{"ok":true,"resultType":"string","result":"identity-ok"}'); },
@@ -74,12 +72,13 @@ async function fixture() {
         resolve(app.listen(0, '127.0.0.1'));
     });
     await new Promise(function (resolve) { listener.once('listening', resolve); });
-    return { server, listener, port: listener.address().port };
+    return { server, listener, port: listener.address().port, stateRoot };
 }
 
 async function closeFixture(host) {
     await new Promise(function (resolve) { host.listener.close(resolve); });
     host.server.setPaused(false);
+    fs.rmSync(host.stateRoot, { recursive: true, force: true });
 }
 
 test('MCP identity blocks existing and new sessions, then restores after unblock', async () => {
@@ -172,7 +171,7 @@ test('MCP kill switch returns a structured JSON-RPC error for an established ses
 
 test('blocked client names persist atomically and corrupt files fail open with a host log', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-blocklist-'));
-    const filePath = path.join(root, '.ae-mcp', 'blocked-clients.json');
+    const filePath = createStatePaths({ stateDir: root }).blockedClients;
     const events = [];
     try {
         const first = createClientBlocklist({ filePath, logger: function (event) { events.push(event); } });

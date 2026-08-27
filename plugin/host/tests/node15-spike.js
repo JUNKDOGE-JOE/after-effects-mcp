@@ -4,9 +4,13 @@
 // fake timers: this is the CEP 11 / Node 15 compatibility gate.
 require('../cep-runtime-compat.js');
 const assert = require('assert');
+const fs = require('fs');
 const http = require('http');
+const os = require('os');
+const path = require('path');
 const express = require('express');
 const server = require('../server.js');
+const { createStatePaths } = require('../state-paths.js');
 
 function request(port, method, path, headers, body) {
     return new Promise(function (resolve, reject) {
@@ -64,7 +68,11 @@ function close(listener) {
 }
 
 async function main() {
-    server.setRuntimeDependencies({ express });
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-node15-state-'));
+    server.setRuntimeDependencies({
+        express,
+        statePaths: createStatePaths({ stateDir: stateRoot }),
+    });
     server.activity._reset();
     server.setPaused(false);
     server.setCSInterface({
@@ -155,6 +163,7 @@ async function main() {
     } finally {
         server.setPaused(false);
         await close(listener);
+        fs.rmSync(stateRoot, { recursive: true, force: true });
     }
 }
 

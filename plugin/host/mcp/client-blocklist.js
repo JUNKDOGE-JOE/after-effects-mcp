@@ -1,11 +1,12 @@
 'use strict';
 
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { createStatePaths } = require('../state-paths');
 
-function defaultPath() {
-    return path.join(os.homedir(), '.ae-mcp', 'blocked-clients.json');
+function defaultPath(options) {
+    const input = options || {};
+    return (input.statePaths || createStatePaths(input)).blockedClients;
 }
 
 function normalizeName(value) {
@@ -68,7 +69,7 @@ function writeNames(fileSystem, filePath, names, logger) {
 function createClientBlocklist(options) {
     const input = options || {};
     const fileSystem = input.fsImpl || fs;
-    const filePath = input.filePath || defaultPath();
+    const filePath = input.filePath || defaultPath(input);
     const logger = typeof input.logger === 'function' ? input.logger : null;
     const names = new Set(readNames(fileSystem, filePath, logger));
 

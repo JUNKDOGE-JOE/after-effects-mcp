@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Manual real-AE acceptance. It is intentionally not part of npm test / CI.
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { isDeepStrictEqual } from 'util';
+import statePathsModule from '../../state-paths.js';
+
+const { createStatePaths } = statePathsModule;
+const hostStatePaths = createStatePaths();
 
 const sections = [
     'status',
@@ -468,7 +471,7 @@ async function main() {
         for (let i = 0; i < 20; i += 1) {
             await call('ae_exec', { code: '"snapshot-clean-' + i + '"' });
         }
-        const token = fs.readFileSync(path.join(os.homedir(), '.ae-mcp', 'auth-token'), 'utf8').trim();
+        const token = fs.readFileSync(hostStatePaths.authToken, 'utf8').trim();
         const cleanupResponse = await fetch(hostUrl + '/exec', {
             method: 'POST',
             headers: {
@@ -546,7 +549,7 @@ async function main() {
         );
         // End-to-end execute: throwaway user skill in the real skill dir, removed afterwards.
         // JSX template values are JSON-encoded on render, so ${marker} must not be quoted.
-        const skillDir = path.join(os.homedir(), '.ae-mcp', 'skills');
+        const skillDir = hostStatePaths.skills;
         const probePath = path.join(skillDir, 'aemcp-live-probe.json');
         fs.mkdirSync(skillDir, { recursive: true });
         fs.writeFileSync(probePath, JSON.stringify({

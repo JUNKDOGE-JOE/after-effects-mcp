@@ -2,8 +2,8 @@
 // CEP 11 runs Node 15, so keep this CommonJS file dependency-free and avoid
 // node:-prefixed builtins.
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { createStatePaths } = require('./state-paths');
 
 const MAX_MEMORY = 2000;
 const RETENTION_DAYS = 14;
@@ -81,7 +81,8 @@ function cleanupOldFiles(now) {
 function init(options = {}) {
     fileSystem = options.fsImpl || fs;
     nowImpl = typeof options.now === 'function' ? options.now : () => new Date();
-    logDir = options.dir || process.env.AE_MCP_LOG_DIR || path.join(os.homedir(), '.ae-mcp', 'logs');
+    const statePaths = options.statePaths || createStatePaths(options);
+    logDir = options.dir || statePaths.logs;
     entries = [];
     sequence = 0;
     writeErrors = 0;
