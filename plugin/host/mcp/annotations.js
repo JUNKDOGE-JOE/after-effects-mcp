@@ -19,6 +19,7 @@ const VERB_ANNOTATIONS = Object.freeze({
     ae_validateExpressions: ann(true, false, true),
     ae_nativeExec: ann(false, true, true),
     ae_toolUse: ann(false, true, false),
+    ae_toolSave: ann(false, false, false),
     ae_toolSearch: ann(true, false, true),
     ae_skillUse: ann(false, true, false),
 });
