@@ -65,6 +65,7 @@ const CEP_EXECUTED_FILES = [
     'mcp/tools/native-exec.js',
     'mcp/tools/tool-search.js',
     'mcp/tools/tool-use.js',
+    'mcp/tools/tool-save.js',
     'mcp/tools/skill-use.js',
     // Generated twins the host requires at runtime. They live under plugin/host because
     // only plugin/ ships to the CEP extension directory (native/ does not).

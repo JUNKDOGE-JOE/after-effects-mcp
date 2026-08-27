@@ -67,7 +67,7 @@ async function initialize(port, name) {
     return result.headers['mcp-session-id'];
 }
 
-test('MCP ae_exec shares paused/blocked gates and activity records with /exec', async () => {
+test('MCP exec capture promotes through toolSave before search and toolUse', async () => {
     const host = await fixture();
     try {
         const client = 'mcp-exec-integration';
@@ -98,8 +98,21 @@ test('MCP ae_exec shares paused/blocked gates and activity records with /exec', 
             params: { name: 'ae_toolSearch', arguments: { name: artifactId } },
         });
         assert.equal(inspected.body.result.structuredContent.artifact.id, artifactId);
-        const used = await request(host.port, headers, {
+        const saved = await request(host.port, headers, {
             jsonrpc: '2.0', id: 24, method: 'tools/call',
+            params: { name: 'ae_toolSave', arguments: { name: artifactId } },
+        });
+        assert.equal(saved.body.result.structuredContent.ok, true);
+        assert.equal(saved.body.result.structuredContent.artifact.status, 'saved');
+        const visible = await request(host.port, headers, {
+            jsonrpc: '2.0', id: 25, method: 'tools/call',
+            params: { name: 'ae_toolSearch', arguments: {} },
+        });
+        assert.ok(visible.body.result.structuredContent.artifacts.some(function (item) {
+            return item.id === artifactId;
+        }));
+        const used = await request(host.port, headers, {
+            jsonrpc: '2.0', id: 26, method: 'tools/call',
             params: { name: 'ae_toolUse', arguments: { name: artifactId } },
         });
         assert.equal(used.body.result.structuredContent.ok, true);
@@ -128,7 +141,7 @@ test('MCP ae_exec shares paused/blocked gates and activity records with /exec', 
         assert.match(paused.body.error.message, /paused/);
         assert.equal(host.server.activity.list().filter(function (event) {
             return event.client === client;
-        }).length, 6);
+        }).length, 8);
     } finally {
         host.server.setPaused(false);
         await new Promise(function (resolve) { host.listener.close(resolve); });
