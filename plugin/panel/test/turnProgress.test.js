@@ -41,6 +41,8 @@ test('turnProgressText localizes backend and generic stages', () => {
   assert.equal(turnProgressText('spawn', 'codex', 'en'), 'Starting Codex…');
   assert.equal(turnProgressText('spawn', 'opencode', 'zh'), '正在启动 OpenCode…');
   assert.equal(turnProgressText('session', 'opencode', 'en'), 'Creating session…');
+  assert.equal(turnProgressText('mcp-rebuild', 'opencode', 'zh'), '与 AE 宿主的连接已失效，正在重建…');
+  assert.equal(turnProgressText('mcp-rebuild', 'opencode', 'en'), 'The connection to the AE host was lost. Rebuilding…');
   assert.equal(turnProgressText('dispatch', 'subscription', 'zh'), '等待模型回复…');
   assert.equal(turnProgressText('thinking', 'subscription', 'en'), 'Model is thinking…');
   assert.equal(turnProgressText('unknown', 'codex', 'en'), '');

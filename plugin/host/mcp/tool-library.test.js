@@ -8,11 +8,13 @@ const path = require('node:path');
 const test = require('node:test');
 const { buildTools } = require('./tools');
 const {
+    ENVIRONMENT,
     ToolLibrary,
     canonicalJson,
     computeContentHash,
     validateArgsSchema,
 } = require('./tool-library');
+const { createStatePaths } = require('../state-paths');
 
 function tempRoot(t) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-tool-library-'));
@@ -85,6 +87,16 @@ function toolContext() {
         port: 11488,
     };
 }
+
+test('ToolLibrary accepts shared state paths while preserving fine directory overrides', (t) => {
+    const root = tempRoot(t);
+    const statePaths = createStatePaths({ stateDir: root });
+    const customSkills = path.join(root, 'custom-skills');
+    const library = new ToolLibrary({ statePaths, skillRoot: customSkills });
+    assert.equal(library.toolRoot, path.join(root, 'tools'));
+    assert.equal(library.skillRoot, customSkills);
+    assert.equal(Object.isFrozen(ENVIRONMENT), true);
+});
 
 test('canonical content addressing is order-independent and atomic writes leave no temp file', (t) => {
     const library = makeLibrary(t);

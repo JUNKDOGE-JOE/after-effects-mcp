@@ -8,6 +8,7 @@ import {
 
 test('error code table is frozen and contains the complete panel vocabulary', () => {
   const expected = [
+    'AE_MCP_REBUILD_FAILED',
     'AUTH_REQUIRED',
     'BACKEND_ERROR',
     'BACKEND_UNAVAILABLE',

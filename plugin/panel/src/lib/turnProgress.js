@@ -39,6 +39,9 @@ export function turnProgressText(stage, backend, lang = 'zh') {
   if (stage === 'session') {
     return zh ? '正在建立会话…' : 'Creating session…';
   }
+  if (stage === 'mcp-rebuild') {
+    return zh ? '与 AE 宿主的连接已失效，正在重建…' : 'The connection to the AE host was lost. Rebuilding…';
+  }
   if (stage === 'dispatch') {
     return zh ? '等待模型回复…' : 'Waiting for the model…';
   }

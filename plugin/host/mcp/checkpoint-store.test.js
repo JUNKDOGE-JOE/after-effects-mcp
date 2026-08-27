@@ -36,11 +36,12 @@ function writeMeta(filePath, fields) {
     fs.writeFileSync(filePath, JSON.stringify(meta), 'utf8');
 }
 
-test('default root is AE_MCP_HOME/checkpoints and keep honors its env override', () => {
+test('default root is AE_MCP_STATE_DIR/checkpoints and keep honors its env override', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-home-'));
     try {
         const store = new CheckpointStore({
-            env: { AE_MCP_HOME: home, AE_MCP_CHECKPOINT_KEEP: '2' }, home: path.join(home, 'unused'),
+            env: { AE_MCP_STATE_DIR: home, AE_MCP_CHECKPOINT_KEEP: '2' },
+            home: path.join(home, 'unused'),
         });
         assert.equal(store.root, path.join(home, 'checkpoints'));
         assert.equal(store.keep, 2);

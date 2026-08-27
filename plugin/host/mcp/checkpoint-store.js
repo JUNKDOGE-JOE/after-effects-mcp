@@ -2,8 +2,8 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { createStatePaths } = require('../state-paths');
 
 let lastMs = 0;
 
@@ -58,9 +58,13 @@ class CheckpointStore {
         const input = typeof options === 'string'
             ? { root: options, keep: positionalKeep } : options || {};
         const environment = input.env || process.env;
-        const home = input.home || os.homedir();
-        const base = environment.AE_MCP_HOME || path.join(home, '.ae-mcp');
-        this.root = path.resolve(input.root || path.join(base, 'checkpoints'));
+        const statePaths = input.statePaths || createStatePaths({
+            stateDir: input.stateDir,
+            env: environment,
+            home: input.home,
+            homedir: input.homedir,
+        });
+        this.root = path.resolve(input.root || statePaths.checkpoints);
         this.keep = input.keep === undefined
             ? checkpointKeep(environment) : Math.max(1, Number(input.keep) || 1);
         fs.mkdirSync(this.root, { recursive: true });

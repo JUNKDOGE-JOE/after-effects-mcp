@@ -8,6 +8,7 @@ const { ConversationStore } = require('./conversations');
 const { ApprovalQueue } = require('./approvals');
 const { CheckpointStore } = require('./checkpoint-store');
 const { RecoveryStore } = require('./recovery-store');
+const { ToolLibrary } = require('./tool-library');
 const { buildInstructions } = require('./instructions');
 const { TOOL_MODULES } = require('./tools');
 
@@ -103,22 +104,34 @@ function mountMcp(app, deps) {
     const approvals = deps.approvals || new ApprovalQueue({ timeoutMs: deps.approvalTimeoutMs });
     let checkpointStore = deps.checkpointStore || null;
     let recoveryStore = deps.recoveryStore || null;
+    let toolLibrary = deps.toolLibrary || null;
     const sseOptions = deps.sseOptions || null;
     const progressIntervalMs = deps.progressIntervalMs || 5000;
+    const checkpointStoreOptions = Object.assign(
+        { statePaths: deps.statePaths },
+        deps.checkpointStoreOptions || {},
+    );
     const tools = buildTools({
         getStatus: deps.getStatus,
         executeJsx: deps.executeJsx,
         approvals,
         getCheckpointStore: function () {
-            if (!checkpointStore) checkpointStore = new CheckpointStore(deps.checkpointStoreOptions);
+            if (!checkpointStore) checkpointStore = new CheckpointStore(checkpointStoreOptions);
             return checkpointStore;
         },
         getRecoveryStore: function () {
             if (!recoveryStore) {
-                if (!checkpointStore) checkpointStore = new CheckpointStore(deps.checkpointStoreOptions);
+                if (!checkpointStore) checkpointStore = new CheckpointStore(checkpointStoreOptions);
                 recoveryStore = new RecoveryStore({ checkpointStore });
             }
             return recoveryStore;
+        },
+        getToolLibrary: function () {
+            if (!toolLibrary) toolLibrary = new ToolLibrary(Object.assign(
+                { statePaths: deps.statePaths },
+                deps.toolLibraryOptions || {},
+            ));
+            return toolLibrary;
         },
         sessionCount: function () { return sessions.size; },
         recordMcpActivity: deps.recordMcpActivity,

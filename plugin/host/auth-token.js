@@ -1,28 +1,33 @@
 // Shared-secret auth for /exec. The token lives at a per-user, cross-platform
-// path (~/.ae-mcp/auth-token) so the panel and host-side clients agree
+// state path (default ~/.ae-mcp/auth-token) so the panel and host-side clients agree
 // without any handshake. Loopback binding limits reach to local
 // processes; the token defeats the "any local process can call /exec" threat.
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
+const { createStatePaths } = require('./state-paths');
 
-// ~/.ae-mcp/auth-token — shared by the panel and host-side clients.
-function tokenDir() {
-    return path.join(os.homedir(), '.ae-mcp');
+function resolvePaths(options) {
+    return options && options.statePaths
+        ? options.statePaths : createStatePaths(options);
 }
 
-function tokenPath() {
-    return path.join(tokenDir(), 'auth-token');
+function tokenDir(options) {
+    return resolvePaths(options).stateDir;
+}
+
+function tokenPath(options) {
+    return resolvePaths(options).authToken;
 }
 
 function generateToken() {
     return crypto.randomBytes(32).toString('hex');
 }
 
-function writeToken(token) {
-    var dir = tokenDir();
-    var file = tokenPath();
+function writeToken(token, options) {
+    var paths = resolvePaths(options);
+    var dir = paths.stateDir;
+    var file = paths.authToken;
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
@@ -41,9 +46,10 @@ function writeToken(token) {
 // Ensure the token file exists, generating a fresh 32-byte hex secret if not.
 // Best-effort 0600 perms on POSIX; on Windows the chmod is a no-op so we just
 // write the file. Returns the token string.
-function ensureToken() {
-    var dir = tokenDir();
-    var file = tokenPath();
+function ensureToken(options) {
+    var paths = resolvePaths(options);
+    var dir = paths.stateDir;
+    var file = paths.authToken;
     if (fs.existsSync(file)) {
         var existing = fs.readFileSync(file, 'utf8').trim();
         if (existing.length > 0) {
@@ -54,11 +60,11 @@ function ensureToken() {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
-    return writeToken(generateToken());
+    return writeToken(generateToken(), { statePaths: paths });
 }
 
-function regenerate() {
-    return writeToken(generateToken());
+function regenerate(options) {
+    return writeToken(generateToken(), options);
 }
 
 // Constant-time comparison that first guards against length mismatch (which
