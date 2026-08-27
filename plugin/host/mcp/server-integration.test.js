@@ -149,6 +149,55 @@ test('MCP exec capture promotes through toolSave before search and toolUse', asy
     }
 });
 
+test('MCP toolSave prompt-skill creation is visible and renderable through skillUse', async () => {
+    const host = await fixture();
+    try {
+        const session = await initialize(host.port, 'mcp-prompt-skill-integration');
+        const headers = { 'Mcp-Session-Id': session };
+        const saved = await request(host.port, headers, {
+            jsonrpc: '2.0', id: 30, method: 'tools/call',
+            params: {
+                name: 'ae_toolSave',
+                arguments: {
+                    create: {
+                        name: 'integration-review',
+                        description: 'Review an integration fixture.',
+                        kind: 'prompt-skill',
+                        content: 'Review ${topic} at ${depth} depth.',
+                        argsSchema: {
+                            type: 'object',
+                            properties: {
+                                topic: { type: 'string' },
+                                depth: { type: 'string', default: 'brief' },
+                            },
+                            required: ['topic'],
+                            additionalProperties: false,
+                        },
+                    },
+                },
+            },
+        });
+        const artifactId = saved.body.result.structuredContent.artifact.id;
+        const listed = await request(host.port, headers, {
+            jsonrpc: '2.0', id: 31, method: 'tools/call',
+            params: { name: 'ae_skillUse', arguments: {} },
+        });
+        assert.ok(listed.body.result.structuredContent.skills.some(function (item) {
+            return item.name === 'integration-review' && item.source === 'library';
+        }));
+        const rendered = await request(host.port, headers, {
+            jsonrpc: '2.0', id: 32, method: 'tools/call',
+            params: {
+                name: 'ae_skillUse', arguments: { name: artifactId, args: { topic: 'timing' } },
+            },
+        });
+        assert.equal(rendered.body.result.structuredContent.rendered, 'Review timing at brief depth.');
+    } finally {
+        await new Promise(function (resolve) { host.listener.close(resolve); });
+        fs.rmSync(host.stateRoot, { recursive: true, force: true });
+    }
+});
+
 test('initialize rejects a client listed in the injected blocked-clients file', async () => {
     const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-blocked-state-'));
     fs.writeFileSync(

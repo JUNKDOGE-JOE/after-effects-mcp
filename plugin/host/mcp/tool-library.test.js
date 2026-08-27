@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { buildTools } = require('./tools');
+const { skillPlan, assertSkillPlanCurrent } = require('./tools/skill-use');
 const {
     ENVIRONMENT,
     ToolLibrary,
@@ -64,6 +65,26 @@ function artifact(overrides) {
     Object.assign(value, overrides || {});
     value.contentHash = computeContentHash(value.kind, value.content, value.argsSchema);
     return value;
+}
+
+function promptSkillArtifact(overrides) {
+    return artifact(Object.assign({
+        id: 'user:22222222-2222-4222-8222-222222222222',
+        name: 'review-comp',
+        description: 'Review a composition.',
+        kind: 'prompt-skill',
+        declaredRisk: 'read',
+        content: 'Review ${topic} with a ${tone} tone.',
+        argsSchema: {
+            type: 'object',
+            properties: {
+                topic: { type: 'string' },
+                tone: { type: 'string', default: 'concise' },
+            },
+            required: ['topic'],
+            additionalProperties: false,
+        },
+    }, overrides || {}));
 }
 
 function makeLibrary(t) {
@@ -300,6 +321,111 @@ test('skillUse lists bundled skills, preserves render-only payload, and passes e
         name: 'ae_skillUse', arguments: { name: 'run-script', execute: true, args: {} },
     }, context);
     assert.deepEqual(executed.result.structuredContent, { ok: true, layerId: 42 });
+});
+
+test('toolSave prompt-skill creation feeds skillUse listing, rendering, and normalized arguments',
+    async (t) => {
+        const library = makeLibrary(t);
+        const registry = buildTools({ toolLibrary: library });
+        const context = toolContext();
+        const created = await registry.call({
+            name: 'ae_toolSave',
+            arguments: {
+                create: {
+                    name: 'review-comp',
+                    description: 'Review a composition.',
+                    kind: 'prompt-skill',
+                    content: 'Review ${topic} with a ${tone} tone.',
+                    argsSchema: promptSkillArtifact().argsSchema,
+                },
+            },
+        }, context);
+        const artifactId = created.result.structuredContent.artifact.id;
+        const listed = await registry.call({
+            name: 'ae_skillUse', arguments: { include_templates: true },
+        }, context);
+        const skill = listed.result.structuredContent.skills.find(function (item) {
+            return item.name === 'review-comp';
+        });
+        assert.deepEqual(skill.args, ['tone', 'topic']);
+        assert.equal(skill.source, 'library');
+        assert.equal(skill.template, 'Review ${topic} with a ${tone} tone.');
+        assert.deepEqual(skill.args_schema, promptSkillArtifact().argsSchema);
+
+        const rendered = await registry.call({
+            name: 'ae_skillUse', arguments: { name: artifactId, args: { topic: 'timing' } },
+        }, context);
+        assert.deepEqual(rendered.result.structuredContent, {
+            ok: true,
+            name: 'review-comp',
+            template_type: 'prompt',
+            rendered: 'Review timing with a concise tone.',
+        });
+        const rejected = await registry.call({
+            name: 'ae_skillUse', arguments: { name: artifactId, args: { topic: 'timing' }, execute: true },
+        }, context);
+        assert.equal(rejected.result.structuredContent.ok, false);
+        assert.match(rejected.result.structuredContent.error, /prompt skills are render-only/i);
+    });
+
+test('skillUse exposes only saved and pinned prompt-skill library artifacts', async (t) => {
+    const library = makeLibrary(t);
+    ['saved', 'pinned', 'candidate', 'archived', 'deprecated'].forEach(function (status, index) {
+        const digit = String(index + 3);
+        library.saveArtifact(promptSkillArtifact({
+            id: 'user:' + digit.repeat(8) + '-' + digit.repeat(4) + '-4' + digit.repeat(3)
+                + '-8' + digit.repeat(3) + '-' + digit.repeat(12),
+            name: 'lifecycle-' + status,
+            status,
+        }));
+    });
+    const listed = await buildTools({ toolLibrary: library }).call({
+        name: 'ae_skillUse', arguments: {},
+    }, toolContext());
+    const names = listed.result.structuredContent.skills.map(function (item) { return item.name; });
+    assert.equal(names.includes('lifecycle-saved'), true);
+    assert.equal(names.includes('lifecycle-pinned'), true);
+    assert.equal(names.includes('lifecycle-candidate'), false);
+    assert.equal(names.includes('lifecycle-archived'), false);
+    assert.equal(names.includes('lifecycle-deprecated'), false);
+});
+
+test('skill name collisions prefer library over legacy over bundled', (t) => {
+    const library = makeLibrary(t);
+    assert.equal(library.resolveSkill('ease-and-timing').source, 'bundled');
+    library.writeSkill({
+        name: 'ease-and-timing',
+        description: 'Legacy override.',
+        template_type: 'prompt',
+        template: 'legacy',
+        args_schema: {},
+    });
+    assert.equal(library.resolveSkill('ease-and-timing').source, 'user');
+    assert.equal(library.resolveSkill('ease-and-timing').skill.template, 'legacy');
+    const current = library.saveArtifact(promptSkillArtifact({
+        name: 'ease-and-timing',
+        content: 'library',
+        argsSchema: {},
+    }));
+    assert.equal(library.resolveSkill('ease-and-timing').source, 'library');
+    assert.equal(library.resolveSkill('ease-and-timing').skill.template, 'library');
+    assert.equal(library.resolveSkill(current.id).artifact.id, current.id);
+});
+
+test('library prompt-skill updates invalidate previously derived approval plans', (t) => {
+    const library = makeLibrary(t);
+    const saved = library.saveArtifact(promptSkillArtifact());
+    const plan = skillPlan(library.resolveSkill(saved.id), { topic: 'timing' });
+    const updated = Object.assign({}, saved, {
+        content: 'Re-review ${topic} with a ${tone} tone.',
+        revision: saved.revision + 1,
+        updatedAt: saved.updatedAt + 1,
+    });
+    updated.contentHash = computeContentHash(updated.kind, updated.content, updated.argsSchema);
+    library.saveArtifact(updated);
+    assert.throws(function () {
+        assertSkillPlanCurrent(library, plan);
+    }, /skill changed after approval/i);
 });
 
 test('content hash remains compatible with SHA-256 canonical JSON', () => {

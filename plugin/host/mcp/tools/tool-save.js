@@ -113,6 +113,8 @@ function createArtifact(input, context, store) {
     if (CREATE_KINDS.indexOf(input.create.kind) === -1) {
         throw new Error('`create.kind` must be `jsx` or `prompt-skill`');
     }
+    // JSX enters the library when ae_exec candidates are retained; prompt-skill
+    // has no capture phase and is created directly through ae_toolSave.
     const createdAt = timestamp(store);
     const session = context && context.session ? context.session : {};
     const artifact = {
