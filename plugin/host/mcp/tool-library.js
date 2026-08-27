@@ -425,6 +425,29 @@ function skillFromWire(wire) {
     };
 }
 
+function skillRecordFromArtifact(artifact) {
+    const source = artifact.source.type === 'bundled' ? 'bundled'
+        : artifact.source.type === 'legacy' ? 'user' : 'library';
+    return {
+        skill: {
+            name: artifact.name,
+            description: artifact.description,
+            template_type: artifact.kind === 'jsx' ? 'jsx' : 'prompt',
+            template: artifact.content,
+            args_schema: artifact.argsSchema,
+        },
+        source,
+        path: artifact.source.ref,
+        artifact,
+    };
+}
+
+function skillArgs(schema) {
+    const canonical = own(schema, 'properties') || own(schema, 'required')
+        || own(schema, 'additionalProperties') || schema.type === 'object';
+    return Object.keys(canonical ? (schema.properties || {}) : schema).sort();
+}
+
 class ToolLibrary {
     constructor(options) {
         const input = options || {};
@@ -615,12 +638,20 @@ class ToolLibrary {
 
     listSkills() {
         const merged = new Map();
+        // Apply sources from least to most authoritative so collisions always
+        // resolve library prompt-skill > legacy user directory > bundled skill.
         this.readSkillDirectory(this.bundledRoot, 'bundled').forEach(function (record) {
             merged.set(record.skill.name, record);
         });
         this.readSkillDirectory(this.skillRoot, 'user').forEach(function (record) {
             merged.set(record.skill.name, record);
         });
+        this.list({ statuses: ['saved', 'pinned'] }).filter(function (summary) {
+            return summary.kind === 'prompt-skill';
+        }).reverse().forEach(function (summary) {
+            const artifact = this.getArtifact(summary.id);
+            merged.set(artifact.name, skillRecordFromArtifact(artifact));
+        }, this);
         return Array.from(merged.values()).sort(function (left, right) {
             return left.skill.name.localeCompare(right.skill.name);
         });
@@ -729,10 +760,25 @@ class ToolLibrary {
     }
 
     resolveSkill(name) {
-        const normalized = String(name || '').replace(/^builtin:skill:/, '');
-        if (!SKILL_NAME.test(normalized)) throw new Error('invalid skill name');
+        const identifier = String(name || '');
+        if (/^(?:user|legacy|builtin:skill):/.test(identifier)) {
+            const artifact = this.getArtifact(identifier);
+            const active = artifact.status === 'saved' || artifact.status === 'pinned';
+            const libraryPrompt = artifact.source.type === 'user' && artifact.kind === 'prompt-skill';
+            const directorySkill = (artifact.source.type === 'bundled' || artifact.source.type === 'legacy')
+                && (artifact.kind === 'jsx' || artifact.kind === 'prompt-skill');
+            if (!active || (!libraryPrompt && !directorySkill)) {
+                throw new Error('skill not found: ' + identifier);
+            }
+            return skillRecordFromArtifact(artifact);
+        }
+        const normalized = identifier.replace(/^builtin:skill:/, '');
+        if (!normalized) throw new Error('invalid skill name');
         const record = this.listSkills().find(function (item) { return item.skill.name === normalized; });
-        if (!record) throw new Error('skill not found: ' + normalized);
+        if (!record) {
+            if (!SKILL_NAME.test(normalized)) throw new Error('invalid skill name');
+            throw new Error('skill not found: ' + normalized);
+        }
         return record;
     }
 
@@ -747,7 +793,8 @@ class ToolLibrary {
             name: record.skill.name,
             description: record.skill.description,
             template_type: record.skill.template_type,
-            args: Object.keys(record.skill.args_schema),
+            args: skillArgs(record.skill.args_schema),
+            source: record.source,
         };
         if (includeTemplate) {
             meta.template = record.skill.template;

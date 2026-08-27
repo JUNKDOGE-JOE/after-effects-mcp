@@ -43,12 +43,10 @@ function invalid(message) {
 function skillPlan(record, args) {
     const skill = record.skill;
     const normalizedArgs = normalizeArgs(skill.args_schema, args);
-    const contentHash = computeContentHash(
-        skill.template_type === 'jsx' ? 'jsx' : 'prompt-skill',
-        skill.template,
-        skill.args_schema,
+    const contentHash = record.artifact ? record.artifact.contentHash : computeContentHash(
+        skill.template_type === 'jsx' ? 'jsx' : 'prompt-skill', skill.template, skill.args_schema,
     );
-    const artifactId = record.source === 'bundled'
+    const artifactId = record.artifact ? record.artifact.id : record.source === 'bundled'
         ? 'builtin:skill:' + skill.name
         : 'legacy:' + crypto.createHash('sha256').update(pathText(record.path), 'utf8')
             .digest('hex').slice(0, 24);
@@ -71,7 +69,7 @@ function pathText(filePath) {
 }
 
 function assertSkillPlanCurrent(store, plan) {
-    const current = skillPlan(store.resolveSkill(plan.name), plan.normalizedArgs);
+    const current = skillPlan(store.resolveSkill(plan.artifactId), plan.normalizedArgs);
     if (current.planHash !== plan.planHash || current.contentHash !== plan.contentHash) {
         throw new Error('skill changed after approval');
     }
@@ -122,7 +120,9 @@ async function call(args, context, deps) {
                 }),
             };
         }
-        if (record.skill.template_type !== 'jsx') return invalid('only jsx skills can be executed');
+        if (record.skill.template_type !== 'jsx') {
+            return invalid('prompt skills are render-only; only jsx skills can be executed');
+        }
         if (!deps || typeof deps.executeJsx !== 'function') return invalid('JSX execution is unavailable');
         const plan = skillPlan(record, normalizedArgs);
         const denied = await enforce('ae_skillUse', Object.assign({}, context, {
