@@ -1067,8 +1067,8 @@ function buildApp() {
 
     a.post('/exec', async (req, res) => {
         // Require the shared-secret token. /exec runs arbitrary ExtendScript, so
-    // every caller must prove it can read the configured host auth token. Constant-time
-        // compare to avoid leaking the token via timing.
+        // every caller must prove it can read the configured host auth token.
+        // Constant-time compare to avoid leaking the token via timing.
         const provided = req.get(authToken.HEADER);
         if (!authToken.tokenMatches(provided, execToken)) {
             return res.status(401).json({ ok: false, error: 'unauthorized' });

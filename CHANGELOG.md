@@ -15,6 +15,9 @@ Format based on Keep a Changelog; versioning follows SemVer.
 - **新增 `ae-mcp-jkdg` npm 连接器与官方 MCP Registry 清单**——Claude Desktop 等仅支持 stdio 的客户端可通过 `npx -y ae-mcp-jkdg` 连接本机 AE 面板；连接器与产品 major.minor 配对，扩展本体仍须从 GitHub Releases 单独安装。
 - **面板不可达时给出可执行修复提示**——stdio 连接失败会直接提醒安装 ae-mcp 扩展并保持 After Effects 面板打开，不再只返回底层网络错误。
 - **接入文档更准确**——README 新增 Glama 徽章和 npx 接入方式，并清理已退役的 `ae_ping`、`ae_snapshot` 工具名。
+- **测试套件不再读写你的真实 `~/.ae-mcp`（#330）**——宿主状态目录统一经可注入的 `AE_MCP_STATE_DIR` 解析（保留 `AE_MCP_HOME` 兼容与 `AE_MCP_LOG_DIR`/`AE_MCP_TOOL_DIR`/`AE_MCP_SKILL_DIR` 细粒度覆盖），全部集成测试改用临时目录。此前开发机面板留下的黑名单等状态能让套件莫名必败，跑测试也可能反过来污染真实用户目录。
+- **OpenCode 不再抱着重启前的死连接（#333）**——面板每次启动生成宿主代次并写入实例标记，跨代次的常驻 OpenCode 实例会被回收重建；回合中识别 `-32000 Connection closed`/`Not connected` 类传输失败后自动重建并重试一次，仍失败则给出「重载面板或新建会话」的明确指引。此前面板重载后 ae 工具会整组静默消失，重启 AE 也未必自愈。
+- **「文档 / GitHub」按钮真的能打开了（#334）**——外链统一走三级回退（CEP → CSInterface → 宿主代开），全部失败时面板给出可见提示；文档地址按面板语言路由，中英链接后续可独立更新。
 
 ### [0.10.3] — 2026-08-26
 
@@ -361,6 +364,9 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 - **Added the `ae-mcp-jkdg` npm connector and official MCP Registry manifest** — stdio-only clients such as Claude Desktop can connect to the local AE panel with `npx -y ae-mcp-jkdg`. The connector is paired with the product by major.minor; the extension itself still comes separately from GitHub Releases.
 - **Unreachable-panel errors now include an actionable fix** — stdio connection failures tell users to install the ae-mcp extension and keep the After Effects panel open instead of exposing only a low-level network error.
 - **Connection docs are more accurate** — the READMEs add the Glama badge and npx setup while removing the retired `ae_ping` and `ae_snapshot` tool names.
+- **The test suites no longer read or write your real `~/.ae-mcp` (#330)** — host state paths resolve through an injectable `AE_MCP_STATE_DIR` root (with `AE_MCP_HOME` compatibility and the fine-grained `AE_MCP_LOG_DIR`/`AE_MCP_TOOL_DIR`/`AE_MCP_SKILL_DIR` overrides), and every integration fixture now uses a temp directory. Panel state left on a dev machine could previously make the suite fail inexplicably — and running the tests could pollute the real user directory.
+- **OpenCode no longer clings to a dead host connection after a restart (#333)** — the panel stamps each boot with a host generation and recycles persistent OpenCode instances across generations; mid-turn `-32000 Connection closed`/`Not connected` transport failures rebuild the instance and retry the turn once, with a clear "reload the panel or start a new session" hint if that also fails. Previously the ae tools silently vanished from the session after a panel reload, and even restarting AE did not always recover.
+- **The Docs / GitHub buttons actually open now (#334)** — external links go through a three-tier fallback (CEP → CSInterface → host-side open) with a visible error when every tier fails, and the docs link routes by panel language with independently updatable zh/en targets.
 
 ### [0.10.3] — 2026-08-26
 

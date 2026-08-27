@@ -19317,12 +19317,12 @@
 
   // src/main.jsx
   init_cep_runtime_inject();
-  var import_react48 = __toESM(require_react(), 1);
+  var import_react49 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
   init_cep_runtime_inject();
-  var import_react47 = __toESM(require_react(), 1);
+  var import_react48 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   init_cep_runtime_inject();
@@ -20407,7 +20407,7 @@
 
   // src/screens/SettingsScreen.jsx
   init_cep_runtime_inject();
-  var import_react19 = __toESM(require_react(), 1);
+  var import_react20 = __toESM(require_react(), 1);
 
   // package.json
   var package_default = {
@@ -22200,23 +22200,264 @@
     throw new PlatformCapabilityError("UNSUPPORTED_PLATFORM", deps.platform + "-" + deps.arch + " is not supported");
   }
 
-  // src/screens/SettingsScreen.jsx
+  // src/components/shell/Toast.jsx
+  init_cep_runtime_inject();
+  var import_react19 = __toESM(require_react(), 1);
   var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
-  var REPO_URL = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
-  var DOCS_URL = "https://github.com/JUNKDOGE-JOE/after-effects-mcp#readme";
-  function openExternal(url) {
-    try {
-      if (globalThis.window && window.cep && window.cep.util && window.cep.util.openURLInDefaultBrowser) {
-        window.cep.util.openURLInDefaultBrowser(url);
-        return;
+  var TOAST_ICONS = {
+    ok: { icon: "check", color: "var(--ok)" },
+    error: { icon: "circle-alert", color: "var(--error)" },
+    warn: { icon: "triangle-alert", color: "var(--warn)" },
+    info: { icon: "info", color: "var(--text-secondary)" }
+  };
+  function Toast({ type = "info", message, actionLabel, onAction, onClose, style }) {
+    const t = TOAST_ICONS[type] || TOAST_ICONS.info;
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+      "div",
+      {
+        role: "status",
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--space-2)",
+          maxWidth: "100%",
+          padding: "5px 6px 5px 10px",
+          background: "var(--bg-overlay)",
+          border: "1px solid var(--border-strong)",
+          borderRadius: "var(--radius-md)",
+          boxShadow: "var(--shadow-toast)",
+          animation: "ds-fade-up var(--dur-slow) var(--ease-out)",
+          ...style
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Icon2, { name: t.icon, size: 13, strokeWidth: 2.25, color: t.color }),
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+            "span",
+            {
+              style: {
+                flex: 1,
+                minWidth: 0,
+                font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`,
+                color: "var(--text-primary)"
+              },
+              children: message
+            }
+          ),
+          actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(ToastAction, { label: actionLabel, onClick: onAction }) : null,
+          onClose ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(IconButton, { icon: "x", title: "\u5173\u95ED Dismiss", onClick: onClose, style: { width: 20, height: 20 } }) : null
+        ]
       }
-    } catch (e) {
+    );
+  }
+  function ToastAction({ label, onClick }) {
+    const [hover, setHover] = import_react19.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+      "button",
+      {
+        type: "button",
+        className: "ds-focusable",
+        onClick,
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        style: {
+          flex: "none",
+          height: 20,
+          padding: "0 6px",
+          background: hover ? "var(--bg-active)" : "var(--bg-hover)",
+          border: "1px solid var(--border-strong)",
+          borderRadius: "var(--radius-sm)",
+          color: "var(--text-primary)",
+          font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`,
+          cursor: "pointer",
+          whiteSpace: "nowrap"
+        },
+        children: label
+      }
+    );
+  }
+
+  // src/lib/externalLinks.js
+  init_cep_runtime_inject();
+  var ALLOWED_PROTOCOLS = /* @__PURE__ */ new Set(["https:"]);
+  var DEFAULT_EVAL_SCRIPT_TIMEOUT_MS = 3e3;
+  var EVAL_SCRIPT_SUCCESS_MARKER = "AE_MCP_OPEN_EXTERNAL_OK";
+  var EVAL_SCRIPT_FAILURE_MARKER = "AE_MCP_OPEN_EXTERNAL_FAIL:";
+  var REPO_URL = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
+  var DOCS_URL_ZH = `${REPO_URL}#readme`;
+  var DOCS_URL_EN = `${REPO_URL}#readme`;
+  function docsUrlForLocale(locale) {
+    return String(locale || "").toLowerCase().startsWith("zh") ? DOCS_URL_ZH : DOCS_URL_EN;
+  }
+  function normalizeExternalUrl(value) {
+    if (typeof value !== "string" || /[\u0000-\u001f\u007f]/.test(value)) {
+      throw new Error("External URL must be a clean https URL");
     }
+    const URLConstructor = globalThis.URL;
+    if (typeof URLConstructor !== "function") throw new Error("URL validation is unavailable");
+    const parsed = new URLConstructor(value);
+    if (!ALLOWED_PROTOCOLS.has(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password) {
+      throw new Error("Only public https URLs can be opened");
+    }
+    return parsed.href;
+  }
+  function buildExternalOpenScript(url) {
+    const normalizedUrl = normalizeExternalUrl(url);
+    const scriptUrl = JSON.stringify(normalizedUrl);
+    return [
+      "(function () {",
+      "  try {",
+      `    var url = ${scriptUrl};`,
+      '    var os = String($.os || "");',
+      "    var command;",
+      "    if (/^win/i.test(os)) {",
+      '      var windowsUrl = url.replace(/([&|<>^])/g, "^$1").replace(/%/g, "%%").replace(/!/g, "^!");',
+      '      command = "cmd /d /c start \\"\\" \\"" + windowsUrl + "\\"";',
+      "    } else {",
+      '      var macUrl = url.replace(/(["\\\\$`])/g, "\\\\$1");',
+      '      command = "open \\"" + macUrl + "\\"";',
+      "    }",
+      "    var output = system.callSystem(command);",
+      `    return ${JSON.stringify(EVAL_SCRIPT_SUCCESS_MARKER)} + String(output == null ? "" : output);`,
+      "  } catch (error) {",
+      `    return ${JSON.stringify(EVAL_SCRIPT_FAILURE_MARKER)} + String(error);`,
+      "  }",
+      "}());"
+    ].join("\n");
+  }
+  function currentWindow(windowObject) {
+    if (windowObject) return windowObject;
+    return typeof globalThis.window === "object" ? globalThis.window : null;
+  }
+  function logAttempt(logger, attempt) {
+    if (typeof logger !== "function") return;
     try {
-      window.open(url, "_blank");
-    } catch (e) {
+      logger(attempt);
+    } catch (error) {
+      return;
     }
   }
+  async function runAttempt(method, operation, logger) {
+    try {
+      const returnValue = await operation();
+      const success = returnValue !== false;
+      const attempt = { method, status: success ? "success" : "failed", returnValue };
+      logAttempt(logger, attempt);
+      return attempt;
+    } catch (error) {
+      const attempt = { method, status: "failed", error: String(error && error.message ? error.message : error) };
+      logAttempt(logger, attempt);
+      return attempt;
+    }
+  }
+  function unavailableAttempt(method, logger, reason) {
+    const attempt = { method, status: "unavailable", error: reason };
+    logAttempt(logger, attempt);
+    return attempt;
+  }
+  function resolveCSInterface(windowObject, provided) {
+    if (provided) return provided;
+    const Constructor = windowObject && windowObject.CSInterface;
+    if (typeof Constructor !== "function") return null;
+    return new Constructor();
+  }
+  function evalScriptResult(result) {
+    const text = String(result == null ? "" : result);
+    if (text.startsWith(EVAL_SCRIPT_SUCCESS_MARKER)) return { success: true, returnValue: result };
+    return { success: false, error: text || "ExtendScript returned no success marker" };
+  }
+  function runEvalScript(csInterface, script, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(`ExtendScript timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+      const finish = (callback) => (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        callback(value);
+      };
+      try {
+        csInterface.evalScript(script, finish((result) => {
+          const parsed = evalScriptResult(result);
+          if (parsed.success) resolve(parsed.returnValue);
+          else reject(new Error(parsed.error));
+        }));
+      } catch (error) {
+        clearTimeout(timer);
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+      }
+    });
+  }
+  async function openExternal(url, options = {}) {
+    const attempts = [];
+    const logger = options.logger || ((attempt) => {
+      if (attempt.status === "success") console.info(`[external-link] ${attempt.method}`, attempt.returnValue);
+      else console.warn(`[external-link] ${attempt.method}`, attempt.error || attempt.returnValue);
+    });
+    let normalizedUrl;
+    try {
+      normalizedUrl = normalizeExternalUrl(url);
+    } catch (error) {
+      const attempt = { method: "validation", status: "failed", error: String(error.message || error) };
+      attempts.push(attempt);
+      logAttempt(logger, attempt);
+      const failure3 = { ok: false, url: String(url || ""), attempts };
+      if (typeof options.onFailure === "function") options.onFailure(failure3);
+      return failure3;
+    }
+    const win = currentWindow(options.windowObject);
+    const cepOpen = win && win.cep && win.cep.util && win.cep.util.openURLInDefaultBrowser;
+    if (typeof cepOpen === "function") {
+      const attempt = await runAttempt("cep.util.openURLInDefaultBrowser", () => cepOpen.call(win.cep.util, normalizedUrl), logger);
+      attempts.push(attempt);
+      if (attempt.status === "success") return { ok: true, method: attempt.method, url: normalizedUrl, attempts };
+    } else {
+      attempts.push(unavailableAttempt("cep.util.openURLInDefaultBrowser", logger, "CEP URL opener is unavailable"));
+    }
+    let csInterface = options.csInterface || null;
+    let csInterfaceResolutionFailed = false;
+    if (!csInterface) {
+      try {
+        csInterface = resolveCSInterface(win, null);
+      } catch (error) {
+        csInterfaceResolutionFailed = true;
+        const attempt = { method: "CSInterface.openURLInDefaultBrowser", status: "failed", error: String(error.message || error) };
+        attempts.push(attempt);
+        logAttempt(logger, attempt);
+      }
+    }
+    if (csInterface && typeof csInterface.openURLInDefaultBrowser === "function") {
+      const attempt = await runAttempt("CSInterface.openURLInDefaultBrowser", () => csInterface.openURLInDefaultBrowser(normalizedUrl), logger);
+      attempts.push(attempt);
+      if (attempt.status === "success") return { ok: true, method: attempt.method, url: normalizedUrl, attempts };
+    } else if (!csInterfaceResolutionFailed) {
+      attempts.push(unavailableAttempt("CSInterface.openURLInDefaultBrowser", logger, "CSInterface URL opener is unavailable"));
+    }
+    if (csInterface && typeof csInterface.evalScript === "function") {
+      const script = buildExternalOpenScript(normalizedUrl);
+      const attempt = await runAttempt("CSInterface.evalScript", () => runEvalScript(
+        csInterface,
+        script,
+        options.evalScriptTimeoutMs || DEFAULT_EVAL_SCRIPT_TIMEOUT_MS
+      ), logger);
+      attempts.push(attempt);
+      if (attempt.status === "success") return { ok: true, method: attempt.method, url: normalizedUrl, attempts };
+    } else {
+      attempts.push(unavailableAttempt("CSInterface.evalScript", logger, "CSInterface evalScript is unavailable"));
+    }
+    const failure2 = { ok: false, url: normalizedUrl, attempts };
+    if (typeof options.onFailure === "function") options.onFailure(failure2);
+    return failure2;
+  }
+
+  // src/screens/SettingsScreen.jsx
+  var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
   var S = {
     zh: {
       ai: "AI \u670D\u52A1",
@@ -22268,7 +22509,8 @@
       pending: "P3 \u63A5\u901A",
       docs: "\u6587\u6863",
       github: "GitHub",
-      rerunWizard: "\u91CD\u65B0\u8FD0\u884C\u5411\u5BFC"
+      rerunWizard: "\u91CD\u65B0\u8FD0\u884C\u5411\u5BFC",
+      externalLinkFailed: "\u65E0\u6CD5\u6253\u5F00\u94FE\u63A5\uFF0C\u8BF7\u68C0\u67E5\u9ED8\u8BA4\u6D4F\u89C8\u5668\u540E\u91CD\u8BD5\u3002"
     },
     en: {
       ai: "AI service",
@@ -22320,12 +22562,13 @@
       pending: "P3",
       docs: "Docs",
       github: "GitHub",
-      rerunWizard: "Re-run setup wizard"
+      rerunWizard: "Re-run setup wizard",
+      externalLinkFailed: "Could not open the link. Check your default browser and try again."
     }
   };
   function Section({ id, title, children, disabled, caption, expanded, onToggle }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)", opacity: disabled ? 0.45 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
         "button",
         {
           type: "button",
@@ -22334,53 +22577,53 @@
           onClick: () => onToggle && onToggle(id),
           style: { display: "flex", alignItems: "center", gap: 6, width: "100%", background: "none", border: "none", padding: "0 0 2px", cursor: "pointer", borderBottom: "1px solid var(--border-subtle)", textAlign: "left" },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Icon2, { name: expanded ? "chevron-down" : "chevron-right", size: 12, strokeWidth: 2, color: "var(--text-tertiary)" }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase" }, children: title })
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Icon2, { name: expanded ? "chevron-down" : "chevron-right", size: 12, strokeWidth: 2, color: "var(--text-tertiary)" }),
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { font: "600 11px/1 var(--font-ui)", letterSpacing: "0.04em", color: "var(--text-tertiary)", textTransform: "uppercase" }, children: title })
           ]
         }
       ),
-      expanded && caption ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
+      expanded && caption ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: caption }) : null,
       expanded ? children : null
     ] });
   }
   function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 32, padding: "2px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: blocked ? 0.55 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: blocked ? "line-through" : "none" }, children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: lastActive })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: blocked, onChange: onBlock })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { font: "400 10px/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: blockLabel }),
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: blocked, onChange: onBlock })
     ] });
   }
   function McpSessionRow({ session, t, onBlock }) {
     const info = session.clientInfo || {};
     const name = info.version ? `${info.name} \xB7 ${info.version}` : info.name || session.clientName || "-";
     const source = session.source === "panel" ? t.sessionSourcePanel : t.sessionSourceExternal;
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 42, padding: "4px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: session.blocked ? 0.55 : 1 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: session.blocked ? "line-through" : "none" }, children: name }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 42, padding: "4px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: session.blocked ? 0.55 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: session.blocked ? "line-through" : "none" }, children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
           t.sessionId,
           ": ",
           session.sessionId
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
           source,
           " \xB7 ",
           formatLastSeen(session.lastActivityAt, t)
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: !!session.blocked, onChange: (value) => onBlock && onBlock(info.name, value) })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: !!session.blocked, onChange: (value) => onBlock && onBlock(info.name, value) })
     ] });
   }
-  function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false }) {
+  function ExternalClientRow({ client, t, configText, copied, onCopy, onOpenExternal, copyDisabled = false }) {
     const isShim = client.kind === "mcp-shim";
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
             "span",
             {
               style: {
@@ -22392,7 +22635,7 @@
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
           Button,
           {
             variant: "secondary",
@@ -22407,10 +22650,10 @@
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
-        client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
-        client.loginHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.loginHint }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+        client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
+        client.loginHint ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.loginHint }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
           "pre",
           {
             style: {
@@ -22428,7 +22671,7 @@
             children: configText
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
           "div",
           {
             style: {
@@ -22438,16 +22681,27 @@
             children: t.panelOpenNote
           }
         ),
-        client.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.networkNote }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("a", { href: client.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.openDocs })
+        client.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.networkNote }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+          "a",
+          {
+            href: client.docsUrl,
+            onClick: (event) => {
+              event.preventDefault();
+              onOpenExternal(client.docsUrl);
+            },
+            style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--accent)" },
+            children: t.openDocs
+          }
+        )
       ] })
     ] });
   }
   function VersionRow({ label, value, badge }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1, font: "400 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
       badge,
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { font: "400 11px/1 var(--font-mono)", color: "var(--text-secondary)" }, children: value })
     ] });
   }
   function maskToken(value) {
@@ -22511,17 +22765,18 @@
   }) {
     const t = S[lang] || S.zh;
     const providerInitMessage = t.providerInitializationFailed;
-    const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
-    const [tokenRaw, setTokenRaw] = import_react19.default.useState("");
-    const [copied, setCopied] = import_react19.default.useState("");
-    const [sections, setSections] = import_react19.default.useState(() => loadSectionState(window.localStorage));
+    const [externalLinkError, setExternalLinkError] = import_react20.default.useState("");
+    const [draftPort, setDraftPort] = import_react20.default.useState(String(port));
+    const [tokenRaw, setTokenRaw] = import_react20.default.useState("");
+    const [copied, setCopied] = import_react20.default.useState("");
+    const [sections, setSections] = import_react20.default.useState(() => loadSectionState(window.localStorage));
     const onToggleSection = (id) => setSections((s) => {
       const next = toggleSection(s, id);
       saveSectionState(window.localStorage, next);
       return next;
     });
-    import_react19.default.useEffect(() => setDraftPort(String(port)), [port]);
-    import_react19.default.useEffect(() => setTokenRaw(readTokenValue()), []);
+    import_react20.default.useEffect(() => setDraftPort(String(port)), [port]);
+    import_react20.default.useEffect(() => setTokenRaw(readTokenValue()), []);
     const copy = (label, text) => {
       copyText(text).then(() => {
         setCopied(label);
@@ -22540,14 +22795,19 @@
         setTokenRaw(result || readTokenValue());
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "ai", title: t.ai, expanded: sections.ai, onToggle: onToggleSection, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
+    const handleExternalLink = (url) => {
+      setExternalLinkError("");
+      return openExternal(url, { onFailure: () => setExternalLinkError(t.externalLinkFailed) });
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-5)" }, children: [
+      externalLinkError ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Toast, { type: "error", message: externalLinkError, onClose: () => setExternalLinkError("") }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { id: "ai", title: t.ai, expanded: sections.ai, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.backend, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Segmented, { full: true, value: backend, onChange: onBackendChange, options: [
           { value: "subscription", label: t.backendSub },
           { value: "codex", label: t.backendCodex },
           { value: "opencode", label: t.backendOpenCode }
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
           ChannelCard,
           {
             lang,
@@ -22562,38 +22822,38 @@
             recheckDisabled
           }
         ),
-        providerInit.state === "unavailable" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { role: "alert", style: { padding: "7px 8px", border: "1px solid var(--error-border)", borderRadius: "var(--radius-md)", background: "var(--error-bg)", color: "var(--error)", font: "400 10px/1.5 var(--font-ui)" }, children: [
+        providerInit.state === "unavailable" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { role: "alert", style: { padding: "7px 8px", border: "1px solid var(--error-border)", borderRadius: "var(--radius-md)", background: "var(--error-bg)", color: "var(--error)", font: "400 10px/1.5 var(--font-ui)" }, children: [
           providerInitMessage,
           providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : ""
         ] }) : null,
         providerManager,
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
           { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
           { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
           { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "conn", title: t.conn, expanded: sections.conn, onToggle: onToggleSection, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { id: "conn", title: t.conn, expanded: sections.conn, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "rotate-cw", onClick: regenerate, children: t.regen })
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.token, caption: t.tokenCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Input, { mono: true, value: tokenDisplay, style: { flex: 1 }, suffix: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(IconButton, { icon: "copy", title: t.copy, disabled: !tokenRaw, onClick: () => copy("token", tokenRaw), style: { width: 20, height: 20 } }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "rotate-cw", onClick: regenerate, children: t.regen })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "copy", disabled: !mcpReady, onClick: () => copy("mcp", mcpConfig), children: t.copy })
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "copy", disabled: !mcpReady, onClick: () => copy("mcp", mcpConfig), children: t.copy })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Section, { id: "externalClients", title: t.externalClients, caption: t.externalClientsCap, expanded: sections.externalClients, onToggle: onToggleSection, children: EXTERNAL_CLIENTS.map((externalClient) => {
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Section, { id: "externalClients", title: t.externalClients, caption: t.externalClientsCap, expanded: sections.externalClients, onToggle: onToggleSection, children: EXTERNAL_CLIENTS.map((externalClient) => {
         const configText = mcpReady ? externalClientConfigText({
           client: externalClient,
           port: Number(draftPort) || port || 11488,
           extensionRoot
         }) : "";
-        return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
           ExternalClientRow,
           {
             client: externalClient,
@@ -22601,14 +22861,15 @@
             configText,
             copied: copied === externalClient.id,
             copyDisabled: !mcpReady,
-            onCopy: () => copy(externalClient.id, configText)
+            onCopy: () => copy(externalClient.id, configText),
+            onOpenExternal: handleExternalLink
           },
           externalClient.id
         );
       }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "sec", title: t.sec, expanded: sections.sec, onToggle: onToggleSection, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.mcpSessions }),
-        mcpSessions.map((session) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { id: "sec", title: t.sec, expanded: sections.sec, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.mcpSessions }),
+        mcpSessions.map((session) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
           McpSessionRow,
           {
             session,
@@ -22617,8 +22878,8 @@
           },
           session.sessionId
         )),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
-        clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
+        clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
           ClientRow,
           {
             name: client.label,
@@ -22630,30 +22891,30 @@
           client.label
         ))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "gen", title: t.gen, expanded: sections.gen, onToggle: onToggleSection, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { layout: "row", label: t.expertGuidance, caption: t.expertGuidanceCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: expertGuidance, onChange: (v) => onExpertGuidance && onExpertGuidance(v) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: logLevel, onChange: onLogLevel, style: { flex: 1 }, options: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { id: "gen", title: t.gen, expanded: sections.gen, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { layout: "row", label: t.expertGuidance, caption: t.expertGuidanceCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: expertGuidance, onChange: (v) => onExpertGuidance && onExpertGuidance(v) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: logLevel, onChange: onLogLevel, style: { flex: 1 }, options: [
             { value: "error", label: "Error" },
             { value: "info", label: "Info" },
             { value: "debug", label: "Debug" }
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "download", onClick: onExportLogs, children: t.exportLog })
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", icon: "download", onClick: onExportLogs, children: t.exportLog })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.logs, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("details", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("summary", { style: { cursor: "pointer", color: "var(--text-secondary)", font: "500 11px/1.35 var(--font-ui)" }, children: t.logs }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("pre", { style: { margin: "6px 0 0", maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-tertiary)", font: "400 10px/1.4 var(--font-mono)" }, children: logs.join("\n") })
         ] }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "about", title: t.about, expanded: sections.about, onToggle: onToggleSection, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", onClick: () => openExternal(DOCS_URL), children: t.docs }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", onClick: () => openExternal(REPO_URL), children: t.github }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "ghost", size: "sm", icon: "rotate-cw", onClick: onRerunWizard, children: t.rerunWizard })
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { id: "about", title: t.about, expanded: sections.about, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(VersionRow, { label: t.verPanel, value: `v${package_default.version}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(VersionRow, { label: t.verHost, value: hostVersion, badge: hostVersion === "-" ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Badge, { status: "neutral", children: t.pending }) : null }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "ghost", size: "sm", icon: "book-open", onClick: () => handleExternalLink(docsUrlForLocale(lang)), children: t.docs }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "ghost", size: "sm", icon: "github", onClick: () => handleExternalLink(REPO_URL), children: t.github }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "ghost", size: "sm", icon: "rotate-cw", onClick: onRerunWizard, children: t.rerunWizard })
         ] })
       ] })
     ] });
@@ -22661,12 +22922,12 @@
 
   // src/screens/ActivityScreen.jsx
   init_cep_runtime_inject();
-  var import_react22 = __toESM(require_react(), 1);
+  var import_react23 = __toESM(require_react(), 1);
 
   // src/components/activity/FilterBar.jsx
   init_cep_runtime_inject();
-  var import_react20 = __toESM(require_react(), 1);
-  var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
+  var import_react21 = __toESM(require_react(), 1);
+  var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
   function FilterBar({
     query = "",
     onQuery,
@@ -22674,8 +22935,8 @@
     filters = [],
     style
   }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", padding: "var(--space-2)", borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", padding: "var(--space-2)", borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
         Input,
         {
           value: query,
@@ -22685,14 +22946,14 @@
           suffix: null
         }
       ),
-      filters.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { full: false, value: f.value, onChange: f.onChange, options: f.options, style: { flex: "none", width: f.width || 96 } }, i))
+      filters.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Select, { full: false, value: f.value, onChange: f.onChange, options: f.options, style: { flex: "none", width: f.width || 96 } }, i))
     ] });
   }
 
   // src/components/activity/ActivityRow.jsx
   init_cep_runtime_inject();
-  var import_react21 = __toESM(require_react(), 1);
-  var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
+  var import_react22 = __toESM(require_react(), 1);
+  var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
   var RESULT = {
     success: { icon: "check", color: "var(--ok)" },
     error: { icon: "x", color: "var(--error)" },
@@ -22712,11 +22973,11 @@
     expandable = true,
     style
   }) {
-    const [expanded, setExpanded] = import_react21.default.useState(false);
-    const [hover, setHover] = import_react21.default.useState(false);
+    const [expanded, setExpanded] = import_react22.default.useState(false);
+    const [hover, setHover] = import_react22.default.useState(false);
     const r = RESULT[result] || RESULT.success;
-    return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { borderBottom: "1px solid var(--border-subtle)", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
         "div",
         {
           role: expandable ? "button" : void 0,
@@ -22734,11 +22995,11 @@
             transition: "background var(--dur-fast) var(--ease-out)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { title: resultTitle, style: { display: "inline-flex", flex: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { title: resultTitle, style: { display: "inline-flex", flex: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Icon2, { name: r.icon, size: 12, strokeWidth: 2.5, color: r.color }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { flex: "none", font: `var(--weight-regular) var(--text-micro)/1 var(--font-mono)`, color: "var(--text-tertiary)" }, children: time }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Badge, { status: "neutral", style: { flex: "none", maxWidth: 84, overflow: "hidden" }, children: source }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { style: { flex: "none", font: `var(--weight-medium) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
               "span",
               {
                 style: {
@@ -22753,7 +23014,7 @@
                 children: target
               }
             ),
-            expandable ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+            expandable ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
               Icon2,
               {
                 name: "chevron-down",
@@ -22765,8 +23026,8 @@
           ]
         }
       ),
-      expanded ? /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2) 26px", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-        params != null ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2) 26px", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+        params != null ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
           "pre",
           {
             style: {
@@ -22785,7 +23046,7 @@
             children: typeof params === "string" ? params : JSON.stringify(params, null, 2)
           }
         ) : null,
-        onUndo ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: onUndo, style: { alignSelf: "flex-start" }, children: undoLabel }) : null
+        onUndo ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: onUndo, style: { alignSelf: "flex-start" }, children: undoLabel }) : null
       ] }) : null
     ] });
   }
@@ -22852,7 +23113,7 @@
   }
 
   // src/screens/ActivityScreen.jsx
-  var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
   var A = {
     zh: {
       search: "\u641C\u7D22\u64CD\u4F5C\u2026",
@@ -22904,9 +23165,9 @@
     emptyCaption
   }) {
     const t = A[lang] || A.zh;
-    const [q, setQ] = import_react22.default.useState("");
-    const [res, setRes] = import_react22.default.useState("all");
-    const [undoing, setUndoing] = import_react22.default.useState(false);
+    const [q, setQ] = import_react23.default.useState("");
+    const [res, setRes] = import_react23.default.useState("all");
+    const [undoing, setUndoing] = import_react23.default.useState(false);
     const rows = filterEvents(events, { mode: res, query: q });
     const empty = events.length === 0;
     const undoCheckpoint = async () => {
@@ -22918,9 +23179,9 @@
         setUndoing(false);
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_react22.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: empty ? /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(import_react23.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { display: "flex", borderBottom: "1px solid var(--border-subtle)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
           FilterBar,
           {
             query: q,
@@ -22940,12 +23201,12 @@
             ]
           }
         ),
-        onClear ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: [
-          onUndoCheckpoint ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: undoCheckpoint, disabled: undoing, title: t.undoCheckpointTitle, children: undoing ? t.undoingCheckpoint : t.undoCheckpoint }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear })
+        onClear ? /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "var(--space-2) var(--space-2) var(--space-2) 0" }, children: [
+          onUndoCheckpoint ? /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Button, { size: "sm", variant: "secondary", icon: "undo-2", onClick: undoCheckpoint, disabled: undoing, title: t.undoCheckpointTitle, children: undoing ? t.undoingCheckpoint : t.undoCheckpoint }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Button, { size: "sm", variant: "ghost", icon: "trash-2", onClick: onClear, title: t.clear, children: t.clear })
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { style: { flex: 1, minHeight: 0, overflow: "auto" }, children: rows.length ? rows.map((evt) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
         ActivityRow,
         {
           time: new Date(evt.ts).toLocaleTimeString(),
@@ -22957,20 +23218,20 @@
           params: eventDetails(evt)
         },
         evt.id
-      )) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) })
+      )) : /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(EmptyState, { icon: "list", title: emptyTitle || t.empty, caption: emptyCaption || t.emptyCap, style: { flex: 1 } }) })
     ] }) });
   }
 
   // src/screens/WizardScreen.jsx
   init_cep_runtime_inject();
-  var import_react24 = __toESM(require_react(), 1);
+  var import_react25 = __toESM(require_react(), 1);
 
   // src/components/core/Spinner.jsx
   init_cep_runtime_inject();
-  var import_react23 = __toESM(require_react(), 1);
-  var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
+  var import_react24 = __toESM(require_react(), 1);
+  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
   function Spinner({ size = 12, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
       "span",
       {
         role: "progressbar",
@@ -23078,7 +23339,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
 
   // src/screens/WizardScreen.jsx
-  var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
   var W = {
     zh: {
       stepOf: (n) => `\u7B2C ${n} \u6B65 / \u5171 3 \u6B65`,
@@ -23145,7 +23406,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     });
   }
   function CodeBlock({ code, copyLabel, onCopy, wrap = false }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
       "div",
       {
         style: {
@@ -23155,7 +23416,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           borderRadius: "var(--radius-md)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             "pre",
             {
               style: {
@@ -23171,7 +23432,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
               children: code
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             IconButton,
             {
               icon: "copy",
@@ -23190,7 +23451,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const busy = status === "checking" || status === "running";
     const problem = status === "missing" || status === "fail";
     const icon = status === "ok" ? "check" : problem ? "triangle-alert" : "circle";
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
       "div",
       {
         style: {
@@ -23202,7 +23463,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           background: "var(--bg-panel)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
             "span",
             {
               style: {
@@ -23213,15 +23474,15 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 justifyContent: "center",
                 color: status === "ok" ? "var(--ok)" : problem ? "var(--warn)" : "var(--text-tertiary)"
               },
-              children: busy ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Spinner, { size: 14 }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Icon2, { name: icon, size: 15, strokeWidth: 2 })
+              children: busy ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 14 }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: icon, size: 15, strokeWidth: 2 })
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
-              status === "ok" && state.version ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)" }, children: state.version }) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
-              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: label }),
+              status === "ok" && state.version ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)" }, children: state.version }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
+              /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
                 IconButton,
                 {
                   icon: "rotate-cw",
@@ -23233,10 +23494,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 }
               )
             ] }),
-            hint ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: hint }) : null,
-            problem && state.logTail ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 10px/1.45 var(--font-mono)", color: "var(--text-tertiary)" }, children: state.logTail }) : null,
-            problem && onInstall && commandPreview2 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+            hint ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: hint }) : null,
+            problem && state.logTail ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-mono)", color: "var(--text-tertiary)" }, children: state.logTail }) : null,
+            problem && onInstall && commandPreview2 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
                 "code",
                 {
                   style: {
@@ -23249,9 +23510,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
                   children: commandPreview2
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: t.install })
+              /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "secondary", size: "sm", onClick: onInstall, children: t.install })
             ] }) : null,
-            pathEntry && onAddToPath ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "secondary", size: "sm", onClick: onAddToPath, children: t.addToPath }) }) : null
+            pathEntry && onAddToPath ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "secondary", size: "sm", onClick: onAddToPath, children: t.addToPath }) }) : null
           ] })
         ]
       }
@@ -23283,7 +23544,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       extensionRoot
     }) : "";
     const mcpUrl = `http://127.0.0.1:${port}/mcp`;
-    return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
       "div",
       {
         style: {
@@ -23294,8 +23555,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
           padding: "var(--space-6) var(--space-5) var(--space-5)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((number) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((number) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
               "span",
               {
                 style: {
@@ -23307,11 +23568,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
               },
               number
             )) }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
-            onSkip && step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, children: t.skip }) : null
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { font: "400 10px/1 var(--font-mono)", color: "var(--text-tertiary)" }, children: t.stepOf(step) }),
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
+            onSkip && step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "sm", onClick: onSkip, children: t.skip }) : null
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
             "div",
             {
               style: {
@@ -23324,10 +23585,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 paddingTop: "var(--space-6)"
               },
               children: [
-                step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t1 }),
-                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
-                  HOST_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                step === 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t1 }),
+                  /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b1 }),
+                  HOST_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
                     CheckRow,
                     {
                       label: STEP_LABELS[id],
@@ -23342,8 +23603,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
                     },
                     id
                   )),
-                  /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
                       "div",
                       {
                         style: {
@@ -23354,7 +23615,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
                         children: t.langLabel
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
                       Segmented,
                       {
                         full: true,
@@ -23368,10 +23629,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
                     )
                   ] })
                 ] }) : null,
-                step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t2 }),
-                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
-                  CLI_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                step === 2 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t2 }),
+                  /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b2 }),
+                  CLI_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
                     CheckRow,
                     {
                       label: STEP_LABELS[id],
@@ -23382,11 +23643,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
                     id
                   ))
                 ] }) : null,
-                step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t3 }),
-                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
-                  promptText ? /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_react24.default.Fragment, { children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                step === 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "600 20px/1.35 var(--font-ui)" }, children: t.t3 }),
+                  /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)" }, children: t.b3 }),
+                  promptText ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
                       CodeBlock,
                       {
                         wrap: true,
@@ -23395,8 +23656,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
                         onCopy: () => onCopy ? onCopy(promptText) : copyText2(promptText)
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.directUrl }),
-                    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.directUrl }),
+                    /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
                       CodeBlock,
                       {
                         code: mcpUrl,
@@ -23405,8 +23666,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
                       }
                     )
                   ] }) : null,
-                  /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.panelOpenNote }),
-                  OPTIONAL_CLIENT_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.panelOpenNote }),
+                  OPTIONAL_CLIENT_STEPS.map((id) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
                     CheckRow,
                     {
                       label: t.optionalNode,
@@ -23425,10 +23686,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
               ]
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
-            step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime22.jsx)("span", { style: { flex: 1 } }),
-            step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start })
+          /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)", paddingTop: "var(--space-3)" }, children: [
+            step > 1 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "ghost", size: "lg", onClick: onBack, children: t.back }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1 } }),
+            step < 3 ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onNext, children: t.next }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { variant: "primary", size: "lg", onClick: onDone, children: t.start })
           ] })
         ]
       }
@@ -23437,12 +23698,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/screens/ConnectionDrawer.jsx
   init_cep_runtime_inject();
-  var import_react27 = __toESM(require_react(), 1);
+  var import_react28 = __toESM(require_react(), 1);
 
   // src/components/shell/DiagnosticItem.jsx
   init_cep_runtime_inject();
-  var import_react25 = __toESM(require_react(), 1);
-  var import_jsx_runtime23 = __toESM(require_jsx_runtime(), 1);
+  var import_react26 = __toESM(require_react(), 1);
+  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
   var GLYPHS = {
     pass: { icon: "check", color: "var(--ok)" },
     fail: { icon: "x", color: "var(--error)" },
@@ -23450,10 +23711,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
   };
   function DiagnosticItem({ label, status = "pending", detail, actionLabel, onAction, style }) {
     const g = GLYPHS[status];
-    return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
-        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
-        /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { padding: "var(--space-1) 0", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-2)", minHeight: 22 }, children: [
+        status === "running" ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Spinner, { size: 12 }) : /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Icon2, { name: g.icon, size: 12, strokeWidth: 2.5, color: g.color }),
+        /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
           "span",
           {
             style: {
@@ -23466,7 +23727,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           }
         )
       ] }),
-      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(
+      status === "fail" && detail ? /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
         "div",
         {
           style: {
@@ -23480,8 +23741,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
             borderRadius: "var(--radius-sm)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
-            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
+            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: detail }),
+            actionLabel ? /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, style: { flex: "none" }, children: actionLabel }) : null
           ]
         }
       ) : null
@@ -23490,19 +23751,19 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/components/shell/Drawer.jsx
   init_cep_runtime_inject();
-  var import_react26 = __toESM(require_react(), 1);
-  var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
+  var import_react27 = __toESM(require_react(), 1);
+  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
   function Drawer({ open = false, title, onClose, children, closeTitle = "\u5173\u95ED Close", style }) {
     if (!open) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { position: "absolute", inset: 0, zIndex: 30 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
         "div",
         {
           onClick: onClose,
           style: { position: "absolute", inset: 0, background: "var(--scrim)", animation: "ds-fade var(--dur-slow) var(--ease-out)" }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
         "div",
         {
           role: "dialog",
@@ -23523,7 +23784,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             ...style
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsxs)(
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(
               "div",
               {
                 style: {
@@ -23534,12 +23795,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
                   borderBottom: "1px solid var(--border-subtle)"
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-                  /* @__PURE__ */ (0, import_jsx_runtime24.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, font: `var(--weight-semibold) var(--text-heading)/1 var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+                  /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(IconButton, { icon: "x", title: closeTitle, onClick: onClose })
                 ]
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime24.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
+            /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { overflow: "auto", padding: "var(--space-3)" }, children })
           ]
         }
       )
@@ -23547,7 +23808,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
 
   // src/screens/ConnectionDrawer.jsx
-  var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
   var D = {
     zh: {
       title: "\u8FDE\u63A5",
@@ -23605,9 +23866,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
     }
   };
   function KV({ k, children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { width: 72, flex: "none", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: k }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.35 var(--font-mono)", color: "var(--text-primary)" }, children })
     ] });
   }
   function formatTime(ts) {
@@ -23632,40 +23893,40 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const hostVersion = info.hostVersion || "-";
     const mismatch = info.hostVersion && info.hostVersion !== panelVersion;
     const recent = info.lastClientSeenAt ? [{ time: formatTime(info.lastClientSeenAt), text: lang === "zh" ? "\u5916\u90E8 MCP \u5BA2\u6237\u7AEF" : "External MCP client" }] : [];
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.status, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.status, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(StatusDot, { status: connected ? "connected" : "waiting", size: 7 }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-ui)" }, children: statusLabel || (connected ? t.connected : t.waiting) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.port, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.port, children: [
         info.port || "-",
         " ",
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(IconButton, { icon: "copy", title: t.copyConfig, disabled: !copyReady, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "copy", title: t.copyConfig, disabled: !copyReady, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(KV, { k: t.ver, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.ver, children: [
         "v",
         panelVersion,
         " \xB7 host ",
         hostVersion,
-        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
+        mismatch ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "warn", children: t.mismatch }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 4 }, children: t.recent }),
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "2px 8px" }, children: (recent.length ? recent : [{ time: "-", text: t.noRecent }]).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", minHeight: 22, font: "400 10px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }, children: r.time }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
       ] }, i)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: !copyReady, onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: !copyReady, onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
       ] })
     ] });
   }
   function DiagnosticsBody({ lang = "zh", diagnostics = [], onRerun }) {
     const t = D[lang] || D.zh;
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
-      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column" }, children: [
+      diagnostics.map((c) => /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         DiagnosticItem,
         {
           label: t.checks[c.id] || c.id,
@@ -23674,10 +23935,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
         },
         c.id
       )),
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: "var(--space-2)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => copyText(JSON.stringify(diagnostics, null, 2)).catch(() => {
         }), children: t.copyReport }),
-        /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRerun, children: t.rerun })
       ] })
     ] });
   }
@@ -23685,8 +23946,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const diagList = Array.isArray(diagnostics) ? diagnostics : [];
     const t = D[lang] || D.zh;
     const panelVersion = info.panelVersion || package_default.version;
-    return /* @__PURE__ */ (0, import_jsx_runtime25.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
         ConnectionDrawerBody,
         {
           lang,
@@ -23698,13 +23959,13 @@ When you are done, remind me of two things: MCP tools load only in a new session
           onDiagnose
         }
       ),
-      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime25.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime25.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
+      diagList.length ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { marginTop: "var(--space-3)", paddingTop: "var(--space-2)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(DiagnosticsBody, { lang, diagnostics: diagList, onRerun: onDiagnose }) }) : null
     ] });
   }
 
   // src/screens/SessionDrawer.jsx
   init_cep_runtime_inject();
-  var import_react28 = __toESM(require_react(), 1);
+  var import_react29 = __toESM(require_react(), 1);
 
   // src/lib/sessionList.js
   init_cep_runtime_inject();
@@ -23774,7 +24035,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
 
   // src/screens/SessionDrawer.jsx
-  var import_jsx_runtime26 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
   var C = {
     zh: {
       title: "\u4F1A\u8BDD\u5386\u53F2",
@@ -23825,11 +24086,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
     onDelete
   }) {
     const t = C[lang] || C.zh;
-    const [search, setSearch] = import_react28.default.useState("");
-    const [view, setView] = import_react28.default.useState("active");
-    const [editingId, setEditingId] = import_react28.default.useState(null);
-    const [editingTitle, setEditingTitle] = import_react28.default.useState("");
-    const [confirmId, setConfirmId] = import_react28.default.useState(null);
+    const [search, setSearch] = import_react29.default.useState("");
+    const [view, setView] = import_react29.default.useState("active");
+    const [editingId, setEditingId] = import_react29.default.useState(null);
+    const [editingTitle, setEditingTitle] = import_react29.default.useState("");
+    const [confirmId, setConfirmId] = import_react29.default.useState(null);
     const now = Date.now();
     const archived = view === "archived";
     const visible = sortSessions(filterSessions(sessions, { archived, search }));
@@ -23838,9 +24099,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
       setEditingId(null);
       setEditingTitle("");
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)", flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Drawer, { open, title: t.title, onClose, closeTitle: t.close, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-2)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)", flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
           Input,
           {
             value: search,
@@ -23851,7 +24112,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             style: { flex: "1 1 150px" }
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
           Button,
           {
             variant: "primary",
@@ -23865,7 +24126,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
         Segmented,
         {
           full: true,
@@ -23881,11 +24142,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
           ]
         }
       ),
-      visible.length ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { display: "flex", flexDirection: "column", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", overflow: "hidden" }, children: visible.map((meta) => {
+      visible.length ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", flexDirection: "column", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", overflow: "hidden" }, children: visible.map((meta) => {
         const current = meta.id === activeId;
         const editing = editingId === meta.id;
         const confirming = confirmId === meta.id;
-        return /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
+        return /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
           "div",
           {
             style: {
@@ -23898,8 +24159,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
               borderBottom: "1px solid var(--border-subtle)"
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-                editing ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+                editing ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
                   Input,
                   {
                     value: editingTitle,
@@ -23911,7 +24172,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
                       if (event.key === "Escape") setEditingId(null);
                     }
                   }
-                ) : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(
+                ) : /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
                   "button",
                   {
                     type: "button",
@@ -23934,26 +24195,26 @@ When you are done, remind me of two things: MCP tools load only in a new session
                       cursor: "pointer"
                     },
                     children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", font: "var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)" }, children: displayTitle(meta, lang) }),
-                      current ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "accent", children: t.current }) : null
+                      /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", font: "var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)" }, children: displayTitle(meta, lang) }),
+                      current ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Badge, { status: "accent", children: t.current }) : null
                     ]
                   }
                 ),
-                !editing ? /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, minWidth: 0, marginTop: 3 }, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "neutral", children: backendLabel(meta.backend, lang) }),
-                  meta.model ? /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Badge, { status: "neutral", children: meta.model }) : null,
-                  /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { minWidth: 0, color: "var(--text-tertiary)", font: "var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: relativeTime(meta.updatedAt, now, lang) })
+                !editing ? /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, minWidth: 0, marginTop: 3 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Badge, { status: "neutral", children: backendLabel(meta.backend, lang) }),
+                  meta.model ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Badge, { status: "neutral", children: meta.model }) : null,
+                  /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { minWidth: 0, color: "var(--text-tertiary)", font: "var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: relativeTime(meta.updatedAt, now, lang) })
                 ] }) : null
               ] }),
-              confirming ? /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flex: "none" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { color: "var(--error)", font: "var(--weight-medium) var(--text-caption)/1 var(--font-ui)" }, children: t.confirmRemove }),
-                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "danger", size: "sm", onClick: () => {
+              confirming ? /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flex: "none" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { color: "var(--error)", font: "var(--weight-medium) var(--text-caption)/1 var(--font-ui)" }, children: t.confirmRemove }),
+                /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "danger", size: "sm", onClick: () => {
                   setConfirmId(null);
                   if (onDelete) onDelete(meta.id);
                 }, children: t.remove }),
-                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setConfirmId(null), children: t.cancel })
-              ] }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", alignItems: "center", flex: "none" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setConfirmId(null), children: t.cancel })
+              ] }) : /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", alignItems: "center", flex: "none" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
                   IconButton,
                   {
                     icon: "pencil",
@@ -23965,7 +24226,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
                     }
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
                   IconButton,
                   {
                     icon: meta.archived ? "archive-restore" : "archive",
@@ -23973,7 +24234,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
                     onClick: () => meta.archived ? onUnarchive == null ? void 0 : onUnarchive(meta.id) : onArchive == null ? void 0 : onArchive(meta.id)
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "trash-2", danger: true, title: t.remove, onClick: () => {
+                /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(IconButton, { icon: "trash-2", danger: true, title: t.remove, onClick: () => {
                   setConfirmId(meta.id);
                   setEditingId(null);
                 } })
@@ -23982,24 +24243,24 @@ When you are done, remind me of two things: MCP tools load only in a new session
           },
           meta.id
         );
-      }) }) : /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("div", { style: { padding: "var(--space-5) var(--space-2)", textAlign: "center", color: "var(--text-tertiary)", font: "var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)" }, children: archived ? t.emptyArchived : t.emptyActive })
+      }) }) : /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { padding: "var(--space-5) var(--space-2)", textAlign: "center", color: "var(--text-tertiary)", font: "var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)" }, children: archived ? t.emptyArchived : t.emptyActive })
     ] }) });
   }
 
   // src/screens/ChatScreen.jsx
   init_cep_runtime_inject();
-  var import_react39 = __toESM(require_react(), 1);
+  var import_react40 = __toESM(require_react(), 1);
 
   // src/components/chat/ChatBubble.jsx
   init_cep_runtime_inject();
-  var import_react30 = __toESM(require_react(), 1);
+  var import_react31 = __toESM(require_react(), 1);
 
   // src/components/chat/AIAvatar.jsx
   init_cep_runtime_inject();
-  var import_react29 = __toESM(require_react(), 1);
-  var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
+  var import_react30 = __toESM(require_react(), 1);
+  var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
   function AIAvatar({ size = 20, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
       "span",
       {
         "aria-label": "AI",
@@ -24015,13 +24276,13 @@ When you are done, remind me of two things: MCP tools load only in a new session
           borderRadius: "var(--radius-md)",
           ...style
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Icon2, { name: "sparkles", size: Math.round(size * 0.6), color: "var(--accent)", strokeWidth: 2 })
       }
     );
   }
 
   // src/components/chat/ChatBubble.jsx
-  var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
   function formatAttachmentBytes(value) {
     const bytes = Number(value) || 0;
     if (bytes < 1024) return bytes + " B";
@@ -24042,7 +24303,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }) {
     const children = normalizeBreaks(rawChildren);
     if (role === "user") {
-      return /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+      return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
         "div",
         {
           style: {
@@ -24058,8 +24319,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
             whiteSpace: "pre-wrap"
           },
           children: [
-            children ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { children }) : null,
-            attachments.length ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 3, marginTop: children ? 5 : 0 }, children: attachments.map((attachment) => /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+            children ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { children }) : null,
+            attachments.length ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 3, marginTop: children ? 5 : 0 }, children: attachments.map((attachment) => /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
               "div",
               {
                 style: {
@@ -24071,8 +24332,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
                   font: "var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)"
                 },
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: attachment.name }),
-                  /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { flex: "none", color: "var(--text-tertiary)" }, children: formatAttachmentBytes(attachment.size) })
+                  /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: attachment.name }),
+                  /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { flex: "none", color: "var(--text-tertiary)" }, children: formatAttachmentBytes(attachment.size) })
                 ]
               },
               attachment.id
@@ -24081,9 +24342,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
         }
       ) });
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "flex-start", ...style }, children: [
-      avatar ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(AIAvatar, { style: { marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime28.jsx)("span", { style: { width: 20, flex: "none" } }),
-      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { display: "flex", gap: "var(--space-2)", alignItems: "flex-start", ...style }, children: [
+      avatar ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(AIAvatar, { style: { marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { width: 20, flex: "none" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
         "div",
         {
           style: {
@@ -24096,7 +24357,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           },
           children: [
             children,
-            streaming ? /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(
+            streaming ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
               "span",
               {
                 style: {
@@ -24119,15 +24380,15 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/components/chat/ToolCallCard.jsx
   init_cep_runtime_inject();
-  var import_react31 = __toESM(require_react(), 1);
-  var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
+  var import_react32 = __toESM(require_react(), 1);
+  var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
   function StatusGlyph({ status }) {
-    if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Spinner, { size: 12 });
-    if (status === "error") return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "x", size: 12, strokeWidth: 2.5, color: "var(--error)" });
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.5, color: "var(--ok)" });
+    if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Spinner, { size: 12 });
+    if (status === "error") return /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: "x", size: 12, strokeWidth: 2.5, color: "var(--error)" });
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.5, color: "var(--ok)" });
   }
   function ParamsBlock({ params }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
       "pre",
       {
         style: {
@@ -24147,7 +24408,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     );
   }
   function DetailsBlock({ details }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
       "pre",
       {
         style: {
@@ -24167,8 +24428,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
     );
   }
   function HeaderRow({ status, verb, target, expandable, expanded, onToggle }) {
-    const [hover, setHover] = import_react31.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+    const [hover, setHover] = import_react32.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
       "div",
       {
         role: expandable ? "button" : void 0,
@@ -24186,9 +24447,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
           transition: "background var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(StatusGlyph, { status }),
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-medium) var(--text-body)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(StatusGlyph, { status }),
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { font: `var(--weight-medium) var(--text-body)/1 var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "nowrap" }, children: verb }),
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
             "span",
             {
               style: {
@@ -24203,7 +24464,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
               children: target
             }
           ),
-          expandable ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+          expandable ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
             Icon2,
             {
               name: "chevron-down",
@@ -24232,11 +24493,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
     retryLabel = "\u91CD\u8BD5",
     style
   }) {
-    const [expanded, setExpanded] = import_react31.default.useState(defaultExpanded);
+    const [expanded, setExpanded] = import_react32.default.useState(defaultExpanded);
     const isGroup = Array.isArray(steps) && steps.length > 0;
     const hasDetails = details !== void 0 && details !== null && details !== "";
     const expandable = isGroup || params != null || hasDetails;
-    return /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
       "div",
       {
         style: {
@@ -24248,7 +24509,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
             HeaderRow,
             {
               status,
@@ -24259,14 +24520,14 @@ When you are done, remind me of two things: MCP tools load only in a new session
               onToggle: () => setExpanded(!expanded)
             }
           ),
-          expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+          expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
             "div",
             {
               style: { display: "flex", alignItems: "center", gap: "var(--space-15)", minHeight: 22, padding: "0 var(--space-2) 0 var(--space-5)" },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(StatusGlyph, { status: s.status || "success" }),
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "nowrap" }, children: s.verb }),
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(StatusGlyph, { status: s.status || "success" }),
+                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "nowrap" }, children: s.verb }),
+                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
                   "span",
                   {
                     style: {
@@ -24285,9 +24546,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
             },
             i
           )) }) : null,
-          expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(ParamsBlock, { params }) : null,
-          expanded && !isGroup && hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(DetailsBlock, { details }) : null,
-          status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)(
+          expanded && !isGroup && params != null ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ParamsBlock, { params }) : null,
+          expanded && !isGroup && hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(DetailsBlock, { details }) : null,
+          status === "error" && errorMessage2 ? /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
             "div",
             {
               style: {
@@ -24299,10 +24560,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 background: "var(--error-bg)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime29.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
-                  hint ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)("span", { style: { font: `var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: hint }) : null,
-                  hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--error)" }, children: errorMessage2 }),
+                  hint ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { font: `var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui)`, color: "var(--text-secondary)" }, children: hint }) : null,
+                  hasDetails ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
                     "button",
                     {
                       type: "button",
@@ -24312,7 +24573,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
                     }
                   ) : null
                 ] }),
-                onRetry ? /* @__PURE__ */ (0, import_jsx_runtime29.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
+                onRetry ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { size: "sm", variant: "secondary", icon: "rotate-cw", onClick: onRetry, children: retryLabel }) : null
               ]
             }
           ) : null
@@ -24323,8 +24584,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/components/chat/ApprovalCard.jsx
   init_cep_runtime_inject();
-  var import_react32 = __toESM(require_react(), 1);
-  var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
+  var import_react33 = __toESM(require_react(), 1);
+  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
   var L = {
     zh: {
       needs: "\u9700\u8981\u6279\u51C6",
@@ -24359,10 +24620,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
     onAllowSession,
     style
   }) {
-    const [expanded, setExpanded] = import_react32.default.useState(false);
+    const [expanded, setExpanded] = import_react33.default.useState(false);
     const t = L[lang] || L.zh;
     const high = risk === "high";
-    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
       "div",
       {
         style: {
@@ -24374,19 +24635,19 @@ When you are done, remind me of two things: MCP tools load only in a new session
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: high ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "error", icon: "shield-alert", children: t.high }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "warn", icon: "shield", children: t.needs }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-            description ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: description }) : null,
-            params != null ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(ApprovalParams, { t, expanded, onToggle: () => setExpanded(!expanded), params }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: high ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Badge, { status: "error", icon: "shield-alert", children: t.high }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Badge, { status: "warn", icon: "shield", children: t.needs }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            description ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)" }, children: description }) : null,
+            params != null ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(ApprovalParams, { t, expanded, onToggle: () => setExpanded(!expanded), params }) : null
           ] }),
-          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: high ? "danger" : "primary", full: true, onClick: onAllow, children: t.allow }),
-              /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "secondary", full: true, onClick: onDeny, children: t.deny })
+          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", gap: "var(--space-15)" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Button, { variant: high ? "danger" : "primary", full: true, onClick: onAllow, children: t.allow }),
+              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Button, { variant: "secondary", full: true, onClick: onDeny, children: t.deny })
             ] }),
-            onAllowSession && !high ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "ghost", size: "sm", onClick: onAllowSession, style: { alignSelf: "flex-start", color: "var(--text-tertiary)" }, children: t.session }) : null
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+            onAllowSession && !high ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Button, { variant: "ghost", size: "sm", onClick: onAllowSession, style: { alignSelf: "flex-start", color: "var(--text-tertiary)" }, children: t.session }) : null
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
             "div",
             {
               style: {
@@ -24399,7 +24660,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 color: state === "allowed" ? "var(--ok)" : "var(--text-tertiary)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: state === "allowed" ? "check" : "x", size: 12, strokeWidth: 2.5 }),
+                /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: state === "allowed" ? "check" : "x", size: 12, strokeWidth: 2.5 }),
                 state === "allowed" ? t.allowed : t.denied
               ]
             }
@@ -24409,9 +24670,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
     );
   }
   function ApprovalParams({ t, expanded, onToggle, params }) {
-    const [hover, setHover] = import_react32.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+    const [hover, setHover] = import_react33.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
         "button",
         {
           type: "button",
@@ -24432,12 +24693,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
             color: hover ? "var(--text-secondary)" : "var(--text-tertiary)"
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: "chevron-right", size: 11, style: { transform: expanded ? "rotate(90deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" } }),
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: "chevron-right", size: 11, style: { transform: expanded ? "rotate(90deg)" : "none", transition: "transform var(--dur-base) var(--ease-out)" } }),
             t.params
           ]
         }
       ),
-      expanded ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+      expanded ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
         "pre",
         {
           style: {
@@ -24461,7 +24722,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/components/chat/QuestionCard.jsx
   init_cep_runtime_inject();
-  var import_react33 = __toESM(require_react(), 1);
+  var import_react34 = __toESM(require_react(), 1);
 
   // src/lib/questionForm.js
   init_cep_runtime_inject();
@@ -24646,7 +24907,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
 
   // src/components/chat/QuestionCard.jsx
-  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
   var L2 = {
     zh: {
       needs: "\u9700\u8981\u56DE\u7B54",
@@ -24677,8 +24938,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
   };
   var OTHER_KEY = "__ae_mcp_other__";
   function OptionRow({ selected, multiSelect, label, description, onToggle }) {
-    const [hover, setHover] = import_react33.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+    const [hover, setHover] = import_react34.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
       "button",
       {
         type: "button",
@@ -24703,7 +24964,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
             "span",
             {
               "aria-hidden": true,
@@ -24720,12 +24981,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 background: selected ? "var(--accent)" : "transparent",
                 color: "var(--text-on-solid)"
               },
-              children: selected ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: "check", size: 9, strokeWidth: 3 }) : null
+              children: selected ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: "check", size: 9, strokeWidth: 3 }) : null
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: label }),
-            description ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("span", { style: { minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { display: "block", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: label }),
+            description ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
               "span",
               {
                 style: {
@@ -24761,12 +25022,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const selected = Array.isArray(selection) ? selection : selection ? [selection] : [];
     const customActive = selected.includes(OTHER_KEY);
     const freeText = !question.options.length;
-    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
         question.prompt || question.header || question.key,
-        question.multiSelect ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { marginLeft: 6, color: "var(--text-tertiary)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: t.multiHint }) : null
+        question.multiSelect ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { marginLeft: 6, color: "var(--text-tertiary)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: t.multiHint }) : null
       ] }),
-      freeText ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      freeText ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
         "textarea",
         {
           rows: 2,
@@ -24776,8 +25037,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
           onChange: (event) => onCustomText(event.target.value),
           style: textInputStyle(Boolean(error))
         }
-      ) : /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, role: question.multiSelect ? "group" : "radiogroup", children: [
-        question.options.map((option2) => /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      ) : /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, role: question.multiSelect ? "group" : "radiogroup", children: [
+        question.options.map((option2) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
           OptionRow,
           {
             multiSelect: question.multiSelect,
@@ -24788,7 +25049,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           },
           option2.label
         )),
-        question.allowCustom ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+        question.allowCustom ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
           OptionRow,
           {
             multiSelect: question.multiSelect,
@@ -24798,7 +25059,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             onToggle: () => onSelect(OTHER_KEY)
           }
         ) : null,
-        question.allowCustom && customActive ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+        question.allowCustom && customActive ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
           "textarea",
           {
             rows: 1,
@@ -24810,7 +25071,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           }
         ) : null
       ] }),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { color: "var(--error)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: error === "invalid-option" ? t.invalidOption : t.required }) : null
+      error ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { color: "var(--error)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: error === "invalid-option" ? t.invalidOption : t.required }) : null
     ] });
   }
   function collectQuestionValues(questions, selections, customTexts) {
@@ -24840,9 +25101,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
     style
   }) {
     const t = L2[lang] || L2.zh;
-    const [selections, setSelections] = import_react33.default.useState({});
-    const [customTexts, setCustomTexts] = import_react33.default.useState({});
-    const [errors, setErrors] = import_react33.default.useState({});
+    const [selections, setSelections] = import_react34.default.useState({});
+    const [customTexts, setCustomTexts] = import_react34.default.useState({});
+    const [errors, setErrors] = import_react34.default.useState({});
     const select = (question, label) => {
       setSelections((current) => {
         const previous = current[question.id];
@@ -24868,7 +25129,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       }
       if (onSubmit) onSubmit(values);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
       "div",
       {
         style: {
@@ -24880,10 +25141,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Badge, { status: "warn", icon: "message-square", children: t.needs }) }),
-            title ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: title }) : null,
-            state === "pending" ? questions.map((question) => /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Badge, { status: "warn", icon: "message-square", children: t.needs }) }),
+            title ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: title }) : null,
+            state === "pending" ? questions.map((question) => /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
               QuestionField,
               {
                 question,
@@ -24897,10 +25158,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
               question.id
             )) : null
           ] }),
-          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", gap: "var(--space-15)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Button, { variant: "primary", full: true, onClick: submit, children: t.submit }),
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Button, { variant: "secondary", full: true, onClick: onCancel, children: t.cancel })
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Button, { variant: "primary", full: true, onClick: submit, children: t.submit }),
+            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Button, { variant: "secondary", full: true, onClick: onCancel, children: t.cancel })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
             "div",
             {
               style: {
@@ -24913,8 +25174,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 color: state === "answered" ? "var(--ok)" : "var(--text-tertiary)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: state === "answered" ? "check" : "x", size: 12, strokeWidth: 2.5, style: { marginTop: 1 } }),
-                /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: state === "answered" ? "check" : "x", size: 12, strokeWidth: 2.5, style: { marginTop: 1 } }),
+                /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("span", { style: { minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
                   state === "answered" ? t.answered : t.cancelled,
                   state === "answered" && answers && Object.keys(answers).length ? ": " + Object.values(answers).join(" \xB7 ") : ""
                 ] })
@@ -24928,11 +25189,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/components/chat/PromptCard.jsx
   init_cep_runtime_inject();
-  var import_react34 = __toESM(require_react(), 1);
-  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
+  var import_react35 = __toESM(require_react(), 1);
+  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
   function PromptCard({ icon = "wand-2", title, caption, onClick, style }) {
-    const [hover, setHover] = import_react34.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+    const [hover, setHover] = import_react35.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
       "button",
       {
         type: "button",
@@ -24955,10 +25216,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-            caption ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            caption ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
           ] })
         ]
       }
@@ -24967,11 +25228,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/components/chat/Composer.jsx
   init_cep_runtime_inject();
-  var import_react36 = __toESM(require_react(), 1);
+  var import_react37 = __toESM(require_react(), 1);
 
   // src/components/chat/AttachmentPond.jsx
   init_cep_runtime_inject();
-  var import_react35 = __toESM(require_react(), 1);
+  var import_react36 = __toESM(require_react(), 1);
   var import_react_filepond = __toESM(require_react_filepond(), 1);
   var import_filepond_plugin_image_preview = __toESM(require_filepond_plugin_image_preview(), 1);
 
@@ -25084,7 +25345,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
 
   // src/components/chat/AttachmentPond.jsx
-  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
   (0, import_react_filepond.registerPlugin)(import_filepond_plugin_image_preview.default);
   var DEFAULT_LABELS = {
     add: "\u6DFB\u52A0\u6587\u4EF6 Add files",
@@ -25104,7 +25365,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   function findItem(items, fileItem) {
     return items.find((item) => item.pondId === (fileItem == null ? void 0 : fileItem.id) || item.file === (fileItem == null ? void 0 : fileItem.file));
   }
-  var AttachmentPond = import_react35.default.forwardRef(function AttachmentPond2({
+  var AttachmentPond = import_react36.default.forwardRef(function AttachmentPond2({
     items = [],
     disabled = false,
     labels: suppliedLabels,
@@ -25112,11 +25373,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
     onRemoveAttachment,
     onRetryAttachment
   }, forwardedRef) {
-    const pondRef = import_react35.default.useRef(null);
+    const pondRef = import_react36.default.useRef(null);
     const labels = { ...DEFAULT_LABELS, ...suppliedLabels || {} };
     const pondFiles = items.map((item) => item.file).filter(Boolean);
     const labelIdle = labels.drop + ' <span class="filepond--label-action">' + labels.add + "</span>";
-    import_react35.default.useImperativeHandle(forwardedRef, () => ({
+    import_react36.default.useImperativeHandle(forwardedRef, () => ({
       addFiles(files) {
         var _a;
         return (_a = pondRef.current) == null ? void 0 : _a.addFiles(Array.from(files || []));
@@ -25131,8 +25392,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
       const item = findItem(items, fileItem);
       if (item) onRemoveAttachment == null ? void 0 : onRemoveAttachment(item);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { className: "ae-attachment-pond", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "ae-attachment-pond", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         import_react_filepond.FilePond,
         {
           ref: pondRef,
@@ -25151,19 +25412,19 @@ When you are done, remind me of two things: MCP tools load only in a new session
           onremovefile: handleRemove
         }
       ),
-      items.length ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { className: "ae-attachment-status-list", "aria-live": "polite", children: items.map((item) => {
+      items.length ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { className: "ae-attachment-status-list", "aria-live": "polite", children: items.map((item) => {
         var _a, _b, _c, _d, _e, _f;
-        return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+        return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
           "div",
           {
             className: `ae-attachment-status ae-attachment-status--${item.status}`,
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "paperclip", size: 12 }),
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "ae-attachment-status__name", children: ((_a = item.file) == null ? void 0 : _a.name) || ((_b = item.ref) == null ? void 0 : _b.name) }),
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "ae-attachment-status__size", children: formatBytes((_e = (_c = item.file) == null ? void 0 : _c.size) != null ? _e : (_d = item.ref) == null ? void 0 : _d.size) }),
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { className: "ae-attachment-status__state", children: item.status === "staging" ? labels.staging : item.status === "error" ? ((_f = item.error) == null ? void 0 : _f.message) || labels.retry : labels.ready }),
-              item.status === "error" ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { type: "button", onClick: () => onRetryAttachment == null ? void 0 : onRetryAttachment(item), children: labels.retry }) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("button", { type: "button", onClick: () => onRemoveAttachment == null ? void 0 : onRemoveAttachment(item), children: labels.remove })
+              /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "paperclip", size: 12 }),
+              /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "ae-attachment-status__name", children: ((_a = item.file) == null ? void 0 : _a.name) || ((_b = item.ref) == null ? void 0 : _b.name) }),
+              /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "ae-attachment-status__size", children: formatBytes((_e = (_c = item.file) == null ? void 0 : _c.size) != null ? _e : (_d = item.ref) == null ? void 0 : _d.size) }),
+              /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { className: "ae-attachment-status__state", children: item.status === "staging" ? labels.staging : item.status === "error" ? ((_f = item.error) == null ? void 0 : _f.message) || labels.retry : labels.ready }),
+              item.status === "error" ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("button", { type: "button", onClick: () => onRetryAttachment == null ? void 0 : onRetryAttachment(item), children: labels.retry }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("button", { type: "button", onClick: () => onRemoveAttachment == null ? void 0 : onRemoveAttachment(item), children: labels.remove })
             ]
           },
           item.pondId
@@ -25449,7 +25710,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
 
   // src/components/chat/Composer.jsx
-  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
   function ComposerResizeHandle({
     height,
     minHeight,
@@ -25457,10 +25718,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
     onHeightChange,
     onHeightReset
   }) {
-    const [hover, setHover] = import_react36.default.useState(false);
-    const [dragging, setDragging] = import_react36.default.useState(false);
-    const [focused, setFocused] = import_react36.default.useState(false);
-    const dragRef = import_react36.default.useRef(null);
+    const [hover, setHover] = import_react37.default.useState(false);
+    const [dragging, setDragging] = import_react37.default.useState(false);
+    const [focused, setFocused] = import_react37.default.useState(false);
+    const dragRef = import_react37.default.useRef(null);
     const clearDrag = (updateState = true) => {
       const active = dragRef.current;
       if (!active) return;
@@ -25470,7 +25731,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       dragRef.current = null;
       if (updateState) setDragging(false);
     };
-    import_react36.default.useEffect(() => () => clearDrag(false), []);
+    import_react37.default.useEffect(() => () => clearDrag(false), []);
     const handleMouseDown = (event) => {
       if (event.button !== 0) return;
       event.currentTarget.focus();
@@ -25502,7 +25763,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       event.preventDefault();
       onHeightChange == null ? void 0 : onHeightChange(nextHeight);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
       "div",
       {
         style: {
@@ -25519,7 +25780,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           boxShadow: focused ? "0 0 0 1px var(--focus-ring)" : "none"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
             "input",
             {
               type: "text",
@@ -25553,7 +25814,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
             "span",
             {
               role: "separator",
@@ -25594,8 +25855,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
     onRetryAttachment,
     attachmentLabels
   }) {
-    const [focus, setFocus] = import_react36.default.useState(false);
-    const attachmentPondRef = import_react36.default.useRef(null);
+    const [focus, setFocus] = import_react37.default.useState(false);
+    const attachmentPondRef = import_react37.default.useRef(null);
     const readyAttachmentCount = readyAttachments(attachmentDraft).length;
     const attachmentsBusy = draftIsBusy(attachmentDraft) || attachmentDraft.items.some((item) => item.status === "error");
     const canSend = !disabled && !streaming && !attachmentsBusy && (value.trim().length > 0 || readyAttachmentCount > 0);
@@ -25620,9 +25881,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
       event.stopPropagation();
       (_a = attachmentPondRef.current) == null ? void 0 : _a.addFiles(files);
     };
-    const dropStateRef = import_react36.default.useRef(null);
+    const dropStateRef = import_react37.default.useRef(null);
     dropStateRef.current = { disabled, streaming, pendingTurnId: attachmentDraft.pendingTurnId };
-    import_react36.default.useEffect(() => {
+    import_react37.default.useEffect(() => {
       const guard = createPanelFileDropGuard({
         target: window,
         canAttach: () => {
@@ -25636,10 +25897,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
       });
       return guard.dispose;
     }, []);
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
       notice,
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", minHeight: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", minHeight: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
           ComposerResizeHandle,
           {
             height,
@@ -25649,7 +25910,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             onHeightReset
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
           "div",
           {
             style: {
@@ -25671,7 +25932,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             onDragOverCapture: handleFileDrag,
             onDropCapture: handleFileDrop,
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
                 AttachmentPond,
                 {
                   ref: attachmentPondRef,
@@ -25683,8 +25944,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
                   onRetryAttachment
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { flex: 1, minWidth: 0, minHeight: 0, display: "flex", alignItems: "stretch", gap: "var(--space-15)" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { flex: 1, minWidth: 0, minHeight: 0, display: "flex", alignItems: "stretch", gap: "var(--space-15)" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
                   "textarea",
                   {
                     rows: 1,
@@ -25710,11 +25971,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
                     }
                   }
                 ),
-                !options ? streaming ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 }) : null
+                !options ? streaming ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 }) : null
               ] }),
-              options ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { flex: "none", display: "flex", alignItems: "center", gap: 2, minWidth: 0, overflow: "visible" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
-                streaming ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+              options ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { flex: "none", display: "flex", alignItems: "center", gap: 2, minWidth: 0, overflow: "visible" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
+                streaming ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
               ] }) : null
             ]
           }
@@ -25723,9 +25984,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
     ] });
   }
   function SendButton({ icon, title, kind, disabled = false, onClick }) {
-    const [hover, setHover] = import_react36.default.useState(false);
+    const [hover, setHover] = import_react37.default.useState(false);
     const active = kind === "send" && !disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
       "button",
       {
         type: "button",
@@ -25752,21 +26013,21 @@ When you are done, remind me of two things: MCP tools load only in a new session
           cursor: disabled ? "default" : "pointer",
           transition: "background var(--dur-fast) var(--ease-out)"
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
       }
     );
   }
 
   // src/components/chat/ComposerChip.jsx
   init_cep_runtime_inject();
-  var import_react38 = __toESM(require_react(), 1);
+  var import_react39 = __toESM(require_react(), 1);
 
   // src/components/core/Menu.jsx
   init_cep_runtime_inject();
-  var import_react37 = __toESM(require_react(), 1);
-  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
+  var import_react38 = __toESM(require_react(), 1);
+  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
   function Keycap({ children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
       "span",
       {
         style: {
@@ -25787,9 +26048,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
     );
   }
   function MenuRow({ item, onClose }) {
-    const [hover, setHover] = import_react37.default.useState(false);
+    const [hover, setHover] = import_react38.default.useState(false);
     const disabled = !!item.disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(
       "button",
       {
         type: "button",
@@ -25818,15 +26079,15 @@ When you are done, remind me of two things: MCP tools load only in a new session
           transition: "background var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
-          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
-          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
+          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
+          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
         ]
       }
     );
   }
   function Menu({ header, items = [], footer, onClose, minWidth = 184, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(
       "div",
       {
         role: "menu",
@@ -25840,7 +26101,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           ...style
         },
         children: [
-          header ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
+          header ? /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(
             "div",
             {
               style: {
@@ -25853,15 +26114,15 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 marginBottom: "var(--space-1)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
-                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Keycap, { children: k }, i)) }) : null
+                /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
+                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Keycap, { children: k }, i)) }) : null
               ]
             }
           ) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
-            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(MenuRow, { item, onClose }, i)
+          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
+            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(MenuRow, { item, onClose }, i)
           ) }),
-          footer ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+          footer ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
             "div",
             {
               style: {
@@ -25880,7 +26141,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
 
   // src/components/chat/ComposerChip.jsx
-  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
   function ComposerChip({
     icon,
     label,
@@ -25894,11 +26155,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
     title,
     style
   }) {
-    const [hover, setHover] = import_react38.default.useState(false);
-    const [open, setOpen] = import_react38.default.useState(false);
-    const rootRef = import_react38.default.useRef(null);
+    const [hover, setHover] = import_react39.default.useState(false);
+    const [open, setOpen] = import_react39.default.useState(false);
+    const rootRef = import_react39.default.useRef(null);
     const isMenu = Array.isArray(items) && items.length > 0;
-    import_react38.default.useEffect(() => {
+    import_react39.default.useEffect(() => {
       if (!open) return void 0;
       const onDoc = (e) => {
         if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
@@ -25914,8 +26175,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
       };
     }, [open]);
     const lit = active || open;
-    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(
         "button",
         {
           type: "button",
@@ -25948,14 +26209,14 @@ When you are done, remind me of two things: MCP tools load only in a new session
             whiteSpace: "nowrap"
           },
           children: [
-            icon ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Icon2, { name: icon, size: 12 }) : null,
-            label ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
-            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
-            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
+            icon ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Icon2, { name: icon, size: 12 }) : null,
+            label ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
+            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
+            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
           ]
         }
       ),
-      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
         "div",
         {
           style: {
@@ -25965,7 +26226,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             zIndex: 30,
             animation: "ds-fade-up var(--dur-base) var(--ease-out)"
           },
-          children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
+          children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
         }
       ) : null
     ] });
@@ -25996,6 +26257,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     PROCESS_EXITED: entry("PROCESS_EXITED", "backend", "\u8BF7\u67E5\u770B\u6298\u53E0\u8BE6\u60C5\u4E2D\u7684\u9000\u51FA\u4FE1\u606F\u4E0E stderr \u5C3E\u90E8\u3002", "Inspect the exit information and stderr tail in the collapsed details."),
     AUTH_REQUIRED: entry("AUTH_REQUIRED", "auth", "\u8BF7\u6309\u300C\u8BBE\u7F6E \u2192 AI\u300D\u901A\u9053\u5361\u4E0A\u7684\u767B\u5F55\u6307\u5F15\u5B8C\u6210\u5BF9\u5E94 CLI \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", "Follow the sign-in guidance on the channel card under Settings \u2192 AI for this CLI, then re-check."),
     MCP_UNREACHABLE: entry("MCP_UNREACHABLE", "mcp", "\u8BF7\u4FDD\u6301\u9762\u677F\u5BBF\u4E3B\u8FD0\u884C\uFF0C\u5E76\u68C0\u67E5\u672C\u673A\u4F1A\u8BDD MCP \u72B6\u6001\u3002", "Keep the panel host running and check the local conversation MCP status."),
+    AE_MCP_REBUILD_FAILED: entry("AE_MCP_REBUILD_FAILED", "network", "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u91CD\u5EFA\u5931\u8D25\u3002\u8BF7\u91CD\u8F7D\u9762\u677F\u6216\u65B0\u5EFA\u4F1A\u8BDD\u540E\u518D\u8BD5\u3002", "The connection to the AE host could not be rebuilt. Reload the panel or start a new session, then try again."),
     SESSION_START_FAILED: entry("SESSION_START_FAILED", "backend", "\u4F1A\u8BDD\u5C1A\u672A\u521B\u5EFA\uFF1B\u53EF\u4FEE\u590D\u901A\u9053\u72B6\u6001\u540E\u5B89\u5168\u91CD\u8BD5\u3002", "The session was not created; retry after fixing the channel state."),
     TURN_START_FAILED: entry("TURN_START_FAILED", "backend", "\u53D1\u9001\u53EF\u80FD\u5DF2\u7ECF\u5F00\u59CB\uFF1B\u8BF7\u5148\u6309\u8BE6\u60C5\u4E2D\u7684\u6D3E\u53D1\u72B6\u6001\u6838\u5BF9\u518D\u91CD\u8BD5\u3002", "Sending may have started; check the dispatch state before retrying."),
     RPC_TIMEOUT: entry("RPC_TIMEOUT", "network", "\u8BF7\u6C42\u7B49\u5F85\u8D85\u65F6\uFF1B\u8BF7\u68C0\u67E5\u901A\u9053\u8FDB\u7A0B\u4E0E\u7F51\u7EDC\u540E\u518D\u8BD5\u3002", "The request timed out; check the channel process and network before retrying."),
@@ -26660,6 +26922,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
     if (stage === "session") {
       return zh ? "\u6B63\u5728\u5EFA\u7ACB\u4F1A\u8BDD\u2026" : "Creating session\u2026";
     }
+    if (stage === "mcp-rebuild") {
+      return zh ? "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u5DF2\u5931\u6548\uFF0C\u6B63\u5728\u91CD\u5EFA\u2026" : "The connection to the AE host was lost. Rebuilding\u2026";
+    }
     if (stage === "dispatch") {
       return zh ? "\u7B49\u5F85\u6A21\u578B\u56DE\u590D\u2026" : "Waiting for the model\u2026";
     }
@@ -26670,7 +26935,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
 
   // src/screens/ChatScreen.jsx
-  var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime38 = __toESM(require_jsx_runtime(), 1);
   var C2 = {
     zh: {
       hello: "\u4F60\u597D\uFF01\u6211\u53EF\u4EE5\u76F4\u63A5\u64CD\u4F5C\u5F53\u524D\u6253\u5F00\u7684 AE \u5DE5\u7A0B\u3002\u8BD5\u8BD5\u8FD9\u4E9B\uFF1A",
@@ -26748,10 +27013,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
     ]
   };
   function Notice({ text, actionLabel, onAction }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
-      onAction ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
+      onAction ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
     ] });
   }
   function statusForTool(state) {
@@ -26772,13 +27037,13 @@ When you are done, remind me of two things: MCP tools load only in a new session
   function Entry({ entry: entry2, lang, onApprove, onAnswerQuestion }) {
     const t = C2[lang] || C2.zh;
     if (entry2.type === "user-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(ChatBubble, { role: "user", attachments: entry2.attachments, children: entry2.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(ChatBubble, { role: "user", attachments: entry2.attachments, children: entry2.text });
     }
     if (entry2.type === "ai-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(ChatBubble, { role: "ai", children: entry2.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(ChatBubble, { role: "ai", children: entry2.text });
     }
     if (entry2.type === "question") {
-      return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
         QuestionCard,
         {
           lang,
@@ -26793,8 +27058,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
     }
     if (entry2.type === "tool-call") {
       const highRisk = entry2.risk === "destructive" || entry2.risk === "external";
-      return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
           ToolCallCard,
           {
             verb: titleForTool(entry2, lang),
@@ -26804,7 +27069,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             errorMessage: entry2.state === "error" ? entry2.text : null
           }
         ),
-        entry2.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+        entry2.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
           ApprovalCard,
           {
             risk: highRisk ? "high" : "normal",
@@ -26821,7 +27086,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     }
     if (entry2.type === "error") {
       const details = formatErrorDetail(entry2.detail);
-      return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
         ToolCallCard,
         {
           verb: entry2.kind === "model" ? t.modelErrorTitle : t.errorTitle,
@@ -26880,21 +27145,21 @@ When you are done, remind me of two things: MCP tools load only in a new session
     onRetryAttachment
   }) {
     const t = C2[lang] || C2.zh;
-    const logRef = import_react39.default.useRef(null);
-    const layoutRef = import_react39.default.useRef(null);
-    const footerRef = import_react39.default.useRef(null);
-    const [composerSize, dispatchComposerSize] = import_react39.default.useReducer(
+    const logRef = import_react40.default.useRef(null);
+    const layoutRef = import_react40.default.useRef(null);
+    const footerRef = import_react40.default.useRef(null);
+    const [composerSize, dispatchComposerSize] = import_react40.default.useReducer(
       reduceComposerHeight,
       void 0,
       () => createComposerHeightState()
     );
-    const composerHeightRef = import_react39.default.useRef(composerSize.height);
+    const composerHeightRef = import_react40.default.useRef(composerSize.height);
     composerHeightRef.current = composerSize.height;
     const hasEntries = entries.length > 0;
     const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
     const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
-    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(import_react39.default.Fragment, { children: [
-      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
+      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
         ComposerChip,
         {
           icon: "box",
@@ -26904,7 +27169,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           items: menuItems(chips.model.items, chipState.modelId, onChipModel)
         }
       ) : null,
-      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
         ComposerChip,
         {
           icon: "brain",
@@ -26914,7 +27179,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           items: menuItems(chips.effort.items, chipState.effort, onChipEffort)
         }
       ) : null,
-      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
         ComposerChip,
         {
           icon: "zap",
@@ -26924,7 +27189,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           onToggle: (next) => onChipFast && onChipFast(next)
         }
       ) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
         ComposerChip,
         {
           icon: "shield",
@@ -26935,11 +27200,11 @@ When you are done, remind me of two things: MCP tools load only in a new session
         }
       )
     ] }) : null;
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }, [entries, streaming, thinking, turnStage, turnProgress]);
-    import_react39.default.useEffect(() => {
+    import_react40.default.useEffect(() => {
       if (typeof ResizeObserver !== "function") return void 0;
       if (!layoutRef.current || !footerRef.current) return void 0;
       const measureComposerBounds = () => {
@@ -26985,9 +27250,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
       retry: t.attachmentRetry,
       remove: t.attachmentRemove
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
-      sessionTitle ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { flex: "none", height: 28, display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "0 var(--space-2)", borderBottom: "1px solid var(--border-subtle)" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { minWidth: 0, flex: 1 }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+      sessionTitle ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { style: { flex: "none", height: 28, display: "flex", alignItems: "center", gap: "var(--space-1)", padding: "0 var(--space-2)", borderBottom: "1px solid var(--border-subtle)" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { style: { minWidth: 0, flex: 1 }, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
           Button,
           {
             variant: "ghost",
@@ -26996,23 +27261,23 @@ When you are done, remind me of two things: MCP tools load only in a new session
             title: sessionTitle,
             onClick: onOpenSessions,
             style: { maxWidth: "100%", minWidth: 0 },
-            children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: sessionTitle })
+            children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: sessionTitle })
           }
         ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { variant: "ghost", size: "sm", icon: "plus", onClick: () => onNewSession(), children: t.newSession })
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "ghost", size: "sm", icon: "plus", onClick: () => onNewSession(), children: t.newSession })
       ] }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
-        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(import_react39.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(AIAvatar, { size: 32 }),
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
+        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(import_react40.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(AIAvatar, { size: 32 }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
         ] }) }) : null,
-        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(import_react39.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(AIAvatar, { size: 32 }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
+        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(AIAvatar, { size: 32 }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
           ] }),
-          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
             PromptCard,
             {
               icon: card.icon,
@@ -27026,27 +27291,27 @@ When you are done, remind me of two things: MCP tools load only in a new session
             card.id || card.title
           ))
         ] }) : null,
-        entries.map((entry2) => /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Entry, { entry: entry2, lang, onApprove, onAnswerQuestion }, entry2.sid || entry2.id)),
-        streaming && thinking && !turnProgress ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Spinner, { size: 12 }),
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: t.thinking })
-        ] }) : turnStage || turnProgress ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Spinner, { size: 12 }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: turnProgressText((turnProgress == null ? void 0 : turnProgress.stage) || turnStage, turnBackend, lang) }),
-            (turnProgress == null ? void 0 : turnProgress.estimatedTokens) !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { children: [
+        entries.map((entry2) => /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Entry, { entry: entry2, lang, onApprove, onAnswerQuestion }, entry2.sid || entry2.id)),
+        streaming && thinking && !turnProgress ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Spinner, { size: 12 }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: t.thinking })
+        ] }) : turnStage || turnProgress ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 6 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Spinner, { size: 12 }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: turnProgressText((turnProgress == null ? void 0 : turnProgress.stage) || turnStage, turnBackend, lang) }),
+            (turnProgress == null ? void 0 : turnProgress.estimatedTokens) !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("span", { children: [
               "\xB7 ",
               t.progressTokens(turnProgress.estimatedTokens)
             ] }) : null,
-            (turnProgress == null ? void 0 : turnProgress.elapsedMs) !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { children: [
+            (turnProgress == null ? void 0 : turnProgress.elapsedMs) !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("span", { children: [
               "\xB7 ",
               t.progressElapsed(progressSeconds(turnProgress.elapsedMs))
             ] }) : null
           ] }),
-          (turnProgress == null ? void 0 : turnProgress.warning) ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { style: { color: "var(--warning, var(--text-secondary))" }, children: t.progressWarning }) : null
+          (turnProgress == null ? void 0 : turnProgress.warning) ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { style: { color: "var(--warning, var(--text-secondary))" }, children: t.progressWarning }) : null
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
         Composer,
         {
           value: attachmentDraft.text,
@@ -27057,7 +27322,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || (() => onNewSession()) }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || (() => onNewSession()) }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
             Notice,
             {
               text: attachmentDraft.dispatchState === "uncertain" ? t.uncertainTurn : sendError.message,
@@ -27082,12 +27347,12 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/screens/ToolsScreen.jsx
   init_cep_runtime_inject();
-  var import_react41 = __toESM(require_react(), 1);
+  var import_react42 = __toESM(require_react(), 1);
 
   // src/components/forms/Textarea.jsx
   init_cep_runtime_inject();
-  var import_react40 = __toESM(require_react(), 1);
-  var import_jsx_runtime38 = __toESM(require_jsx_runtime(), 1);
+  var import_react41 = __toESM(require_react(), 1);
+  var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
   function Textarea({
     value,
     onChange,
@@ -27098,8 +27363,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
     rows = 5,
     style
   }) {
-    const [focused, setFocused] = import_react40.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+    const [focused, setFocused] = import_react41.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
       "textarea",
       {
         className: "ds-focusable",
@@ -27133,7 +27398,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
 
   // src/screens/ToolsScreen.jsx
-  var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
   var TEXT = {
     zh: {
       title: "\u5DE5\u5177\u5E93",
@@ -27196,7 +27461,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
   function ItemRow({ mode, item, selected, onSelect }) {
     const id = itemId(mode, item);
-    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(
       "button",
       {
         type: "button",
@@ -27215,7 +27480,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
         },
         "data-item-id": id,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
             "span",
             {
               style: {
@@ -27228,7 +27493,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
               children: item.name || item.id
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
             "span",
             {
               style: {
@@ -27249,18 +27514,18 @@ When you are done, remind me of two things: MCP tools load only in a new session
   }
   function ToolsScreen({ api, lang = "zh" }) {
     const t = TEXT[lang] || TEXT.zh;
-    const [mode, setMode] = import_react41.default.useState("tools");
-    const [query, setQuery] = import_react41.default.useState("");
-    const [items, setItems] = import_react41.default.useState([]);
-    const [selectedId, setSelectedId] = import_react41.default.useState("");
-    const [detail, setDetail] = import_react41.default.useState(null);
-    const [argsText, setArgsText] = import_react41.default.useState("{}");
-    const [result, setResult] = import_react41.default.useState(null);
-    const [busy, setBusy] = import_react41.default.useState(false);
-    const [error, setError] = import_react41.default.useState("");
-    const loadSequence = import_react41.default.useRef(0);
-    const selectSequence = import_react41.default.useRef(0);
-    const load = import_react41.default.useCallback(async () => {
+    const [mode, setMode] = import_react42.default.useState("tools");
+    const [query, setQuery] = import_react42.default.useState("");
+    const [items, setItems] = import_react42.default.useState([]);
+    const [selectedId, setSelectedId] = import_react42.default.useState("");
+    const [detail, setDetail] = import_react42.default.useState(null);
+    const [argsText, setArgsText] = import_react42.default.useState("{}");
+    const [result, setResult] = import_react42.default.useState(null);
+    const [busy, setBusy] = import_react42.default.useState(false);
+    const [error, setError] = import_react42.default.useState("");
+    const loadSequence = import_react42.default.useRef(0);
+    const selectSequence = import_react42.default.useRef(0);
+    const load = import_react42.default.useCallback(async () => {
       if (!api) return;
       const sequence = loadSequence.current + 1;
       loadSequence.current = sequence;
@@ -27282,7 +27547,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
         if (sequence === loadSequence.current) setError(cause.message || String(cause));
       }
     }, [api, mode, query]);
-    import_react41.default.useEffect(() => {
+    import_react42.default.useEffect(() => {
       const timer = setTimeout(load, 120);
       return () => clearTimeout(timer);
     }, [load]);
@@ -27335,13 +27600,13 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const selectedSchema = selected && (detail.mode === "skills" ? selected.args_schema : selected.argsSchema);
     const selectedContent = selected && (detail.mode === "skills" ? selected.template : selected.content);
     const canExecuteSkill = detail && detail.mode === "skills" && selected.template_type === "jsx";
-    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-screen", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("header", { className: "tools-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-header__title", children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-header__actions", children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "ghost", icon: "rotate-cw", onClick: load, disabled: busy, children: t.refresh }) })
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-screen", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("header", { className: "tools-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-header__title", children: t.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-header__actions", children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", icon: "rotate-cw", onClick: load, disabled: busy, children: t.refresh }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-filters", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-filters", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
           Segmented,
           {
             value: mode,
@@ -27352,7 +27617,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
           Input,
           {
             value: query,
@@ -27361,9 +27626,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
           }
         )
       ] }),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-error", role: "alert", children: error }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-split", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("section", { className: "tools-list", "aria-label": mode === "skills" ? t.skills : t.tools, children: items.length ? items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+      error ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-error", role: "alert", children: error }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-split", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-list", "aria-label": mode === "skills" ? t.skills : t.tools, children: items.length ? items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
           ItemRow,
           {
             mode,
@@ -27372,22 +27637,22 @@ When you are done, remind me of two things: MCP tools load only in a new session
             onSelect: select
           },
           itemId(mode, item)
-        )) : /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(EmptyState, { icon: "box", title: t.empty, compact: true }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("section", { className: "tools-detail", children: !selected ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(import_react41.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-detail__heading", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h2", { children: selected.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("p", { children: selected.description })
+        )) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.empty, compact: true }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-detail", children: !selected ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-detail__heading", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h2", { children: selected.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("p", { children: selected.description })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: selected.verified ? "ok" : "neutral", children: selected.verified ? t.signed : detail.mode === "skills" ? t.prompt : t.user })
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: selected.verified ? "ok" : "neutral", children: selected.verified ? t.signed : detail.mode === "skills" ? t.prompt : t.user })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.content }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { className: "tools-content", children: selectedContent || "\u2014" })
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.content }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: selectedContent || "\u2014" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.args }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.args }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
               Textarea,
               {
                 mono: true,
@@ -27396,13 +27661,13 @@ When you are done, remind me of two things: MCP tools load only in a new session
                 rows: Math.max(4, Object.keys((selectedSchema == null ? void 0 : selectedSchema.properties) || {}).length + 2)
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-runner__actions", children: [
-              detail.mode === "skills" ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "secondary", onClick: () => invoke("render"), disabled: busy, children: t.render }) : null,
-              detail.mode === "tools" || canExecuteSkill ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "primary", onClick: () => invoke("execute"), disabled: busy, children: t.run }) : null
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-runner__actions", children: [
+              detail.mode === "skills" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", onClick: () => invoke("render"), disabled: busy, children: t.render }) : null,
+              detail.mode === "tools" || canExecuteSkill ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", onClick: () => invoke("execute"), disabled: busy, children: t.run }) : null
             ] }),
-            result ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(import_react41.default.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.result }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { className: "tools-content", children: JSON.stringify(result, null, 2) })
+            result ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.result }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: JSON.stringify(result, null, 2) })
             ] }) : null
           ] })
         ] }) })
@@ -27412,8 +27677,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/components/tools/ToolApprovalDialog.jsx
   init_cep_runtime_inject();
-  var import_react42 = __toESM(require_react(), 1);
-  var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
+  var import_react43 = __toESM(require_react(), 1);
+  var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
   var L3 = {
     zh: {
       title: "\u6279\u51C6\u5DE5\u5177\u6267\u884C\uFF1F",
@@ -27443,29 +27708,29 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const t = L3[lang] || L3.zh;
     const plan = record.plan || {};
     const resolve = (decision) => onResolve && onResolve({ id: record.id, decision });
-    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve("deny") }),
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-approval", role: "alertdialog", "aria-label": t.title, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-approval__heading", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: t.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: plan.risk === "destructive" || plan.risk === "external" ? "error" : "warn", children: plan.risk })
+    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve("deny") }),
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-approval", role: "alertdialog", "aria-label": t.title, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-approval__heading", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { children: t.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: plan.risk === "destructive" || plan.risk === "external" ? "error" : "warn", children: plan.risk })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("dl", { className: "tools-kv", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.artifact }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: plan.artifactId || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.operation }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: plan.operation || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.risk }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: plan.risk || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.args }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { children: JSON.stringify(plan.normalizedArgs || {}, null, 2) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.target }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { children: JSON.stringify(plan.target || {}, null, 2) }) })
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("dl", { className: "tools-kv", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.artifact }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: plan.artifactId || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.operation }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: plan.operation || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.risk }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: plan.risk || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.args }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("pre", { children: JSON.stringify(plan.normalizedArgs || {}, null, 2) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.target }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("pre", { children: JSON.stringify(plan.target || {}, null, 2) }) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-approval__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", onClick: () => resolve("deny"), children: t.deny }),
-          record.policy && record.policy.allowSession ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", onClick: () => resolve("session"), children: t.session }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", onClick: () => resolve("once"), children: t.once })
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-approval__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", onClick: () => resolve("deny"), children: t.deny }),
+          record.policy && record.policy.allowSession ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", onClick: () => resolve("session"), children: t.session }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "primary", onClick: () => resolve("once"), children: t.once })
         ] })
       ] })
     ] });
@@ -27473,17 +27738,17 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/components/tools/QuestionFormDialog.jsx
   init_cep_runtime_inject();
-  var import_react43 = __toESM(require_react(), 1);
-  var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
+  var import_react44 = __toESM(require_react(), 1);
+  var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
   function QuestionFormDialog({ record, lang = "zh", onResolve }) {
     if (!record) return null;
     const presentation = record.presentation;
     if (!presentation || presentation.kind !== "question-form") return null;
     const questions = Array.isArray(presentation.questions) ? presentation.questions : [];
     const resolve = (result) => onResolve && onResolve({ id: record.id, ...result });
-    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve({ action: "cancel", content: {} }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "tools-approval", role: "dialog", "aria-label": presentation.title || "", children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve({ action: "cancel", content: {} }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { className: "tools-approval", role: "dialog", "aria-label": presentation.title || "", children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
         QuestionCard,
         {
           lang,
@@ -31695,6 +31960,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   var STDERR_TAIL_LIMIT3 = 4096;
   var STALE_TERMINATE_LIMIT = 8;
   var STALE_REMOVE_LIMIT = 64;
+  var PANEL_HOST_GENERATION = [
+    Date.now().toString(36),
+    Math.random().toString(36).slice(2)
+  ].join("-");
   var OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES = Object.freeze([
     "apply_patch",
     "bash",
@@ -31954,7 +32223,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     setTimeoutImpl = setTimeout,
     clearTimeoutImpl = clearTimeout,
     sleepImpl = sleep,
-    onSweepComplete
+    onSweepComplete,
+    hostGeneration = PANEL_HOST_GENERATION
   } = {}) {
     const adapter = platform || createPlatformAdapter();
     if (!Number.isFinite(readyRequestTimeoutMs) || readyRequestTimeoutMs <= 0 || readyRequestTimeoutMs < readyPollMs) {
@@ -31970,6 +32240,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       throw new TypeError("probeTimeoutMs must be greater than readyTimeoutMs");
     }
     const currentLang = () => (typeof getLang === "function" ? getLang() : lang) || "zh";
+    const currentHostGeneration = String(hostGeneration || PANEL_HOST_GENERATION);
     let proc = null;
     let port = null;
     let baseUrl = "";
@@ -32003,6 +32274,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let stallWarningEmitted = false;
     let messageAbortController = null;
     let generation = 0;
+    let aeMcpRecoveryAttempts = 0;
+    let aeMcpRecoveryStarted = false;
+    let aeMcpRecoveryPromise = null;
     let toolMeta = { annotations: {} };
     const pendingApprovals = /* @__PURE__ */ new Map();
     const pendingQuestions = /* @__PURE__ */ new Map();
@@ -32204,7 +32478,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           } catch {
           }
         }
-        if (!ownedElsewhere) {
+        if (marker.hostGeneration !== currentHostGeneration || !ownedElsewhere) {
           try {
             await adapter.terminateProcess({ pid: marker.pid, executableName: "opencode" });
           } catch {
@@ -32314,6 +32588,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             owner: "ae-mcp-panel",
             ownerPid: adapter.pid,
             pid: spawnedProc.pid,
+            hostGeneration: currentHostGeneration,
             port: instancePort,
             startedAt: (/* @__PURE__ */ new Date()).toISOString()
           })
@@ -32335,6 +32610,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         activeTurnAccepted = false;
         messageDispatched = false;
         turnStarted = false;
+        aeMcpRecoveryAttempts = 0;
+        aeMcpRecoveryStarted = false;
+        aeMcpRecoveryPromise = null;
         startedTools.clear();
         partTypes.clear();
         setActiveAttachmentPaths([]);
@@ -32348,6 +32626,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       activeTurnAccepted = false;
       messageDispatched = false;
       turnStarted = false;
+      aeMcpRecoveryAttempts = 0;
+      aeMcpRecoveryStarted = false;
+      aeMcpRecoveryPromise = null;
       startedTools.clear();
       partTypes.clear();
       setActiveAttachmentPaths([]);
@@ -32384,6 +32665,87 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           dispatchState: messageDispatched ? "uncertain" : "not-started"
         } : {}
       };
+    }
+    function isAeMcpTransportFailure(value, text = "", { allowBareNotConnected = false } = {}) {
+      const combined = [String(text || "")];
+      try {
+        combined.push(JSON.stringify(value));
+      } catch {
+      }
+      const message = combined.filter(Boolean).join("\n");
+      return /(?:mcp\s+error\s*)?-?32000\b[\s\S]{0,120}\b(?:connection\s+closed|not\s+connected)\b/i.test(message) || allowBareNotConnected && /\bnot\s+connected\b/i.test(message);
+    }
+    function aeMcpRebuildFailureMessage() {
+      return /^zh/i.test(currentLang()) ? "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u91CD\u5EFA\u5931\u8D25\u3002\u8BF7\u91CD\u8F7D\u9762\u677F\u6216\u65B0\u5EFA\u4F1A\u8BDD\u540E\u518D\u8BD5\u3002" : "The connection to the AE host could not be rebuilt. Reload the panel or start a new session, then try again.";
+    }
+    async function recycleAeMcpServer() {
+      var _a;
+      const staleProc = proc;
+      const staleHome = configHome;
+      generation += 1;
+      sseClosed = true;
+      sseStarted = false;
+      serverPromise = null;
+      messageAbortController == null ? void 0 : messageAbortController.abort();
+      messageAbortController = null;
+      invalidateSession();
+      proc = null;
+      port = null;
+      baseUrl = "";
+      configHome = "";
+      removeInstanceMarker(staleHome);
+      if (staleProc == null ? void 0 : staleProc.pid) {
+        try {
+          await adapter.terminateProcess({ pid: staleProc.pid, executableName: "opencode" });
+        } catch {
+        }
+      }
+      try {
+        (_a = staleProc == null ? void 0 : staleProc.kill) == null ? void 0 : _a.call(staleProc);
+      } catch {
+      }
+    }
+    function failAeMcpRebuild() {
+      if (!activeRun || stopRequested) return;
+      emitAfterText({
+        type: "error",
+        kind: "network",
+        code: "AE_MCP_REBUILD_FAILED",
+        message: aeMcpRebuildFailureMessage(),
+        detail: { recoveryAttempts: aeMcpRecoveryAttempts },
+        ...activeTurnFailureFields()
+      });
+      finishActive();
+      void recycleAeMcpServer();
+    }
+    function recoverAeMcpTransport() {
+      if (!activeRun || stopRequested) return false;
+      if (aeMcpRecoveryPromise) return true;
+      if (aeMcpRecoveryAttempts >= 1) {
+        failAeMcpRebuild();
+        return true;
+      }
+      const retryTurn = activeTurn;
+      aeMcpRecoveryAttempts += 1;
+      aeMcpRecoveryStarted = true;
+      emitTurnProgress("mcp-rebuild");
+      const pendingRecovery = (async () => {
+        await recycleAeMcpServer();
+        if (!activeRun || stopRequested || !retryTurn) return;
+        const replacementId = await prepareTurnSession();
+        await dispatchTurnMessage(replacementId, retryTurn);
+      })();
+      aeMcpRecoveryPromise = pendingRecovery;
+      void pendingRecovery.then(
+        () => {
+          if (aeMcpRecoveryPromise === pendingRecovery) aeMcpRecoveryPromise = null;
+        },
+        () => {
+          if (aeMcpRecoveryPromise === pendingRecovery) aeMcpRecoveryPromise = null;
+          failAeMcpRebuild();
+        }
+      );
+      return true;
     }
     async function requestJson(path, options = {}, requestBaseUrl = baseUrl) {
       const response = await request(path, options, requestBaseUrl);
@@ -32845,13 +33207,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const state = part.state || {};
       const status = state.status;
       if (status === "completed" || status === "error") {
+        const outputText = typeof state.output === "string" ? state.output : eventOutputText(state);
+        if (status === "error" && name.startsWith("mcp__ae__") && isAeMcpTransportFailure(state, outputText, { allowBareNotConnected: true })) {
+          void recoverAeMcpTransport();
+        }
         const ms = state.time && Number.isFinite(state.time.start) && Number.isFinite(state.time.end) ? state.time.end - state.time.start : void 0;
         emitAfterText({
           type: "tool-result",
           toolUseId,
           name,
           ok: status === "completed",
-          text: typeof state.output === "string" ? state.output : eventOutputText(state),
+          text: outputText,
           durationMs: ms
         });
         return;
@@ -32970,6 +33336,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           upstream: true,
           upstreamText: combined
         });
+        if (isAeMcpTransportFailure(error, combined)) {
+          void recoverAeMcpTransport();
+          return;
+        }
         settleFailedTurnInteractions();
         emitAfterText({
           type: "error",
@@ -33020,6 +33390,38 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }))
       ];
     }
+    async function prepareTurnSession() {
+      if (!proc || !baseUrl || sseClosed) emitTurnProgress("spawn");
+      else if (!sessionId) emitTurnProgress("session");
+      return ensureSession();
+    }
+    async function dispatchTurnMessage(id, turn) {
+      const messageBody = { parts: openCodeParts(turn) };
+      try {
+        messageDispatched = true;
+        armStallWatchdog();
+        const controller = new AbortController();
+        messageAbortController = controller;
+        const messageRequest = postJson("/session/" + encodeURIComponent(id) + "/message", messageBody, controller.signal);
+        emitTurnProgress("dispatch");
+        await messageRequest;
+      } catch (error) {
+        if (!sessionWasAdopted || (error == null ? void 0 : error.httpStatus) !== 404 && (error == null ? void 0 : error.httpStatus) !== 503) throw error;
+        sessionId = null;
+        adoptedSessionId = null;
+        sessionWasAdopted = false;
+        const replacementId = await ensureSession();
+        const controller = new AbortController();
+        messageAbortController = controller;
+        const replacementRequest = postJson(
+          "/session/" + encodeURIComponent(replacementId) + "/message",
+          messageBody,
+          controller.signal
+        );
+        emitTurnProgress("dispatch");
+        await replacementRequest;
+      }
+    }
     async function sendUser(input) {
       if (activeRun) return activeRun;
       stopRequested = false;
@@ -33041,6 +33443,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       activeTurn = turn;
       activeTurnAccepted = false;
       messageDispatched = false;
+      aeMcpRecoveryAttempts = 0;
+      aeMcpRecoveryStarted = false;
+      aeMcpRecoveryPromise = null;
       setActiveAttachmentPaths(turn.attachments.flatMap((attachment) => [
         attachment.localPath,
         attachmentFileUrl(attachment.localPath, adapter.id)
@@ -33049,42 +33454,20 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         activeResolve = resolve;
       });
       try {
-        if (!proc || !baseUrl || sseClosed) emitTurnProgress("spawn");
-        else if (!sessionId) emitTurnProgress("session");
-        const id = await ensureSession();
+        const id = await prepareTurnSession();
         const userText = turn.text;
         transcript.push({ role: "user", text: userText });
         if (turn.turnId) {
           activeTurnAccepted = true;
           emit({ type: "turn-accepted", turnId: turn.turnId, transport: "opencode-file-part" });
         }
-        const messageBody = { parts: openCodeParts(turn) };
-        try {
-          messageDispatched = true;
-          armStallWatchdog();
-          const controller = new AbortController();
-          messageAbortController = controller;
-          const messageRequest = postJson("/session/" + encodeURIComponent(id) + "/message", messageBody, controller.signal);
-          emitTurnProgress("dispatch");
-          await messageRequest;
-        } catch (error) {
-          if (!sessionWasAdopted || (error == null ? void 0 : error.httpStatus) !== 404 && (error == null ? void 0 : error.httpStatus) !== 503) throw error;
-          sessionId = null;
-          adoptedSessionId = null;
-          sessionWasAdopted = false;
-          const replacementId = await ensureSession();
-          const controller = new AbortController();
-          messageAbortController = controller;
-          const replacementRequest = postJson(
-            "/session/" + encodeURIComponent(replacementId) + "/message",
-            messageBody,
-            controller.signal
-          );
-          emitTurnProgress("dispatch");
-          await replacementRequest;
-        }
+        await dispatchTurnMessage(id, turn);
       } catch (e) {
         if (stopRequested || !activeRun) return;
+        if (aeMcpRecoveryStarted) {
+          if (aeMcpRecoveryPromise) await aeMcpRecoveryPromise;
+          return activeRun;
+        }
         const httpStatus = extractHttpStatus(e == null ? void 0 : e.httpStatus);
         const fallbackCode = (e == null ? void 0 : e.fallbackCode) || (messageDispatched ? "TURN_START_FAILED" : "SESSION_START_FAILED");
         const classified = classifyErrorCode({
@@ -33227,6 +33610,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       activeTurnAccepted = false;
       messageDispatched = false;
       turnStarted = false;
+      aeMcpRecoveryAttempts = 0;
+      aeMcpRecoveryStarted = false;
+      aeMcpRecoveryPromise = null;
       stopRequested = false;
       startedTools.clear();
       partTypes.clear();
@@ -33541,7 +33927,7 @@ ${command}`
 
   // src/components/settings/ProviderManagerSection.jsx
   init_cep_runtime_inject();
-  var import_react44 = __toESM(require_react(), 1);
+  var import_react45 = __toESM(require_react(), 1);
 
   // src/lib/providerManagerState.js
   init_cep_runtime_inject();
@@ -33626,7 +34012,7 @@ ${command}`
   }
 
   // src/components/settings/ProviderManagerSection.jsx
-  var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime43 = __toESM(require_jsx_runtime(), 1);
   var L4 = {
     zh: {
       title: "Provider \u7BA1\u7406",
@@ -33688,7 +34074,7 @@ ${command}`
     }
   };
   function SecretInput({ name, disabled = false }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
       "input",
       {
         name,
@@ -33721,12 +34107,12 @@ ${command}`
     disabled = false
   }) {
     const t = L4[lang] || L4.zh;
-    const [draft, setDraft] = import_react44.default.useState(null);
-    const [error, setError] = import_react44.default.useState("");
-    const [note, setNote] = import_react44.default.useState("");
-    const [probing, setProbing] = import_react44.default.useState(false);
-    const probeRunRef = import_react44.default.useRef(0);
-    const invalidateProbe = import_react44.default.useCallback(() => {
+    const [draft, setDraft] = import_react45.default.useState(null);
+    const [error, setError] = import_react45.default.useState("");
+    const [note, setNote] = import_react45.default.useState("");
+    const [probing, setProbing] = import_react45.default.useState(false);
+    const probeRunRef = import_react45.default.useRef(0);
+    const invalidateProbe = import_react45.default.useCallback(() => {
       probeRunRef.current += 1;
       setProbing(false);
     }, []);
@@ -33756,25 +34142,25 @@ ${command}`
         (_b = (_a = event.currentTarget) == null ? void 0 : _a.reset) == null ? void 0 : _b.call(_a);
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("details", { style: {
+    return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("details", { style: {
       border: "1px solid var(--border-subtle)",
       borderRadius: "var(--radius-md)",
       background: "var(--bg-well)",
       padding: "7px 8px"
     }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("summary", { style: {
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("summary", { style: {
         cursor: "pointer",
         listStyle: "none",
         display: "flex",
         alignItems: "center",
         gap: 8
       }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { style: {
+        /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { style: {
           flex: 1,
           font: "500 12px/1.35 var(--font-ui)",
           color: "var(--text-primary)"
         }, children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
           Button,
           {
             variant: "secondary",
@@ -33792,11 +34178,11 @@ ${command}`
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
         providers.map((provider) => {
           const modelCount = Array.isArray(provider == null ? void 0 : provider.modelIds) ? provider.modelIds.length : 0;
           const selected = provider.id === activeProviderId;
-          return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { "data-provider-id": provider.id, style: {
+          return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { "data-provider-id": provider.id, style: {
             display: "flex",
             flexDirection: "column",
             gap: 4,
@@ -33805,8 +34191,8 @@ ${command}`
             borderRadius: "var(--radius-sm)",
             background: "var(--bg-panel)"
           }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { style: {
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { style: {
                 flex: 1,
                 minWidth: 120,
                 font: "500 12px/1.35 var(--font-ui)",
@@ -33815,19 +34201,19 @@ ${command}`
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap"
               }, children: provider.name }),
-              selected ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Badge, { status: "accent", children: t.selected }) : null,
-              provider.needsApiKey ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Badge, { status: "warn", children: t.needsApiKey }) : null,
-              modelCount ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
+              selected ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: "accent", children: t.selected }) : null,
+              provider.needsApiKey ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: "warn", children: t.needsApiKey }) : null,
+              modelCount ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: {
               font: "400 10px/1.35 var(--font-mono)",
               color: "var(--text-tertiary)",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap"
             }, children: provider.baseUrl }),
-            /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
                 Button,
                 {
                   variant: "ghost",
@@ -33842,7 +34228,7 @@ ${command}`
                   children: t.edit
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
                 Button,
                 {
                   variant: "ghost",
@@ -33858,7 +34244,7 @@ ${command}`
             ] })
           ] }, provider.id);
         }),
-        draft ? /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("form", { onSubmit: save, style: {
+        draft ? /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("form", { onSubmit: save, style: {
           display: "flex",
           flexDirection: "column",
           gap: 6,
@@ -33867,7 +34253,7 @@ ${command}`
           borderRadius: "var(--radius-sm)",
           background: "var(--bg-panel)"
         }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
             Input,
             {
               disabled,
@@ -33875,7 +34261,7 @@ ${command}`
               onChange: (value) => setDraft({ ...draft, name: value })
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
             Input,
             {
               mono: true,
@@ -33888,7 +34274,7 @@ ${command}`
               placeholder: "https://api.example.com/v1"
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.dialect, caption: t.dialectCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.dialect, caption: t.dialectCap, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
             Select,
             {
               disabled,
@@ -33903,13 +34289,13 @@ ${command}`
               ]
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("label", { style: {
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("label", { style: {
             display: "flex",
             gap: 6,
             alignItems: "center",
             font: "400 11px/1.35 var(--font-ui)"
           }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
               "input",
               {
                 type: "checkbox",
@@ -33926,9 +34312,9 @@ ${command}`
             ),
             t.insecure
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
               Input,
               {
                 mono: true,
@@ -33941,7 +34327,7 @@ ${command}`
                 placeholder: "claude-sonnet-4"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
               Button,
               {
                 type: "button",
@@ -33996,7 +34382,7 @@ ${command}`
               }
             )
           ] }) }),
-          draftModelIds.length ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Field, { label: t.contextWindow, caption: t.contextCap, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
+          draftModelIds.length ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.contextWindow, caption: t.contextCap, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: {
             display: "flex",
             flexDirection: "column",
             gap: 5,
@@ -34009,20 +34395,20 @@ ${command}`
               modelId
             ) ? draft.modelContexts[modelId] : OPEN_CODE_DEFAULT_CONTEXT_WINDOW;
             const choice = openCodeContextPresetValue(contextValue);
-            return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: {
+            return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: {
               display: "grid",
               gridTemplateColumns: "minmax(90px, 1fr) 105px",
               gap: 6,
               alignItems: "center"
             }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { title: modelId, style: {
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { title: modelId, style: {
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
                 font: "400 10px/1.35 var(--font-mono)",
                 color: "var(--text-secondary)"
               }, children: modelId }),
-              /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
                 Select,
                 {
                   disabled,
@@ -34040,7 +34426,7 @@ ${command}`
                   ]
                 }
               ),
-              choice === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: { gridColumn: "1 / -1", display: "flex", gap: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+              choice === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: { gridColumn: "1 / -1", display: "flex", gap: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
                 Input,
                 {
                   mono: true,
@@ -34048,7 +34434,7 @@ ${command}`
                   disabled,
                   value: String(contextValue),
                   onChange: (value) => setModelContext(modelId, value),
-                  suffix: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("span", { style: {
+                  suffix: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { style: {
                     paddingRight: 5,
                     font: "400 9px/1 var(--font-ui)",
                     color: "var(--text-tertiary)"
@@ -34057,16 +34443,16 @@ ${command}`
               ) }) : null
             ] }, modelId);
           }) }) }) : null,
-          error ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
+          error ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: {
             font: "400 10px/1.4 var(--font-ui)",
             color: "var(--warn)"
           }, children: error }) : null,
-          note ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { style: {
+          note ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: {
             font: "400 10px/1.4 var(--font-ui)",
             color: "var(--text-tertiary)"
           }, children: note }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
               Button,
               {
                 variant: "ghost",
@@ -34080,7 +34466,7 @@ ${command}`
                 children: t.cancel
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
               Button,
               {
                 variant: "primary",
@@ -34514,10 +34900,10 @@ ${command}`
 
   // src/cep/useActivity.js
   init_cep_runtime_inject();
-  var import_react45 = __toESM(require_react(), 1);
+  var import_react46 = __toESM(require_react(), 1);
   function useActivity(getHost) {
-    const [events, setEvents] = import_react45.default.useState([]);
-    import_react45.default.useEffect(() => {
+    const [events, setEvents] = import_react46.default.useState([]);
+    import_react46.default.useEffect(() => {
       let unsub = null;
       let retry = null;
       let disposed = false;
@@ -34539,7 +34925,7 @@ ${command}`
         if (retry) clearTimeout(retry);
       };
     }, [getHost]);
-    const clear = import_react45.default.useCallback(() => setEvents([]), []);
+    const clear = import_react46.default.useCallback(() => setEvents([]), []);
     return { events, clear };
   }
 
@@ -34568,7 +34954,7 @@ ${command}`
 
   // src/app/wizardWiring.js
   init_cep_runtime_inject();
-  var import_react46 = __toESM(require_react(), 1);
+  var import_react47 = __toESM(require_react(), 1);
 
   // src/cep/wizardActions.js
   init_cep_runtime_inject();
@@ -34846,17 +35232,17 @@ ${command}`
     fetchImpl,
     platform
   } = {}) {
-    const [stepStates, dispatch] = import_react46.default.useReducer(stepReducer, null, initialStepStates);
-    const [pathOffers, setPathOffers] = import_react46.default.useState({});
-    const commands = import_react46.default.useMemo(
+    const [stepStates, dispatch] = import_react47.default.useReducer(stepReducer, null, initialStepStates);
+    const [pathOffers, setPathOffers] = import_react47.default.useState({});
+    const commands = import_react47.default.useMemo(
       () => buildInstallCommands({ platform }),
       [platform]
     );
-    const commandPreviews = import_react46.default.useMemo(() => ({
+    const commandPreviews = import_react47.default.useMemo(() => ({
       node: commandPreview(commands.node),
       claude: commandPreview(commands.claude)
     }), [commands]);
-    const updatePathOffer = import_react46.default.useCallback(async (id, result) => {
+    const updatePathOffer = import_react47.default.useCallback(async (id, result) => {
       var _a, _b;
       if (!isWindowsPlatform(platform) || !result.ok || !result.path) {
         setPathOffers((current) => {
@@ -34886,7 +35272,7 @@ ${command}`
         });
       }
     }, [platform]);
-    const detect = import_react46.default.useCallback(async (id) => {
+    const detect = import_react47.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
       const result = await detectTool(id, {
         platform,
@@ -34905,7 +35291,7 @@ ${command}`
       await updatePathOffer(id, result);
       return result;
     }, [fetchImpl, platform, port, updatePathOffer]);
-    const install = import_react46.default.useCallback(async (id) => {
+    const install = import_react47.default.useCallback(async (id) => {
       const command = commands[id];
       if (!command) return { ok: false, output: "No install command configured for " + id };
       dispatch({ type: "run-start", id });
@@ -34918,7 +35304,7 @@ ${command}`
       await detect(id);
       return result;
     }, [commands, detect, platform]);
-    const addToPath = import_react46.default.useCallback(async (id) => {
+    const addToPath = import_react47.default.useCallback(async (id) => {
       const offer = pathOffers[id];
       if (!offer) return { changed: false };
       const result = await addUserPathEntry(platform, offer.directory);
@@ -34932,8 +35318,8 @@ ${command}`
       }
       return result;
     }, [detect, pathOffers, platform]);
-    const bootDetectRef = import_react46.default.useRef(false);
-    import_react46.default.useEffect(() => {
+    const bootDetectRef = import_react47.default.useRef(false);
+    import_react47.default.useEffect(() => {
       if (bootDetectRef.current) return;
       bootDetectRef.current = true;
       [...HOST_STEPS, ...CLI_STEPS, ...OPTIONAL_CLIENT_STEPS].forEach((id) => {
@@ -36851,7 +37237,7 @@ ${command}`
   }
 
   // src/app/App.jsx
-  var import_jsx_runtime43 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime44 = __toESM(require_jsx_runtime(), 1);
   var T = {
     zh: {
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
@@ -36950,23 +37336,23 @@ ${command}`
   }
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
-    const langRef = import_react47.default.useRef(lang);
+    const langRef = import_react48.default.useRef(lang);
     langRef.current = lang;
     const t = T[lang];
-    const [tab, setTab] = import_react47.default.useState("chat");
-    const [status, setStatus] = import_react47.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const statusRef = import_react47.default.useRef(status);
+    const [tab, setTab] = import_react48.default.useState("chat");
+    const [status, setStatus] = import_react48.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const statusRef = import_react48.default.useRef(status);
     statusRef.current = status;
-    const [paused, setPaused] = import_react47.default.useState(false);
-    const [logs, setLogs] = import_react47.default.useState([]);
-    const backendErrorsRef = import_react47.default.useRef([]);
-    const panelLogRef = import_react47.default.useRef(null);
-    const ctrl = import_react47.default.useRef(null);
-    const getHost = import_react47.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const hostConversation = import_react47.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
-    const hostApprovalBridge = import_react47.default.useMemo(() => createHostApprovalBridge(), []);
-    const [hostConversationError, setHostConversationError] = import_react47.default.useState("");
-    const runHostConversationSync = import_react47.default.useCallback((operation) => {
+    const [paused, setPaused] = import_react48.default.useState(false);
+    const [logs, setLogs] = import_react48.default.useState([]);
+    const backendErrorsRef = import_react48.default.useRef([]);
+    const panelLogRef = import_react48.default.useRef(null);
+    const ctrl = import_react48.default.useRef(null);
+    const getHost = import_react48.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const hostConversation = import_react48.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
+    const hostApprovalBridge = import_react48.default.useMemo(() => createHostApprovalBridge(), []);
+    const [hostConversationError, setHostConversationError] = import_react48.default.useState("");
+    const runHostConversationSync = import_react48.default.useCallback((operation) => {
       var _a;
       try {
         const value = operation();
@@ -36979,53 +37365,53 @@ ${command}`
         return null;
       }
     }, []);
-    const [wizardDone, setWizardDone] = import_react47.default.useState(() => isWizardDone(window.localStorage));
-    const [wizStep, setWizStep] = import_react47.default.useState(1);
-    const [drawerOpen, setDrawerOpen] = import_react47.default.useState(false);
-    const [sessionsOpen, setSessionsOpen] = import_react47.default.useState(false);
-    const [connInfo, setConnInfo] = import_react47.default.useState(null);
-    const [diagnostics, setDiagnostics] = import_react47.default.useState(null);
+    const [wizardDone, setWizardDone] = import_react48.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react48.default.useState(1);
+    const [drawerOpen, setDrawerOpen] = import_react48.default.useState(false);
+    const [sessionsOpen, setSessionsOpen] = import_react48.default.useState(false);
+    const [connInfo, setConnInfo] = import_react48.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react48.default.useState(null);
     const { events, clear } = useActivity(getHost);
-    const [clients, setClients] = import_react47.default.useState([]);
-    const [mcpSessions, setMcpSessions] = import_react47.default.useState([]);
-    const [confirmRegen, setConfirmRegen] = import_react47.default.useState(false);
-    const [confirmChatNavigation, setConfirmChatNavigation] = import_react47.default.useState(null);
-    const [tokenEpoch, setTokenEpoch] = import_react47.default.useState(0);
-    const platform = import_react47.default.useMemo(() => createPlatformAdapter(), []);
-    const sessionStore = import_react47.default.useMemo(() => createSessionStore({
+    const [clients, setClients] = import_react48.default.useState([]);
+    const [mcpSessions, setMcpSessions] = import_react48.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react48.default.useState(false);
+    const [confirmChatNavigation, setConfirmChatNavigation] = import_react48.default.useState(null);
+    const [tokenEpoch, setTokenEpoch] = import_react48.default.useState(0);
+    const platform = import_react48.default.useMemo(() => createPlatformAdapter(), []);
+    const sessionStore = import_react48.default.useMemo(() => createSessionStore({
       platform,
       log: (message) => {
         var _a;
         return (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, message);
       }
     }), [platform]);
-    const attachmentStore = import_react47.default.useMemo(() => createAttachmentStore({
+    const attachmentStore = import_react48.default.useMemo(() => createAttachmentStore({
       platform,
       randomUUID: randomProviderCredentialId
     }), [platform]);
-    const [attachmentDraft, dispatchAttachmentDraft] = import_react47.default.useReducer(
+    const [attachmentDraft, dispatchAttachmentDraft] = import_react48.default.useReducer(
       reduceAttachmentDraft,
       void 0,
       createAttachmentDraftState
     );
-    const [chatSessionId, setChatSessionId] = import_react47.default.useState("chat-0");
-    const chatSessionIdRef = import_react47.default.useRef(chatSessionId);
+    const [chatSessionId, setChatSessionId] = import_react48.default.useState("chat-0");
+    const chatSessionIdRef = import_react48.default.useRef(chatSessionId);
     chatSessionIdRef.current = chatSessionId;
-    const attachmentOperationsRef = import_react47.default.useRef(/* @__PURE__ */ new Map());
-    const pendingTurnRef = import_react47.default.useRef(null);
-    const acceptedTurnRef = import_react47.default.useRef(null);
-    import_react47.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-    const [model, setModel] = import_react47.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
-    const [logLevel, setLogLevel] = import_react47.default.useState(() => readPref("ae_mcp_log_level", "info"));
-    const logLevelRef = import_react47.default.useRef(logLevel);
+    const attachmentOperationsRef = import_react48.default.useRef(/* @__PURE__ */ new Map());
+    const pendingTurnRef = import_react48.default.useRef(null);
+    const acceptedTurnRef = import_react48.default.useRef(null);
+    import_react48.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
+    const [model, setModel] = import_react48.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [logLevel, setLogLevel] = import_react48.default.useState(() => readPref("ae_mcp_log_level", "info"));
+    const logLevelRef = import_react48.default.useRef(logLevel);
     logLevelRef.current = logLevel;
-    const [sessionModel, setSessionModel] = import_react47.default.useState(null);
-    const [sessionEffort, setSessionEffort] = import_react47.default.useState(null);
-    const [sessionFast, setSessionFast] = import_react47.default.useState(null);
-    const [permissionMode, setPermissionMode] = import_react47.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
-    const permissionModeRef = import_react47.default.useRef(permissionMode);
+    const [sessionModel, setSessionModel] = import_react48.default.useState(null);
+    const [sessionEffort, setSessionEffort] = import_react48.default.useState(null);
+    const [sessionFast, setSessionFast] = import_react48.default.useState(null);
+    const [permissionMode, setPermissionMode] = import_react48.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const permissionModeRef = import_react48.default.useRef(permissionMode);
     permissionModeRef.current = permissionMode;
-    const elicitationCoordinator = import_react47.default.useMemo(() => createElicitationCoordinator({
+    const elicitationCoordinator = import_react48.default.useMemo(() => createElicitationCoordinator({
       resolveApproval: (_request, { plan }) => decideToolPlan({
         tier: permissionModeRef.current,
         plan
@@ -37046,42 +37432,42 @@ ${command}`
         };
       }
     }), []);
-    const [toolApproval, setToolApproval] = import_react47.default.useState(() => elicitationCoordinator.snapshot());
-    import_react47.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
-    import_react47.default.useEffect(() => {
+    const [toolApproval, setToolApproval] = import_react48.default.useState(() => elicitationCoordinator.snapshot());
+    import_react48.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
+    import_react48.default.useEffect(() => {
       runHostConversationSync(() => hostConversation.updatePolicy({ approvalTier: permissionMode }));
     }, [hostConversation, permissionMode, runHostConversationSync]);
-    import_react47.default.useEffect(() => () => {
+    import_react48.default.useEffect(() => () => {
       elicitationCoordinator.dispose();
     }, [elicitationCoordinator]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       const guard = createPanelFileDropGuard({ target: window });
       return guard.dispose;
     }, []);
-    const backendMigration = import_react47.default.useMemo(() => migrateBackendPref(window.localStorage), []);
-    const [backendPref, setBackendPref] = import_react47.default.useState(() => backendMigration.pref);
-    const [channelChoices, setChannelChoices] = import_react47.default.useState(() => backendMigration.channelChoices);
-    const openCodeProviderStore = import_react47.default.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
-    const [providerInit, setProviderInit] = import_react47.default.useState({ state: "checking", error: "" });
-    const [providers, setProviders] = import_react47.default.useState([]);
-    const providersRef = import_react47.default.useRef(providers);
+    const backendMigration = import_react48.default.useMemo(() => migrateBackendPref(window.localStorage), []);
+    const [backendPref, setBackendPref] = import_react48.default.useState(() => backendMigration.pref);
+    const [channelChoices, setChannelChoices] = import_react48.default.useState(() => backendMigration.channelChoices);
+    const openCodeProviderStore = import_react48.default.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
+    const [providerInit, setProviderInit] = import_react48.default.useState({ state: "checking", error: "" });
+    const [providers, setProviders] = import_react48.default.useState([]);
+    const providersRef = import_react48.default.useRef(providers);
     providersRef.current = providers;
-    const providerSensitiveValues = import_react47.default.useMemo(() => providers.map((provider) => {
+    const providerSensitiveValues = import_react48.default.useMemo(() => providers.map((provider) => {
       try {
         return openCodeProviderStore.readApiKey(provider.id);
       } catch {
         return "";
       }
     }).filter(Boolean), [openCodeProviderStore, providers]);
-    const providerSensitiveValuesRef = import_react47.default.useRef(providerSensitiveValues);
+    const providerSensitiveValuesRef = import_react48.default.useRef(providerSensitiveValues);
     providerSensitiveValuesRef.current = providerSensitiveValues;
-    const [expertGuidance, setExpertGuidance] = import_react47.default.useState(() => loadExpertGuidance(window.localStorage));
-    const expertGuidanceRef = import_react47.default.useRef(expertGuidance);
+    const [expertGuidance, setExpertGuidance] = import_react48.default.useState(() => loadExpertGuidance(window.localStorage));
+    const expertGuidanceRef = import_react48.default.useRef(expertGuidance);
     expertGuidanceRef.current = expertGuidance;
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       runHostConversationSync(() => hostConversation.updatePolicy({ expertGuidance }));
     }, [expertGuidance, hostConversation, runHostConversationSync]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (status.state !== "ok") return;
       runHostConversationSync(() => hostConversation.ensureConversation({
         label: chatSessionIdRef.current,
@@ -37089,7 +37475,7 @@ ${command}`
         expertGuidance: expertGuidanceRef.current
       }));
     }, [hostConversation, runHostConversationSync, status.state]);
-    const resolveHostConversationContext = import_react47.default.useCallback((conversationId) => {
+    const resolveHostConversationContext = import_react48.default.useCallback((conversationId) => {
       const current = hostConversation.currentConversation();
       if (!current || current.id !== conversationId) return null;
       return {
@@ -37097,7 +37483,7 @@ ${command}`
         conversationLabel: current.label || chatSessionIdRef.current
       };
     }, [hostConversation]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (status.state !== "ok") {
         hostApprovalBridge.detach();
         return void 0;
@@ -37111,29 +37497,29 @@ ${command}`
       });
       return () => hostApprovalBridge.detach();
     }, [elicitationCoordinator, getHost, hostApprovalBridge, resolveHostConversationContext, status.state]);
-    const [probe, setProbe] = import_react47.default.useState(null);
-    const [codexProbe, setCodexProbe] = import_react47.default.useState(null);
-    const [codexModels, setCodexModels] = import_react47.default.useState(null);
-    const [loginState, setLoginState] = import_react47.default.useState({ channel: "", status: "idle", detail: "" });
-    const codexLoginRef = import_react47.default.useRef(null);
-    const [openCodeProbe, setOpenCodeProbe] = import_react47.default.useState(null);
-    const [openCodeProbeStale, setOpenCodeProbeStale] = import_react47.default.useState(false);
-    const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = import_react47.default.useState(0);
-    const openCodeProbeRunRef = import_react47.default.useRef(0);
-    const openCodeAvailableProviders = import_react47.default.useMemo(() => Array.isArray(openCodeProbe == null ? void 0 : openCodeProbe.providers) && openCodeProbe.providers.length ? openCodeProbe.providers : providers, [openCodeProbe, providers]);
-    const [chatEntries, setChatEntries] = import_react47.default.useState([]);
-    const chatEntriesRef = import_react47.default.useRef(chatEntries);
+    const [probe, setProbe] = import_react48.default.useState(null);
+    const [codexProbe, setCodexProbe] = import_react48.default.useState(null);
+    const [codexModels, setCodexModels] = import_react48.default.useState(null);
+    const [loginState, setLoginState] = import_react48.default.useState({ channel: "", status: "idle", detail: "" });
+    const codexLoginRef = import_react48.default.useRef(null);
+    const [openCodeProbe, setOpenCodeProbe] = import_react48.default.useState(null);
+    const [openCodeProbeStale, setOpenCodeProbeStale] = import_react48.default.useState(false);
+    const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = import_react48.default.useState(0);
+    const openCodeProbeRunRef = import_react48.default.useRef(0);
+    const openCodeAvailableProviders = import_react48.default.useMemo(() => Array.isArray(openCodeProbe == null ? void 0 : openCodeProbe.providers) && openCodeProbe.providers.length ? openCodeProbe.providers : providers, [openCodeProbe, providers]);
+    const [chatEntries, setChatEntries] = import_react48.default.useState([]);
+    const chatEntriesRef = import_react48.default.useRef(chatEntries);
     chatEntriesRef.current = chatEntries;
-    const sessionControllerRef = import_react47.default.useRef(null);
-    const [chatStreaming, setChatStreaming] = import_react47.default.useState(false);
-    const [thinkingActive, setThinkingActive] = import_react47.default.useState(false);
-    const [turnStage, setTurnStage] = import_react47.default.useState(null);
-    const [turnProgress, setTurnProgress] = import_react47.default.useState(null);
-    const baseDescriptor = import_react47.default.useMemo(
+    const sessionControllerRef = import_react48.default.useRef(null);
+    const [chatStreaming, setChatStreaming] = import_react48.default.useState(false);
+    const [thinkingActive, setThinkingActive] = import_react48.default.useState(false);
+    const [turnStage, setTurnStage] = import_react48.default.useState(null);
+    const [turnProgress, setTurnProgress] = import_react48.default.useState(null);
+    const baseDescriptor = import_react48.default.useMemo(
       () => baseDescriptorFor(backendPref),
       [backendPref]
     );
-    const [descriptor, setDescriptor] = import_react47.default.useState(() => baseDescriptor);
+    const [descriptor, setDescriptor] = import_react48.default.useState(() => baseDescriptor);
     const requestedModel = sessionModel || model;
     const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
@@ -37143,7 +37529,7 @@ ${command}`
       defaultEffort: descriptor.defaultEffort
     });
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
       ProviderManagerSection,
       {
         lang,
@@ -37192,7 +37578,7 @@ ${draft.baseUrl}`)) return;
         }
       }
     );
-    const channels = import_react47.default.useMemo(() => ({
+    const channels = import_react48.default.useMemo(() => ({
       claude: claudeChannels({
         probe,
         canOpenLoginTerminal: typeof platform.openLoginTerminal === "function"
@@ -37215,28 +37601,28 @@ ${draft.baseUrl}`)) return;
       platform
     ]);
     const effective = pickBackend({ pref: backendPref, channels, channelChoices });
-    const effectiveBackendRef = import_react47.default.useRef(effective.backend);
+    const effectiveBackendRef = import_react48.default.useRef(effective.backend);
     effectiveBackendRef.current = effective.backend;
-    const effectiveChannelRef = import_react47.default.useRef(effective.channel);
+    const effectiveChannelRef = import_react48.default.useRef(effective.channel);
     effectiveChannelRef.current = effective.channel;
-    const runtimeRef = import_react47.default.useRef({
+    const runtimeRef = import_react48.default.useRef({
       model: effectiveModel,
       permissionMode,
       effort: effectiveEffort,
       thinking: null,
       fast: effectiveFast
     });
-    const extRoot = import_react47.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
-    const hostPortRef = import_react47.default.useRef(status.port);
+    const extRoot = import_react48.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
+    const hostPortRef = import_react48.default.useRef(status.port);
     hostPortRef.current = status.port;
-    const getMcpSpec2 = import_react47.default.useCallback(() => getMcpSpec({
+    const getMcpSpec2 = import_react48.default.useCallback(() => getMcpSpec({
       port: hostPortRef.current,
       label: chatSessionIdRef.current,
       approvalTier: permissionModeRef.current,
       expertGuidance: expertGuidanceRef.current,
       hostConversation
     }), [hostConversation]);
-    const mcp = import_react47.default.useMemo(() => createMcpClient({
+    const mcp = import_react48.default.useMemo(() => createMcpClient({
       extRoot,
       getHost,
       getPort: () => hostPortRef.current,
@@ -37246,14 +37632,14 @@ ${draft.baseUrl}`)) return;
         expertGuidance: expertGuidanceRef.current
       })
     }), [extRoot, getHost, hostConversation]);
-    const toolsApi = import_react47.default.useMemo(() => createToolsApi(mcp), [mcp]);
-    import_react47.default.useEffect(() => () => mcp.stop(), [mcp]);
-    const releaseTurnAttachments = import_react47.default.useCallback((turn) => {
+    const toolsApi = import_react48.default.useMemo(() => createToolsApi(mcp), [mcp]);
+    import_react48.default.useEffect(() => () => mcp.stop(), [mcp]);
+    const releaseTurnAttachments = import_react48.default.useCallback((turn) => {
       for (const attachment of (turn == null ? void 0 : turn.attachments) || []) {
         attachmentStore.release(attachment.id);
       }
     }, [attachmentStore]);
-    const resetAttachmentDraftSession = import_react47.default.useCallback((nextSessionId = null) => {
+    const resetAttachmentDraftSession = import_react48.default.useCallback((nextSessionId = null) => {
       attachmentStore.releaseSession(chatSessionIdRef.current);
       attachmentOperationsRef.current.clear();
       pendingTurnRef.current = null;
@@ -37264,7 +37650,7 @@ ${draft.baseUrl}`)) return;
         setChatSessionId(nextSessionId);
       }
     }, [attachmentStore]);
-    const addAttachment = import_react47.default.useCallback(async ({ pondId, file }) => {
+    const addAttachment = import_react48.default.useCallback(async ({ pondId, file }) => {
       const operation = {};
       const sessionId = chatSessionId;
       attachmentOperationsRef.current.set(pondId, operation);
@@ -37290,15 +37676,15 @@ ${draft.baseUrl}`)) return;
         });
       }
     }, [attachmentStore, chatSessionId]);
-    const removeAttachment = import_react47.default.useCallback((item) => {
+    const removeAttachment = import_react48.default.useCallback((item) => {
       attachmentOperationsRef.current.delete(item.pondId);
       if (item.ref) attachmentStore.release(item.ref.id);
       dispatchAttachmentDraft({ type: "remove", pondId: item.pondId });
     }, [attachmentStore]);
-    const retryAttachment = import_react47.default.useCallback((item) => {
+    const retryAttachment = import_react48.default.useCallback((item) => {
       addAttachment({ pondId: item.pondId, file: item.file });
     }, [addAttachment]);
-    const commitChatEntries = import_react47.default.useCallback((updater, event) => {
+    const commitChatEntries = import_react48.default.useCallback((updater, event) => {
       var _a;
       const current = chatEntriesRef.current;
       const next = typeof updater === "function" ? updater(current) : updater;
@@ -37306,7 +37692,7 @@ ${draft.baseUrl}`)) return;
       setChatEntries(chatEntriesRef.current);
       (_a = sessionControllerRef.current) == null ? void 0 : _a.recordEntries(chatEntriesRef.current, event);
     }, []);
-    const handleChatEvent = import_react47.default.useCallback((evt) => {
+    const handleChatEvent = import_react48.default.useCallback((evt) => {
       var _a;
       const pending = pendingTurnRef.current;
       setTurnStage((current) => reduceTurnStage(current, evt, {
@@ -37409,7 +37795,7 @@ ${draft.baseUrl}`)) return;
       }
       commitChatEntries((entries) => reduceEvent(entries, evt), evt);
     }, [commitChatEntries, releaseTurnAttachments]);
-    const claudeBackend = import_react47.default.useMemo(() => createClaudeAgentBackend({
+    const claudeBackend = import_react48.default.useMemo(() => createClaudeAgentBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
@@ -37426,7 +37812,7 @@ ${draft.baseUrl}`)) return;
       handleChatEvent,
       platform
     ]);
-    const codexBackend = import_react47.default.useMemo(() => createCodexBackend({
+    const codexBackend = import_react48.default.useMemo(() => createCodexBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
@@ -37440,7 +37826,7 @@ ${draft.baseUrl}`)) return;
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
-    const openCodeBackend = import_react47.default.useMemo(() => createOpenCodeBackend({
+    const openCodeBackend = import_react48.default.useMemo(() => createOpenCodeBackend({
       platform,
       getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
@@ -37474,13 +37860,13 @@ ${draft.baseUrl}`)) return;
         `Unknown backend id "${effective.backend}". Known backend ids: ${knownBackendIds}`
       );
     })();
-    const backendInstancesRef = import_react47.default.useRef(backendInstances);
+    const backendInstancesRef = import_react48.default.useRef(backendInstances);
     backendInstancesRef.current = backendInstances;
-    const activeBackendInstanceRef = import_react47.default.useRef(activeBackend);
+    const activeBackendInstanceRef = import_react48.default.useRef(activeBackend);
     activeBackendInstanceRef.current = activeBackend;
-    const pendingSessionLoadRef = import_react47.default.useRef(null);
-    const [sessionSnapshot, setSessionSnapshot] = import_react47.default.useState({ sessions: [], activeId: null });
-    const sessionController = import_react47.default.useMemo(() => createSessionController({
+    const pendingSessionLoadRef = import_react48.default.useRef(null);
+    const [sessionSnapshot, setSessionSnapshot] = import_react48.default.useState({ sessions: [], activeId: null });
+    const sessionController = import_react48.default.useMemo(() => createSessionController({
       store: sessionStore,
       now: () => Date.now(),
       uuid: randomProviderCredentialId,
@@ -37542,9 +37928,9 @@ ${draft.baseUrl}`)) return;
       sessionStore
     ]);
     sessionControllerRef.current = sessionController;
-    import_react47.default.useEffect(() => sessionController.subscribe(setSessionSnapshot), [sessionController]);
-    const sessionBootStartedRef = import_react47.default.useRef(false);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => sessionController.subscribe(setSessionSnapshot), [sessionController]);
+    const sessionBootStartedRef = import_react48.default.useRef(false);
+    import_react48.default.useEffect(() => {
       if (status.state !== "ok" || effective.backend === "none" || sessionBootStartedRef.current) return;
       sessionBootStartedRef.current = true;
       sessionController.boot().catch((error) => {
@@ -37555,7 +37941,7 @@ ${draft.baseUrl}`)) return;
         );
       });
     }, [effective.backend, sessionController, status.state]);
-    import_react47.default.useEffect(
+    import_react48.default.useEffect(
       () => installBeforeUnloadReset(
         window,
         [codexBackend, openCodeBackend, claudeBackend],
@@ -37563,7 +37949,7 @@ ${draft.baseUrl}`)) return;
       ),
       [claudeBackend, codexBackend, openCodeBackend, sessionController]
     );
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       const facts = {
         effectiveBackend: effective.backend,
         effectiveChannel: effective.channel,
@@ -37591,8 +37977,8 @@ ${draft.baseUrl}`)) return;
       openCodeProbe,
       providerInit.state
     ]);
-    const lastRealBackendRef = import_react47.default.useRef(null);
-    const runClaudeProbe = import_react47.default.useCallback(() => {
+    const lastRealBackendRef = import_react48.default.useRef(null);
+    const runClaudeProbe = import_react48.default.useCallback(() => {
       let alive = true;
       setProbe(null);
       probeClaudeLogin({
@@ -37613,11 +37999,11 @@ ${draft.baseUrl}`)) return;
         alive = false;
       };
     }, [platform]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
     }, [backendPref, runClaudeProbe]);
-    const runCodexProbe = import_react47.default.useCallback(() => {
+    const runCodexProbe = import_react48.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
       codexBackend.probeAccount().then((result) => {
@@ -37638,11 +38024,11 @@ ${draft.baseUrl}`)) return;
         alive = false;
       };
     }, [codexBackend]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
-    const onLoginChannel = import_react47.default.useCallback((_channel, action) => {
+    const onLoginChannel = import_react48.default.useCallback((_channel, action) => {
       if ((action == null ? void 0 : action.kind) === "terminal") {
         setLoginState({
           channel: "subscription",
@@ -37702,7 +38088,7 @@ ${draft.baseUrl}`)) return;
         (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, `Codex login failed: ${(error == null ? void 0 : error.message) || String(error)}`);
       });
     }, [codexBackend, codexProbe == null ? void 0 : codexProbe.codexHome, platform, runCodexProbe]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (loginState.channel !== "subscription" || loginState.status !== "waiting") return void 0;
       if (tab !== "settings" || backendPref !== "subscription") return void 0;
       let alive = true;
@@ -37735,7 +38121,7 @@ ${draft.baseUrl}`)) return;
         if (timer) clearTimeout(timer);
       };
     }, [backendPref, loginState.channel, loginState.status, platform, tab]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (loginState.channel !== "cli" || loginState.status !== "verifying" || codexProbe === null) return;
       setLoginState(codexProbe.loggedIn ? { channel: "", status: "idle", detail: "" } : {
         channel: "cli",
@@ -37743,7 +38129,7 @@ ${draft.baseUrl}`)) return;
         detail: langRef.current === "en" ? "Codex sign-in could not be verified. Retry or use the copy-command fallback below." : "\u672A\u80FD\u9A8C\u8BC1 Codex \u767B\u5F55\u72B6\u6001\u3002\u8BF7\u91CD\u8BD5\uFF0C\u6216\u4F7F\u7528\u4E0B\u65B9\u7684\u590D\u5236\u547D\u4EE4\u5907\u7528\u64CD\u4F5C\u3002"
       });
     }, [codexProbe, loginState.channel, loginState.status]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       const loginBackend = loginState.channel === "cli" ? "codex" : "subscription";
       if (loginState.status === "idle" || tab === "settings" && backendPref === loginBackend) return;
       const current = codexLoginRef.current;
@@ -37751,12 +38137,12 @@ ${draft.baseUrl}`)) return;
       if (current) current.cancel();
       setLoginState({ channel: "", status: "idle", detail: "" });
     }, [backendPref, loginState.channel, loginState.status, tab]);
-    import_react47.default.useEffect(() => () => {
+    import_react48.default.useEffect(() => () => {
       const current = codexLoginRef.current;
       codexLoginRef.current = null;
       if (current) current.cancel();
     }, []);
-    const runOpenCodeProbe = import_react47.default.useCallback(() => {
+    const runOpenCodeProbe = import_react48.default.useCallback(() => {
       let alive = true;
       const runId = openCodeProbeRunRef.current + 1;
       openCodeProbeRunRef.current = runId;
@@ -37779,7 +38165,7 @@ ${draft.baseUrl}`)) return;
         alive = false;
       };
     }, [openCodeBackend]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (backendPref !== "opencode" || openCodeProbe !== null) {
         setOpenCodeProbeStale(false);
         return void 0;
@@ -37787,12 +38173,12 @@ ${draft.baseUrl}`)) return;
       const timer = setTimeout(() => setOpenCodeProbeStale(true), PROBE_PENDING_GRACE_MS);
       return () => clearTimeout(timer);
     }, [backendPref, openCodeProbe, openCodeProbeAttempt]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (backendPref !== "opencode") return void 0;
       if (status.state !== "ok" || providerInit.state !== "ready") return void 0;
       return runOpenCodeProbe();
     }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(lastRealBackendRef.current, effective.backend);
       lastRealBackendRef.current = decision.nextReal;
       if (!decision.reset) return;
@@ -37882,7 +38268,7 @@ ${draft.baseUrl}`)) return;
       setTurnStage(null);
       setTurnProgress(null);
     };
-    const pushLog = import_react47.default.useCallback((m) => {
+    const pushLog = import_react48.default.useCallback((m) => {
       const message = String(m != null ? m : "");
       const host = getHost();
       try {
@@ -37896,7 +38282,7 @@ ${draft.baseUrl}`)) return;
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${message}`]);
     }, [getHost]);
     panelLogRef.current = pushLog;
-    const switchChatSession = import_react47.default.useCallback(async (id) => {
+    const switchChatSession = import_react48.default.useCallback(async (id) => {
       if (id === sessionController.snapshot().activeId) return;
       if (pendingTurnRef.current || chatStreaming) {
         setConfirmChatNavigation({ kind: "switch", id });
@@ -37904,7 +38290,7 @@ ${draft.baseUrl}`)) return;
       }
       await switchChatSessionNow(id);
     }, [chatStreaming, sessionController]);
-    const switchChatSessionNow = import_react47.default.useCallback(async (id) => {
+    const switchChatSessionNow = import_react48.default.useCallback(async (id) => {
       const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
       pendingSessionLoadRef.current = id;
       if (target) {
@@ -37924,7 +38310,7 @@ ${draft.baseUrl}`)) return;
         pendingSessionLoadRef.current = null;
       }
     }, [pushLog, sessionController]);
-    const confirmChatNavigationNow = import_react47.default.useCallback(async () => {
+    const confirmChatNavigationNow = import_react48.default.useCallback(async () => {
       const request = confirmChatNavigation;
       setConfirmChatNavigation(null);
       if (!request) return;
@@ -37932,7 +38318,7 @@ ${draft.baseUrl}`)) return;
       if (request.kind === "new") await newChatSession(true);
       else await switchChatSessionNow(request.id);
     }, [activeBackend, chatStreaming, confirmChatNavigation, newChatSession, switchChatSessionNow]);
-    const deleteChatSession = import_react47.default.useCallback(async (id) => {
+    const deleteChatSession = import_react48.default.useCallback(async (id) => {
       var _a;
       const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
       try {
@@ -37945,7 +38331,7 @@ ${draft.baseUrl}`)) return;
         pushLog("Session delete failed: " + ((error == null ? void 0 : error.message) || String(error)));
       }
     }, [pushLog, sessionController]);
-    const exportLogs = import_react47.default.useCallback(async () => {
+    const exportLogs = import_react48.default.useCallback(async () => {
       var _a;
       try {
         const exactSecrets = [];
@@ -38053,7 +38439,7 @@ ${draft.baseUrl}`)) return;
       status.port,
       cs2
     ]);
-    const undoToPreviousCheckpoint = import_react47.default.useCallback(async () => {
+    const undoToPreviousCheckpoint = import_react48.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
         pushLog("Reverted to previous checkpoint");
@@ -38061,7 +38447,7 @@ ${draft.baseUrl}`)) return;
         pushLog("Checkpoint revert failed: " + (e && e.message ? e.message : String(e)));
       }
     }, [mcp, pushLog]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -38079,7 +38465,7 @@ ${draft.baseUrl}`)) return;
       });
       ctrl.current.start(port);
     }, [cs2, extRoot, platform, pushLog]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (status.state !== "ok") return void 0;
       let alive = true;
       setProviderInit({ state: "checking", error: "" });
@@ -38100,7 +38486,7 @@ ${draft.baseUrl}`)) return;
         alive = false;
       };
     }, [openCodeProviderStore, status.state]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
         const h = getHost();
@@ -38110,7 +38496,7 @@ ${draft.baseUrl}`)) return;
       const i = setInterval(update, 3e3);
       return () => clearInterval(i);
     }, [drawerOpen, getHost]);
-    import_react47.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (tab !== "settings") return void 0;
       const update = () => {
         const h = getHost();
@@ -38122,7 +38508,7 @@ ${draft.baseUrl}`)) return;
       const i = setInterval(update, 4e3);
       return () => clearInterval(i);
     }, [tab, getHost]);
-    const runDiag = import_react47.default.useCallback(async () => {
+    const runDiag = import_react48.default.useCallback(async () => {
       setDiagnostics("running");
       try {
         const items = await runDiagnostics({
@@ -38171,7 +38557,7 @@ ${draft.baseUrl}`)) return;
       fetchImpl: window.fetch.bind(window)
     });
     if (!wizardDone) {
-      return /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         WizardScreen,
         {
           step: wizStep,
@@ -38203,8 +38589,8 @@ ${draft.baseUrl}`)) return;
       (meta) => meta.id === sessionSnapshot.activeId
     ) || null;
     const sessionTitle = displayTitle(activeSessionMeta, lang);
-    return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)(import_react47.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime44.jsxs)(import_react48.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         StatusBar,
         {
           status: statusForBar,
@@ -38221,8 +38607,8 @@ ${draft.baseUrl}`)) return;
           settingsTitle: t.settings
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
-        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
+        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
           ChatScreen,
           {
             lang,
@@ -38265,7 +38651,7 @@ ${draft.baseUrl}`)) return;
             onRetryAttachment: retryAttachment
           }
         ) : null,
-        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
           ActivityScreen,
           {
             events,
@@ -38276,14 +38662,14 @@ ${draft.baseUrl}`)) return;
             emptyCaption: t.actEmptyB
           }
         ) : null,
-        tab === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+        tab === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
           ToolsScreen,
           {
             api: toolsApi,
             lang
           }
         ) : null,
-        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
           SettingsScreen,
           {
             lang,
@@ -38379,8 +38765,8 @@ ${draft.baseUrl}`)) return;
           tokenEpoch
         ) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         ConnectionDrawer,
         {
           open: drawerOpen,
@@ -38394,7 +38780,7 @@ ${draft.baseUrl}`)) return;
           onRestart: () => applyPort(status.port)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         SessionDrawer,
         {
           open: sessionsOpen,
@@ -38410,7 +38796,7 @@ ${draft.baseUrl}`)) return;
           onDelete: deleteChatSession
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         ConfirmDialog,
         {
           open: confirmRegen,
@@ -38432,7 +38818,7 @@ ${draft.baseUrl}`)) return;
           }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         ConfirmDialog,
         {
           open: Boolean(confirmChatNavigation),
@@ -38445,7 +38831,7 @@ ${draft.baseUrl}`)) return;
           onConfirm: confirmChatNavigationNow
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         ToolApprovalDialog,
         {
           record: toolApproval && toolApproval.plan ? toolApproval : null,
@@ -38453,7 +38839,7 @@ ${draft.baseUrl}`)) return;
           onResolve: (result) => elicitationCoordinator.resolveVisible(result)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         QuestionFormDialog,
         {
           record: toolApproval && !toolApproval.plan ? toolApproval : null,
@@ -38464,13 +38850,13 @@ ${draft.baseUrl}`)) return;
     ] });
   }
   function App({ cs: cs2 }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Shell, { cs: cs2 }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(Shell, { cs: cs2 }) });
   }
 
   // src/main.jsx
-  var import_jsx_runtime44 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime45 = __toESM(require_jsx_runtime(), 1);
   var cs = new window.CSInterface();
-  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime44.jsx)(App, { cs }));
+  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime45.jsx)(App, { cs }));
 })();
 /*! Bundled license information:
 
