@@ -337,12 +337,13 @@ function makeStableFs(marker) {
   };
 }
 
-test('OpenCode reclaims a stable marker owned by this panel before spawn', async () => {
+test('OpenCode reclaims a legacy stable marker without a host generation before spawn', async () => {
   const fsImpl = makeStableFs({ owner: 'ae-mcp-panel', ownerPid: 4100, pid: 7101 });
-  const h = makeBackend({ fsImpl });
+  const h = makeBackend({ fsImpl, hostGeneration: 'current-host-generation' });
   assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
   assert.deepEqual(h.terminated, [{ pid: 7101, executableName: 'opencode' }]);
   assert.equal(fsImpl.removals.includes(fsImpl.markerPath), true);
+  assert.equal(JSON.parse(fsImpl.files.get(fsImpl.markerPath)).hostGeneration, 'current-host-generation');
 });
 
 test('OpenCode decodes both child-process streams as UTF-8', async () => {
@@ -355,11 +356,14 @@ test('OpenCode decodes both child-process streams as UTF-8', async () => {
   h.backend.reset();
 });
 
-test('OpenCode does not terminate a stable marker owned by another live panel', async () => {
-  const fsImpl = makeStableFs({ owner: 'ae-mcp-panel', ownerPid: 5100, pid: 7102 });
+test('OpenCode does not terminate a stable marker owned by another live panel in the same host generation', async () => {
+  const fsImpl = makeStableFs({
+    owner: 'ae-mcp-panel', ownerPid: 5100, pid: 7102, hostGeneration: 'current-host-generation',
+  });
   const aliveRequests = [];
   const h = makeBackend({
     fsImpl,
+    hostGeneration: 'current-host-generation',
     processAlive: async (request) => { aliveRequests.push(request); return true; },
   });
   assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
@@ -368,11 +372,30 @@ test('OpenCode does not terminate a stable marker owned by another live panel', 
   assert.equal(fsImpl.removals.includes(fsImpl.markerPath), true);
 });
 
-test('OpenCode terminates a stable marker after its owner process exits', async () => {
-  const fsImpl = makeStableFs({ owner: 'ae-mcp-panel', ownerPid: 5101, pid: 7103 });
+test('OpenCode reclaims a live stable marker when its host generation mismatches before spawn', async () => {
+  const fsImpl = makeStableFs({
+    owner: 'ae-mcp-panel', ownerPid: 5100, pid: 7104, hostGeneration: 'previous-host-generation',
+  });
   const aliveRequests = [];
   const h = makeBackend({
     fsImpl,
+    hostGeneration: 'current-host-generation',
+    processAlive: async (request) => { aliveRequests.push(request); return true; },
+  });
+  assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
+  assert.deepEqual(aliveRequests, [{ pid: 5100 }]);
+  assert.deepEqual(h.terminated, [{ pid: 7104, executableName: 'opencode' }]);
+  assert.equal(h.spawned.calls.length, 1);
+});
+
+test('OpenCode terminates a stable marker after its owner process exits', async () => {
+  const fsImpl = makeStableFs({
+    owner: 'ae-mcp-panel', ownerPid: 5101, pid: 7103, hostGeneration: 'current-host-generation',
+  });
+  const aliveRequests = [];
+  const h = makeBackend({
+    fsImpl,
+    hostGeneration: 'current-host-generation',
     processAlive: async (request) => { aliveRequests.push(request); return false; },
   });
   assert.deepEqual(await h.backend.probeAccount(), OPEN_CODE_PROBE);
@@ -792,14 +815,23 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   assert.equal(pluginWrite.text, openCodeHistoryGuardPluginSource());
   const markerWrite = fsImpl.writes.find((write) => write.file.endsWith('instance.json'));
   assert.equal(markerWrite.file, 'C:\\Users\\test\\.ae-mcp\\opencode\\home-11488\\instance.json');
-  assert.deepEqual(JSON.parse(markerWrite.text), {
+  const marker = JSON.parse(markerWrite.text);
+  assert.deepEqual({
+    owner: marker.owner,
+    ownerPid: marker.ownerPid,
+    pid: marker.pid,
+    port: marker.port,
+    startedAt: marker.startedAt,
+  }, {
     owner: 'ae-mcp-panel',
     ownerPid: 4100,
     pid: 7001,
     port: 4567,
-    startedAt: JSON.parse(markerWrite.text).startedAt,
+    startedAt: marker.startedAt,
   });
-  assert.equal(Number.isNaN(Date.parse(JSON.parse(markerWrite.text).startedAt)), false);
+  assert.equal(typeof marker.hostGeneration, 'string');
+  assert.notEqual(marker.hostGeneration, '');
+  assert.equal(Number.isNaN(Date.parse(marker.startedAt)), false);
 
   await flush();
   const sessionCall = fetched.calls.find((call) => call.path === '/session');
@@ -1821,6 +1853,121 @@ test('OpenCode maps session.error HTTP status to an upstream HTTP category', asy
   )).length, 2);
   completeTurn(fetched);
   await retry;
+});
+
+test('OpenCode rebuilds the AE MCP transport and retries once after a -32000 connection close', async (t) => {
+  const timers = watchdogTimers();
+  const h = makeBackend({
+    now: () => 0,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+    sleepImpl: async () => {},
+  });
+  t.after(() => h.backend.reset());
+  const run = h.backend.sendUser({ turnId: 'turn-ae-mcp-rebuild', text: 'check the composition', attachments: [] });
+  for (let index = 0; index < 30
+    && !h.fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+
+  h.fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: { name: 'McpError', data: { message: 'MCP error -32000: Connection closed' } },
+    },
+  });
+  for (let index = 0; index < 30
+    && (h.spawned.calls.length < 2
+      || h.fetched.sseStreams.length < 2
+      || h.fetched.calls.filter((call) => call.path === '/session/session_1/message').length < 2); index += 1) {
+    await flush();
+  }
+
+  assert.equal(h.spawned.calls.length, 2);
+  assert.ok(h.terminated.some((request) => request.pid === 7001 && request.executableName === 'opencode'));
+  assert.ok(h.events.some((event) => event.type === 'turn-progress' && event.stage === 'mcp-rebuild'));
+  assert.equal(h.events.some((event) => event.type === 'error'), false);
+  completeTurn(h.fetched);
+  for (let index = 0; index < 30
+    && !h.events.some((event) => event.type === 'turn-end'); index += 1) {
+    await flush();
+  }
+  assert.ok(h.events.some((event) => event.type === 'turn-end'));
+  await run;
+});
+
+test('OpenCode reports a repair hint after the one AE MCP retry also gets Not connected', async (t) => {
+  const timers = watchdogTimers();
+  const h = makeBackend({
+    now: () => 0,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+    sleepImpl: async () => {},
+  });
+  t.after(() => h.backend.reset());
+  const run = h.backend.sendUser({ turnId: 'turn-ae-mcp-rebuild-failed', text: 'check the composition', attachments: [] });
+  for (let index = 0; index < 30
+    && !h.fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+
+  const disconnected = () => h.fetched.sse.push({
+    type: 'message.part.updated',
+    properties: {
+      sessionID: 'session_1',
+      part: {
+        type: 'tool',
+        tool: 'ae_ae_status',
+        callID: 'call_ae_mcp_disconnected',
+        state: { status: 'error', output: 'Not connected' },
+      },
+    },
+  });
+  disconnected();
+  for (let index = 0; index < 30
+    && (h.spawned.calls.length < 2
+      || h.fetched.sseStreams.length < 2
+      || h.fetched.calls.filter((call) => call.path === '/session/session_1/message').length < 2); index += 1) {
+    await flush();
+  }
+  disconnected();
+  await run;
+
+  const errors = h.events.filter((event) => event.type === 'error');
+  assert.equal(h.spawned.calls.length, 2);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].code, 'AE_MCP_REBUILD_FAILED');
+  assert.equal(errors[0].message, '与 AE 宿主的连接重建失败。请重载面板或新建会话后再试。');
+});
+
+test('OpenCode does not rebuild AE MCP for a provider session error that only says Not connected', async (t) => {
+  const timers = watchdogTimers();
+  const h = makeBackend({
+    now: () => 0,
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+    sleepImpl: async () => {},
+  });
+  t.after(() => h.backend.reset());
+  const run = h.backend.sendUser({ turnId: 'turn-provider-not-connected', text: 'check the composition', attachments: [] });
+  for (let index = 0; index < 30
+    && !h.fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+
+  h.fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: { name: 'ProviderError', data: { message: 'Provider relay: Not connected' } },
+    },
+  });
+  await run;
+
+  assert.equal(h.spawned.calls.length, 1);
+  assert.equal(h.events.some((event) => event.type === 'turn-progress' && event.stage === 'mcp-rebuild'), false);
+  assert.equal(h.events.find((event) => event.type === 'error')?.code, 'UPSTREAM_ERROR');
 });
 
 test('OpenCode exposes a nested socket-close cause and keeps the session', async () => {

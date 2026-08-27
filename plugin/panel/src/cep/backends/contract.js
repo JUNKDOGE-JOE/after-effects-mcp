@@ -20,7 +20,7 @@
 //   turn-start
 //   turn-accepted{turnId,transport}
 //   session-ref{ref} may appear before or after turn-accepted
-//   turn-progress{turnId?,stage}, where stage is spawn, session, or dispatch,
+//   turn-progress{turnId?,stage}, where stage is spawn, session, mcp-rebuild, or dispatch,
 //     may repeat after sendUser and before the first text-delta, tool-start,
 //     approval-required, or question-required event. Thinking does not end
 //     progress, and progress never appears after turn-end.
