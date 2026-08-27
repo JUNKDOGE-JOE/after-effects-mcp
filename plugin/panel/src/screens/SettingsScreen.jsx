@@ -14,19 +14,8 @@ import { copyText } from '../lib/clipboard';
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 import { createPlatformAdapter } from '../cep/platform/index';
-
-const REPO_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';
-const DOCS_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp#readme';
-
-function openExternal(url) {
-  try {
-    if (globalThis.window && window.cep && window.cep.util && window.cep.util.openURLInDefaultBrowser) {
-      window.cep.util.openURLInDefaultBrowser(url);
-      return;
-    }
-  } catch (e) { /* fall through */ }
-  try { window.open(url, '_blank'); } catch (e) { /* best effort */ }
-}
+import { Toast } from '../components/shell/Toast';
+import { docsUrlForLocale, openExternal, REPO_URL } from '../lib/externalLinks.js';
 
 const S = {
   zh: {
@@ -80,6 +69,7 @@ const S = {
     docs: '文档',
     github: 'GitHub',
     rerunWizard: '重新运行向导',
+    externalLinkFailed: '无法打开链接，请检查默认浏览器后重试。',
   },
   en: {
     ai: 'AI service',
@@ -133,6 +123,7 @@ const S = {
     docs: 'Docs',
     github: 'GitHub',
     rerunWizard: 'Re-run setup wizard',
+    externalLinkFailed: 'Could not open the link. Check your default browser and try again.',
   },
 };
 
@@ -184,7 +175,7 @@ function McpSessionRow({ session, t, onBlock }) {
   );
 }
 
-function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false }) {
+function ExternalClientRow({ client, t, configText, copied, onCopy, onOpenExternal, copyDisabled = false }) {
   const isShim = client.kind === 'mcp-shim';
   return (
     <details style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', padding: '7px 8px' }}>
@@ -242,7 +233,16 @@ function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled
           {t.panelOpenNote}
         </div>
         {client.networkNote ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{client.networkNote}</div> : null}
-        <a href={client.docsUrl} target="_blank" rel="noreferrer" style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--accent)' }}>{t.openDocs}</a>
+        <a
+          href={client.docsUrl}
+          onClick={(event) => {
+            event.preventDefault();
+            onOpenExternal(client.docsUrl);
+          }}
+          style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--accent)' }}
+        >
+          {t.openDocs}
+        </a>
       </div>
     </details>
   );
@@ -322,6 +322,7 @@ export function SettingsScreen({
 }) {
   const t = S[lang] || S.zh;
   const providerInitMessage = t.providerInitializationFailed;
+  const [externalLinkError, setExternalLinkError] = React.useState('');
   const [draftPort, setDraftPort] = React.useState(String(port));
   const [tokenRaw, setTokenRaw] = React.useState('');
   const [copied, setCopied] = React.useState('');
@@ -351,9 +352,14 @@ export function SettingsScreen({
       setTokenRaw(result || readTokenValue());
     }
   };
+  const handleExternalLink = (url) => {
+    setExternalLinkError('');
+    return openExternal(url, { onFailure: () => setExternalLinkError(t.externalLinkFailed) });
+  };
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+      {externalLinkError ? <Toast type="error" message={externalLinkError} onClose={() => setExternalLinkError('')} /> : null}
       <Section id="ai" title={t.ai} expanded={sections.ai} onToggle={onToggleSection}>
         <Field label={t.backend}>
           <Segmented full value={backend} onChange={onBackendChange} options={[
@@ -427,6 +433,7 @@ export function SettingsScreen({
               copied={copied === externalClient.id}
               copyDisabled={!mcpReady}
               onCopy={() => copy(externalClient.id, configText)}
+              onOpenExternal={handleExternalLink}
             />
           );
         })}
@@ -484,8 +491,8 @@ export function SettingsScreen({
         <VersionRow label={t.verPanel} value={`v${pkg.version}`} />
         <VersionRow label={t.verHost} value={hostVersion} badge={hostVersion === '-' ? <Badge status="neutral">{t.pending}</Badge> : null} />
         <div style={{ display: 'flex', gap: 6 }}>
-          <Button variant="ghost" size="sm" icon="book-open" onClick={() => openExternal(DOCS_URL)}>{t.docs}</Button>
-          <Button variant="ghost" size="sm" icon="github" onClick={() => openExternal(REPO_URL)}>{t.github}</Button>
+          <Button variant="ghost" size="sm" icon="book-open" onClick={() => handleExternalLink(docsUrlForLocale(lang))}>{t.docs}</Button>
+          <Button variant="ghost" size="sm" icon="github" onClick={() => handleExternalLink(REPO_URL)}>{t.github}</Button>
           <span style={{ flex: 1 }} />
           <Button variant="ghost" size="sm" icon="rotate-cw" onClick={onRerunWizard}>{t.rerunWizard}</Button>
         </div>
