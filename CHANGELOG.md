@@ -18,6 +18,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 - **测试套件不再读写你的真实 `~/.ae-mcp`（#330）**——宿主状态目录统一经可注入的 `AE_MCP_STATE_DIR` 解析（保留 `AE_MCP_HOME` 兼容与 `AE_MCP_LOG_DIR`/`AE_MCP_TOOL_DIR`/`AE_MCP_SKILL_DIR` 细粒度覆盖），全部集成测试改用临时目录。此前开发机面板留下的黑名单等状态能让套件莫名必败，跑测试也可能反过来污染真实用户目录。
 - **OpenCode 不再抱着重启前的死连接（#333）**——面板每次启动生成宿主代次并写入实例标记，跨代次的常驻 OpenCode 实例会被回收重建；回合中识别 `-32000 Connection closed`/`Not connected` 类传输失败后自动重建并重试一次，仍失败则给出「重载面板或新建会话」的明确指引。此前面板重载后 ae 工具会整组静默消失，重启 AE 也未必自愈。
 - **「文档 / GitHub」按钮真的能打开了（#334）**——外链统一走三级回退（CEP → CSInterface → 宿主代开），全部失败时面板给出可见提示；文档地址按面板语言路由，中英链接后续可独立更新。
+- **成功执行的脚本自动留底，上下文被压缩后可一键重跑（#338）**——`ae_exec`/`ae_execRecover` 成功后把脚本自动存入 Tool Library 成为 candidate（同内容去重、已沉淀内容不重复建、不进默认搜索列表）；执行信封新增 `artifactId`；占位符守卫拒绝时直接列出本会话最近可重跑条目和 `ae_toolUse {"name":"<id>"}` 用法，对话历史被压缩也不再丢脚本。留底自动清理（7 天 / 每会话 20 条 / 全局 200 条），捕获失败绝不影响执行结果本身。
 
 ### [0.10.3] — 2026-08-26
 
@@ -367,6 +368,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 - **The test suites no longer read or write your real `~/.ae-mcp` (#330)** — host state paths resolve through an injectable `AE_MCP_STATE_DIR` root (with `AE_MCP_HOME` compatibility and the fine-grained `AE_MCP_LOG_DIR`/`AE_MCP_TOOL_DIR`/`AE_MCP_SKILL_DIR` overrides), and every integration fixture now uses a temp directory. Panel state left on a dev machine could previously make the suite fail inexplicably — and running the tests could pollute the real user directory.
 - **OpenCode no longer clings to a dead host connection after a restart (#333)** — the panel stamps each boot with a host generation and recycles persistent OpenCode instances across generations; mid-turn `-32000 Connection closed`/`Not connected` transport failures rebuild the instance and retry the turn once, with a clear "reload the panel or start a new session" hint if that also fails. Previously the ae tools silently vanished from the session after a panel reload, and even restarting AE did not always recover.
 - **The Docs / GitHub buttons actually open now (#334)** — external links go through a three-tier fallback (CEP → CSInterface → host-side open) with a visible error when every tier fails, and the docs link routes by panel language with independently updatable zh/en targets.
+- **Successful scripts are captured automatically and can be rerun after context compaction (#338)** — `ae_exec`/`ae_execRecover` now store each successful script in the Tool Library as a candidate (deduplicated by content, never duplicating promoted artifacts, hidden from default search); the exec envelope gains an `artifactId`, and the placeholder guard lists this conversation's recent rerunnable entries with the exact `ae_toolUse {"name":"<id>"}` call. Candidates prune themselves (7-day TTL / 20 per conversation / 200 global), and a capture failure never affects the execution result.
 
 ### [0.10.3] — 2026-08-26
 

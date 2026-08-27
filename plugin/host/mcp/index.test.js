@@ -1,12 +1,17 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const express = require('express');
+const { createStatePaths } = require('../state-paths');
 const mountMcp = require('./index');
 
 function start(options) {
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-index-state-'));
     const app = express();
     app.use(express.json());
     const mounted = mountMcp(app, {
@@ -20,10 +25,14 @@ function start(options) {
         },
         progressIntervalMs: options && options.progressIntervalMs,
         sseOptions: options && options.sseOptions,
+        statePaths: createStatePaths({
+            stateDir: stateRoot,
+            homedir: function () { throw new Error('MCP index tests must not resolve the real home'); },
+        }),
     });
     return new Promise(function (resolve) {
         const listener = app.listen(0, '127.0.0.1', function () {
-            resolve({ listener, port: listener.address().port, mounted });
+            resolve({ listener, port: listener.address().port, mounted, stateRoot });
         });
     });
 }
@@ -108,7 +117,15 @@ test('MCP initializes, enforces loopback Origin/Host, and supports session lifec
         assert.equal(deleted.status, 204);
     } finally {
         await new Promise(function (resolve) { fixture.listener.close(resolve); });
+        fs.rmSync(fixture.stateRoot, { recursive: true, force: true });
     }
+});
+
+test('mountMcp requires explicit state paths', () => {
+    assert.throws(
+        function () { mountMcp(express(), {}); },
+        { name: 'TypeError', message: 'mountMcp requires deps.statePaths' },
+    );
 });
 
 test('progress notifications retain their token and report elapsed seconds', () => {

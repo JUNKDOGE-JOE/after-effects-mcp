@@ -1,9 +1,13 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const express = require('express');
+const { createStatePaths } = require('../../state-paths');
 const mountMcp = require('../index');
 const { VERB_ANNOTATIONS } = require('../annotations');
 const {
@@ -113,6 +117,7 @@ function request(port, path, body, headers) {
 }
 
 async function fixture(options) {
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-native-exec-state-'));
     const app = express();
     app.use(express.json());
     const input = options || {};
@@ -123,11 +128,20 @@ async function fixture(options) {
         version: '0.9.6-test',
         getStatus,
         executeJsx: async function () { return { payload: { ok: true, result: '{}' } }; },
+        statePaths: createStatePaths({
+            stateDir: stateRoot,
+            homedir: function () { throw new Error('native exec tests must not resolve the real home'); },
+        }),
     }, input));
     const listener = await new Promise(function (resolve) {
         const value = app.listen(0, '127.0.0.1', function () { resolve(value); });
     });
-    return { listener, port: listener.address().port, mounted };
+    return { listener, port: listener.address().port, mounted, stateRoot };
+}
+
+async function closeFixture(host) {
+    await new Promise(function (resolve) { host.listener.close(resolve); });
+    fs.rmSync(host.stateRoot, { recursive: true, force: true });
 }
 
 async function initialize(host, conversationPath) {
@@ -196,7 +210,7 @@ test('real Express MCP route runs ae_nativeExec through fake negotiate/invoke', 
         assert.deepEqual(write.undo, { available: true, groupLabel: 'Native write' });
         assert.equal(Object.hasOwn(write.audit, 'undoVerified'), false);
     } finally {
-        await new Promise(function (resolve) { host.listener.close(resolve); });
+        await closeFixture(host);
     }
 });
 
@@ -211,7 +225,7 @@ test('ae_nativeExec returns generated-schema errors before approval or native di
         assert.ok(Array.isArray(response.body.result.structuredContent.errors));
         assert.equal(invoked, false);
     } finally {
-        await new Promise(function (resolve) { host.listener.close(resolve); });
+        await closeFixture(host);
     }
 });
 
@@ -251,6 +265,6 @@ test('native errors retain the structured payload and approval gate blocks reado
         assert.equal(approvalCalls, 1);
         assert.equal(negotiateCalls, 1);
     } finally {
-        await new Promise(function (resolve) { host.listener.close(resolve); });
+        await closeFixture(host);
     }
 });

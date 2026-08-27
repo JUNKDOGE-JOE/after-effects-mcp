@@ -7,12 +7,14 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const express = require('express');
+const { createStatePaths } = require('../state-paths');
 const mountMcp = require('./index');
 const { CheckpointStore } = require('./checkpoint-store');
 const { READONLY_DENIED } = require('./approval-gate');
 
 function start(options) {
     const input = options || {};
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-conversation-state-'));
     const ownedStoreRoot = input.checkpointStore
         ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-conversation-store-'));
     const checkpointStore = input.checkpointStore
@@ -27,10 +29,14 @@ function start(options) {
         recoveryStore: input.recoveryStore,
         progressIntervalMs: input.progressIntervalMs,
         approvalTimeoutMs: input.approvalTimeoutMs,
+        statePaths: createStatePaths({
+            stateDir: stateRoot,
+            homedir: function () { throw new Error('conversation tests must not resolve the real home'); },
+        }),
     });
     return new Promise(function (resolve) {
         const listener = app.listen(0, '127.0.0.1', function () {
-            resolve({ listener, port: listener.address().port, mounted, ownedStoreRoot });
+            resolve({ listener, port: listener.address().port, mounted, ownedStoreRoot, stateRoot });
         });
     });
 }
@@ -78,11 +84,21 @@ function toolCall(id, code, extra, meta) {
     };
 }
 
+function assertCapturedExecResult(actual, expected) {
+    const artifactId = actual.artifactId;
+    assert.equal(typeof artifactId, 'string');
+    assert.match(artifactId, /^user:/);
+    const envelope = Object.assign({}, actual);
+    delete envelope.artifactId;
+    assert.deepEqual(envelope, expected);
+}
+
 async function closeFixture(fixture) {
     await new Promise(function (resolve) { fixture.listener.close(resolve); });
     if (fixture.ownedStoreRoot) {
         fs.rmSync(fixture.ownedStoreRoot, { recursive: true, force: true });
     }
+    fs.rmSync(fixture.stateRoot, { recursive: true, force: true });
 }
 
 test('conversation tiers isolate calls, external calls bypass, updates are live, and unknown tokens 404', async () => {
@@ -117,7 +133,7 @@ test('conversation tiers isolate calls, external calls bypass, updates are live,
         const allowed = await request(fixture.port, 'POST', none.path, {
             'Mcp-Session-Id': noneSession.session,
         }, toolCall(2, 'json'));
-        assert.deepEqual(allowed.body.result.structuredContent, {
+        assertCapturedExecResult(allowed.body.result.structuredContent, {
             ok: true,
             content: '{"ok":true,"n":1}',
             contentType: 'json',
@@ -135,7 +151,7 @@ test('conversation tiers isolate calls, external calls bypass, updates are live,
         const externalResult = await request(fixture.port, 'POST', '/mcp', {
             'Mcp-Session-Id': external.session,
         }, toolCall(4, 'plain'));
-        assert.deepEqual(externalResult.body.result.structuredContent, {
+        assertCapturedExecResult(externalResult.body.result.structuredContent, {
             ok: true,
             content: 'hi',
             contentType: 'text',
@@ -214,7 +230,7 @@ test('manual conversation approval accepts with progress and declines without ex
                 && frame.params.progressToken === 'approval-progress';
         }));
         const terminal = frames.find(function (frame) { return frame.id === 2; });
-        assert.deepEqual(terminal.result.structuredContent, {
+        assertCapturedExecResult(terminal.result.structuredContent, {
             ok: true,
             content: '{"ok":true,"approved":true}',
             contentType: 'json',
@@ -289,7 +305,7 @@ test('checkpoint success probes, snapshots, persists metadata, then executes use
         }, toolCall(2, 'user-edit-code', {
             checkpoint_label: 'Before edit', undo_group_name: 'Edit', timeout_sec: 45,
         }));
-        assert.deepEqual(response.body.result.structuredContent, {
+        assertCapturedExecResult(response.body.result.structuredContent, {
             ok: true,
             content: '{"ok":true,"edited":true}',
             contentType: 'json',
@@ -348,7 +364,7 @@ test('untitled and failed checkpoints annotate the result but never block user J
     }
 
     const untitled = await runCase(null, false);
-    assert.deepEqual(untitled.result, {
+    assertCapturedExecResult(untitled.result, {
         ok: true,
         content: '{"ok":true,"edited":true}',
         contentType: 'json',
@@ -363,6 +379,12 @@ test('untitled and failed checkpoints annotate the result but never block user J
     try {
         const failed = await runCase(source, true);
         assert.match(failed.result.checkpointSkipped, /^checkpoint-failed:/);
+        assertCapturedExecResult(failed.result, {
+            ok: true,
+            content: '{"ok":true,"edited":true}',
+            contentType: 'json',
+            checkpointSkipped: failed.result.checkpointSkipped,
+        });
         assert.equal(failed.calls.length, 3);
         assert.equal(failed.calls[2].code, 'user-edit');
     } finally {
