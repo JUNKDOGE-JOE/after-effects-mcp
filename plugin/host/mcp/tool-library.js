@@ -14,7 +14,7 @@ const ARTIFACT_KEYS = [
     'schemaVersion', 'id', 'name', 'description', 'kind', 'category', 'tags',
     'compatibility', 'declaredRisk', 'source', 'status', 'verified',
     'verification', 'content', 'argsSchema', 'contentHash', 'revision',
-    'createdAt', 'updatedAt', 'lastUsedAt',
+    'createdAt', 'updatedAt', 'lastUsedAt', 'useCount',
 ];
 const ARTIFACT_KINDS = new Set([
     'jsx', 'expression', 'prompt-skill', 'recipe', 'diagnostic', 'system-command',
@@ -84,6 +84,11 @@ function exactKeys(value, expected, label) {
     const missing = expected.filter(function (key) { return !own(value, key); }).sort();
     if (unknown.length) throw new Error(label + ' contains unknown keys: ' + unknown.join(', '));
     if (missing.length) throw new Error(label + ' is missing keys: ' + missing.join(', '));
+}
+
+function normalizeArtifact(value) {
+    if (!isObject(value) || own(value, 'useCount')) return value;
+    return Object.assign({}, value, { useCount: 0 });
 }
 
 function boundedString(value, label, maximum, nonEmpty) {
@@ -264,6 +269,7 @@ function validateArtifact(value) {
     nonNegativeInteger(value.createdAt, 'artifact createdAt');
     nonNegativeInteger(value.updatedAt, 'artifact updatedAt');
     if (value.lastUsedAt !== null) nonNegativeInteger(value.lastUsedAt, 'artifact lastUsedAt');
+    nonNegativeInteger(value.useCount, 'artifact useCount');
     return finiteJson(value, 'artifact');
 }
 
@@ -496,10 +502,15 @@ class ToolLibrary {
             || index.revision < 0 || !Array.isArray(index.artifacts)) {
             throw new Error('tool store is corrupt');
         }
-        index.artifacts.forEach(function (entry) {
+        const artifacts = index.artifacts.map(function (entry) {
             if (!isObject(entry)) throw new Error('tool store is corrupt');
+            const normalized = own(entry, 'useCount') ? entry : Object.assign({}, entry, { useCount: 0 });
+            if (!Number.isInteger(normalized.useCount) || normalized.useCount < 0) {
+                throw new Error('tool store is corrupt');
+            }
+            return normalized;
         });
-        return index;
+        return Object.assign({}, index, { artifacts });
     }
 
     summaryFromArtifact(artifact) {
@@ -517,12 +528,13 @@ class ToolLibrary {
             revision: artifact.revision,
             updatedAt: artifact.updatedAt,
             lastUsedAt: artifact.lastUsedAt,
+            useCount: artifact.useCount,
             sourceType: artifact.source.type,
         };
     }
 
     saveArtifact(wire) {
-        const artifact = validateArtifact(wire);
+        const artifact = validateArtifact(normalizeArtifact(wire));
         assertSecretFree(artifact, 'artifact.json');
         const artifactPath = this.artifactPath(artifact.id);
         const index = this.readIndex();
@@ -541,6 +553,14 @@ class ToolLibrary {
             throw error;
         }
         return artifact;
+    }
+
+    touchUsage(id) {
+        const current = this.getArtifact(id);
+        return this.saveArtifact(Object.assign({}, current, {
+            lastUsedAt: Math.max(0, Math.floor(this.now())),
+            useCount: current.useCount + 1,
+        }));
     }
 
     removeArtifact(id) {
@@ -578,7 +598,9 @@ class ToolLibrary {
             if (!legacy) throw new Error('tool not found');
             return legacy;
         }
-        const artifact = validateArtifact(this.readJson(this.artifactPath(id), 'artifact.json'));
+        const artifact = validateArtifact(normalizeArtifact(
+            this.readJson(this.artifactPath(id), 'artifact.json'),
+        ));
         if (canonicalJson(this.summaryFromArtifact(artifact)) !== canonicalJson(entry)) {
             throw new Error('tool store is corrupt');
         }
@@ -731,6 +753,7 @@ class ToolLibrary {
                 createdAt,
                 updatedAt,
                 lastUsedAt: null,
+                useCount: 0,
             };
             assertSecretFree(artifact, 'legacy-artifact.json');
             return validateArtifact(artifact);

@@ -48,6 +48,7 @@ function artifact(overrides) {
         createdAt: 1000,
         updatedAt: 1000,
         lastUsedAt: null,
+        useCount: 0,
     };
     Object.assign(value, overrides || {});
     value.contentHash = computeContentHash(value.kind, value.content, value.argsSchema);
@@ -297,6 +298,43 @@ test('registry chain captures exec, promotes, lists, and executes the saved arti
     }, context()));
     assert.deepEqual(used, { ok: true });
     assert.equal(executions, 2);
+});
+
+test('toolSave records create, promote, update, and status funnel operations', async (t) => {
+    const library = makeLibrary(t);
+    const candidate = library.saveArtifact(artifact());
+    const activity = [];
+    const deps = {
+        toolLibrary: library,
+        recordMcpActivity: function (event) { activity.push(event); },
+    };
+    await toolSave.call({ name: candidate.id }, context(), deps);
+    const created = value(await toolSave.call({
+        create: {
+            name: 'Reusable prompt',
+            description: 'Created for funnel telemetry.',
+            kind: 'prompt-skill',
+            content: 'Review ${topic}.',
+            argsSchema: { topic: { type: 'string' } },
+        },
+    }, context(), deps));
+    await toolSave.call({
+        name: created.artifact.id,
+        description: 'Updated for funnel telemetry.',
+    }, context(), deps);
+    await toolSave.call({
+        name: created.artifact.id,
+        status: 'archived',
+    }, context(), deps);
+
+    assert.deepEqual(activity.map(function (event) { return event.operation; }), [
+        'promote', 'create', 'update', 'status',
+    ]);
+    activity.forEach(function (event) {
+        assert.equal(event.tool, 'ae_toolSave');
+        assert.match(event.artifactId, /^user:/);
+        assert.equal(event.ok, true);
+    });
 });
 
 test('advertised save schema has no top-level combinator and rejects candidate status by construction', () => {

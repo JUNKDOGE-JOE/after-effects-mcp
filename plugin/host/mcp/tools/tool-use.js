@@ -9,7 +9,7 @@ const { defaultLibrary } = require('../tool-library');
 
 const definition = {
     name: 'ae_toolUse',
-    description: 'Run a persisted JSX Tool Library artifact by id.',
+    description: 'Replay a Tool Library artifact by id. Prefer it over rewriting a script for a repeated task.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -31,6 +31,24 @@ function invalid(message) {
     return { result: textResult({ ok: false, error: message }, true) };
 }
 
+function touchUsage(store, artifact) {
+    if (!artifact || artifact.source.type === 'bundled' || artifact.source.type === 'legacy') return;
+    try { store.touchUsage(artifact.id); } catch (error) { void error; }
+}
+
+function recordUsage(context, deps, artifactId) {
+    if (!deps || typeof deps.recordMcpActivity !== 'function') return;
+    const session = context && context.session ? context.session : {};
+    deps.recordMcpActivity({
+        tool: 'ae_toolUse',
+        artifactId,
+        operation: 'use',
+        ok: true,
+        transport: 'mcp',
+        client: typeof session.clientName === 'string' ? session.clientName : null,
+    });
+}
+
 async function call(args, context, deps) {
     if (typeof args.name !== 'string' || !args.name) return invalid('`name` must be a non-empty string');
     if (args.args !== undefined && (args.args === null || typeof args.args !== 'object'
@@ -50,9 +68,10 @@ async function call(args, context, deps) {
         // renderPlan's second current-content check immediately before dispatch.
         store.consumePlan(plan);
         const code = store.renderPlan(plan);
+        const artifact = store.getArtifact(plan.artifactId);
         const execution = await deps.executeJsx({
             code,
-            undoGroup: 'Tool Library: ' + store.getArtifact(plan.artifactId).name,
+            undoGroup: 'Tool Library: ' + artifact.name,
             timeoutMs: 60000,
             client: context.session.clientName,
             nativeProjectGraphEffect: 'invalidate',
@@ -61,6 +80,9 @@ async function call(args, context, deps) {
             return { result: textResult(executionFailure(execution), true) };
         }
         const parsed = parseJsxResult(execution.payload.result);
+        if (parsed && parsed.ok === false) return { result: textResult(parsed, true) };
+        touchUsage(store, artifact);
+        recordUsage(context, deps, plan.artifactId);
         return { result: textResult(parsed, parsed && parsed.ok === false) };
     } catch (error) {
         return invalid(error && error.message ? error.message : String(error));
