@@ -7,12 +7,14 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const express = require('express');
+const { createStatePaths } = require('../state-paths');
 const mountMcp = require('./index');
 const { CheckpointStore } = require('./checkpoint-store');
 const { READONLY_DENIED } = require('./approval-gate');
 
 function start(options) {
     const input = options || {};
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-conversation-state-'));
     const ownedStoreRoot = input.checkpointStore
         ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-conversation-store-'));
     const checkpointStore = input.checkpointStore
@@ -27,10 +29,14 @@ function start(options) {
         recoveryStore: input.recoveryStore,
         progressIntervalMs: input.progressIntervalMs,
         approvalTimeoutMs: input.approvalTimeoutMs,
+        statePaths: createStatePaths({
+            stateDir: stateRoot,
+            homedir: function () { throw new Error('conversation tests must not resolve the real home'); },
+        }),
     });
     return new Promise(function (resolve) {
         const listener = app.listen(0, '127.0.0.1', function () {
-            resolve({ listener, port: listener.address().port, mounted, ownedStoreRoot });
+            resolve({ listener, port: listener.address().port, mounted, ownedStoreRoot, stateRoot });
         });
     });
 }
@@ -92,6 +98,7 @@ async function closeFixture(fixture) {
     if (fixture.ownedStoreRoot) {
         fs.rmSync(fixture.ownedStoreRoot, { recursive: true, force: true });
     }
+    fs.rmSync(fixture.stateRoot, { recursive: true, force: true });
 }
 
 test('conversation tiers isolate calls, external calls bypass, updates are live, and unknown tokens 404', async () => {

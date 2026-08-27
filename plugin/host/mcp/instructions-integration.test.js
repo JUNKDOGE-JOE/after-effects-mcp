@@ -2,8 +2,12 @@
 
 const assert = require('node:assert/strict');
 const express = require('express');
+const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
+const { createStatePaths } = require('../state-paths');
 const mountMcp = require('./index');
 
 function request(port, route) {
@@ -37,6 +41,7 @@ function request(port, route) {
     });
 }
 test('initialize uses conversation expertGuidance while external sessions retain the expert addendum', async function () {
+    const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-instructions-state-'));
     const app = express();
     app.use(express.json());
     const mounted = mountMcp(app, {
@@ -47,6 +52,10 @@ test('initialize uses conversation expertGuidance while external sessions retain
         executeJsx: async function () {
             return { payload: { ok: true, result: '{}' } };
         },
+        statePaths: createStatePaths({
+            stateDir: stateRoot,
+            homedir: function () { throw new Error('MCP instructions tests must not resolve the real home'); },
+        }),
     });
     const server = await new Promise(function (resolve) {
         const next = app.listen(0, '127.0.0.1', function () {
@@ -71,5 +80,6 @@ test('initialize uses conversation expertGuidance while external sessions retain
         await new Promise(function (resolve) {
             server.close(resolve);
         });
+        fs.rmSync(stateRoot, { recursive: true, force: true });
     }
 });

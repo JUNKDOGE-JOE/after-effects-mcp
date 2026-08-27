@@ -99,6 +99,9 @@ function progressMessage(token, startedAt, now) {
 }
 
 function mountMcp(app, deps) {
+    if (!deps || !deps.statePaths) {
+        throw new TypeError('mountMcp requires deps.statePaths');
+    }
     const sessions = new SessionStore();
     const conversations = new ConversationStore(sessions);
     const approvals = deps.approvals || new ApprovalQueue({ timeoutMs: deps.approvalTimeoutMs });
