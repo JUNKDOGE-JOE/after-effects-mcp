@@ -12,9 +12,9 @@ const { PROJECT_PATH_CODE } = require('../checkpoint-ops');
 const execTool = require('./exec');
 const execRecoverTool = require('./exec-recover');
 
-function context(tier) {
+function context(tier, session) {
     return {
-        session: { id: 'session', clientName: 'test-client', conversationId: 'conversation' },
+        session: session || { id: 'session', clientName: 'test-client', conversationId: 'conversation' },
         policy: { approvalTier: tier === undefined ? null : tier },
     };
 }
@@ -422,6 +422,8 @@ test('retry uses one ae_execRecover approval with complete code and recovery sum
 test('history-guard placeholder code is rejected before execution and never overwrites a stored recovery script', async () => {
     const f = fixture();
     try {
+        const activity = [];
+        f.deps.recordMcpActivity = function (event) { activity.push(event); };
         const freshMarker = '/* ae-mcp: script body hidden from history to save tokens. Never send this comment back as code. */';
         const rejected = value(await execTool.call({ code: freshMarker }, context(null), f.deps));
         assert.equal(rejected.ok, false);
@@ -451,6 +453,117 @@ test('history-guard placeholder code is rejected before execution and never over
         assert.match(blocked.error, /chars=16/);
         assert.equal(f.calls.length, callsBefore);
         assert.equal(fs.readFileSync(failure.scriptPath, 'utf8'), stored);
+        assert.deepEqual(activity.map(function (event) { return event.tool; }), ['ae_exec', 'ae_execRecover']);
+        assert.equal(activity[1].verdict, 'placeholder_rejected');
+        assert.equal(activity[1].streak, 1);
+    } finally {
+        f.close();
+    }
+});
+
+test('history guard rejects known placeholder formats without rejecting runnable JSX', async () => {
+    const f = fixture();
+    try {
+        const placeholders = [
+            '/* ae-mcp: script body hidden from history to save tokens. Never send this comment back as code. */',
+            '/* executed AE script omitted from prior model history */',
+            '[Tool input omitted from prior model history to save tokens]',
+            '/* compressed conversation context elided to preserve tokens */',
+        ];
+        for (const code of placeholders) {
+            const rejected = value(await execTool.call({ code }, context(null), f.deps));
+            assert.equal(rejected.ok, false, code);
+            assert.match(rejected.error, /redaction placeholder|Redaction placeholder/);
+        }
+        assert.equal(f.calls.length, 0);
+
+        const runnable = [
+            '/* tokens can appear in a normal comment. */\n' + 'var value = 1;\n'.repeat(30),
+            'var hidden = "normal JSX";\nhidden;',
+            'app.project.activeItem.name;',
+            '"ok " + (1+1)',
+        ];
+        for (const code of runnable) {
+            const result = value(await execTool.call({ code }, context(null), f.deps));
+            assert.equal(result.ok, true, code);
+        }
+    } finally {
+        f.close();
+    }
+});
+
+test('placeholder rejections escalate per session, record telemetry, and reset after execution', async () => {
+    const f = fixture();
+    try {
+        const activity = [];
+        const marker = '/* ae-mcp: script body hidden from history to save tokens. Never send this comment back as code. */';
+        const shared = context(null);
+        f.deps.recordMcpActivity = function (event) { activity.push(event); };
+
+        const first = value(await execTool.call({ code: marker }, shared, f.deps));
+        assert.match(first.error, /Write the complete script again from scratch/);
+        const second = value(await execTool.call({ code: marker }, shared, f.deps));
+        assert.match(second.error, /consecutive rejection #2/);
+        assert.match(second.error, /Write the complete script from scratch; do not resend redacted history/);
+        const third = value(await execTool.call({ code: marker }, shared, f.deps));
+        assert.match(third.error, /consecutive rejection #3/);
+
+        const executed = value(await execTool.call({ code: 'app.project.activeItem.name;' }, shared, f.deps));
+        assert.equal(executed.ok, true);
+        const afterSuccess = value(await execTool.call({ code: marker }, shared, f.deps));
+        assert.doesNotMatch(afterSuccess.error, /consecutive rejection/);
+
+        const escalatedWithCandidate = value(await execTool.call({ code: marker }, shared, f.deps));
+        assert.match(escalatedWithCandidate.error, /consecutive rejection #2/);
+        assert.match(escalatedWithCandidate.error, /Recent successful scripts you can rerun/);
+        assert.doesNotMatch(escalatedWithCandidate.error, /Write the complete script from scratch; do not resend redacted history/);
+
+        f.deps.setUserHandler(async function () {
+            return failed('ExtendScript error: ordinary script failure');
+        });
+        const scriptFailure = value(await execTool.call({ code: 'throw new Error("ordinary script failure");' }, shared, f.deps));
+        assert.equal(scriptFailure.ok, false);
+        const afterScriptFailure = value(await execTool.call({ code: marker }, shared, f.deps));
+        assert.doesNotMatch(afterScriptFailure.error, /consecutive rejection/);
+
+        assert.deepEqual(activity[0], {
+            tool: 'ae_exec',
+            transport: 'mcp',
+            ok: false,
+            verdict: 'placeholder_rejected',
+            client: 'test-client',
+            streak: 1,
+            scriptChars: marker.length,
+            scriptHead: marker,
+        });
+        assert.deepEqual(activity.map(function (event) { return event.streak; }), [1, 2, 3, 1, 2, 1]);
+    } finally {
+        f.close();
+    }
+});
+
+test('placeholder rejection streaks do not cross MCP sessions', async () => {
+    const f = fixture();
+    try {
+        const activity = [];
+        const marker = '[Tool input omitted from prior model history to save tokens]';
+        const firstSession = context(null, {
+            id: 'first-session', clientName: 'first-client', conversationId: 'first-conversation',
+        });
+        const secondSession = context(null, {
+            id: 'second-session', clientName: 'second-client', conversationId: 'second-conversation',
+        });
+        f.deps.recordMcpActivity = function (event) { activity.push(event); };
+
+        await execTool.call({ code: marker }, firstSession, f.deps);
+        const secondFirst = value(await execTool.call({ code: marker }, firstSession, f.deps));
+        assert.match(secondFirst.error, /consecutive rejection #2/);
+        const otherSessionFirst = value(await execTool.call({ code: marker }, secondSession, f.deps));
+        assert.doesNotMatch(otherSessionFirst.error, /consecutive rejection/);
+        assert.deepEqual(activity.map(function (event) { return event.streak; }), [1, 2, 1]);
+        assert.deepEqual(activity.map(function (event) { return event.client; }), [
+            'first-client', 'first-client', 'second-client',
+        ]);
     } finally {
         f.close();
     }
