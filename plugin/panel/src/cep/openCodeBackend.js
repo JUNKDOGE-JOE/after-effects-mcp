@@ -27,6 +27,10 @@ const DEFAULT_MODEL_ID = 'hy3-free';
 const STDERR_TAIL_LIMIT = 4096;
 const STALE_TERMINATE_LIMIT = 8;
 const STALE_REMOVE_LIMIT = 64;
+const PANEL_HOST_GENERATION = [
+  Date.now().toString(36),
+  Math.random().toString(36).slice(2),
+].join('-');
 
 export const OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES = Object.freeze([
   'apply_patch',
@@ -357,6 +361,7 @@ export function createOpenCodeBackend({
   clearTimeoutImpl = clearTimeout,
   sleepImpl = sleep,
   onSweepComplete,
+  hostGeneration = PANEL_HOST_GENERATION,
 } = {}) {
   const adapter = platform || createPlatformAdapter();
   if (!Number.isFinite(readyRequestTimeoutMs)
@@ -377,6 +382,7 @@ export function createOpenCodeBackend({
     throw new TypeError('probeTimeoutMs must be greater than readyTimeoutMs');
   }
   const currentLang = () => (typeof getLang === 'function' ? getLang() : lang) || 'zh';
+  const currentHostGeneration = String(hostGeneration || PANEL_HOST_GENERATION);
   let proc = null;
   let port = null;
   let baseUrl = '';
@@ -408,6 +414,9 @@ export function createOpenCodeBackend({
   let stallWarningEmitted = false;
   let messageAbortController = null;
   let generation = 0;
+  let aeMcpRecoveryAttempts = 0;
+  let aeMcpRecoveryStarted = false;
+  let aeMcpRecoveryPromise = null;
   let toolMeta = { annotations: {} };
   const pendingApprovals = new Map();
   const pendingQuestions = new Map();
@@ -631,7 +640,7 @@ export function createOpenCodeBackend({
           ownedElsewhere = await adapter.processAlive({ pid: ownerPid });
         } catch {}
       }
-      if (!ownedElsewhere) {
+      if (marker.hostGeneration !== currentHostGeneration || !ownedElsewhere) {
         try {
           await adapter.terminateProcess({ pid: marker.pid, executableName: 'opencode' });
         } catch {}
@@ -748,9 +757,10 @@ export function createOpenCodeBackend({
       backendFs().writeFileSync(
         adapter.paths.join([home, 'instance.json']),
         JSON.stringify({
-        owner: 'ae-mcp-panel',
-        ownerPid: adapter.pid,
-        pid: spawnedProc.pid,
+          owner: 'ae-mcp-panel',
+          ownerPid: adapter.pid,
+          pid: spawnedProc.pid,
+          hostGeneration: currentHostGeneration,
           port: instancePort,
           startedAt: new Date().toISOString(),
         }),
@@ -775,6 +785,9 @@ export function createOpenCodeBackend({
       activeTurnAccepted = false;
       messageDispatched = false;
       turnStarted = false;
+      aeMcpRecoveryAttempts = 0;
+      aeMcpRecoveryStarted = false;
+      aeMcpRecoveryPromise = null;
       startedTools.clear();
       partTypes.clear();
       setActiveAttachmentPaths([]);
@@ -788,6 +801,9 @@ export function createOpenCodeBackend({
     activeTurnAccepted = false;
     messageDispatched = false;
     turnStarted = false;
+    aeMcpRecoveryAttempts = 0;
+    aeMcpRecoveryStarted = false;
+    aeMcpRecoveryPromise = null;
     startedTools.clear();
     partTypes.clear();
     setActiveAttachmentPaths([]);
@@ -825,6 +841,90 @@ export function createOpenCodeBackend({
         dispatchState: messageDispatched ? 'uncertain' : 'not-started',
       } : {}),
     };
+  }
+
+  function isAeMcpTransportFailure(value, text = '', { allowBareNotConnected = false } = {}) {
+    // Session errors have no tool identity, so require the JSON-RPC code there
+    // instead of replaying a turn for an unrelated provider disconnection.
+    const combined = [String(text || '')];
+    try { combined.push(JSON.stringify(value)); } catch {}
+    const message = combined.filter(Boolean).join('\n');
+    return /(?:mcp\s+error\s*)?-?32000\b[\s\S]{0,120}\b(?:connection\s+closed|not\s+connected)\b/i.test(message)
+      || (allowBareNotConnected && /\bnot\s+connected\b/i.test(message));
+  }
+
+  function aeMcpRebuildFailureMessage() {
+    return /^zh/i.test(currentLang())
+      ? '与 AE 宿主的连接重建失败。请重载面板或新建会话后再试。'
+      : 'The connection to the AE host could not be rebuilt. Reload the panel or start a new session, then try again.';
+  }
+
+  async function recycleAeMcpServer() {
+    const staleProc = proc;
+    const staleHome = configHome;
+    generation += 1;
+    sseClosed = true;
+    sseStarted = false;
+    serverPromise = null;
+    messageAbortController?.abort();
+    messageAbortController = null;
+    invalidateSession();
+    proc = null;
+    port = null;
+    baseUrl = '';
+    configHome = '';
+    removeInstanceMarker(staleHome);
+    if (staleProc?.pid) {
+      try {
+        await adapter.terminateProcess({ pid: staleProc.pid, executableName: 'opencode' });
+      } catch {}
+    }
+    try { staleProc?.kill?.(); } catch {}
+  }
+
+  function failAeMcpRebuild() {
+    if (!activeRun || stopRequested) return;
+    emitAfterText({
+      type: 'error',
+      kind: 'network',
+      code: 'AE_MCP_REBUILD_FAILED',
+      message: aeMcpRebuildFailureMessage(),
+      detail: { recoveryAttempts: aeMcpRecoveryAttempts },
+      ...activeTurnFailureFields(),
+    });
+    finishActive();
+    void recycleAeMcpServer();
+  }
+
+  function recoverAeMcpTransport() {
+    if (!activeRun || stopRequested) return false;
+    if (aeMcpRecoveryPromise) return true;
+    if (aeMcpRecoveryAttempts >= 1) {
+      failAeMcpRebuild();
+      return true;
+    }
+
+    const retryTurn = activeTurn;
+    aeMcpRecoveryAttempts += 1;
+    aeMcpRecoveryStarted = true;
+    emitTurnProgress('mcp-rebuild');
+    const pendingRecovery = (async () => {
+      await recycleAeMcpServer();
+      if (!activeRun || stopRequested || !retryTurn) return;
+      const replacementId = await prepareTurnSession();
+      await dispatchTurnMessage(replacementId, retryTurn);
+    })();
+    aeMcpRecoveryPromise = pendingRecovery;
+    void pendingRecovery.then(
+      () => {
+        if (aeMcpRecoveryPromise === pendingRecovery) aeMcpRecoveryPromise = null;
+      },
+      () => {
+        if (aeMcpRecoveryPromise === pendingRecovery) aeMcpRecoveryPromise = null;
+        failAeMcpRebuild();
+      },
+    );
+    return true;
   }
 
   async function requestJson(path, options = {}, requestBaseUrl = baseUrl) {
@@ -1303,6 +1403,12 @@ export function createOpenCodeBackend({
     const state = part.state || {};
     const status = state.status;
     if (status === 'completed' || status === 'error') {
+      const outputText = typeof state.output === 'string' ? state.output : eventOutputText(state);
+      if (status === 'error'
+        && name.startsWith('mcp__ae__')
+        && isAeMcpTransportFailure(state, outputText, { allowBareNotConnected: true })) {
+        void recoverAeMcpTransport();
+      }
       const ms = state.time && Number.isFinite(state.time.start) && Number.isFinite(state.time.end)
         ? state.time.end - state.time.start
         : undefined;
@@ -1311,7 +1417,7 @@ export function createOpenCodeBackend({
         toolUseId,
         name,
         ok: status === 'completed',
-        text: typeof state.output === 'string' ? state.output : eventOutputText(state),
+        text: outputText,
         durationMs: ms,
       });
       return;
@@ -1436,6 +1542,10 @@ export function createOpenCodeBackend({
         upstream: true,
         upstreamText: combined,
       });
+      if (isAeMcpTransportFailure(error, combined)) {
+        void recoverAeMcpTransport();
+        return;
+      }
       // A provider failure does not invalidate OpenCode's local conversation.
       // Keep the session so a user retry preserves context; only settle
       // interactions that belonged to the failed turn. Local 404/process/SSE
@@ -1499,6 +1609,40 @@ export function createOpenCodeBackend({
     ];
   }
 
+  async function prepareTurnSession() {
+    if (!proc || !baseUrl || sseClosed) emitTurnProgress('spawn');
+    else if (!sessionId) emitTurnProgress('session');
+    return ensureSession();
+  }
+
+  async function dispatchTurnMessage(id, turn) {
+    const messageBody = { parts: openCodeParts(turn) };
+    try {
+      messageDispatched = true;
+      armStallWatchdog();
+      const controller = new AbortController();
+      messageAbortController = controller;
+      const messageRequest = postJson('/session/' + encodeURIComponent(id) + '/message', messageBody, controller.signal);
+      emitTurnProgress('dispatch');
+      await messageRequest;
+    } catch (error) {
+      if (!sessionWasAdopted || (error?.httpStatus !== 404 && error?.httpStatus !== 503)) throw error;
+      sessionId = null;
+      adoptedSessionId = null;
+      sessionWasAdopted = false;
+      const replacementId = await ensureSession();
+      const controller = new AbortController();
+      messageAbortController = controller;
+      const replacementRequest = postJson(
+        '/session/' + encodeURIComponent(replacementId) + '/message',
+        messageBody,
+        controller.signal,
+      );
+      emitTurnProgress('dispatch');
+      await replacementRequest;
+    }
+  }
+
   async function sendUser(input) {
     if (activeRun) return activeRun;
     stopRequested = false;
@@ -1520,6 +1664,9 @@ export function createOpenCodeBackend({
     activeTurn = turn;
     activeTurnAccepted = false;
     messageDispatched = false;
+    aeMcpRecoveryAttempts = 0;
+    aeMcpRecoveryStarted = false;
+    aeMcpRecoveryPromise = null;
     setActiveAttachmentPaths(turn.attachments.flatMap((attachment) => [
       attachment.localPath,
       attachmentFileUrl(attachment.localPath, adapter.id),
@@ -1528,9 +1675,7 @@ export function createOpenCodeBackend({
       activeResolve = resolve;
     });
     try {
-      if (!proc || !baseUrl || sseClosed) emitTurnProgress('spawn');
-      else if (!sessionId) emitTurnProgress('session');
-      const id = await ensureSession();
+      const id = await prepareTurnSession();
       const userText = turn.text;
       transcript.push({ role: 'user', text: userText });
       // Accept at dispatch, not on POST completion: OpenCode's message POST
@@ -1543,33 +1688,13 @@ export function createOpenCodeBackend({
         activeTurnAccepted = true;
         emit({ type: 'turn-accepted', turnId: turn.turnId, transport: 'opencode-file-part' });
       }
-      const messageBody = { parts: openCodeParts(turn) };
-      try {
-        messageDispatched = true;
-        armStallWatchdog();
-        const controller = new AbortController();
-        messageAbortController = controller;
-        const messageRequest = postJson('/session/' + encodeURIComponent(id) + '/message', messageBody, controller.signal);
-        emitTurnProgress('dispatch');
-        await messageRequest;
-      } catch (error) {
-        if (!sessionWasAdopted || (error?.httpStatus !== 404 && error?.httpStatus !== 503)) throw error;
-        sessionId = null;
-        adoptedSessionId = null;
-        sessionWasAdopted = false;
-        const replacementId = await ensureSession();
-        const controller = new AbortController();
-        messageAbortController = controller;
-        const replacementRequest = postJson(
-          '/session/' + encodeURIComponent(replacementId) + '/message',
-          messageBody,
-          controller.signal,
-        );
-        emitTurnProgress('dispatch');
-        await replacementRequest;
-      }
+      await dispatchTurnMessage(id, turn);
     } catch (e) {
       if (stopRequested || !activeRun) return;
+      if (aeMcpRecoveryStarted) {
+        if (aeMcpRecoveryPromise) await aeMcpRecoveryPromise;
+        return activeRun;
+      }
       const httpStatus = extractHttpStatus(e?.httpStatus);
       const fallbackCode = e?.fallbackCode
         || (messageDispatched ? 'TURN_START_FAILED' : 'SESSION_START_FAILED');
@@ -1720,6 +1845,9 @@ export function createOpenCodeBackend({
     activeTurnAccepted = false;
     messageDispatched = false;
     turnStarted = false;
+    aeMcpRecoveryAttempts = 0;
+    aeMcpRecoveryStarted = false;
+    aeMcpRecoveryPromise = null;
     stopRequested = false;
     startedTools.clear();
     partTypes.clear();
