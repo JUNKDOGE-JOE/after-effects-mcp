@@ -983,7 +983,7 @@ class ToolLibrary {
         if (wire.schemaVersion !== 1) throw new Error('unsupported artifact export schemaVersion');
         nonNegativeInteger(wire.exportedAt, 'artifact export exportedAt');
         assertSecretFree(wire, 'artifact-export.json');
-        const original = validateArtifact(wire.artifact);
+        const original = validateArtifact(normalizeArtifact(wire.artifact));
         const existing = this.findByContentHash(original.kind, original.contentHash)[0];
         if (existing) return { imported: false, existingId: existing.id, artifact: null };
         const importedAt = Math.max(0, Math.floor(this.now()));
@@ -1007,6 +1007,7 @@ class ToolLibrary {
             createdAt: importedAt,
             updatedAt: importedAt,
             lastUsedAt: null,
+            useCount: 0,
         });
         return { imported: true, existingId: null, artifact: this.saveArtifact(artifact) };
     }
@@ -1026,6 +1027,7 @@ module.exports = {
     computeContentHash,
     defaultLibrary,
     normalizeArgs,
+    normalizeArtifact,
     renderText,
     validateArgsSchema,
     validateArtifact,

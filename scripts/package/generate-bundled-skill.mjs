@@ -9,6 +9,7 @@ const {
   ToolLibrary,
   assertSecretFree,
   validateArtifact,
+    normalizeArtifact,
 } = require('../../plugin/host/mcp/tool-library.js');
 
 const SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
@@ -32,7 +33,7 @@ function parseExportWire(text) {
     throw new Error('export wire version or timestamp is invalid');
   }
   assertSecretFree(wire, 'artifact-export.json');
-  return validateArtifact(wire.artifact);
+  return validateArtifact(normalizeArtifact(wire.artifact));
 }
 
 function artifactFromState(artifactId, stateDir) {
