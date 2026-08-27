@@ -6,7 +6,7 @@ const { defaultLibrary } = require('../tool-library');
 
 const definition = {
     name: 'ae_toolSearch',
-    description: 'List, search, or inspect persisted Tool Library artifacts.',
+    description: 'Search the Tool Library before repeating an operation; saved tools and candidates can both be inspected directly by id.',
     inputSchema: {
         type: 'object',
         properties: {

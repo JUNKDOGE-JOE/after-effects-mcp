@@ -7,7 +7,9 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { buildTools } = require('./tools');
-const { skillPlan, assertSkillPlanCurrent } = require('./tools/skill-use');
+const skillUse = require('./tools/skill-use');
+const toolUse = require('./tools/tool-use');
+const { skillPlan, assertSkillPlanCurrent } = skillUse;
 const {
     ENVIRONMENT,
     ToolLibrary,
@@ -61,6 +63,7 @@ function artifact(overrides) {
         createdAt: 1000,
         updatedAt: 1000,
         lastUsedAt: null,
+        useCount: 0,
     };
     Object.assign(value, overrides || {});
     value.contentHash = computeContentHash(value.kind, value.content, value.argsSchema);
@@ -298,6 +301,88 @@ test('library management transitions and deletion respect artifact lifecycle', (
     }));
     assert.equal(library.managementList().candidates[0].contentCharacters > 0, true);
     assert.deepEqual(library.clearCandidates(), { removedIds: [secondCandidate.id], count: 1 });
+test('touchUsage increments lastUsedAt and useCount without changing artifact revision', (t) => {
+    const library = makeLibrary(t);
+    const saved = library.saveArtifact(artifact());
+    library.now = function () { return 2500; };
+    const first = library.touchUsage(saved.id);
+    library.now = function () { return 3000; };
+    const second = library.touchUsage(saved.id);
+
+    assert.equal(first.lastUsedAt, 2500);
+    assert.equal(first.useCount, 1);
+    assert.equal(second.lastUsedAt, 3000);
+    assert.equal(second.useCount, 2);
+    assert.equal(second.revision, saved.revision);
+    assert.equal(library.list()[0].useCount, 2);
+    assert.equal(JSON.parse(fs.readFileSync(library.artifactPath(saved.id), 'utf8')).useCount, 2);
+});
+
+test('saveArtifact writes a default useCount and rejects invalid usage counts', (t) => {
+    const library = makeLibrary(t);
+    const missing = artifact();
+    delete missing.useCount;
+    const saved = library.saveArtifact(missing);
+    assert.equal(saved.useCount, 0);
+    assert.equal(JSON.parse(fs.readFileSync(library.artifactPath(saved.id), 'utf8')).useCount, 0);
+    assert.throws(function () {
+        library.saveArtifact(artifact({ useCount: -1 }));
+    }, /artifact useCount/);
+});
+
+test('old artifacts and index entries without useCount survive read, use, touch, and save', async (t) => {
+    const library = makeLibrary(t);
+    const currentWire = artifact({
+        status: 'candidate',
+        argsSchema: {},
+        content: 'app.project.activeItem;',
+    });
+    const oldWire = Object.assign({}, currentWire);
+    delete oldWire.useCount;
+    const oldSummary = library.summaryFromArtifact(currentWire);
+    delete oldSummary.useCount;
+    fs.writeFileSync(library.artifactPath(currentWire.id), canonicalJson(oldWire) + '\n', 'utf8');
+    fs.writeFileSync(library.indexPath, canonicalJson({
+        schemaVersion: 1,
+        revision: 1,
+        artifacts: [oldSummary],
+    }) + '\n', 'utf8');
+
+    assert.equal(library.getArtifact(currentWire.id).useCount, 0);
+    assert.equal(library.list()[0].useCount, 0);
+    const activity = [];
+    const registry = buildTools({
+        toolLibrary: library,
+        executeJsx: async function () {
+            return { payload: { ok: true, result: '{"ok":true}' } };
+        },
+        recordMcpActivity: function (event) { activity.push(event); },
+    });
+    const used = await registry.call({
+        name: 'ae_toolUse', arguments: { name: currentWire.id },
+    }, toolContext());
+    assert.equal(used.result.structuredContent.ok, true);
+    assert.equal(library.getArtifact(currentWire.id).useCount, 1);
+
+    const promoted = await registry.call({
+        name: 'ae_toolSave', arguments: {
+            name: currentWire.id,
+            description: 'Promoted old-format artifact.',
+        },
+    }, toolContext());
+    assert.equal(promoted.result.structuredContent.ok, true);
+    assert.equal(promoted.result.structuredContent.artifact.revision, 2);
+    assert.equal(promoted.result.structuredContent.artifact.useCount, 1);
+    assert.ok(activity.some(function (event) {
+        return event.tool === 'ae_toolUse' && event.artifactId === currentWire.id
+            && event.operation === 'use' && event.ok === true;
+    }));
+    assert.ok(activity.some(function (event) {
+        return event.tool === 'ae_toolSave' && event.artifactId === currentWire.id
+            && event.operation === 'promote' && event.ok === true;
+    }));
+    assert.equal(JSON.parse(fs.readFileSync(library.artifactPath(currentWire.id), 'utf8')).useCount, 1);
+    assert.equal(JSON.parse(fs.readFileSync(library.indexPath, 'utf8')).artifacts[0].useCount, 1);
 });
 
 test('toolSearch combines index, query, and inspect modes', async (t) => {
@@ -354,6 +439,38 @@ test('candidate artifacts stay out of default search but remain inspectable and 
         name: 'ae_toolUse', arguments: { name: captured.id },
     }, toolContext());
     assert.deepEqual(used.result.structuredContent, { ok: true });
+});
+
+test('toolUse touches successful artifacts, records use activity, and fails open on touch errors', async (t) => {
+    const library = makeLibrary(t);
+    const saved = library.saveArtifact(artifact());
+    const activity = [];
+    const deps = {
+        toolLibrary: library,
+        executeJsx: async function () {
+            return { payload: { ok: true, result: '{"ok":true}' } };
+        },
+        recordMcpActivity: function (event) { activity.push(event); },
+    };
+    const first = await toolUse.call({ name: saved.id, args: { text: 'Hello' } }, toolContext(), deps);
+    assert.equal(first.result.structuredContent.ok, true);
+    const touched = library.getArtifact(saved.id);
+    assert.equal(touched.lastUsedAt, 1000);
+    assert.equal(touched.useCount, 1);
+    assert.equal(touched.revision, saved.revision);
+    assert.deepEqual(activity[0], {
+        tool: 'ae_toolUse',
+        artifactId: saved.id,
+        operation: 'use',
+        ok: true,
+        transport: 'mcp',
+        client: 'tool-library-test',
+    });
+
+    library.touchUsage = function () { throw new Error('usage storage unavailable'); };
+    const second = await toolUse.call({ name: saved.id, args: { text: 'Again' } }, toolContext(), deps);
+    assert.equal(second.result.structuredContent.ok, true);
+    assert.equal(activity.length, 2);
 });
 
 test('toolUse rejects a changed artifact at approval consumption and before execution', async (t) => {
@@ -461,6 +578,112 @@ test('toolSave prompt-skill creation feeds skillUse listing, rendering, and norm
         assert.match(rejected.result.structuredContent.error, /prompt skills are render-only/i);
     });
 
+test('skillUse touches and records a named library render, including include_templates requests', async (t) => {
+    const library = makeLibrary(t);
+    const saved = library.saveArtifact(promptSkillArtifact());
+    const activity = [];
+    const deps = {
+        toolLibrary: library,
+        recordMcpActivity: function (event) { activity.push(event); },
+    };
+    const output = await skillUse.call({
+        name: saved.id,
+        args: { topic: 'timing' },
+        include_templates: true,
+    }, toolContext(), deps);
+    assert.equal(output.result.structuredContent.ok, true);
+    assert.equal(library.getArtifact(saved.id).useCount, 1);
+    assert.deepEqual(activity[0], {
+        tool: 'ae_skillUse',
+        artifactId: saved.id,
+        operation: 'render',
+        ok: true,
+        transport: 'mcp',
+        client: 'tool-library-test',
+    });
+
+    library.touchUsage = function () { throw new Error('usage storage unavailable'); };
+    const failOpen = await skillUse.call({
+        name: saved.id, args: { topic: 'spacing' },
+    }, toolContext(), deps);
+    assert.equal(failOpen.result.structuredContent.ok, true);
+});
+
+test('skillUse touches and records a successful library skill execution', async () => {
+    const stored = artifact({
+        id: 'user:33333333-3333-4333-8333-333333333333',
+        name: 'run-library-skill',
+        argsSchema: {},
+        content: 'app.project.activeItem;',
+    });
+    const record = {
+        skill: {
+            name: stored.name,
+            description: stored.description,
+            template_type: 'jsx',
+            template: stored.content,
+            args_schema: stored.argsSchema,
+        },
+        source: 'library',
+        path: 'library',
+        artifact: stored,
+    };
+    const touches = [];
+    const activity = [];
+    const store = {
+        resolveSkill: function () { return record; },
+        touchUsage: function (id) { touches.push(id); },
+    };
+    const output = await skillUse.call({
+        name: stored.id, execute: true, args: {},
+    }, toolContext(), {
+        toolLibrary: store,
+        executeJsx: async function () {
+            return { payload: { ok: true, result: '{"ok":true}' } };
+        },
+        recordMcpActivity: function (event) { activity.push(event); },
+    });
+    assert.equal(output.result.structuredContent.ok, true);
+    assert.deepEqual(touches, [stored.id]);
+    assert.equal(activity[0].tool, 'ae_skillUse');
+    assert.equal(activity[0].artifactId, stored.id);
+    assert.equal(activity[0].operation, 'use');
+    assert.equal(activity[0].ok, true);
+});
+
+test('bundled and legacy synthetic artifacts never receive usage touches', async (t) => {
+    const library = makeLibrary(t);
+    library.writeSkill({
+        name: 'legacy-runner',
+        description: 'Legacy JSX fixture.',
+        template_type: 'jsx',
+        template: 'app.project.activeItem;',
+        args_schema: {},
+    });
+    const legacy = library.allSummaries().find(function (item) {
+        return item.name === 'legacy-runner';
+    });
+    const touches = [];
+    library.touchUsage = function (id) { touches.push(id); };
+    const deps = {
+        toolLibrary: library,
+        executeJsx: async function () {
+            return { payload: { ok: true, result: '{"ok":true}' } };
+        },
+    };
+    const bundled = await skillUse.call({
+        name: 'builtin:skill:ae-execution-guide', include_templates: true,
+    }, toolContext(), deps);
+    const legacySkill = await skillUse.call({
+        name: legacy.id, execute: true,
+    }, toolContext(), deps);
+    const legacyTool = await toolUse.call({ name: legacy.id }, toolContext(), deps);
+    assert.equal(bundled.result.structuredContent.ok, true);
+    assert.equal(legacySkill.result.structuredContent.ok, true);
+    assert.equal(legacyTool.result.structuredContent.ok, true);
+    assert.deepEqual(touches, []);
+});
+
 test('skillUse exposes only saved and pinned prompt-skill library artifacts', async (t) => {
     const library = makeLibrary(t);
     ['saved', 'pinned', 'candidate', 'archived', 'deprecated'].forEach(function (status, index) {
@@ -527,4 +750,19 @@ test('content hash remains compatible with SHA-256 canonical JSON', () => {
         computeContentHash(value.kind, value.content, value.argsSchema),
         crypto.createHash('sha256').update(canonicalJson(value), 'utf8').digest('hex'),
     );
+});
+
+test('bundled execution guide advertises the Tool Library workflow and matches its manifest hash', (t) => {
+    const bundledRoot = path.join(__dirname, 'skills_bundled');
+    const guidePath = path.join(bundledRoot, 'ae-execution-guide.json');
+    const guideBytes = fs.readFileSync(guidePath);
+    const guide = JSON.parse(guideBytes.toString('utf8'));
+    const manifest = JSON.parse(fs.readFileSync(path.join(bundledRoot, 'manifest.json'), 'utf8'));
+    const entry = manifest.artifacts.find(function (item) {
+        return item.path === 'ae-execution-guide.json';
+    });
+    assert.match(guide.template, /ae_toolSearch.*ae_toolUse/s);
+    assert.match(guide.template, /ae_toolSave/);
+    assert.equal(entry.sha256, crypto.createHash('sha256').update(guideBytes).digest('hex'));
+    assert.equal(makeLibrary(t).getArtifact('builtin:skill:ae-execution-guide').verified, true);
 });

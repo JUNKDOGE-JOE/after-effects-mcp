@@ -139,9 +139,16 @@ test('MCP exec capture promotes through toolSave before search and toolUse', asy
         assert.equal(paused.body.error.code, -32004);
         assert.equal(paused.body.error.data.code, 'ACTIONS_PAUSED');
         assert.match(paused.body.error.message, /paused/);
-        assert.equal(host.server.activity.list().filter(function (event) {
+        const clientEvents = host.server.activity.list().filter(function (event) {
             return event.client === client;
-        }).length, 8);
+        });
+        assert.equal(clientEvents.length, 10);
+        assert.ok(clientEvents.some(function (event) {
+            return event.tool === 'ae_toolSave' && event.operation === 'promote' && event.ok === true;
+        }));
+        assert.ok(clientEvents.some(function (event) {
+            return event.tool === 'ae_toolUse' && event.operation === 'use' && event.ok === true;
+        }));
     } finally {
         host.server.setPaused(false);
         await new Promise(function (resolve) { host.listener.close(resolve); });

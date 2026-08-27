@@ -34,6 +34,11 @@ EXTENDSCRIPT EXPERT GUARDRAILS — high-frequency AE traps (toggle via AE_MCP_EX
     reorder afterward with moveBefore / moveToBeginning).
   Effect sub-properties: if access by display name returns null on this build,
     address them by index instead — effect.property(1) / property(2) / property(3).
+
+TOOL LIBRARY WORKFLOW:
+  For a repeated operation, call ae_toolSearch first, then replay a match by id
+  with ae_toolUse instead of rewriting the script. When a useful script or
+  candidate is worth retaining, call ae_toolSave to save or promote it.
 `;
 function buildInstructions(options) {
     const names = options && Array.isArray(options.tools) ? options.tools : [];

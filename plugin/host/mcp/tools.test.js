@@ -48,6 +48,14 @@ test('tools/list uses top-level JSON-schema object forms only', () => {
     assert.deepEqual(recover.inputSchema.required, ['recoveryId']);
     assert.deepEqual(exec.outputSchema.properties.contentType.enum, ['text', 'json']);
     assert.match(exec.description, /contentType/);
+    assert.match(tools.find(function (tool) { return tool.name === 'ae_toolSearch'; }).description,
+        /before repeating an operation/);
+    assert.match(tools.find(function (tool) { return tool.name === 'ae_toolUse'; }).description,
+        /Prefer it over rewriting a script/);
+    assert.match(tools.find(function (tool) { return tool.name === 'ae_toolSave'; }).description,
+        /promote a captured candidate/);
+    assert.match(tools.find(function (tool) { return tool.name === 'ae_skillUse'; }).description,
+        /prompt skills you saved/);
 });
 
 test('ae_exec surfaces explicit contentType and never sniffs JSON-like text', async () => {
