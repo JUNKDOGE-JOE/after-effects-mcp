@@ -5,11 +5,11 @@ const test = require('node:test');
 const { VERB_ANNOTATIONS } = require('./annotations');
 const { TOOL_MODULES } = require('./tools');
 
-test('target MCP annotation table contains the twelve direction tools', () => {
+test('target MCP annotation table contains the thirteen direction tools', () => {
     assert.deepEqual(Object.keys(VERB_ANNOTATIONS), [
         'ae_exec', 'ae_execRecover', 'ae_status', 'ae_previewFrame', 'ae_read', 'ae_checkpoint',
         'ae_revert', 'ae_validateExpressions', 'ae_nativeExec', 'ae_toolUse',
-        'ae_toolSearch', 'ae_skillUse',
+        'ae_toolSave', 'ae_toolSearch', 'ae_skillUse',
     ]);
     assert.deepEqual(VERB_ANNOTATIONS.ae_read, {
         readOnlyHint: true, destructiveHint: false, idempotentHint: true,

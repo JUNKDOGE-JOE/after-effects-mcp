@@ -103,8 +103,23 @@ function riskLabel(toolName) {
     return 'non-destructive write';
 }
 
+function firstCharacters(value, limit) {
+    return Array.from(String(value || '')).slice(0, limit).join('');
+}
+
 function approvalSummary(args) {
     const input = args || {};
+    if (['promote', 'create', 'update', 'status'].indexOf(input.operation) >= 0) {
+        return {
+            id: input.id === undefined ? null : input.id,
+            name: input.name === undefined ? null : input.name,
+            operation: input.operation,
+            kind: input.kind === undefined ? null : input.kind,
+            content_chars: typeof input.content === 'string' ? Array.from(input.content).length : 0,
+            status: input.status === undefined ? null : input.status,
+            content: typeof input.content === 'string' ? firstCharacters(input.content, 200) : '',
+        };
+    }
     return {
         code: typeof input.code === 'string' ? input.code.slice(0, 200) : '',
         undo_group_name: input.undo_group_name === undefined ? null : input.undo_group_name,
@@ -118,15 +133,7 @@ function approvalSummary(args) {
 
 function approvalPlan(toolName, args, now = Date.now()) {
     const input = args || {};
-    const normalizedArgs = {
-        code: typeof input.code === 'string' ? input.code.slice(0, 200) : '',
-        undo_group_name: input.undo_group_name === undefined ? null : input.undo_group_name,
-        checkpoint_label: input.checkpoint_label === undefined ? null : input.checkpoint_label,
-        recoveryId: input.recoveryId === undefined ? null : input.recoveryId,
-        retryMode: input.retryMode === undefined ? null : input.retryMode,
-        restoreCheckpointId: input.restoreCheckpointId === undefined
-            ? null : input.restoreCheckpointId,
-    };
+    const normalizedArgs = approvalSummary(input);
     // The card preview is intentionally bounded, but the identity must cover
     // the complete tool call. Otherwise two scripts sharing the first 200
     // characters would look like the same approved operation.

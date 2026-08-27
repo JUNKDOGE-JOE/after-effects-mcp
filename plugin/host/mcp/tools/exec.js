@@ -12,9 +12,22 @@ const HISTORY_REDACTION_MARKERS = [
     'omitted from prior model history',
     'hidden from history to save tokens'
 ];
+const HISTORY_REDACTION_WORDS = /\b(omitted|redacted|hidden|elided)\b/i;
+const HISTORY_REDACTION_CONTEXT = /\b(history|tokens?|context)\b/i;
+const PLACEHOLDER_STREAK_FIELD = 'placeholderRejectionStreak';
 
 function isHistoryRedactionPlaceholder(value) {
-    return typeof value === 'string' && HISTORY_REDACTION_MARKERS.some((marker) => value.includes(marker));
+    if (typeof value !== 'string') return false;
+    if (HISTORY_REDACTION_MARKERS.some((marker) => value.includes(marker))) return true;
+    const trimmed = value.trim();
+    const placeholderShape = value.length <= 300 && (
+        /^\/\*[\s\S]*\*\/$/.test(trimmed)
+        || (trimmed.charAt(0) === '[' && trimmed.charAt(trimmed.length - 1) === ']')
+        || (!/[\r\n]/.test(trimmed) && !/[;{=(]/.test(trimmed))
+    );
+    return placeholderShape
+        && HISTORY_REDACTION_WORDS.test(value)
+        && HISTORY_REDACTION_CONTEXT.test(value);
 }
 
 function placeholderError(recovery) {
@@ -22,6 +35,53 @@ function placeholderError(recovery) {
         ? ' omit `code` entirely to rerun the stored recovery script, or pass a full replacement script.'
         : '';
     return `\`code\` is a redaction placeholder from the conversation history, not runnable code (earlier scripts are hidden to save tokens). Write the complete script again from scratch.${suffix}`;
+}
+
+function placeholderStreak(context) {
+    const session = context && context.session;
+    if (!session || typeof session !== 'object') return 1;
+    const next = Number.isInteger(session[PLACEHOLDER_STREAK_FIELD])
+        ? session[PLACEHOLDER_STREAK_FIELD] + 1 : 1;
+    session[PLACEHOLDER_STREAK_FIELD] = next;
+    return next;
+}
+
+function resetPlaceholderStreak(context) {
+    const session = context && context.session;
+    if (session && typeof session === 'object') session[PLACEHOLDER_STREAK_FIELD] = 0;
+}
+
+function recordPlaceholderRejection(code, context, deps, tool, streak) {
+    if (!deps || typeof deps.recordMcpActivity !== 'function') return;
+    const session = context && context.session ? context.session : {};
+    deps.recordMcpActivity({
+        tool,
+        transport: 'mcp',
+        ok: false,
+        verdict: 'placeholder_rejected',
+        client: typeof session.clientName === 'string' ? session.clientName : null,
+        streak,
+        scriptChars: code.length,
+        scriptHead: code.replace(/\s+/g, ' ').trim().slice(0, 200),
+    });
+}
+
+function escalatedPlaceholderError(streak, context, deps) {
+    const prefix = 'Redaction placeholder rejected (consecutive rejection #' + streak + ').';
+    const guidance = candidateGuidance('', context, deps);
+    if (guidance.indexOf('Recent successful scripts you can rerun:') !== -1) return prefix + guidance;
+    return prefix + ' Write the complete script from scratch; do not resend redacted history';
+}
+
+function placeholderResponse(code, context, deps, tool, recovery) {
+    const streak = placeholderStreak(context);
+    recordPlaceholderRejection(code, context, deps, tool, streak);
+    const error = streak === 1
+        ? candidateGuidance(placeholderError(recovery), context, deps)
+        : escalatedPlaceholderError(streak, context, deps);
+    return {
+        result: textResult({ ok: false, error }, true),
+    };
 }
 const {
     autoCheckpoint,
@@ -298,6 +358,7 @@ async function runInitial(args, context, deps) {
     if (denied) return denied;
     const checkpointRun = await autoCheckpoint(args, context, deps);
     const execution = await execute(args.code, args, context, deps);
+    if (execution) resetPlaceholderStreak(context);
     if (execution && execution.payload
         && hasOwn(execution.payload, 'projectPath')) {
         recentProjectPath = execution.payload.projectPath || null;
@@ -421,6 +482,7 @@ async function runRecovery(args, context, deps) {
         store.writeMeta(entry, meta);
     }
     const execution = await execute(code, resolvedArgs, context, deps);
+    if (execution) resetPlaceholderStreak(context);
     if (execution && execution.payload
         && hasOwn(execution.payload, 'projectPath')) {
         recentProjectPath = execution.payload.projectPath || null;
@@ -462,12 +524,7 @@ async function runRecovery(args, context, deps) {
 
 async function call(args, context, deps) {
     if (isHistoryRedactionPlaceholder(args && args.code)) {
-        return {
-            result: textResult({
-                ok: false,
-                error: candidateGuidance(placeholderError(false), context, deps),
-            }, true),
-        };
+        return placeholderResponse(args.code, context, deps, 'ae_exec', false);
     }
     const input = args || {};
     const invalid = initialValidationError(input);
@@ -484,12 +541,7 @@ async function call(args, context, deps) {
 
 async function recover(args, context, deps) {
     if (isHistoryRedactionPlaceholder(args && args.code)) {
-        return {
-            result: textResult({
-                ok: false,
-                error: candidateGuidance(placeholderError(true), context, deps),
-            }, true),
-        };
+        return placeholderResponse(args.code, context, deps, 'ae_execRecover', true);
     }
     const input = args || {};
     const invalid = recoveryValidationError(input);

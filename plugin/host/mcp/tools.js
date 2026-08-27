@@ -38,6 +38,7 @@ const TOOL_MODULES = [
     require('./tools/native-exec'),
     require('./tools/tool-search'),
     require('./tools/tool-use'),
+    require('./tools/tool-save'),
     require('./tools/skill-use'),
 ];
 

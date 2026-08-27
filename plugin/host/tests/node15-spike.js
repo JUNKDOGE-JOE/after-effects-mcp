@@ -114,7 +114,7 @@ async function main() {
         assert.deepStrictEqual(tools.map(function (tool) { return tool.name; }), [
             'ae_status', 'ae_exec', 'ae_execRecover', 'ae_previewFrame', 'ae_read', 'ae_checkpoint',
             'ae_revert', 'ae_validateExpressions', 'ae_nativeExec', 'ae_toolSearch',
-            'ae_toolUse', 'ae_skillUse',
+            'ae_toolUse', 'ae_toolSave', 'ae_skillUse',
         ]);
         tools.forEach(function (tool) {
             assert.strictEqual(Object.prototype.hasOwnProperty.call(tool.inputSchema, 'oneOf'), false);
