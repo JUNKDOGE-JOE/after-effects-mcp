@@ -6,6 +6,7 @@ const { VERB_ANNOTATIONS } = require('../annotations');
 const { enforce } = require('../approval-gate');
 const { parseExecResult } = require('../jsx-result');
 const { matchHint } = require('../error-hints');
+const { candidateGuidance, captureSuccessfulScript } = require('../candidate-artifacts');
 
 const HISTORY_REDACTION_MARKERS = [
     'omitted from prior model history',
@@ -71,6 +72,7 @@ const definition = {
             revision: { type: 'object' },
             attempt: { type: 'number' },
             restored: { type: 'string' },
+            artifactId: { type: 'string' },
         },
         required: ['ok'],
         additionalProperties: true,
@@ -310,6 +312,8 @@ async function runInitial(args, context, deps) {
         return createRecovery(args, context, deps, args.code, execution, failure, checkpointRun);
     }
     const parsed = parseExecResult(execution.payload.resultType, execution.payload.result);
+    const artifactId = captureSuccessfulScript(args.code, args, context, deps, 'ae_exec');
+    if (artifactId) parsed.artifactId = artifactId;
     return annotateCheckpoint(parsed, checkpointRun);
 }
 
@@ -447,16 +451,23 @@ async function runRecovery(args, context, deps) {
     }
     const parsed = parseExecResult(execution.payload.resultType, execution.payload.result);
     annotateCheckpoint(parsed, checkpointRun);
+    const artifactId = captureSuccessfulScript(code, resolvedArgs, context, deps, 'ae_execRecover');
     return Object.assign({}, parsed, {
         recoveryId: args.recoveryId,
         attempt: attemptNumber,
         restored: restoration.restored,
+        ...(artifactId ? { artifactId } : {}),
     });
 }
 
 async function call(args, context, deps) {
     if (isHistoryRedactionPlaceholder(args && args.code)) {
-        return { result: textResult({ ok: false, error: placeholderError(false) }, true) };
+        return {
+            result: textResult({
+                ok: false,
+                error: candidateGuidance(placeholderError(false), context, deps),
+            }, true),
+        };
     }
     const input = args || {};
     const invalid = initialValidationError(input);
@@ -473,7 +484,12 @@ async function call(args, context, deps) {
 
 async function recover(args, context, deps) {
     if (isHistoryRedactionPlaceholder(args && args.code)) {
-        return { result: textResult({ ok: false, error: placeholderError(true) }, true) };
+        return {
+            result: textResult({
+                ok: false,
+                error: candidateGuidance(placeholderError(true), context, deps),
+            }, true),
+        };
     }
     const input = args || {};
     const invalid = recoveryValidationError(input);

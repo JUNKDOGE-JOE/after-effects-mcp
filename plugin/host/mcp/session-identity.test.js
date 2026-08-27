@@ -52,6 +52,15 @@ function initializeMessage(id, name, version) {
     };
 }
 
+function assertCapturedExecResult(actual, expected) {
+    const artifactId = actual.artifactId;
+    assert.equal(typeof artifactId, 'string');
+    assert.match(artifactId, /^user:/);
+    const envelope = Object.assign({}, actual);
+    delete envelope.artifactId;
+    assert.deepEqual(envelope, expected);
+}
+
 async function fixture() {
     const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-identity-state-'));
     delete require.cache[require.resolve('../server')];
@@ -116,7 +125,7 @@ test('MCP identity blocks existing and new sessions, then restores after unblock
             jsonrpc: '2.0', id: 3, method: 'tools/call',
             params: { name: 'ae_exec', arguments: { code: '1 + 1' } },
         });
-        assert.deepEqual(restored.body.result.structuredContent, {
+        assertCapturedExecResult(restored.body.result.structuredContent, {
             ok: true,
             content: 'identity-ok',
             contentType: 'text',

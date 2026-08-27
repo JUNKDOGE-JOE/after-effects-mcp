@@ -47,6 +47,7 @@ const CEP_EXECUTED_FILES = [
     'mcp/jsx-result.js',
     'mcp/template.js',
     'mcp/tool-library.js',
+    'mcp/candidate-artifacts.js',
     'mcp/tools.js',
     'mcp/tool-result.js',
     // One file per /mcp tool (see mcp/tools.js). Every new tool module must be

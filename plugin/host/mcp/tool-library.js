@@ -520,6 +520,31 @@ class ToolLibrary {
         return artifact;
     }
 
+    removeArtifact(id) {
+        const artifactPath = this.artifactPath(id);
+        const index = this.readIndex();
+        const entry = index.artifacts.find(function (item) { return item.id === id; });
+        if (!entry) return false;
+        let before;
+        try { before = fs.readFileSync(artifactPath, 'utf8'); } catch (error) {
+            throw new Error('tool store is corrupt');
+        }
+        const next = {
+            schemaVersion: 1,
+            revision: index.revision + 1,
+            artifacts: index.artifacts.filter(function (item) { return item.id !== id; }),
+        };
+        assertSecretFree(next, 'index.json');
+        fs.unlinkSync(artifactPath);
+        try {
+            atomicWrite(this.indexPath, canonicalJson(next) + '\n');
+        } catch (error) {
+            atomicWrite(artifactPath, before);
+            throw error;
+        }
+        return true;
+    }
+
     getArtifact(id) {
         const index = this.readIndex();
         const entry = index.artifacts.find(function (item) { return item.id === id; });

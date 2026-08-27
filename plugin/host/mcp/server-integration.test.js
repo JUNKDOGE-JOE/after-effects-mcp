@@ -77,11 +77,33 @@ test('MCP ae_exec shares paused/blocked gates and activity records with /exec', 
             jsonrpc: '2.0', id: 2, method: 'tools/call',
             params: { name: 'ae_exec', arguments: { code: '1 + 1', undo_group_name: 'MCP test' } },
         });
-        assert.deepEqual(success.body.result.structuredContent, {
+        const successfulExec = success.body.result.structuredContent;
+        assert.match(successfulExec.artifactId, /^user:/);
+        assert.deepEqual(Object.assign({}, successfulExec, { artifactId: undefined }), {
             ok: true,
             content: 'bridge-ok',
             contentType: 'text',
+            artifactId: undefined,
         });
+        const artifactId = successfulExec.artifactId;
+        const listed = await request(host.port, headers, {
+            jsonrpc: '2.0', id: 22, method: 'tools/call',
+            params: { name: 'ae_toolSearch', arguments: {} },
+        });
+        assert.equal(listed.body.result.structuredContent.artifacts.some(function (item) {
+            return item.id === artifactId;
+        }), false);
+        const inspected = await request(host.port, headers, {
+            jsonrpc: '2.0', id: 23, method: 'tools/call',
+            params: { name: 'ae_toolSearch', arguments: { name: artifactId } },
+        });
+        assert.equal(inspected.body.result.structuredContent.artifact.id, artifactId);
+        const used = await request(host.port, headers, {
+            jsonrpc: '2.0', id: 24, method: 'tools/call',
+            params: { name: 'ae_toolUse', arguments: { name: artifactId } },
+        });
+        assert.equal(used.body.result.structuredContent.ok, true);
+        assert.equal(used.body.result.structuredContent.content, 'bridge-ok');
         const invalidParams = await request(host.port, headers, {
             jsonrpc: '2.0', id: 21, method: 'tools/call', params: {},
         });
@@ -106,7 +128,7 @@ test('MCP ae_exec shares paused/blocked gates and activity records with /exec', 
         assert.match(paused.body.error.message, /paused/);
         assert.equal(host.server.activity.list().filter(function (event) {
             return event.client === client;
-        }).length, 3);
+        }).length, 6);
     } finally {
         host.server.setPaused(false);
         await new Promise(function (resolve) { host.listener.close(resolve); });

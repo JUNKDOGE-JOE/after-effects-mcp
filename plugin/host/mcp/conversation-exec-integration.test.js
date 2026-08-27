@@ -78,6 +78,15 @@ function toolCall(id, code, extra, meta) {
     };
 }
 
+function assertCapturedExecResult(actual, expected) {
+    const artifactId = actual.artifactId;
+    assert.equal(typeof artifactId, 'string');
+    assert.match(artifactId, /^user:/);
+    const envelope = Object.assign({}, actual);
+    delete envelope.artifactId;
+    assert.deepEqual(envelope, expected);
+}
+
 async function closeFixture(fixture) {
     await new Promise(function (resolve) { fixture.listener.close(resolve); });
     if (fixture.ownedStoreRoot) {
@@ -117,7 +126,7 @@ test('conversation tiers isolate calls, external calls bypass, updates are live,
         const allowed = await request(fixture.port, 'POST', none.path, {
             'Mcp-Session-Id': noneSession.session,
         }, toolCall(2, 'json'));
-        assert.deepEqual(allowed.body.result.structuredContent, {
+        assertCapturedExecResult(allowed.body.result.structuredContent, {
             ok: true,
             content: '{"ok":true,"n":1}',
             contentType: 'json',
@@ -135,7 +144,7 @@ test('conversation tiers isolate calls, external calls bypass, updates are live,
         const externalResult = await request(fixture.port, 'POST', '/mcp', {
             'Mcp-Session-Id': external.session,
         }, toolCall(4, 'plain'));
-        assert.deepEqual(externalResult.body.result.structuredContent, {
+        assertCapturedExecResult(externalResult.body.result.structuredContent, {
             ok: true,
             content: 'hi',
             contentType: 'text',
@@ -214,7 +223,7 @@ test('manual conversation approval accepts with progress and declines without ex
                 && frame.params.progressToken === 'approval-progress';
         }));
         const terminal = frames.find(function (frame) { return frame.id === 2; });
-        assert.deepEqual(terminal.result.structuredContent, {
+        assertCapturedExecResult(terminal.result.structuredContent, {
             ok: true,
             content: '{"ok":true,"approved":true}',
             contentType: 'json',
@@ -289,7 +298,7 @@ test('checkpoint success probes, snapshots, persists metadata, then executes use
         }, toolCall(2, 'user-edit-code', {
             checkpoint_label: 'Before edit', undo_group_name: 'Edit', timeout_sec: 45,
         }));
-        assert.deepEqual(response.body.result.structuredContent, {
+        assertCapturedExecResult(response.body.result.structuredContent, {
             ok: true,
             content: '{"ok":true,"edited":true}',
             contentType: 'json',
@@ -348,7 +357,7 @@ test('untitled and failed checkpoints annotate the result but never block user J
     }
 
     const untitled = await runCase(null, false);
-    assert.deepEqual(untitled.result, {
+    assertCapturedExecResult(untitled.result, {
         ok: true,
         content: '{"ok":true,"edited":true}',
         contentType: 'json',
@@ -363,6 +372,12 @@ test('untitled and failed checkpoints annotate the result but never block user J
     try {
         const failed = await runCase(source, true);
         assert.match(failed.result.checkpointSkipped, /^checkpoint-failed:/);
+        assertCapturedExecResult(failed.result, {
+            ok: true,
+            content: '{"ok":true,"edited":true}',
+            contentType: 'json',
+            checkpointSkipped: failed.result.checkpointSkipped,
+        });
         assert.equal(failed.calls.length, 3);
         assert.equal(failed.calls[2].code, 'user-edit');
     } finally {

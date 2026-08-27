@@ -123,6 +123,29 @@ test('canonical content addressing is order-independent and atomic writes leave 
     assert.equal(library.findByContentHash('jsx', first.contentHash).length, 2);
 });
 
+test('removeArtifact deletes both records and rolls back the file when the index update fails', (t) => {
+    const library = makeLibrary(t);
+    const saved = library.saveArtifact(artifact());
+    const originalRename = fs.renameSync;
+    let rejected = false;
+    fs.renameSync = function (source, destination) {
+        if (!rejected && destination === library.indexPath) {
+            rejected = true;
+            throw new Error('index write failed');
+        }
+        return originalRename(source, destination);
+    };
+    try {
+        assert.throws(function () { library.removeArtifact(saved.id); }, /index write failed/);
+    } finally {
+        fs.renameSync = originalRename;
+    }
+    assert.equal(library.getArtifact(saved.id).id, saved.id);
+    assert.equal(library.removeArtifact(saved.id), true);
+    assert.equal(library.removeArtifact(saved.id), false);
+    assert.throws(function () { library.getArtifact(saved.id); }, /tool not found/);
+});
+
 test('secret-shaped artifact content is rejected before it reaches disk', (t) => {
     const library = makeLibrary(t);
     const secret = artifact({ content: 'var key = "sk-secretvalue";' });
@@ -181,6 +204,42 @@ test('toolSearch combines index, query, and inspect modes', async (t) => {
         name: 'ae_toolSearch', arguments: { name: saved.id },
     }, context);
     assert.deepEqual(inspected.result.structuredContent.artifact, saved);
+});
+
+test('candidate artifacts stay out of default search but remain inspectable and executable by id', async (t) => {
+    const library = makeLibrary(t);
+    const captured = artifact({
+        status: 'candidate',
+        argsSchema: {},
+        content: 'app.project.activeItem;',
+        source: {
+            type: 'chat-tool-call',
+            ref: 'ae_exec',
+            client: 'test-client',
+            productVersion: null,
+            provenance: { capturedAt: 1000, conversationId: 'conversation-test', tool: 'ae_exec' },
+        },
+    });
+    library.saveArtifact(captured);
+    const registry = buildTools({
+        toolLibrary: library,
+        executeJsx: async function (request) {
+            assert.equal(request.code, captured.content);
+            return { payload: { ok: true, result: '{"ok":true}' } };
+        },
+    });
+    const listed = await registry.call({ name: 'ae_toolSearch', arguments: {} }, toolContext());
+    assert.equal(listed.result.structuredContent.artifacts.some(function (item) {
+        return item.id === captured.id;
+    }), false);
+    const inspected = await registry.call({
+        name: 'ae_toolSearch', arguments: { name: captured.id },
+    }, toolContext());
+    assert.equal(inspected.result.structuredContent.artifact.id, captured.id);
+    const used = await registry.call({
+        name: 'ae_toolUse', arguments: { name: captured.id },
+    }, toolContext());
+    assert.deepEqual(used.result.structuredContent, { ok: true });
 });
 
 test('toolUse rejects a changed artifact at approval consumption and before execution', async (t) => {

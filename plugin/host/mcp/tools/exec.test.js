@@ -7,6 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { CheckpointStore } = require('../checkpoint-store');
 const { RecoveryStore } = require('../recovery-store');
+const { ToolLibrary } = require('../tool-library');
 const { PROJECT_PATH_CODE } = require('../checkpoint-ops');
 const execTool = require('./exec');
 const execRecoverTool = require('./exec-recover');
@@ -51,11 +52,17 @@ function fixture() {
     fs.writeFileSync(project, 'current-project', 'utf8');
     const checkpointStore = new CheckpointStore({ root: path.join(root, 'checkpoints') });
     const recoveryStore = new RecoveryStore({ checkpointStore });
+    const toolLibrary = new ToolLibrary({
+        toolRoot: path.join(root, 'tools'),
+        skillRoot: path.join(root, 'skills'),
+        bundledRoot: path.join(__dirname, '..', 'skills_bundled'),
+    });
     const calls = [];
     let userHandler = async function () { return success({ ok: true }); };
     const deps = {
         getCheckpointStore: function () { return checkpointStore; },
         getRecoveryStore: function () { return recoveryStore; },
+        getToolLibrary: function () { return toolLibrary; },
         setUserHandler: function (handler) { userHandler = handler; },
         executeJsx: async function (input) {
             if (input.code === PROJECT_PATH_CODE) {
@@ -91,6 +98,7 @@ function fixture() {
         project,
         checkpointStore,
         recoveryStore,
+        toolLibrary,
         calls,
         deps,
         close: function () { fs.rmSync(root, { recursive: true, force: true }); },
@@ -107,6 +115,7 @@ test('ae_exec accepts only new executions and ae_execRecover owns the compact re
     assert.equal(execRecoverTool.definition.inputSchema.properties.recoveryId.maxLength, 6);
     assert.match(execRecoverTool.definition.inputSchema.properties.recoveryId.description, /Never invent|exact/i);
     assert.deepEqual(execRecoverTool.definition.inputSchema.properties.retryMode.enum, ['restore', 'continue']);
+    assert.equal(execTool.definition.outputSchema.properties.artifactId.type, 'string');
     assert.ok(Buffer.byteLength(JSON.stringify(execRecoverTool.definition), 'utf8') < 2500);
     const missing = value(await execTool.call({}, context(null), {}));
     assert.equal(missing.error, 'missing or empty `code`');
@@ -116,6 +125,27 @@ test('ae_exec accepts only new executions and ae_execRecover owns the compact re
     assert.equal(misplacedRecovery.error, 'recovery fields are only accepted by `ae_execRecover`');
     const missingRecoveryId = value(await execRecoverTool.call({ code: 'fixed' }, context(null), {}));
     assert.match(missingRecoveryId.error, /recoveryId.*must match/);
+});
+
+test('successful execution returns a captured artifact id while capture errors leave success unchanged', async () => {
+    const f = fixture();
+    try {
+        const captured = value(await execTool.call({
+            code: 'app.project.activeItem;', undo_group_name: 'Inspect project',
+        }, context(null), f.deps));
+        assert.equal(captured.ok, true);
+        assert.match(captured.artifactId, /^user:/);
+        const artifact = f.toolLibrary.getArtifact(captured.artifactId);
+        assert.equal(artifact.name, 'Inspect project');
+        assert.equal(artifact.source.provenance.tool, 'ae_exec');
+
+        f.deps.getToolLibrary = function () { throw new Error('capture unavailable'); };
+        const uncaptured = value(await execTool.call({ code: '2 + 2' }, context(null), f.deps));
+        assert.equal(uncaptured.ok, true);
+        assert.equal(Object.prototype.hasOwnProperty.call(uncaptured, 'artifactId'), false);
+    } finally {
+        f.close();
+    }
 });
 
 test('initial dispatched failure writes byte-identical recovery script and attempt metadata', async () => {
@@ -158,6 +188,7 @@ test('initial dispatched failure writes byte-identical recovery script and attem
         assert.equal(meta.attempts[0].errorLine, 2);
         assert.equal(meta.attempts[0].errorSource, 'throw new Error("bad");');
         assert.equal(meta.attempts[0].touchedLevel, 'layer_diff');
+        assert.equal(f.toolLibrary.list({ statuses: ['candidate'] }).length, 0);
     } finally {
         f.close();
     }
@@ -212,6 +243,8 @@ test('retry restores checkpoint, restores viewer, checkpoints again, then runs e
         assert.equal(retried.recoveryId, first.recoveryId);
         assert.equal(retried.attempt, 2);
         assert.equal(retried.restored, 'checkpoint');
+        assert.match(retried.artifactId, /^user:/);
+        assert.equal(f.toolLibrary.getArtifact(retried.artifactId).source.provenance.tool, 'ae_execRecover');
         assert.equal(approvals, 1);
         assert.deepEqual(f.calls, [
             'resolve', 'close', 'open', 'viewer', 'resolve', 'checkpoint', 'user:fixed',
@@ -393,6 +426,7 @@ test('history-guard placeholder code is rejected before execution and never over
         const rejected = value(await execTool.call({ code: freshMarker }, context(null), f.deps));
         assert.equal(rejected.ok, false);
         assert.match(rejected.error, /redaction placeholder/);
+        assert.doesNotMatch(rejected.error, /Recent successful scripts/);
         assert.equal(f.calls.length, 0);
 
         f.deps.setUserHandler(async function () {
@@ -402,6 +436,9 @@ test('history-guard placeholder code is rejected before execution and never over
         assert.ok(failure.recoveryId);
         const stored = fs.readFileSync(failure.scriptPath, 'utf8');
 
+        f.deps.setUserHandler(async function () { return success({ ok: true }); });
+        const captured = value(await execTool.call({ code: 'captured-success' }, context(null), f.deps));
+
         const callsBefore = f.calls.length;
         const blocked = value(await execRecoverTool.call({
             recoveryId: failure.recoveryId,
@@ -410,6 +447,8 @@ test('history-guard placeholder code is rejected before execution and never over
         assert.equal(blocked.ok, false);
         assert.match(blocked.error, /redaction placeholder/);
         assert.match(blocked.error, /omit `code`/);
+        assert.match(blocked.error, new RegExp(captured.artifactId));
+        assert.match(blocked.error, /chars=16/);
         assert.equal(f.calls.length, callsBefore);
         assert.equal(fs.readFileSync(failure.scriptPath, 'utf8'), stored);
     } finally {
