@@ -207,6 +207,99 @@ test('disk-format fixture round-trips exactly through the host store', (t) => {
     assert.equal(fs.readFileSync(artifactPath, 'utf8'), canonicalJson(wire) + '\n');
 });
 
+test('library export only permits saved and pinned user artifacts', (t) => {
+    const library = makeLibrary(t);
+    const saved = library.saveArtifact(artifact());
+    const pinned = library.saveArtifact(artifact({
+        id: 'user:22222222-2222-4222-8222-222222222222',
+        status: 'pinned',
+        content: 'app.project.activeItem.layers.addText("pinned");',
+        argsSchema: {},
+    }));
+    const candidate = library.saveArtifact(artifact({
+        id: 'user:33333333-3333-4333-8333-333333333333',
+        status: 'candidate',
+        content: 'app.project.activeItem.layers.addText("candidate");',
+        argsSchema: {},
+    }));
+    const exported = library.exportArtifact(saved.id);
+
+    assert.equal(exported.schemaVersion, 1);
+    assert.equal(exported.exportedAt, 1000);
+    assert.deepEqual(exported.artifact, saved);
+    assert.equal(library.exportArtifact(pinned.id).artifact.id, pinned.id);
+    assert.throws(function () { library.exportArtifact(candidate.id); }, /saved or pinned/i);
+    assert.throws(function () {
+        library.exportArtifact(library.legacyArtifacts()[0].id);
+    }, /product-provided artifacts/i);
+});
+
+test('library import verifies content, rejects duplicates, and records imported provenance', (t) => {
+    const source = makeLibrary(t);
+    const original = source.saveArtifact(artifact());
+    const exported = source.exportArtifact(original.id);
+    const target = makeLibrary(t);
+    const imported = target.importArtifact(exported);
+
+    assert.equal(imported.imported, true);
+    assert.match(imported.artifact.id, /^user:/);
+    assert.notEqual(imported.artifact.id, original.id);
+    assert.equal(imported.artifact.status, 'saved');
+    assert.equal(imported.artifact.verified, false);
+    assert.equal(imported.artifact.source.type, 'imported');
+    assert.equal(imported.artifact.source.ref, original.id);
+    assert.deepEqual(imported.artifact.source.provenance, {
+        importedAt: 1000,
+        originalId: original.id,
+        originalSource: original.source,
+    });
+    assert.equal(target.importArtifact(exported).imported, false);
+    assert.equal(target.importArtifact(exported).existingId, imported.artifact.id);
+
+    const tampered = JSON.parse(JSON.stringify(exported));
+    tampered.artifact.content = 'app.project.activeItem.layers.addText("tampered");';
+    assert.throws(function () { target.importArtifact(tampered); }, /contentHash does not match/i);
+
+    const secret = JSON.parse(JSON.stringify(exported));
+    secret.artifact.content = 'var apiKey = "not-allowed";';
+    secret.artifact.contentHash = computeContentHash(
+        secret.artifact.kind,
+        secret.artifact.content,
+        secret.artifact.argsSchema,
+    );
+    assert.throws(function () { target.importArtifact(secret); }, /secret-shaped/i);
+});
+
+test('library management transitions and deletion respect artifact lifecycle', (t) => {
+    const library = makeLibrary(t);
+    const candidate = library.saveArtifact(artifact({
+        id: 'user:33333333-3333-4333-8333-333333333333',
+        status: 'candidate',
+        content: 'app.project.activeItem.layers.addText("candidate");',
+        argsSchema: {},
+    }));
+    const saved = library.promoteArtifact(candidate.id);
+    const pinned = library.pinArtifact(saved.id);
+    const archived = library.archiveArtifact(pinned.id);
+
+    assert.equal(saved.status, 'saved');
+    assert.equal(pinned.status, 'pinned');
+    assert.equal(archived.status, 'archived');
+    assert.equal(library.restoreArtifact(archived.id).status, 'saved');
+    assert.throws(function () { library.deleteManagedArtifact(saved.id); }, /candidate or archived/i);
+    assert.equal(library.archiveArtifact(saved.id).status, 'archived');
+    assert.equal(library.deleteManagedArtifact(saved.id), true);
+
+    const secondCandidate = library.saveArtifact(artifact({
+        id: 'user:44444444-4444-4444-8444-444444444444',
+        status: 'candidate',
+        content: 'app.project.activeItem.layers.addText("candidate two");',
+        argsSchema: {},
+    }));
+    assert.equal(library.managementList().candidates[0].contentCharacters > 0, true);
+    assert.deepEqual(library.clearCandidates(), { removedIds: [secondCandidate.id], count: 1 });
+});
+
 test('toolSearch combines index, query, and inspect modes', async (t) => {
     const library = makeLibrary(t);
     const saved = library.saveArtifact(artifact());

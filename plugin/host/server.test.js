@@ -14,6 +14,7 @@ const FULL_REGISTRY = require(
 );
 const authToken = require('./auth-token');
 const { createStatePaths } = require('./state-paths');
+const { computeContentHash } = require('./mcp/tool-library');
 
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
@@ -23,6 +24,32 @@ const HEADERS = {
     'X-AE-MCP-Token': TOKEN,
     'x-ae-mcp-client': 'stdio-mcp/test',
 };
+
+function artifactExportWire() {
+    const artifact = {
+        schemaVersion: 1,
+        id: 'user:11111111-1111-4111-8111-111111111111',
+        name: 'Route export',
+        description: 'Export through the panel route.',
+        kind: 'jsx',
+        category: 'workflow',
+        tags: [],
+        compatibility: {},
+        declaredRisk: 'write',
+        source: { type: 'user', ref: 'test', client: null, productVersion: null, provenance: {} },
+        status: 'saved',
+        verified: false,
+        verification: null,
+        content: 'app.project.activeItem;',
+        argsSchema: {},
+        revision: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        lastUsedAt: null,
+    };
+    artifact.contentHash = computeContentHash(artifact.kind, artifact.content, artifact.argsSchema);
+    return { schemaVersion: 1, exportedAt: 1, artifact };
+}
 
 function readProgram() {
     return {
@@ -386,6 +413,47 @@ test('server requires explicit Express injection', () => {
             return error?.code === 'HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE';
         },
     );
+});
+
+test('tool library panel routes require the token and operate on imported artifacts', async () => {
+    const fixture = await startApp();
+    try {
+        const denied = await get(fixture.port, '/tool-library', {});
+        assert.equal(denied.status, 401);
+
+        const imported = await post(fixture.port, '/tool-library/import', HEADERS, {
+            wire: artifactExportWire(),
+        });
+        assert.equal(imported.status, 200);
+        assert.equal(imported.body.ok, true);
+        assert.match(imported.body.artifact.id, /^user:/);
+
+        const listed = await get(fixture.port, '/tool-library', HEADERS);
+        assert.equal(listed.status, 200);
+        assert.equal(listed.body.artifacts.length, 1);
+        assert.equal(listed.body.artifacts[0].contentCharacters, 23);
+
+        const exported = await post(fixture.port, '/tool-library/export', HEADERS, {
+            id: imported.body.artifact.id,
+        });
+        assert.equal(exported.status, 200);
+        assert.equal(exported.body.wire.artifact.id, imported.body.artifact.id);
+        assert.match(exported.body.path, /exports[\\/]Route-export-/);
+
+        const archived = await post(fixture.port, '/tool-library/archive', HEADERS, {
+            id: imported.body.artifact.id,
+        });
+        assert.equal(archived.body.artifact.status, 'archived');
+        const removed = await request(
+            fixture.port,
+            'DELETE',
+            '/tool-library/' + encodeURIComponent(imported.body.artifact.id),
+            HEADERS,
+        );
+        assert.equal(removed.body.deleted, true);
+    } finally {
+        await closeFixture(fixture);
+    }
 });
 
 test('native invoke requires auth and accepts only the native program root', async () => {

@@ -839,6 +839,154 @@ class ToolLibrary {
         const artifact = this.getArtifact(current.artifactId);
         return renderText(artifact.content, current.normalizedArgs, false);
     }
+
+    managedArtifact(id) {
+        if (!USER_ID.test(String(id || ''))) {
+            throw new Error('only user library artifacts can be managed');
+        }
+        return this.getArtifact(id);
+    }
+
+    managementSummary(artifact) {
+        const summary = this.summaryFromArtifact(artifact);
+        summary.createdAt = artifact.createdAt;
+        summary.contentCharacters = Array.from(typeof artifact.content === 'string'
+            ? artifact.content : canonicalJson(artifact.content)).length;
+        return summary;
+    }
+
+    managementList() {
+        const rows = this.list().map(function (summary) {
+            return this.managementSummary(this.getArtifact(summary.id));
+        }, this);
+        return {
+            candidates: rows.filter(function (item) { return item.status === 'candidate'; }),
+            artifacts: rows.filter(function (item) {
+                return ['saved', 'pinned', 'archived'].indexOf(item.status) >= 0;
+            }),
+        };
+    }
+
+    setManagedStatus(id, status) {
+        if (['saved', 'pinned', 'archived'].indexOf(status) < 0) {
+            throw new Error('unsupported library status');
+        }
+        const artifact = this.managedArtifact(id);
+        const allowed = {
+            candidate: ['saved', 'pinned'],
+            saved: ['pinned', 'archived'],
+            pinned: ['saved', 'archived'],
+            archived: ['saved'],
+        };
+        if (!allowed[artifact.status] || allowed[artifact.status].indexOf(status) < 0) {
+            throw new Error('library status transition is not allowed');
+        }
+        const changed = Object.assign({}, artifact, {
+            status,
+            revision: artifact.revision + 1,
+            updatedAt: Math.max(artifact.updatedAt, Math.floor(this.now())),
+        });
+        return this.saveArtifact(changed);
+    }
+
+    promoteArtifact(id) {
+        return this.setManagedStatus(id, 'saved');
+    }
+
+    archiveArtifact(id) {
+        return this.setManagedStatus(id, 'archived');
+    }
+
+    restoreArtifact(id) {
+        return this.setManagedStatus(id, 'saved');
+    }
+
+    pinArtifact(id) {
+        return this.setManagedStatus(id, 'pinned');
+    }
+
+    deleteManagedArtifact(id) {
+        const artifact = this.managedArtifact(id);
+        if (artifact.status !== 'candidate' && artifact.status !== 'archived') {
+            throw new Error('only candidate or archived artifacts can be deleted');
+        }
+        return this.removeArtifact(id);
+    }
+
+    clearCandidates() {
+        const ids = this.list({ statuses: ['candidate'] }).map(function (item) { return item.id; });
+        ids.forEach(function (id) { this.deleteManagedArtifact(id); }, this);
+        return { removedIds: ids, count: ids.length };
+    }
+
+    exportArtifact(id) {
+        const artifact = this.getArtifact(id);
+        if (artifact.source.type === 'bundled' || artifact.source.type === 'legacy') {
+            throw new Error('product-provided artifacts do not need exporting');
+        }
+        if (!USER_ID.test(artifact.id)) {
+            throw new Error('only user library artifacts can be exported');
+        }
+        if (artifact.status !== 'saved' && artifact.status !== 'pinned') {
+            throw new Error('only saved or pinned artifacts can be exported');
+        }
+        const wire = {
+            schemaVersion: 1,
+            exportedAt: Math.max(0, Math.floor(this.now())),
+            artifact,
+        };
+        assertSecretFree(wire, 'artifact-export.json');
+        return finiteJson(wire, 'artifact export');
+    }
+
+    exportArtifactToDirectory(id, directory) {
+        if (typeof directory !== 'string' || !directory.trim()) {
+            throw new Error('export directory is required');
+        }
+        const wire = this.exportArtifact(id);
+        const name = wire.artifact.name.replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '')
+            || 'artifact';
+        const identifier = wire.artifact.id.split(':').pop().slice(0, 8);
+        const outputPath = path.resolve(directory, name + '-' + identifier + '.json');
+        if (path.dirname(outputPath) !== path.resolve(directory)) {
+            throw new Error('export path is invalid');
+        }
+        atomicWrite(outputPath, canonicalJson(wire) + '\n');
+        return { path: outputPath, wire };
+    }
+
+    importArtifact(wire) {
+        exactKeys(wire, ['schemaVersion', 'exportedAt', 'artifact'], 'artifact export');
+        if (wire.schemaVersion !== 1) throw new Error('unsupported artifact export schemaVersion');
+        nonNegativeInteger(wire.exportedAt, 'artifact export exportedAt');
+        assertSecretFree(wire, 'artifact-export.json');
+        const original = validateArtifact(wire.artifact);
+        const existing = this.findByContentHash(original.kind, original.contentHash)[0];
+        if (existing) return { imported: false, existingId: existing.id, artifact: null };
+        const importedAt = Math.max(0, Math.floor(this.now()));
+        const artifact = Object.assign({}, original, {
+            id: 'user:' + crypto.randomUUID(),
+            source: {
+                type: 'imported',
+                ref: original.id,
+                client: null,
+                productVersion: null,
+                provenance: {
+                    importedAt,
+                    originalId: original.id,
+                    originalSource: finiteJson(original.source, 'original source'),
+                },
+            },
+            status: original.status === 'pinned' ? 'pinned' : 'saved',
+            verified: false,
+            verification: null,
+            revision: 1,
+            createdAt: importedAt,
+            updatedAt: importedAt,
+            lastUsedAt: null,
+        });
+        return { imported: true, existingId: null, artifact: this.saveArtifact(artifact) };
+    }
 }
 
 let singleton;
