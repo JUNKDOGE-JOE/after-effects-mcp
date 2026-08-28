@@ -14,7 +14,7 @@ supported client connections.
 3. With After Effects closed, install the native plug-in in the plug-in
    directory used by the selected After Effects host. `ae_nativeExec` is the
    only tool that needs it, so a release that has not yet published the
-   native plug-in for your platform is still usable through the other ten.
+   native plug-in for your platform is still usable through the other 12.
 
    On Windows, copy the file into the selected host with administrator
    rights:
@@ -56,11 +56,24 @@ claude mcp add --transport http ae http://127.0.0.1:11488/mcp
 If the client was already running before the panel was installed, start a new
 client session so it reloads its MCP configuration.
 
-## 3. Claude Desktop
+## 3. Stdio-only clients
 
-Claude Desktop uses the dependency-free stdio shim shipped in the installed
-extension. It requires the system Node executable. Point the configuration at
-the extension directory's `host/stdio-shim.js`:
+Claude Desktop and other stdio-only clients use the published connector. It
+requires system Node 18 or newer and forwards to the panel's `/mcp` endpoint:
+
+```json
+{
+  "mcpServers": {
+    "ae": {
+      "command": "npx",
+      "args": ["-y", "ae-mcp-jkdg"]
+    }
+  }
+}
+```
+
+As an advanced alternative, run the dependency-free shim shipped inside the
+installed extension. Point Node at that extension's `host/stdio-shim.js`:
 
 ```json
 {
@@ -77,14 +90,34 @@ the extension directory's `host/stdio-shim.js`:
 ```
 
 Replace the placeholder with the installed extension's absolute directory.
-Do not point Claude Desktop at source files from an unrelated checkout.
+Do not point a client at source files from an unrelated checkout. Both stdio
+forms reach `http://127.0.0.1:11488/mcp`; the connector does not install the
+After Effects extension itself.
 
-## 4. Verify the connection
+## 4. Verify the 13-tool surface
 
-Keep the panel open and call `ae_ping` from a fresh client session. If the
-tool is unavailable, restart the client session after confirming that the
-panel is visible. A closed panel, a different After Effects host, or a stale
-client session can all make the endpoint appear unavailable.
+Keep the panel open and call `ae_status` from a fresh client session. The host
+must advertise exactly these 13 tools:
+
+| Area | Tools |
+| --- | --- |
+| Status | `ae_status` |
+| ExtendScript and recovery | `ae_exec`, `ae_execRecover` |
+| Read and visual verification | `ae_read`, `ae_previewFrame`, `ae_validateExpressions` |
+| Project checkpoints | `ae_checkpoint`, `ae_revert` |
+| Frozen native AEGP | `ae_nativeExec` |
+| Tool Library and skills | `ae_toolSearch`, `ae_toolUse`, `ae_toolSave`, `ae_skillUse` |
+
+If the tool is unavailable, restart the client session after confirming that
+the panel is visible. A closed panel, a different After Effects host, or a
+stale client session can all make the endpoint appear unavailable.
+
+Successful `ae_exec` and `ae_execRecover` calls capture rerunnable Tool Library
+candidates. Repeated tasks can follow `ae_toolSearch` → `ae_toolUse` →
+`ae_toolSave`; import/export and candidate management live on the panel's Tools
+page. Persistent state defaults to `~/.ae-mcp` and can be relocated with
+`AE_MCP_STATE_DIR`. See [Tool Library](TOOL_LIBRARY.md) for lifecycle, cleanup,
+distribution, and developer details.
 
 ## 5. Local development
 

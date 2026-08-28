@@ -9,9 +9,9 @@ http://127.0.0.1:11488/mcp
 ```
 
 The endpoint is intended for clients on the same machine as After Effects.
-The host is a Node process and the shipped Claude Desktop bridge is
-`host/stdio-shim.js`; it runs with the system Node executable and has no
-additional package install step.
+The host is a Node process. Stdio-only clients normally use the published
+`ae-mcp-jkdg` connector; the installed extension also ships the same
+dependency-free bridge as `host/stdio-shim.js`.
 
 ## Supported client setup
 
@@ -21,7 +21,20 @@ Claude Code:
 claude mcp add --transport http ae http://127.0.0.1:11488/mcp
 ```
 
-Claude Desktop:
+Stdio-only clients such as Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "ae": {
+      "command": "npx",
+      "args": ["-y", "ae-mcp-jkdg"]
+    }
+  }
+}
+```
+
+Installed-extension shim alternative:
 
 ```json
 {
@@ -37,6 +50,8 @@ Claude Desktop:
 
 ## Public tools
 
+The CEP host advertises exactly 13 tools:
+
 | Area | Tools |
 |---|---|
 | Status | `ae_status` |
@@ -46,7 +61,7 @@ Claude Desktop:
 | Preview and validation | `ae_previewFrame`, `ae_validateExpressions` |
 | Checkpoints and recovery | `ae_checkpoint`, `ae_revert` |
 | Skills | `ae_skillUse` |
-| Tool Library | `ae_toolSearch`, `ae_toolUse` |
+| Tool Library | `ae_toolSearch`, `ae_toolUse`, `ae_toolSave` |
 
 `ae_exec` is the default route for maintained scripting semantics. Use
 `ae_nativeExec` for the frozen native primitives. Native writes require an
@@ -56,6 +71,20 @@ with StartUndoGroup/EndUndoGroup; the response envelope does not certify that
 Undo restores state. Release discipline proves restoration separately through
 an explicit Undo and state readback. A result that may have dispatched a write
 must be reconciled against After Effects state and audit evidence before retrying.
+
+### Tool Library lifecycle
+
+Successful `ae_exec` and `ae_execRecover` calls add `artifactId` to their
+execution envelope after best-effort capture. Captured JSX starts as a hidden,
+exact-id-rerunnable `candidate`; `ae_toolSave` promotes it or creates a new
+`jsx`/`prompt-skill` artifact. `ae_toolUse` replays JSX, while `ae_skillUse`
+lists and renders saved/pinned prompt-skills. User-library usage updates
+`useCount` and `lastUsedAt`.
+
+Candidates expire after 7 days and are capped at 20 per conversation and 200
+globally. Saved/pinned artifacts can be exported and imported from the panel's
+Tools page. See [Tool Library](TOOL_LIBRARY.md) for schemas, state transitions,
+placeholder protection, host routes, and bundled generation.
 
 ### `ae_exec` failure recovery
 
@@ -186,3 +215,13 @@ The maintained source boundaries are:
 The generated native protocol catalog and bundled skills are shipped with the
 host. The Adobe SDK remains a local developer input and is never part of the
 extension payload.
+
+## Persistent state
+
+The default state root is `~/.ae-mcp`. `AE_MCP_STATE_DIR` overrides the whole
+root; `AE_MCP_HOME` remains a compatibility fallback. Fine-grained overrides
+are `AE_MCP_LOG_DIR`, `AE_MCP_TOOL_DIR`, and `AE_MCP_SKILL_DIR`. Host
+checkpoints, recovery files, blocked-client state, logs, tools, legacy skills,
+and Tool Library exports derive from the selected root. Panel conversation
+history continues to use the panel platform path `~/.ae-mcp/sessions`. Host
+tests must inject a temporary root instead of using the developer's real state.
