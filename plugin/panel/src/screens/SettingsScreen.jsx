@@ -15,7 +15,6 @@ import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 import { createPlatformAdapter } from '../cep/platform/index';
 import { Toast } from '../components/shell/Toast';
-import { ToolLibrarySection } from '../components/settings/ToolLibrarySection';
 import { docsUrlForLocale, openExternal, REPO_URL } from '../lib/externalLinks.js';
 
 const S = {
@@ -62,7 +61,6 @@ const S = {
     exportLog: '导出日志',
     mcp: 'MCP 配置',
     logs: '日志',
-    toolLibrary: '工具库',
     copy: '复制',
     copied: '已复制',
     verPanel: '面板',
@@ -117,7 +115,6 @@ const S = {
     exportLog: 'Export log',
     mcp: 'MCP config',
     logs: 'Logs',
-    toolLibrary: 'Tool library',
     copy: 'Copy',
     copied: 'Copied',
     verPanel: 'Panel',
@@ -488,10 +485,6 @@ export function SettingsScreen({
             <pre style={{ margin: '6px 0 0', maxHeight: 128, overflow: 'auto', padding: 8, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', color: 'var(--text-tertiary)', font: '400 10px/1.4 var(--font-mono)' }}>{logs.join('\n')}</pre>
           </details>
         </Field>
-      </Section>
-
-      <Section id="toolLibrary" title={t.toolLibrary} expanded={sections.toolLibrary} onToggle={onToggleSection}>
-        <ToolLibrarySection lang={lang} port={port} />
       </Section>
 
       <Section id="about" title={t.about} expanded={sections.about} onToggle={onToggleSection}>
