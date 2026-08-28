@@ -9,12 +9,11 @@ English | [简体中文](README.zh-CN.md)
 **One-line setup prompt — paste this into Claude Code or another AI agent:**
 
 ```text
-Install the ae-mcp ZXP and the native plug-in for my platform from the v0.10.3
-release, open Window > Extensions
-> ae-mcp in After Effects, then connect Claude Code with `claude mcp add
---transport http ae http://127.0.0.1:11488/mcp`; for Claude Desktop, configure
-the extension's `host/stdio-shim.js` with the system Node executable and ask me
-to start a new client session before testing `ae_status`.
+Install the ae-mcp ZXP and the native plug-in for my platform from the latest
+release, open Window > Extensions > ae-mcp in After Effects, then connect
+Claude Code with `claude mcp add --transport http ae http://127.0.0.1:11488/mcp`;
+for a stdio-only client, configure `npx -y ae-mcp-jkdg`. Keep the panel open and
+start a new client session before testing `ae_status`.
 ```
 
 ae-mcp connects an After Effects CEP panel to AI clients through a local MCP
@@ -88,14 +87,28 @@ stdio request queue and forwards MCP responses to the panel host.
 
 ## Panel capabilities
 
-- `ae_exec` for maintained ExtendScript operations.
-- `ae_execRecover` for retrying a dispatched `ae_exec` failure by its returned id.
-- `ae_nativeExec` for the frozen native AEGP primitives.
-- `ae_previewFrame`, `ae_validateExpressions`, structured `ae_read`, and checkpoints.
-- Bundled skills plus the local JSX Tool Library.
-- Approval modes, activity history, diagnostics, and log export.
-- Built-in Claude, Codex, and OpenCode channels when their local CLI login is
-  available.
+The CEP host advertises 13 public MCP tools:
+
+| Area | Tools |
+| --- | --- |
+| Status | `ae_status` |
+| ExtendScript and recovery | `ae_exec`, `ae_execRecover` |
+| Read and visual verification | `ae_read`, `ae_previewFrame`, `ae_validateExpressions` |
+| Project checkpoints | `ae_checkpoint`, `ae_revert` |
+| Frozen native AEGP | `ae_nativeExec` |
+| Tool Library and skills | `ae_toolSearch`, `ae_toolUse`, `ae_toolSave`, `ae_skillUse` |
+
+Successful `ae_exec` and `ae_execRecover` scripts are captured as deduplicated,
+rerunnable Tool Library candidates. `ae_toolSave` promotes or creates reusable
+JSX and prompt-skill artifacts; the Tools page manages candidates and saved
+artifacts, including import/export. Usage counters and funnel events show what
+gets replayed or retained, while the placeholder guard points compacted
+conversations back to exact candidates and stops repeated placeholder retries.
+
+The panel also provides approval modes, activity history, diagnostics, log
+export, and built-in Claude, Codex, and OpenCode channels. Persistent host state
+defaults to `~/.ae-mcp`; developers and tests can relocate it with
+`AE_MCP_STATE_DIR`.
 
 The public MCP tools are served by the CEP host. Writes should be followed by
 an independent readback; potentially side-effecting failures must be
@@ -172,8 +185,10 @@ Express `4.22.2` dependency and signs the ZXP once:
 The signed ZXP must contain no nested native binary other than an explicitly
 handled `.aex` artifact, and it must remain below 20 MB.
 
-See [Install](docs/INSTALL.md), [Reference](docs/REFERENCE.md), and
-[Release](docs/RELEASE.md) for the maintained operational details.
+See [Install](docs/INSTALL.md), [Reference](docs/REFERENCE.md),
+[Tool Library](docs/TOOL_LIBRARY.md), [Architecture](docs/ARCHITECTURE_DIRECTION.md),
+[Workflow](docs/WORKFLOW.md), and [Release](docs/RELEASE.md) for maintained
+operational and developer details.
 
 ## License
 

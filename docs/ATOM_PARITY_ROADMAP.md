@@ -1,20 +1,33 @@
-# Current parity roadmap
+# Product differentiation roadmap
 
-The panel-host migration is complete for the public MCP surface. New work is
-planned on the CEP Node host and the frozen native AEGP plane.
+The CEP-host migration is complete. The current public surface has 13 tools,
+the Python bridge is retired, and the native AEGP plane is frozen at 23
+primitives. New work is evaluated against observable After Effects outcomes,
+not parity by tool count.
 
-## Current boundaries
+## Differentiators already delivered
 
-- `plugin/host/mcp` owns public MCP handlers and generated native contracts.
-- `plugin/host` owns `/mcp`, `/exec`, the stdio bridge, audit, and host logs.
-- `plugin/panel` owns UI, approvals, client orchestration, and diagnostics.
-- `plugin/shared` contains the two panel-shared attachment and approval modules.
-- `native/ae-plugin` remains frozen and supplies exact time and generation
-  locator primitives.
+- External MCP clients connect directly to `http://127.0.0.1:11488/mcp` or
+  through the `ae-mcp-jkdg` stdio connector.
+- Exact rational time and generation-bound locators remain available through
+  the frozen `ae_nativeExec` plane.
+- `ae_read` supplies structured project, comp, layer, property, keyframe, and
+  comp-settings views; `ae_previewFrame` supplies range grids and A/B diffs.
+- Tool Library now covers capture → replay → promote/save → export/import or
+  bundled generation → `useCount`/`lastUsedAt` and funnel telemetry.
+- History-redaction placeholders are rejected before dispatch, pointed to
+  captured candidates, and stopped by a per-session circuit breaker.
 
-## Acceptance
+## Current focus
 
-Every new capability is tested through a public MCP call, real After Effects
-state, typed provenance, audit evidence, postcondition verification, and Undo
-verification for writes. Disposable fixtures are archived outside Adobe scan
-roots after evidence extraction.
+- Complete issue #350 by making the Tools page the single Tool Library
+  management surface.
+- Fix the already-assigned `jsx-bridge` timeout overlap window without opening
+  a second execution plane.
+- Admit new ExtendScript capabilities only when a public MCP call can prove a
+  user-visible AE outcome through typed response, state readback, audit, and
+  Undo verification for writes.
+
+No parity item may add a native primitive, revive the Python/package-server
+plane, add a fourth provider adapter, or create a separate target-identity
+stamp without a reproduced acceptance failure and an explicit scope decision.

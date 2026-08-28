@@ -9,12 +9,10 @@
 **一行安装提示词——复制给 Claude Code 或其它 AI agent：**
 
 ```text
-请从 v0.10.3 发布页安装 ae-mcp 的 ZXP 和对应平台的原生插件，在 After Effects
-中打开
-Window > Extensions > ae-mcp，然后用 `claude mcp add --transport http ae
-http://127.0.0.1:11488/mcp` 接入 Claude Code；Claude Desktop 则使用系统 Node
-执行扩展目录里的 `host/stdio-shim.js`，并在测试 `ae_status` 前提醒我重新启动
-客户端会话。
+请从最新发布页安装 ae-mcp 的 ZXP 和对应平台的原生插件，在 After Effects 中
+打开 Window > Extensions > ae-mcp，然后用 `claude mcp add --transport http ae http://127.0.0.1:11488/mcp`
+接入 Claude Code；仅支持 stdio 的客户端配置 `npx -y ae-mcp-jkdg`。保持面板打开，
+并在测试 `ae_status` 前新建客户端会话。
 ```
 
 ae-mcp 通过本机 MCP 把 After Effects CEP 面板连接到 AI 客户端。面板在
@@ -80,13 +78,25 @@ MCP 响应转发给面板宿主。
 
 ## 面板能力
 
-- `ae_exec`：执行维护中的 ExtendScript 操作。
-- `ae_execRecover`：按失败返回的编号重试一次已派发的 `ae_exec`。
-- `ae_nativeExec`：执行冻结的原生 AEGP primitive。
-- `ae_previewFrame`、`ae_validateExpressions`、结构化 `ae_read` 和检查点。
-- 内置 skills 与本地 JSX Tool Library。
-- 审批模式、活动记录、诊断和日志导出。
-- 在本机 CLI 已登录时，可使用 Claude、Codex、OpenCode 内嵌通道。
+CEP 宿主公开 13 个 MCP 工具：
+
+| 领域 | 工具 |
+| --- | --- |
+| 状态 | `ae_status` |
+| ExtendScript 与恢复 | `ae_exec`、`ae_execRecover` |
+| 读取与视觉验证 | `ae_read`、`ae_previewFrame`、`ae_validateExpressions` |
+| 工程检查点 | `ae_checkpoint`、`ae_revert` |
+| 冻结的原生 AEGP | `ae_nativeExec` |
+| Tool Library 与技能 | `ae_toolSearch`、`ae_toolUse`、`ae_toolSave`、`ae_skillUse` |
+
+`ae_exec` 和 `ae_execRecover` 成功后会把脚本捕获为去重、可重放的 Tool
+Library candidate。`ae_toolSave` 可沉淀或新建可复用 JSX 与 prompt-skill；工具页
+集中管理候选和已保存工件，并支持导入/导出。使用计数与漏斗事件记录哪些工件被
+重放或保留；占位符守卫会把历史压缩后的对话指回精确候选，并切断重复占位符重试。
+
+面板还提供审批档位、活动记录、诊断、日志导出，以及 Claude、Codex、OpenCode
+内嵌通道。宿主持久状态默认位于 `~/.ae-mcp`；开发与测试可用
+`AE_MCP_STATE_DIR` 整体迁移。
 
 公开 MCP 工具由 CEP 宿主提供。写入后应独立读取验证；可能产生副作用的
 失败必须先核对再重试，Undo 的可用性和实际执行后的验证是两件事。
@@ -157,8 +167,9 @@ Windows ZXP 暂存只复制面板、宿主、JSX、shared、图标和宿主生�
 签名 ZXP 不得包含嵌套原生二进制；原有机制明确处理的 `.aex` 除外，且
 产物必须小于 20 MB。
 
-详见[安装文档](docs/INSTALL.md)、[参考](docs/REFERENCE.md)和
-[发布文档](docs/RELEASE.md)。
+详见[安装文档](docs/INSTALL.md)、[参考](docs/REFERENCE.md)、
+[Tool Library](docs/TOOL_LIBRARY.md)、[架构方向](docs/ARCHITECTURE_DIRECTION.md)、
+[开发流程](docs/WORKFLOW.md)和[发布文档](docs/RELEASE.md)。
 
 ## 许可证
 

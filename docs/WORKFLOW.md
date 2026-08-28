@@ -12,15 +12,27 @@ MCP client
   -> typed result and audit evidence
 ```
 
-Claude Code uses the panel URL directly. Claude Desktop uses the installed
-extension's `host/stdio-shim.js` under the system Node executable. The panel
-must remain open during either connection.
+Claude Code uses the panel URL directly. Stdio-only clients use
+`npx -y ae-mcp-jkdg`; the installed extension's `host/stdio-shim.js` remains
+the dependency-free direct alternative. The panel must remain open during
+either connection.
+
+The public registry contains 13 tools. Tool Library work stays inside the
+existing `plugin/host/mcp` store and handlers plus the panel's Tools page; it
+must not recreate a package server or a second persistence layer. See
+[Tool Library](TOOL_LIBRARY.md) for artifact and distribution contracts.
 
 ## JavaScript development
 
 ```bash
 (cd plugin/host && npm ci && npm test)
 (cd plugin/panel && npm ci && npm test && npm run build)
+```
+
+Tool Library changes should also run the generator contract:
+
+```bash
+node --test scripts/package/test/generate-bundled-skill.test.mjs
 ```
 
 Deploy a development extension after building:
