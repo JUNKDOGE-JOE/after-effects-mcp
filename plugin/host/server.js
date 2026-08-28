@@ -10,6 +10,7 @@ const hostLog = require('./host-log');
 const nativeAegp = require('./native-aegp-client');
 const mountMcp = require('./mcp');
 const { createClientBlocklist } = require('./mcp/client-blocklist');
+const { ToolLibrary } = require('./mcp/tool-library');
 const { createStatePaths } = require('./state-paths');
 const PKG_VERSION = require('./package.json').version;
 
@@ -323,6 +324,19 @@ function nativeRequestGate(req, res, tool) {
         return null;
     }
     return client;
+}
+
+function toolLibraryRequestGate(req, res) {
+    const provided = req.get(authToken.HEADER);
+    if (!authToken.tokenMatches(provided, execToken)) {
+        res.status(401).json({ ok: false, error: 'unauthorized' });
+        return false;
+    }
+    return true;
+}
+
+function toolLibraryFailure(res, error) {
+    res.status(400).json({ ok: false, error: error.message });
 }
 
 async function connectedNativeClient(deadlineUnixMs) {
@@ -771,6 +785,7 @@ function buildApp() {
     ensureClientBlocklist();
     const a = express();
     a.use(express.json({ limit: '5mb' }));
+    const toolLibrary = new ToolLibrary({ statePaths: statePathsForHost() });
     async function nativeNegotiate(deadlineUnixMs) {
         const client = await connectedNativeClient(deadlineUnixMs);
         const hello = await client.negotiate({ deadlineUnixMs });
@@ -830,6 +845,7 @@ function buildApp() {
         recordMcpActivity: function (event) { activity.record(event); },
         updateActivity: function (id, patch) { return activity.update(id, patch); },
         statePaths: statePathsForHost(),
+        toolLibrary,
     });
 
     a.get('/health', (req, res) => {
@@ -850,6 +866,115 @@ function buildApp() {
         }
         const since = parseInt(req.query.since, 10);
         res.json({ ok: true, events: activity.list(Number.isFinite(since) ? since : 0) });
+    });
+
+    a.get('/tool-library', (req, res) => {
+        if (!toolLibraryRequestGate(req, res)) return;
+        try {
+            res.json(Object.assign({ ok: true }, toolLibrary.managementList()));
+        } catch (error) {
+            toolLibraryFailure(res, error);
+        }
+    });
+
+    a.post('/tool-library/promote', (req, res) => {
+        if (!toolLibraryRequestGate(req, res)) return;
+        try {
+            if (!exactBody(req.body || {}, ['id']) || typeof req.body.id !== 'string') {
+                throw new Error('artifact id is required');
+            }
+            res.json({ ok: true, artifact: toolLibrary.promoteArtifact(req.body.id) });
+        } catch (error) {
+            toolLibraryFailure(res, error);
+        }
+    });
+
+    a.post('/tool-library/pin', (req, res) => {
+        if (!toolLibraryRequestGate(req, res)) return;
+        try {
+            if (!exactBody(req.body || {}, ['id']) || typeof req.body.id !== 'string') {
+                throw new Error('artifact id is required');
+            }
+            res.json({ ok: true, artifact: toolLibrary.pinArtifact(req.body.id) });
+        } catch (error) {
+            toolLibraryFailure(res, error);
+        }
+    });
+
+    a.post('/tool-library/archive', (req, res) => {
+        if (!toolLibraryRequestGate(req, res)) return;
+        try {
+            if (!exactBody(req.body || {}, ['id']) || typeof req.body.id !== 'string') {
+                throw new Error('artifact id is required');
+            }
+            res.json({ ok: true, artifact: toolLibrary.archiveArtifact(req.body.id) });
+        } catch (error) {
+            toolLibraryFailure(res, error);
+        }
+    });
+
+    a.post('/tool-library/restore', (req, res) => {
+        if (!toolLibraryRequestGate(req, res)) return;
+        try {
+            if (!exactBody(req.body || {}, ['id']) || typeof req.body.id !== 'string') {
+                throw new Error('artifact id is required');
+            }
+            res.json({ ok: true, artifact: toolLibrary.restoreArtifact(req.body.id) });
+        } catch (error) {
+            toolLibraryFailure(res, error);
+        }
+    });
+
+    a.delete('/tool-library/:id', (req, res) => {
+        if (!toolLibraryRequestGate(req, res)) return;
+        try {
+            res.json({ ok: true, deleted: toolLibrary.deleteManagedArtifact(req.params.id) });
+        } catch (error) {
+            toolLibraryFailure(res, error);
+        }
+    });
+
+    a.post('/tool-library/clear-candidates', (req, res) => {
+        if (!toolLibraryRequestGate(req, res)) return;
+        try {
+            res.json(Object.assign({ ok: true }, toolLibrary.clearCandidates()));
+        } catch (error) {
+            toolLibraryFailure(res, error);
+        }
+    });
+
+    a.post('/tool-library/export', (req, res) => {
+        if (!toolLibraryRequestGate(req, res)) return;
+        try {
+            if (!exactBody(req.body || {}, ['id']) || typeof req.body.id !== 'string') {
+                throw new Error('artifact id is required');
+            }
+            const exportDirectory = path.join(statePathsForHost().stateDir, 'exports');
+            res.json(Object.assign({ ok: true }, toolLibrary.exportArtifactToDirectory(
+                req.body.id,
+                exportDirectory,
+            )));
+        } catch (error) {
+            toolLibraryFailure(res, error);
+        }
+    });
+
+    a.post('/tool-library/import', (req, res) => {
+        if (!toolLibraryRequestGate(req, res)) return;
+        try {
+            if (!exactBody(req.body || {}, ['wire'])) throw new Error('artifact export is required');
+            const result = toolLibrary.importArtifact(req.body.wire);
+            if (!result.imported) {
+                return res.status(409).json({
+                    ok: false,
+                    error: 'artifact content already exists',
+                    existingId: result.existingId,
+                });
+            }
+            res.json({ ok: true, artifact: result.artifact });
+        } catch (error) {
+            toolLibraryFailure(res, error);
+        }
     });
 
     a.get('/native/status', (req, res) => {

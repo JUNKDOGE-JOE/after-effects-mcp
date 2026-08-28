@@ -14,7 +14,7 @@ const ARTIFACT_KEYS = [
     'schemaVersion', 'id', 'name', 'description', 'kind', 'category', 'tags',
     'compatibility', 'declaredRisk', 'source', 'status', 'verified',
     'verification', 'content', 'argsSchema', 'contentHash', 'revision',
-    'createdAt', 'updatedAt', 'lastUsedAt',
+    'createdAt', 'updatedAt', 'lastUsedAt', 'useCount',
 ];
 const ARTIFACT_KINDS = new Set([
     'jsx', 'expression', 'prompt-skill', 'recipe', 'diagnostic', 'system-command',
@@ -84,6 +84,11 @@ function exactKeys(value, expected, label) {
     const missing = expected.filter(function (key) { return !own(value, key); }).sort();
     if (unknown.length) throw new Error(label + ' contains unknown keys: ' + unknown.join(', '));
     if (missing.length) throw new Error(label + ' is missing keys: ' + missing.join(', '));
+}
+
+function normalizeArtifact(value) {
+    if (!isObject(value) || own(value, 'useCount')) return value;
+    return Object.assign({}, value, { useCount: 0 });
 }
 
 function boundedString(value, label, maximum, nonEmpty) {
@@ -264,6 +269,7 @@ function validateArtifact(value) {
     nonNegativeInteger(value.createdAt, 'artifact createdAt');
     nonNegativeInteger(value.updatedAt, 'artifact updatedAt');
     if (value.lastUsedAt !== null) nonNegativeInteger(value.lastUsedAt, 'artifact lastUsedAt');
+    nonNegativeInteger(value.useCount, 'artifact useCount');
     return finiteJson(value, 'artifact');
 }
 
@@ -496,10 +502,15 @@ class ToolLibrary {
             || index.revision < 0 || !Array.isArray(index.artifacts)) {
             throw new Error('tool store is corrupt');
         }
-        index.artifacts.forEach(function (entry) {
+        const artifacts = index.artifacts.map(function (entry) {
             if (!isObject(entry)) throw new Error('tool store is corrupt');
+            const normalized = own(entry, 'useCount') ? entry : Object.assign({}, entry, { useCount: 0 });
+            if (!Number.isInteger(normalized.useCount) || normalized.useCount < 0) {
+                throw new Error('tool store is corrupt');
+            }
+            return normalized;
         });
-        return index;
+        return Object.assign({}, index, { artifacts });
     }
 
     summaryFromArtifact(artifact) {
@@ -517,12 +528,13 @@ class ToolLibrary {
             revision: artifact.revision,
             updatedAt: artifact.updatedAt,
             lastUsedAt: artifact.lastUsedAt,
+            useCount: artifact.useCount,
             sourceType: artifact.source.type,
         };
     }
 
     saveArtifact(wire) {
-        const artifact = validateArtifact(wire);
+        const artifact = validateArtifact(normalizeArtifact(wire));
         assertSecretFree(artifact, 'artifact.json');
         const artifactPath = this.artifactPath(artifact.id);
         const index = this.readIndex();
@@ -541,6 +553,14 @@ class ToolLibrary {
             throw error;
         }
         return artifact;
+    }
+
+    touchUsage(id) {
+        const current = this.getArtifact(id);
+        return this.saveArtifact(Object.assign({}, current, {
+            lastUsedAt: Math.max(0, Math.floor(this.now())),
+            useCount: current.useCount + 1,
+        }));
     }
 
     removeArtifact(id) {
@@ -578,7 +598,9 @@ class ToolLibrary {
             if (!legacy) throw new Error('tool not found');
             return legacy;
         }
-        const artifact = validateArtifact(this.readJson(this.artifactPath(id), 'artifact.json'));
+        const artifact = validateArtifact(normalizeArtifact(
+            this.readJson(this.artifactPath(id), 'artifact.json'),
+        ));
         if (canonicalJson(this.summaryFromArtifact(artifact)) !== canonicalJson(entry)) {
             throw new Error('tool store is corrupt');
         }
@@ -731,6 +753,7 @@ class ToolLibrary {
                 createdAt,
                 updatedAt,
                 lastUsedAt: null,
+                useCount: 0,
             };
             assertSecretFree(artifact, 'legacy-artifact.json');
             return validateArtifact(artifact);
@@ -839,6 +862,155 @@ class ToolLibrary {
         const artifact = this.getArtifact(current.artifactId);
         return renderText(artifact.content, current.normalizedArgs, false);
     }
+
+    managedArtifact(id) {
+        if (!USER_ID.test(String(id || ''))) {
+            throw new Error('only user library artifacts can be managed');
+        }
+        return this.getArtifact(id);
+    }
+
+    managementSummary(artifact) {
+        const summary = this.summaryFromArtifact(artifact);
+        summary.createdAt = artifact.createdAt;
+        summary.contentCharacters = Array.from(typeof artifact.content === 'string'
+            ? artifact.content : canonicalJson(artifact.content)).length;
+        return summary;
+    }
+
+    managementList() {
+        const rows = this.list().map(function (summary) {
+            return this.managementSummary(this.getArtifact(summary.id));
+        }, this);
+        return {
+            candidates: rows.filter(function (item) { return item.status === 'candidate'; }),
+            artifacts: rows.filter(function (item) {
+                return ['saved', 'pinned', 'archived'].indexOf(item.status) >= 0;
+            }),
+        };
+    }
+
+    setManagedStatus(id, status) {
+        if (['saved', 'pinned', 'archived'].indexOf(status) < 0) {
+            throw new Error('unsupported library status');
+        }
+        const artifact = this.managedArtifact(id);
+        const allowed = {
+            candidate: ['saved', 'pinned'],
+            saved: ['pinned', 'archived'],
+            pinned: ['saved', 'archived'],
+            archived: ['saved'],
+        };
+        if (!allowed[artifact.status] || allowed[artifact.status].indexOf(status) < 0) {
+            throw new Error('library status transition is not allowed');
+        }
+        const changed = Object.assign({}, artifact, {
+            status,
+            revision: artifact.revision + 1,
+            updatedAt: Math.max(artifact.updatedAt, Math.floor(this.now())),
+        });
+        return this.saveArtifact(changed);
+    }
+
+    promoteArtifact(id) {
+        return this.setManagedStatus(id, 'saved');
+    }
+
+    archiveArtifact(id) {
+        return this.setManagedStatus(id, 'archived');
+    }
+
+    restoreArtifact(id) {
+        return this.setManagedStatus(id, 'saved');
+    }
+
+    pinArtifact(id) {
+        return this.setManagedStatus(id, 'pinned');
+    }
+
+    deleteManagedArtifact(id) {
+        const artifact = this.managedArtifact(id);
+        if (artifact.status !== 'candidate' && artifact.status !== 'archived') {
+            throw new Error('only candidate or archived artifacts can be deleted');
+        }
+        return this.removeArtifact(id);
+    }
+
+    clearCandidates() {
+        const ids = this.list({ statuses: ['candidate'] }).map(function (item) { return item.id; });
+        ids.forEach(function (id) { this.deleteManagedArtifact(id); }, this);
+        return { removedIds: ids, count: ids.length };
+    }
+
+    exportArtifact(id) {
+        const artifact = this.getArtifact(id);
+        if (artifact.source.type === 'bundled' || artifact.source.type === 'legacy') {
+            throw new Error('product-provided artifacts do not need exporting');
+        }
+        if (!USER_ID.test(artifact.id)) {
+            throw new Error('only user library artifacts can be exported');
+        }
+        if (artifact.status !== 'saved' && artifact.status !== 'pinned') {
+            throw new Error('only saved or pinned artifacts can be exported');
+        }
+        const wire = {
+            schemaVersion: 1,
+            exportedAt: Math.max(0, Math.floor(this.now())),
+            artifact,
+        };
+        assertSecretFree(wire, 'artifact-export.json');
+        return finiteJson(wire, 'artifact export');
+    }
+
+    exportArtifactToDirectory(id, directory) {
+        if (typeof directory !== 'string' || !directory.trim()) {
+            throw new Error('export directory is required');
+        }
+        const wire = this.exportArtifact(id);
+        const name = wire.artifact.name.replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '')
+            || 'artifact';
+        const identifier = wire.artifact.id.split(':').pop().slice(0, 8);
+        const outputPath = path.resolve(directory, name + '-' + identifier + '.json');
+        if (path.dirname(outputPath) !== path.resolve(directory)) {
+            throw new Error('export path is invalid');
+        }
+        atomicWrite(outputPath, canonicalJson(wire) + '\n');
+        return { path: outputPath, wire };
+    }
+
+    importArtifact(wire) {
+        exactKeys(wire, ['schemaVersion', 'exportedAt', 'artifact'], 'artifact export');
+        if (wire.schemaVersion !== 1) throw new Error('unsupported artifact export schemaVersion');
+        nonNegativeInteger(wire.exportedAt, 'artifact export exportedAt');
+        assertSecretFree(wire, 'artifact-export.json');
+        const original = validateArtifact(normalizeArtifact(wire.artifact));
+        const existing = this.findByContentHash(original.kind, original.contentHash)[0];
+        if (existing) return { imported: false, existingId: existing.id, artifact: null };
+        const importedAt = Math.max(0, Math.floor(this.now()));
+        const artifact = Object.assign({}, original, {
+            id: 'user:' + crypto.randomUUID(),
+            source: {
+                type: 'imported',
+                ref: original.id,
+                client: null,
+                productVersion: null,
+                provenance: {
+                    importedAt,
+                    originalId: original.id,
+                    originalSource: finiteJson(original.source, 'original source'),
+                },
+            },
+            status: original.status === 'pinned' ? 'pinned' : 'saved',
+            verified: false,
+            verification: null,
+            revision: 1,
+            createdAt: importedAt,
+            updatedAt: importedAt,
+            lastUsedAt: null,
+            useCount: 0,
+        });
+        return { imported: true, existingId: null, artifact: this.saveArtifact(artifact) };
+    }
 }
 
 let singleton;
@@ -855,6 +1027,7 @@ module.exports = {
     computeContentHash,
     defaultLibrary,
     normalizeArgs,
+    normalizeArtifact,
     renderText,
     validateArgsSchema,
     validateArtifact,

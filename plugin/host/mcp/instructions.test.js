@@ -19,6 +19,8 @@ test(
     const disabled = buildInstructions({ expertGuidance: false, tools: ['ae_status'] });
     assert.ok(enabled.includes(EXPERT.trim()));
     assert.ok(!disabled.includes('EXTENDSCRIPT EXPERT GUARDRAILS'));
+    assert.match(enabled, /TOOL LIBRARY WORKFLOW:[\s\S]*ae_toolSearch[\s\S]*ae_toolUse[\s\S]*ae_toolSave/);
+    assert.doesNotMatch(disabled, /TOOL LIBRARY WORKFLOW/);
     assert.match(enabled, /This CEP-hosted server currently exposes: ae_status, ae_checkpoint\.$/);
     assert.match(disabled, /currently exposes: ae_status\.$/);
 });

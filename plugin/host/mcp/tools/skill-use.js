@@ -17,7 +17,7 @@ const {
 
 const definition = {
     name: 'ae_skillUse',
-    description: 'List, render, or execute a bundled or user skill.',
+    description: 'List, render, or execute skills, including prompt skills you saved with ae_toolSave.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -40,18 +40,41 @@ function invalid(message) {
     return { result: textResult({ ok: false, error: message }, true) };
 }
 
+function artifactId(record) {
+    if (record.artifact) return record.artifact.id;
+    return record.source === 'bundled' ? 'builtin:skill:' + record.skill.name
+        : 'legacy:' + crypto.createHash('sha256').update(pathText(record.path), 'utf8')
+            .digest('hex').slice(0, 24);
+}
+
+function touchUsage(store, record) {
+    const artifact = record && record.artifact;
+    if (!artifact || artifact.source.type === 'bundled' || artifact.source.type === 'legacy') return;
+    try { store.touchUsage(artifact.id); } catch (error) { void error; }
+}
+
+function recordUsage(context, deps, record, operation) {
+    if (!deps || typeof deps.recordMcpActivity !== 'function') return;
+    const session = context && context.session ? context.session : {};
+    deps.recordMcpActivity({
+        tool: 'ae_skillUse',
+        artifactId: artifactId(record),
+        operation,
+        ok: true,
+        transport: 'mcp',
+        client: typeof session.clientName === 'string' ? session.clientName : null,
+    });
+}
+
 function skillPlan(record, args) {
     const skill = record.skill;
     const normalizedArgs = normalizeArgs(skill.args_schema, args);
     const contentHash = record.artifact ? record.artifact.contentHash : computeContentHash(
         skill.template_type === 'jsx' ? 'jsx' : 'prompt-skill', skill.template, skill.args_schema,
     );
-    const artifactId = record.artifact ? record.artifact.id : record.source === 'bundled'
-        ? 'builtin:skill:' + skill.name
-        : 'legacy:' + crypto.createHash('sha256').update(pathText(record.path), 'utf8')
-            .digest('hex').slice(0, 24);
+    const resolvedArtifactId = artifactId(record);
     const payload = {
-        artifactId,
+        artifactId: resolvedArtifactId,
         contentHash,
         operation: 'execute',
         normalizedArgs,
@@ -111,6 +134,8 @@ async function call(args, context, deps) {
             record.skill.template_type === 'prompt',
         );
         if (args.execute !== true) {
+            touchUsage(store, record);
+            recordUsage(context, deps, record, 'render');
             return {
                 result: textResult({
                     ok: true,
@@ -142,6 +167,9 @@ async function call(args, context, deps) {
             return { result: textResult(executionFailure(execution), true) };
         }
         const parsed = parseJsxResult(execution.payload.result);
+        if (parsed && parsed.ok === false) return { result: textResult(parsed, true) };
+        touchUsage(store, fresh);
+        recordUsage(context, deps, fresh, 'use');
         return { result: textResult(parsed, parsed && parsed.ok === false) };
     } catch (error) {
         return invalid(error && error.message ? error.message : String(error));

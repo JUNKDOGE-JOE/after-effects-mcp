@@ -22,7 +22,7 @@ const UPDATE_KEYS = ['newName', 'description', 'tags', 'content', 'argsSchema'];
 
 const definition = {
     name: 'ae_toolSave',
-    description: 'Create, promote, update, or change the status of a Tool Library artifact.',
+    description: 'Turn a useful script into a reusable tool, or promote a captured candidate in one step.',
     inputSchema: {
         type: 'object',
         properties: {
@@ -143,6 +143,7 @@ function createArtifact(input, context, store) {
         createdAt,
         updatedAt: createdAt,
         lastUsedAt: null,
+        useCount: 0,
     };
     artifact.contentHash = computeContentHash(artifact.kind, artifact.content, artifact.argsSchema);
     return { artifact: validateArtifact(artifact), operation: 'create', original: null };
@@ -204,6 +205,19 @@ function approvalArguments(prepared) {
     return Object.assign({ operation: prepared.operation }, prepared.artifact);
 }
 
+function recordSave(context, deps, artifactId, operation) {
+    if (!deps || typeof deps.recordMcpActivity !== 'function') return;
+    const session = context && context.session ? context.session : {};
+    deps.recordMcpActivity({
+        tool: 'ae_toolSave',
+        artifactId,
+        operation,
+        ok: true,
+        transport: 'mcp',
+        client: typeof session.clientName === 'string' ? session.clientName : null,
+    });
+}
+
 async function call(args, context, deps) {
     try {
         const store = library(deps);
@@ -220,6 +234,7 @@ async function call(args, context, deps) {
             }
         }
         const saved = store.saveArtifact(prepared.artifact);
+        recordSave(context, deps, saved.id, prepared.operation);
         return { result: textResult({ ok: true, artifact: store.summaryFromArtifact(saved) }) };
     } catch (error) {
         return invalid(error && error.message ? error.message : String(error));
