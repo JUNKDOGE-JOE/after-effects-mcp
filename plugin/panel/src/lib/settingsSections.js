@@ -2,10 +2,10 @@
 // machine.
 const KEY = 'ae_mcp_settings_sections';
 
-export const SECTION_IDS = ['ai', 'conn', 'externalClients', 'sec', 'gen', 'toolLibrary', 'about'];
+export const SECTION_IDS = ['ai', 'conn', 'externalClients', 'sec', 'gen', 'about'];
 
 export function defaultSectionState() {
-  return { ai: true, conn: false, externalClients: false, sec: false, gen: false, toolLibrary: false, about: false };
+  return { ai: true, conn: false, externalClients: false, sec: false, gen: false, about: false };
 }
 
 export function loadSectionState(storage) {

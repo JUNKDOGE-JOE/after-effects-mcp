@@ -1582,6 +1582,7 @@ function Shell({ cs }) {
           <ToolsScreen
             api={toolsApi}
             lang={lang}
+            port={status.port}
           />
         ) : null}
         {tab === 'settings' ? (
