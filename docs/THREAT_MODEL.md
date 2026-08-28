@@ -12,8 +12,10 @@ same-user process safe.
 ## Supported deployment
 
 The supported shape is one user operating After Effects and ae-mcp on the same local machine.
-Panel agents and configured external clients spawn Core over MCP stdio. Core calls the CEP host over
-loopback HTTP; CEP reaches After Effects through maintained JSX or the local native AEGP transport.
+Panel agents and configured external clients connect to the CEP Node host's `/mcp` endpoint over
+loopback HTTP. Stdio-only clients use `ae-mcp-jkdg` or the installed `host/stdio-shim.js` as a
+transport adapter to that same endpoint. The CEP host reaches After Effects through maintained JSX
+or the local frozen native AEGP transport. There is no Python Core or package-server process.
 
 Non-loopback or forwarded MCP/HTTP, remote AE hosts, shared daemons, second-user access,
 multi-user/multi-tenant operation, and service accounts are unsupported. A configurable local URL
@@ -96,5 +98,5 @@ Supporting remote access, a second user, shared-service operation, intentionally
 untrusted same-user processes requires an explicit product decision and a new threat model before
 implementation. Until then, such work is out of scope rather than deferred security debt.
 
-See `docs/RELEASE.md` for release integrity and `docs/CAPABILITY_PACKAGE_WORKFLOW.md` for
+See `docs/RELEASE.md` for release integrity and `docs/WORKFLOW.md` plus `AGENTS.md` for
 correctness and real-AE evidence.

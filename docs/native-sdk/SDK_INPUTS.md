@@ -40,9 +40,10 @@ package-bundled executable or script ran. The canonical extracted tree contains 
 regular files totalling 5,526,135 bytes; hashing sorted records of relative path, type,
 size, and file SHA-256 yields
 `3bec810920dd6ad2d9180c6456d4af421fef20e751dca7446800de80a2751cca`.
-This fingerprint verifies extracted content, not Adobe origin or license. The equivalent
-Windows root fingerprint remains pending Windows-specific extraction evidence and does
-not block the current macOS native vertical slice.
+This fingerprint verifies extracted content, not Adobe origin or license. The Windows
+canonical tree contains 497 regular files totalling 15,960,949 bytes; the corresponding
+sorted file-record digest is
+`9ca19fe536e39445fdf0f9f2a1e981d30dcce8e56989c17fc9170a0da98abfbe`.
 
 The repository does not publish per-file SDK fingerprints. Public CI inspects the tracked
 Git index for SDK-only paths, recognizable SDK containers, and exact aggregate archive or
@@ -70,7 +71,7 @@ sample-derived code, or model training/evaluation.
 | Public integrity metadata | Aggregate locks and minimal build sentinels only; no comprehensive per-file index or file content |
 | Private self-hosted CI | Blocked pending a separate, scope-specific approval |
 | Private hosted artifact storage | Blocked pending a separate, scope-specific approval |
-| Product release | SDK payload blocked; compiled plug-in distribution requires separate review |
+| Product release | SDK payload blocked; compiled plug-in distribution allowed by the explicit 2026-08-03 release approval |
 | Adobe sample-derived code | Blocked pending separate review and provenance inventory |
 
 The policy records the [Adobe Developer Terms of Use dated 18 June 2024](https://wwwimages2.adobe.com/content/dam/cc/en/legal/servicetou/Developer-Terms-en_US-20240618.pdf)
@@ -106,9 +107,8 @@ development scope or another separately approved scope:
 - `AE_SDK_ARCHIVE`: the original developer-provided outer archive. Exact size and
   SHA-256 establish `sha256-verified` byte identity only.
 - `AE_SDK_ROOT`: either the extracted `ae25.6_61.64bit.AfterEffectsSDK` directory or its
-  direct parent. The validator checks root name, file types, and build-critical sentinels.
-  On macOS it additionally verifies the canonical file-tree digest. Windows currently
-  returns `layout-verified` only and reports that content provenance is still pending.
+  direct parent. The validator checks root name, file types, build-critical sentinels, and
+  the platform's canonical file-tree digest on both macOS and Windows.
 
 Both paths must be outside the repository. The validator never prints them. A matching
 macOS root fingerprint binds the extracted content to the reviewed intake, while trusted
@@ -134,10 +134,6 @@ node scripts/package/ae-sdk-input.mjs verify-input --platform macos-arm64
 The equivalent Windows platform identifier is `windows-x64`. Missing inputs fail with
 an actionable `AE_SDK_ROOT` or `AE_SDK_ARCHIVE` error; no build may silently use an SDK
 from `PATH`, a global include directory, or a checkout subdirectory.
-
-Windows `verify-root` is currently diagnostic-only. Until a Windows-specific canonical
-root fingerprint is reviewed, `verify-input --platform windows-x64` fails closed with
-`AE_SDK_CONTENT_EVIDENCE_PENDING` and cannot authorize a native build.
 
 Public CI runs only:
 
