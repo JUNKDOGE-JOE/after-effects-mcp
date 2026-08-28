@@ -1048,7 +1048,7 @@ function createNativeAegpClient(options) {
             supportedWireVersions: { minimum: 1, maximum: 1 },
             client: {
                 component: input.component || 'core-broker',
-                version: input.version || '0.10.3',
+                version: input.version || '0.10.5',
                 instanceId: clientInstanceId,
             },
             nonce,
