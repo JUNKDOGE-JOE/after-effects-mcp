@@ -49,8 +49,13 @@ function artifactId(record) {
 
 function touchUsage(store, record) {
     const artifact = record && record.artifact;
-    if (!artifact || artifact.source.type === 'bundled' || artifact.source.type === 'legacy') return;
-    try { store.touchUsage(artifact.id); } catch (error) { void error; }
+    try {
+        if (artifact && artifact.source.type !== 'bundled' && artifact.source.type !== 'legacy') {
+            store.touchUsage(artifact.id);
+        } else if (store && typeof store.touchSkillUsage === 'function') {
+            store.touchSkillUsage(record);
+        }
+    } catch (error) { void error; }
 }
 
 function recordUsage(context, deps, record, operation) {

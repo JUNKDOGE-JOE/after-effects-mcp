@@ -476,6 +476,7 @@ class ToolLibrary {
         this.skillRoot = path.resolve(input.skillRoot || statePaths.skills);
         this.bundledRoot = input.bundledRoot || path.join(__dirname, 'skills_bundled');
         this.indexPath = path.join(this.toolRoot, 'index.json');
+        this.skillUsagePath = path.join(this.toolRoot, 'skill-usage.json');
         this.artifactsRoot = path.join(this.toolRoot, 'artifacts');
         this.now = input.now || function () { return Date.now(); };
         this.warn = typeof input.warn === 'function' ? input.warn : function () {};
@@ -569,6 +570,59 @@ class ToolLibrary {
             lastUsedAt: Math.max(0, Math.floor(this.now())),
             useCount: current.useCount + 1,
         }));
+    }
+
+    skillUsageId(record) {
+        if (record && record.artifact) return record.artifact.id;
+        if (!record || !record.skill) throw new Error('skill usage record is invalid');
+        if (record.source === 'bundled') return 'builtin:skill:' + record.skill.name;
+        return 'legacy:' + crypto.createHash('sha256').update(
+            path.resolve(record.path).normalize('NFC'), 'utf8',
+        ).digest('hex').slice(0, 24);
+    }
+
+    readSkillUsage() {
+        if (!fs.existsSync(this.skillUsagePath)) return {};
+        try {
+            const usage = this.readJson(this.skillUsagePath, 'skill-usage.json');
+            if (!isObject(usage)) throw new Error('invalid skill usage');
+            Object.keys(usage).forEach(function (id) {
+                const entry = usage[id];
+                if (!isObject(entry) || !Number.isInteger(entry.useCount) || entry.useCount < 0
+                    || (entry.lastUsedAt !== null
+                        && (!Number.isInteger(entry.lastUsedAt) || entry.lastUsedAt < 0))) {
+                    throw new Error('invalid skill usage');
+                }
+            });
+            return usage;
+        } catch (error) {
+            return {};
+        }
+    }
+
+    skillUsage(record) {
+        if (record && record.artifact && record.artifact.source.type !== 'bundled'
+            && record.artifact.source.type !== 'legacy') {
+            return {
+                useCount: record.artifact.useCount,
+                lastUsedAt: record.artifact.lastUsedAt,
+            };
+        }
+        const usage = this.readSkillUsage()[this.skillUsageId(record)];
+        return usage || { useCount: 0, lastUsedAt: null };
+    }
+
+    touchSkillUsage(record) {
+        const id = this.skillUsageId(record);
+        const usage = this.readSkillUsage();
+        const current = usage[id] || { useCount: 0, lastUsedAt: null };
+        const next = {
+            useCount: current.useCount + 1,
+            lastUsedAt: Math.max(0, Math.floor(this.now())),
+        };
+        usage[id] = next;
+        atomicWrite(this.skillUsagePath, canonicalJson(usage) + '\n');
+        return next;
     }
 
     removeArtifact(id) {
@@ -838,12 +892,15 @@ class ToolLibrary {
     }
 
     skillMeta(record, includeTemplate) {
+        const usage = this.skillUsage(record);
         const meta = {
             name: record.skill.name,
             description: record.skill.description,
             template_type: record.skill.template_type,
             args: skillArgs(record.skill.args_schema),
             source: record.source,
+            useCount: usage.useCount,
+            lastUsedAt: usage.lastUsedAt,
         };
         if (includeTemplate) {
             meta.template = record.skill.template;
