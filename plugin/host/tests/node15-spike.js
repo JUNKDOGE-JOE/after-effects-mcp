@@ -98,7 +98,9 @@ async function main() {
         });
         assert.strictEqual(initialized.status, 200);
         const initBody = JSON.parse(initialized.text);
-        assert.strictEqual(initBody.result.protocolVersion, '2025-03-26');
+        // No protocolVersion in the request: the host answers with its newest
+        // supported version (MCP negotiation), which is what CEP clients get.
+        assert.strictEqual(initBody.result.protocolVersion, '2025-06-18');
         const session = initialized.headers['mcp-session-id'];
         assert(/^[0-9a-f]{32}$/.test(session));
         const headers = { 'Mcp-Session-Id': session };

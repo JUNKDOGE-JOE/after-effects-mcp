@@ -90,6 +90,9 @@ function buildTools(deps) {
         } catch (error) {
             output = { result: textResult({ ok: false, error: error && error.message ? error.message : String(error) }, true) };
         }
+        if (!output || output.result === undefined) {
+            output = { result: textResult({ ok: false, error: 'tool returned no result' }, true) };
+        }
         const structured = output && output.result && output.result.structuredContent;
         const errorText = structured && typeof structured.error === 'string' ? structured.error : '';
         if (activityRef.id && errorText.indexOf(HINT_MARK) !== -1

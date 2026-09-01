@@ -126,8 +126,10 @@ its existing request and response shape.
 
 `ae_previewFrame` uses After Effects `CompItem.saveFrameToPng` and performs all
 PNG decoding, scaling, contact-sheet composition, and comparison in the CEP
-host with no browser canvas or image-library dependency. It supports three
-forms:
+host with no browser canvas or image-library dependency. RGB and RGBA source
+frames from 16 bpc projects are decoded in the host and replace their source
+file as an 8-bit PNG before any requested scaling or composition. It supports
+three forms:
 
 - A single `time` or `times` array returns the existing per-frame MCP image
   content and `structuredContent.frames` records. Separate output accepts at
@@ -154,9 +156,24 @@ and `layout`. The process keeps the most recent 50 successful capture records;
 a referenced PNG must still match its recorded SHA-256 or the comparison fails.
 Grid, diff, and side-by-side output is bounded to a 2048-pixel long side (or the
 smaller `grid_max_side` for grids). Existing `comp_id`, `out_dir`,
-`include_base64`, `scale`, and `repaint_delay_ms` behavior is unchanged, and
-`frames` contains every newly captured frame even when the call returns a
-single derived image.
+`scale`, and `repaint_delay_ms` behavior is unchanged, and `frames` contains
+every newly captured frame even when the call returns a single derived image.
+
+All image content blocks and optional `include_base64` frame copies share a
+12 MiB base64-character budget, with a 4.5 MiB limit for each image. The host
+reduces inline copies in 0.75 steps down to a 256-pixel minimum edge and reports
+`budgetScale`, inline dimensions, and warnings without modifying the file named
+by `path`. If a frame still cannot fit, its full-resolution 8-bit `path` remains
+available, `frame.base64` is omitted, and the image content block becomes a
+thumbnail whose long side is at most 512 pixels. Thus `path`, `sizeBytes`, and
+`sha256` always describe the full-resolution 8-bit disk file, while inline
+fields describe any response-budget reduction.
+
+On the first preview call in a host process, the default preview root removes
+`.png` files older than seven days from other session directories. If all
+session PNGs still exceed 300 MiB, it deletes the oldest eligible files until
+the total is at or below that limit. The current process session is never
+deleted, and only empty directories are removed afterward.
 
 ## Host response shape
 

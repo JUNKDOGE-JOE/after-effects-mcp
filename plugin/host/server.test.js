@@ -13,8 +13,10 @@ const FULL_REGISTRY = require(
     '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json'
 );
 const authToken = require('./auth-token');
+const jsxBridge = require('./jsx-bridge');
 const { createStatePaths } = require('./state-paths');
 const { computeContentHash } = require('./mcp/tool-library');
+const { NATIVE_EXEC_TIMEOUT_MS } = require('./mcp/native-program');
 
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
@@ -363,6 +365,7 @@ function request(port, method, pathname, headers, body) {
                 resolve({
                     status: res.statusCode,
                     body: JSON.parse(chunks || '{}'),
+                    headers: res.headers,
                 });
             });
         });
@@ -383,6 +386,51 @@ function get(port, pathname, headers) {
 async function closeFixture(fixture) {
     await new Promise(function (resolve) { fixture.instance.close(resolve); });
     fixture.server.stop();
+}
+
+function openSse(port, sessionId) {
+    return new Promise(function (resolve, reject) {
+        const req = http.request({
+            host: '127.0.0.1',
+            port,
+            path: '/mcp',
+            method: 'GET',
+            headers: {
+                Accept: 'text/event-stream',
+                'Mcp-Session-Id': sessionId,
+            },
+        });
+        req.on('error', reject);
+        req.on('response', function (res) {
+            const ended = new Promise(function (finish) {
+                res.on('end', finish);
+                res.on('close', finish);
+                res.resume();
+            });
+            resolve({ ended, response: res });
+        });
+        req.end();
+    });
+}
+
+function settlesWithin(promise, timeoutMs) {
+    return Promise.race([
+        promise,
+        new Promise(function (_resolve, reject) {
+            setTimeout(function () { reject(new Error('timed out after ' + timeoutMs + 'ms')); }, timeoutMs);
+        }),
+    ]);
+}
+
+function unusedPort() {
+    return new Promise(function (resolve, reject) {
+        const probe = http.createServer();
+        probe.on('error', reject);
+        probe.listen(0, '127.0.0.1', function () {
+            const port = probe.address().port;
+            probe.close(function () { resolve(port); });
+        });
+    });
 }
 
 test('token matching is exact and rejects non-string input', () => {
@@ -731,6 +779,94 @@ test('/exec preserves the graph only when explicitly requested', async () => {
         assert.equal(invalid.status, 400);
     } finally {
         await closeFixture(fixture);
+    }
+});
+
+test('/exec clamps oversized timeouts before passing them to the JSX bridge', async () => {
+    const scheduled = [];
+    jsxBridge._setTimingForTest({
+        setTimeout: function (fn, timeoutMs) {
+            scheduled.push(timeoutMs);
+            return setTimeout(fn, timeoutMs);
+        },
+        clearTimeout,
+    });
+    const fixture = await startApp();
+    try {
+        const response = await post(fixture.port, '/exec', HEADERS, {
+            code: '1 + 1',
+            timeoutMs: 1e10,
+        });
+        assert.equal(response.status, 200);
+        assert.equal(response.body.ok, true);
+        assert.equal(scheduled.includes(600000), true);
+        assert.equal(scheduled.includes(1e10), false);
+    } finally {
+        jsxBridge._setTimingForTest({ setTimeout, clearTimeout });
+        await closeFixture(fixture);
+    }
+});
+
+test('restart closes active MCP SSE sessions and starts again exactly once', async () => {
+    const server = loadServer();
+    server.setCSInterface({
+        evalScript: function (_jsx, callback) {
+            callback('{"ok":true,"resultType":"string","result":"stub-result"}');
+        },
+    });
+    const start = function (port) {
+        return new Promise(function (resolve, reject) {
+            server.start(port, function (error) {
+                if (error) reject(error);
+                else resolve(server.getConnectionInfo().port);
+            });
+        });
+    };
+    try {
+        const firstPort = await start(await unusedPort());
+        const initialized = await post(firstPort, '/mcp', {
+            'Mcp-Protocol-Version': '2025-03-26',
+        }, {
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: { protocolVersion: '2025-03-26', clientInfo: { name: 'restart-test' } },
+        });
+        assert.equal(initialized.status, 200);
+        const sessionId = initialized.headers['mcp-session-id'];
+        assert.equal(typeof sessionId, 'string');
+        const stream = await openSse(firstPort, sessionId);
+        assert.equal(stream.response.statusCode, 200);
+
+        let callbacks = 0;
+        await settlesWithin(new Promise(function (resolve, reject) {
+            unusedPort().then(function (secondPort) {
+                server.restart(secondPort, function (error) {
+                    callbacks += 1;
+                    if (error) reject(error);
+                    else resolve();
+                });
+            }, reject);
+        }), 1000);
+        assert.equal(callbacks, 1);
+        await settlesWithin(stream.ended, 1000);
+        await new Promise(function (resolve) { setTimeout(resolve, 20); });
+        assert.equal(callbacks, 1);
+
+        const secondPort = server.getConnectionInfo().port;
+        assert.equal(typeof secondPort, 'number');
+        const restarted = await post(secondPort, '/mcp', {
+            'Mcp-Protocol-Version': '2025-03-26',
+        }, {
+            jsonrpc: '2.0',
+            id: 2,
+            method: 'initialize',
+            params: { protocolVersion: '2025-03-26', clientInfo: { name: 'restart-test-2' } },
+        });
+        assert.equal(restarted.status, 200);
+        assert.equal(typeof restarted.headers['mcp-session-id'], 'string');
+    } finally {
+        await new Promise(function (resolve) { server.stop(resolve); });
     }
 });
 
@@ -1233,6 +1369,11 @@ test('ExtendScript transport fails deterministically for cycles and serializatio
 
 test('evalScript transport decoder requires typed successes and preserves error envelopes', () => {
     const server = loadServer();
+    const chinese = '在需要数字、数组或属性的位置找到类型为“Error”的对象';
+    const mojibake = Buffer.from(chinese, 'utf8').toString('latin1');
+    assert.equal(server.repairLatin1Utf8(mojibake), chinese);
+    assert.equal(server.repairLatin1Utf8('plain ASCII'), 'plain ASCII');
+    assert.equal(server.repairLatin1Utf8('café ÿþ'), 'café ÿþ');
     assert.deepEqual(
         server.decodeEvalScriptTransportResult(
             '{"ok":true,"resultType":"string","result":"你好"}',
@@ -1245,6 +1386,24 @@ test('evalScript transport decoder requires typed successes and preserves error 
         ),
         { resultType: 'json', result: '{"n":42}' },
     );
+    assert.deepEqual(
+        server.decodeEvalScriptTransportResult(JSON.stringify({
+            ok: true,
+            resultType: 'string',
+            result: mojibake,
+        })),
+        { resultType: 'string', result: chinese },
+    );
+    const jsonResult = JSON.stringify({
+        ok: true,
+        resultType: 'json',
+        result: JSON.stringify({ text: mojibake, items: [mojibake, { ok: true }] }),
+    });
+    const decodedJsonResult = server.decodeEvalScriptTransportResult(jsonResult);
+    assert.deepEqual(JSON.parse(decodedJsonResult.result), {
+        text: chinese,
+        items: [chinese, { ok: true }],
+    });
     assert.throws(
         function () {
             server.decodeEvalScriptTransportResult('{"ok":true,"result":"legacy"}');
@@ -1267,6 +1426,18 @@ test('evalScript transport decoder requires typed successes and preserves error 
     }
     assert.match(legacyError.message, /boom/);
     assert.equal(legacyError.disposition, 'failed');
+    let localizedError;
+    try {
+        server.decodeEvalScriptTransportResult(JSON.stringify({
+            ok: false,
+            error: mojibake,
+            errorSource: mojibake,
+        }));
+    } catch (error) {
+        localizedError = error;
+    }
+    assert.equal(localizedError.message, 'ExtendScript error: ' + chinese);
+    assert.equal(localizedError.errorSource, chinese);
 });
 
 test('diagnostic decoder and executeJsx preserve optional success and failure evidence', async () => {
@@ -1435,5 +1606,31 @@ test('/exec distinguishes uncertain timeout from a queued not_dispatched call', 
     } finally {
         if (sentinelCallback) sentinelCallback('2');
         await closeFixture(fixture);
+    }
+});
+
+test('native client factory receives the public native execution timeout', () => {
+    const server = loadServer();
+    let options = null;
+    server._setNativeAegpClientFactoryForTest(function (input) {
+        options = input;
+        return fakeNativeClient();
+    });
+    server._makeNativeAegpClientForTest();
+    assert.equal(options.requestTimeoutMs, NATIVE_EXEC_TIMEOUT_MS);
+});
+
+test('unhandled rejections are recorded in the host log without crashing the host', () => {
+    const server = loadServer();
+    server.hostLog.init({ statePaths: isolatedStatePaths() });
+    server._registerUnhandledRejectionHandlerForTest();
+    try {
+        server._recordUnhandledRejectionForTest(new Error('test rejection'));
+        const event = server.hostLog.tail(1)[0];
+        assert.equal(event.level, 'error');
+        assert.equal(event.source, 'process');
+        assert.equal(event.message, 'Unhandled promise rejection: test rejection');
+    } finally {
+        server._clearUnhandledRejectionHandlerForTest();
     }
 });

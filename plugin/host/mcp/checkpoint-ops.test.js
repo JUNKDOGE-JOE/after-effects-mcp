@@ -8,35 +8,31 @@ const { atomicReplace, autoCheckpoint, createCheckpoint } = require('./checkpoin
 function reply(value) {
     return { payload: { ok: true, result: JSON.stringify(value) } };
 }
-test('atomicReplace uses a sibling temp file, replaces atomically, and cleans a failed copy', function () {
+test('atomicReplace uses a sibling temp file and leaves no temporary file or directory', function () {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-atomic-'));
     const src = path.join(root, 'source.aep');
     const dst = path.join(root, 'target.aep');
     fs.writeFileSync(src, 'new');
     fs.writeFileSync(dst, 'old');
-    let temporary = '';
-    const io = Object.assign({}, fs, {
-        mkdtempSync: function (prefix) {
-            assert.equal(path.dirname(prefix), root);
-            temporary = fs.mkdtempSync(prefix);
-            return temporary;
-        },
-    });
-    atomicReplace(src, dst, io);
-    assert.equal(fs.readFileSync(dst, 'utf8'), 'new');
-    assert.equal(fs.existsSync(temporary + '.aep.tmp'), false);
-    fs.writeFileSync(dst, 'old-again');
-    const failing = Object.assign({}, fs, {
-        mkdtempSync: fs.mkdtempSync,
-        copyFileSync: function () {
-            throw new Error('disk full');
-        },
-    });
-    assert.throws(function () {
-        atomicReplace(src, dst, failing);
-    }, /disk full/);
-    assert.equal(fs.readFileSync(dst, 'utf8'), 'old-again');
-    fs.rmSync(root, { recursive: true, force: true });
+    try {
+        atomicReplace(src, dst);
+        assert.equal(fs.readFileSync(dst, 'utf8'), 'new');
+        assert.deepEqual(fs.readdirSync(root).sort(), ['source.aep', 'target.aep']);
+
+        fs.writeFileSync(dst, 'old-again');
+        const failing = Object.assign({}, fs, {
+            copyFileSync: function () {
+                throw new Error('disk full');
+            },
+        });
+        assert.throws(function () {
+            atomicReplace(src, dst, failing);
+        }, /disk full/);
+        assert.equal(fs.readFileSync(dst, 'utf8'), 'old-again');
+        assert.deepEqual(fs.readdirSync(root).sort(), ['source.aep', 'target.aep']);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
 });
 test('createCheckpoint and autoCheckpoint share the same successful persistence path', async function () {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-ops-'));

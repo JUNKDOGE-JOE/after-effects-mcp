@@ -8,6 +8,7 @@ const zlib = require('zlib');
 const { textResult } = require('../tool-result');
 const imageOps = require('../image-ops');
 const png = require('../png');
+const previewPrune = require('../preview-prune');
 
 const TEMPLATE = fs.readFileSync(path.join(__dirname, '../../../jsx/templates/preview_viewer.jsx'), 'utf8');
 const PREVIEW_ROOT = path.join(os.tmpdir(), 'ae_mcp_previews');
@@ -16,6 +17,11 @@ const BASE_TIMEOUT_MS = 45000;
 const PER_FRAME_TIMEOUT_MS = 35000;
 const MAX_TIMEOUT_MS = 300000;
 const CAPTURE_HISTORY_LIMIT = 50;
+const IMAGE_BUDGET_TOTAL_BASE64 = 12 * 1024 * 1024;
+const IMAGE_BUDGET_PER_IMAGE_BASE64 = 4.5 * 1024 * 1024;
+const BUDGET_SCALE_STEP = 0.75;
+const BUDGET_MIN_EDGE = 256;
+const THUMBNAIL_MAX_SIDE = 512;
 const captureHistory = new Map();
 
 const compareSelectorSchema = {
@@ -30,7 +36,7 @@ const compareSelectorSchema = {
 
 const definition = {
     name: 'ae_previewFrame',
-    description: 'Read real composition pixels after a write, use compare to prove only the intended region changed, or use range with grid to inspect an animation interval. Transparent pixels retain the composition background RGB even though After Effects does not composite that background into exported alpha.',
+    description: 'Read real composition pixels after a write, use compare to prove only the intended region changed, or use range with grid to inspect an animation interval. 16-bit source PNGs are returned as 8-bit. Inline images share a 12 MiB base64-character budget with a 4.5 MiB per-image limit; oversized images are reduced or represented by a thumbnail while path retains the full-resolution 8-bit PNG. Transparent pixels retain the composition background RGB even though After Effects does not composite that background into exported alpha.',
     inputSchema: {
         type: 'object', properties: {
             comp_id: { type: 'string', minLength: 1, description: 'AE comp id. Omit for the active comp.' },
@@ -47,7 +53,7 @@ const definition = {
                 description: 'Evenly sample 2 to 16 times; mutually exclusive with time and times.',
             },
             layout: { type: 'string', enum: ['separate', 'grid'], default: 'separate', description: 'Return each frame separately or one labeled contact sheet.' },
-            grid_max_side: { type: 'integer', minimum: 256, maximum: 2048, default: 1280, description: 'Maximum width or height of a grid PNG.' },
+            grid_max_side: { type: 'integer', minimum: 256, maximum: 2048, default: 1280, description: 'Maximum width or height of the full-resolution 8-bit grid PNG before the shared inline-image byte budget is applied.' },
             compare: {
                 type: 'object',
                 properties: {
@@ -60,8 +66,8 @@ const definition = {
                 description: 'Compare two captured times or prior capture frames; mutually exclusive with ordinary frame output arguments.',
             },
             out_dir: { type: 'string', minLength: 1, description: 'Output directory. Default: temp ae_mcp_previews session directory.' },
-            include_base64: { type: 'boolean', default: false, description: 'Also include PNG base64 in each JSON frame. Image content is always returned.' },
-            scale: { type: 'number', exclusiveMinimum: 0, maximum: 4, default: 1, description: 'Output scale factor (0 < scale <= 4), applied after capture.' },
+            include_base64: { type: 'boolean', default: false, description: 'Also include PNG base64 in each JSON frame. These copies count toward the 12 MiB total and 4.5 MiB per-image base64-character budgets; an oversized frame may omit this field and return path plus a thumbnail.' },
+            scale: { type: 'number', exclusiveMinimum: 0, maximum: 4, default: 1, description: 'Full-resolution output scale factor (0 < scale <= 4), applied after capture. Inline images may be reduced further to fit the response budget; path still identifies the full-resolution 8-bit file.' },
             repaint_delay_ms: { type: 'integer', minimum: 0, maximum: 5000, default: 300, description: 'Retained for compatibility; has no effect because viewer screenshot fallback is not supported.' },
         }, additionalProperties: false,
     },
@@ -131,15 +137,16 @@ async function awaitWrittenPng(file, timeoutMs) {
                 const bytes = fs.readFileSync(file);
                 if (bytes.subarray(-8).equals(Buffer.from([73, 69, 78, 68, 174, 66, 96, 130]))) {
                     try {
+                        const info = png.readPngInfo(bytes);
                         const decoded = png.decodeRgba(bytes);
-                        return { width: decoded.width, height: decoded.height };
+                        return { width: decoded.width, height: decoded.height, bitDepth: info.bitDepth };
                     } catch (error) {
                         // AE can emit complete PNG variants outside the pixel subset
                         // this dependency-free path can safely resample.
                         if (!error || error.message !== 'unsupported png') throw error;
                         const info = png.readPngInfo(bytes);
                         zlib.inflateSync(Buffer.concat(info.idat));
-                        return { width: info.width, height: info.height, unsupported: true };
+                        return { width: info.width, height: info.height, bitDepth: info.bitDepth, unsupported: true };
                     }
                 }
             }
@@ -258,9 +265,15 @@ async function captureFrames(args, context, deps, expression, requests, deadline
             let width = dimensions.width;
             let height = dimensions.height;
             let downsampleSkipped = dimensions.unsupported ? 'unsupported-png-format' : undefined;
+            let decoded = null;
+            if (!dimensions.unsupported) decoded = png.decodeRgba(bytes);
+            if (dimensions.bitDepth === 16) {
+                bytes = png.encodePng(decoded.rgba, decoded.width, decoded.height);
+                fs.writeFileSync(outputPath, bytes);
+            }
             if (Math.abs(scale - 1) > 1e-9) {
                 try {
-                    const decoded = png.decodeRgba(bytes);
+                    if (!decoded) decoded = png.decodeRgba(bytes);
                     const resized = png.boxDownscale(decoded.rgba, decoded.width, decoded.height, scale);
                     if (resized.width !== decoded.width || resized.height !== decoded.height) {
                         bytes = png.encodePng(resized.rgba, resized.width, resized.height);
@@ -278,6 +291,7 @@ async function captureFrames(args, context, deps, expression, requests, deadline
             const frame = {
                 time: prepared.time, path: outputPath, width: width, height: height, sizeBytes: bytes.length,
                 sha256: crypto.createHash('sha256').update(bytes).digest('hex'), source: 'comp', method: 'saveFrameToPng', compId: compId,
+                sourceBitDepth: dimensions.bitDepth, bitDepth: verified.bitDepth,
             };
             if (Number.isInteger(prepared.compWidth) && Number.isInteger(prepared.compHeight)) {
                 frame.compWidth = prepared.compWidth; frame.compHeight = prepared.compHeight;
@@ -286,7 +300,6 @@ async function captureFrames(args, context, deps, expression, requests, deadline
             if (Array.isArray(prepared.resolutionFactor)) frame.resolutionFactor = prepared.resolutionFactor;
             if (Math.abs(scale - 1) > 1e-9 && !downsampleSkipped && (width !== dimensions.width || height !== dimensions.height)) frame.downsampled = true;
             if (downsampleSkipped) frame.downsampleSkipped = downsampleSkipped;
-            if (args.include_base64 === true) frame.base64 = bytes.toString('base64');
             branch.ok = true;
             frames.push(frame);
         } catch (error) {
@@ -306,14 +319,6 @@ function verifiedFrame(frame, changedMessage, decodePixels) {
     return { bytes: bytes, image: decodePixels === false ? null : png.decodeRgba(bytes), digest: digest };
 }
 
-function frameContent(frame, captureId, index) {
-    const verified = verifiedFrame(frame, 'preview frame changed after capture', false);
-    return {
-        type: 'image', data: verified.bytes.toString('base64'), mimeType: 'image/png',
-        _meta: { captureId: captureId, frameIndex: index, sha256: verified.digest, width: frame.width, height: frame.height },
-    };
-}
-
 function writeImage(file, image) {
     const bytes = png.encodePng(image.rgba, image.width, image.height);
     fs.writeFileSync(file, bytes);
@@ -323,15 +328,177 @@ function writeImage(file, image) {
     };
 }
 
-function artifactContent(artifact, captureId, kind) {
+function verifiedArtifact(artifact) {
     const bytes = fs.readFileSync(artifact.path);
     const dimensions = png.readPngInfo(bytes);
     const digest = crypto.createHash('sha256').update(bytes).digest('hex');
     if (dimensions.width !== artifact.width || dimensions.height !== artifact.height || digest !== artifact.sha256) throw new Error('preview artifact changed after creation');
+    return { bytes: bytes, image: png.decodeRgba(bytes), digest: digest };
+}
+
+function frameInlineGroup(frame, captureId, index, includeBase64, contentRequired) {
+    const verified = verifiedFrame(frame, 'preview frame changed after capture', false);
+    let image = null;
+    try { image = png.decodeRgba(verified.bytes); } catch (error) {
+        if (!error || error.message !== 'unsupported png') throw error;
+    }
     return {
-        type: 'image', data: bytes.toString('base64'), mimeType: 'image/png',
-        _meta: { captureId: captureId, kind: kind, sha256: digest, width: artifact.width, height: artifact.height },
+        owner: frame, label: 'Frame ' + index, path: frame.path,
+        image: image, bytes: verified.bytes, digest: verified.digest,
+        width: frame.width, height: frame.height, scale: 1,
+        includeBase64: includeBase64, contentRequired: contentRequired,
+        meta: { captureId: captureId, frameIndex: index, sha256: verified.digest },
     };
+}
+
+function artifactInlineGroup(artifact, owner, captureId, kind) {
+    const verified = verifiedArtifact(artifact);
+    return {
+        owner: owner, label: kind + ' image', path: artifact.path,
+        image: verified.image, bytes: verified.bytes, digest: verified.digest,
+        width: artifact.width, height: artifact.height, scale: 1,
+        includeBase64: false, contentRequired: true,
+        meta: { captureId: captureId, kind: kind, sha256: verified.digest },
+    };
+}
+
+function base64Length(group) { return 4 * Math.ceil(group.bytes.length / 3); }
+
+function copyCount(group) {
+    return (group.contentRequired ? 1 : 0) + (group.includeBase64 ? 1 : 0);
+}
+
+function minimumBudgetScale(group) {
+    const shortest = Math.min(group.width, group.height);
+    return shortest <= BUDGET_MIN_EDGE ? 1 : BUDGET_MIN_EDGE / shortest;
+}
+
+function canBudgetDownscale(group) {
+    return !!group.image && !group.fallback && group.scale - minimumBudgetScale(group) > 1e-9;
+}
+
+function downscaleInlineGroup(group) {
+    const nextScale = Math.max(minimumBudgetScale(group), group.scale * BUDGET_SCALE_STEP);
+    if (nextScale >= group.scale - 1e-9) return false;
+    const resized = png.boxDownscale(group.image.rgba, group.image.width, group.image.height, nextScale);
+    if (resized.width === group.inlineWidth && resized.height === group.inlineHeight) return false;
+    group.bytes = png.encodePng(resized.rgba, resized.width, resized.height);
+    group.inlineWidth = resized.width;
+    group.inlineHeight = resized.height;
+    group.scale = nextScale;
+    return true;
+}
+
+function useThumbnail(group) {
+    if (!group.image) {
+        group.bytes = Buffer.alloc(0);
+        group.inlineWidth = 0;
+        group.inlineHeight = 0;
+        group.includeBase64 = false;
+        group.contentRequired = false;
+        group.fallback = true;
+        group.pathOnly = true;
+        return;
+    }
+    const longest = Math.max(group.image.width, group.image.height);
+    const scale = Math.min(1, THUMBNAIL_MAX_SIDE / longest);
+    const thumbnail = scale < 1
+        ? png.boxDownscale(group.image.rgba, group.image.width, group.image.height, scale)
+        : group.image;
+    group.bytes = png.encodePng(thumbnail.rgba, thumbnail.width, thumbnail.height);
+    group.inlineWidth = thumbnail.width;
+    group.inlineHeight = thumbnail.height;
+    group.scale = Math.min(group.image.width / group.width, group.image.height / group.height, scale);
+    group.includeBase64 = false;
+    group.contentRequired = true;
+    group.fallback = true;
+}
+
+function totalBase64Length(groups) {
+    return groups.reduce(function (total, group) { return total + base64Length(group) * copyCount(group); }, 0);
+}
+
+function largestGroup(groups, predicate) {
+    return groups.filter(predicate).sort(function (a, b) {
+        return base64Length(b) * copyCount(b) - base64Length(a) * copyCount(a);
+    })[0] || null;
+}
+
+function fitInlineBudget(groups) {
+    groups.forEach(function (group) {
+        group.inlineWidth = group.width;
+        group.inlineHeight = group.height;
+    });
+    let iterations = 0;
+    while (iterations < 256) {
+        iterations += 1;
+        const oversized = largestGroup(groups, function (group) {
+            return copyCount(group) > 0 && base64Length(group) > IMAGE_BUDGET_PER_IMAGE_BASE64;
+        });
+        if (oversized) {
+            if (!downscaleInlineGroup(oversized)) useThumbnail(oversized);
+            continue;
+        }
+        if (totalBase64Length(groups) <= IMAGE_BUDGET_TOTAL_BASE64) break;
+        const reducible = largestGroup(groups, canBudgetDownscale);
+        if (reducible) {
+            downscaleInlineGroup(reducible);
+            continue;
+        }
+        const fallback = largestGroup(groups, function (group) { return !group.fallback && copyCount(group) > 0; });
+        if (!fallback) break;
+        useThumbnail(fallback);
+    }
+}
+
+function applyInlineBudget(result, groups, warnings) {
+    fitInlineBudget(groups);
+    let scaled = false;
+    const content = [];
+    groups.forEach(function (group) {
+        const data = group.bytes.toString('base64');
+        if (group.scale < 1 - 1e-9 || group.fallback) {
+            scaled = true;
+            group.owner.budgetScale = Number(group.scale.toFixed(6));
+            group.owner.inlineWidth = group.inlineWidth;
+            group.owner.inlineHeight = group.inlineHeight;
+            group.owner.inlineSizeBytes = group.bytes.length;
+            group.owner.downsampled = true;
+        }
+        if (group.fallback) {
+            group.owner.inlineKind = group.pathOnly ? 'path-only' : 'thumbnail';
+            if (group.owner.base64 !== undefined) delete group.owner.base64;
+            if (group.pathOnly) warnings.push(group.label + ' exceeded the inline image budget in an unsupported PNG format; returned path without inline pixels.');
+            else warnings.push(group.label + ' exceeded the inline image budget; returned path plus a '
+                + group.inlineWidth + 'x' + group.inlineHeight + ' thumbnail instead.');
+        } else if (group.includeBase64) {
+            group.owner.base64 = data;
+        }
+        if (group.contentRequired) {
+            content.push({
+                type: 'image', data: data, mimeType: 'image/png',
+                _meta: Object.assign({}, group.meta, {
+                    width: group.inlineWidth, height: group.inlineHeight,
+                    fullWidth: group.width, fullHeight: group.height, path: group.path,
+                    thumbnail: group.fallback === true,
+                }),
+            });
+        }
+    });
+    if (scaled) warnings.unshift('Inline preview images were downscaled to fit the 12 MiB total and 4.5 MiB per-image base64-character budgets; path still identifies each full-resolution 8-bit PNG.');
+    result.imageBudget = {
+        totalBase64Chars: totalBase64Length(groups),
+        totalLimitBase64Chars: IMAGE_BUDGET_TOTAL_BASE64,
+        perImageLimitBase64Chars: IMAGE_BUDGET_PER_IMAGE_BASE64,
+    };
+    return content;
+}
+
+function resultText(result) {
+    return JSON.stringify(result, function (key, value) {
+        if (key === 'base64' && this && own(this, 'path')) return undefined;
+        return value;
+    });
 }
 
 function rememberCapture(captureId, frames, compId, compName) {
@@ -408,13 +575,13 @@ async function compareResult(args, context, deps, expression, outDir, captureId)
     const diff = imageOps.diffImages(sides[0].image, bImage, { threshold: threshold, maxSide: 2048 });
     if (resampled) diff.metrics.resampled = true;
     const result = makeBaseResult(captureId, captured);
-    const content = [];
+    const groups = [];
     let scaled = false;
     const comparison = { a: sides[0].descriptor, b: sides[1].descriptor, metrics: diff.metrics };
     if (mode === 'diff' || mode === 'both') {
         const artifact = writeImage(path.join(outDir, captureId + '-diff.png'), diff.image);
         comparison.diffPath = artifact.path;
-        content.push(artifactContent(artifact, captureId, 'diff'));
+        groups.push(artifactInlineGroup(artifact, artifact, captureId, 'diff'));
         if (diff.scaled) {
             scaled = true;
             warnings.push('The diff heatmap was scaled to fit within 2048 pixels.');
@@ -424,7 +591,7 @@ async function compareResult(args, context, deps, expression, outDir, captureId)
         const sideBySide = imageOps.composeSideBySide(sides[0].image, bImage, 8, ['A', 'B'], 2048);
         const artifact = writeImage(path.join(outDir, captureId + '-sbs.png'), sideBySide.image);
         comparison.sideBySidePath = artifact.path;
-        content.push(artifactContent(artifact, captureId, 'side-by-side'));
+        groups.push(artifactInlineGroup(artifact, artifact, captureId, 'side-by-side'));
         if (sideBySide.scaled) {
             scaled = true;
             warnings.push('The side-by-side image was scaled to fit within 2048 pixels.');
@@ -432,8 +599,12 @@ async function compareResult(args, context, deps, expression, outDir, captureId)
     }
     comparison.scaled = scaled;
     result.compare = comparison;
+    if (args.include_base64 === true) captured.frames.forEach(function (frame, index) {
+        groups.push(frameInlineGroup(frame, captureId, index, true, false));
+    });
+    const content = applyInlineBudget(result, groups, warnings);
     addWarnings(result, warnings);
-    content.push({ type: 'text', text: JSON.stringify(result) });
+    content.push({ type: 'text', text: resultText(result) });
     rememberCapture(captureId, captured.frames, captured.compId, captured.compName);
     return { result: { content: content, structuredContent: result } };
 }
@@ -444,7 +615,7 @@ async function ordinaryResult(args, context, deps, expression, outDir, captureId
     const captured = await captureFrames(args, context, deps, expression, requests, deadline);
     const result = makeBaseResult(captureId, captured);
     const warnings = [];
-    let content;
+    const groups = [];
     if ((args.layout || 'separate') === 'grid') {
         const entries = captured.frames.map(function (frame, index) {
             return { image: verifiedFrame(frame, 'preview frame changed after capture').image, label: '#' + index + ' ' + Number(frame.time).toFixed(3) + 's' };
@@ -460,12 +631,18 @@ async function ordinaryResult(args, context, deps, expression, outDir, captureId
             }),
         };
         if (composed.scaled) warnings.push('The grid image was scaled to fit within grid_max_side.');
-        content = [artifactContent(artifact, captureId, 'grid')];
+        groups.push(artifactInlineGroup(artifact, result.grid, captureId, 'grid'));
+        if (args.include_base64 === true) captured.frames.forEach(function (frame, index) {
+            groups.push(frameInlineGroup(frame, captureId, index, true, false));
+        });
     } else {
-        content = captured.frames.map(function (frame, index) { return frameContent(frame, captureId, index); });
+        captured.frames.forEach(function (frame, index) {
+            groups.push(frameInlineGroup(frame, captureId, index, args.include_base64 === true, true));
+        });
     }
+    const content = applyInlineBudget(result, groups, warnings);
     addWarnings(result, warnings);
-    content.push({ type: 'text', text: JSON.stringify(result) });
+    content.push({ type: 'text', text: resultText(result) });
     rememberCapture(captureId, captured.frames, captured.compId, captured.compName);
     return { result: { content: content, structuredContent: result } };
 }
@@ -475,7 +652,10 @@ async function call(args, context, deps) {
     try { validateArgs(args); } catch (error) { return errorResult(error); }
     let expression;
     try { expression = compExpr(args.comp_id); } catch (error) { return errorResult(error); }
-    const outDir = args.out_dir || path.join(PREVIEW_ROOT, SESSION_ID);
+    const previewRoot = deps.previewRoot || PREVIEW_ROOT;
+    const sessionId = deps.previewSessionId || SESSION_ID;
+    previewPrune.prunePreviewRootOnce(previewRoot, sessionId);
+    const outDir = args.out_dir || path.join(previewRoot, sessionId);
     const captureId = crypto.randomBytes(16).toString('hex');
     try {
         fs.mkdirSync(outDir, { recursive: true });
@@ -486,4 +666,10 @@ async function call(args, context, deps) {
     }
 }
 
-module.exports = { definition, call, renderTemplate, compExpr, expandRange, frameRequests, previewTimeoutMs, awaitWrittenPng, nativeStatus };
+module.exports = {
+    definition: definition, call: call, renderTemplate: renderTemplate, compExpr: compExpr,
+    expandRange: expandRange, frameRequests: frameRequests, previewTimeoutMs: previewTimeoutMs,
+    awaitWrittenPng: awaitWrittenPng, nativeStatus: nativeStatus,
+    IMAGE_BUDGET_TOTAL_BASE64: IMAGE_BUDGET_TOTAL_BASE64,
+    IMAGE_BUDGET_PER_IMAGE_BASE64: IMAGE_BUDGET_PER_IMAGE_BASE64,
+};

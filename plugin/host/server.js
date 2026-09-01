@@ -8,6 +8,7 @@ const authToken = require('./auth-token');
 const activity = require('./activity');
 const hostLog = require('./host-log');
 const nativeAegp = require('./native-aegp-client');
+const { NATIVE_EXEC_TIMEOUT_MS } = require('./mcp/native-program');
 const mountMcp = require('./mcp');
 const { createClientBlocklist } = require('./mcp/client-blocklist');
 const { ToolLibrary } = require('./mcp/tool-library');
@@ -28,6 +29,7 @@ let nativeAegpClientFactory = null;
 let nativeAegpRuntime = null;
 let restoreHostConsole = null;
 let unsubscribeHostActivity = null;
+let unhandledRejectionHandler = null;
 const clients = new Map();
 const blocked = new Set();
 let clientBlocklist = null;
@@ -36,6 +38,9 @@ let clientBlocklist = null;
 const INTERNAL_CLIENT = 'panel-diagnostics/internal';
 const NATIVE_MAX_REQUEST_WINDOW_MS = 30000;
 const NATIVE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const EXEC_TIMEOUT_MAX_MS = 600000;
+const STOP_FALLBACK_TIMEOUT_MS = 3000;
+const trackedSockets = new Set();
 
 function setRuntimeDependencies(dependencies) {
     if (!dependencies || typeof dependencies.express !== 'function') {
@@ -152,6 +157,7 @@ function makeNativeAegpClient() {
         version: PKG_VERSION,
         component: 'core-broker',
         runtime: nativeAegpRuntime,
+        requestTimeoutMs: NATIVE_EXEC_TIMEOUT_MS,
     });
     if (!nativeAegpClient
         || typeof nativeAegpClient.connect !== 'function'
@@ -169,6 +175,27 @@ function makeNativeAegpClient() {
         throw error;
     }
     return nativeAegpClient;
+}
+
+function registerUnhandledRejectionHandler() {
+    if (unhandledRejectionHandler) return;
+    unhandledRejectionHandler = recordUnhandledRejection;
+    process.on('unhandledRejection', unhandledRejectionHandler);
+}
+
+function recordUnhandledRejection(reason) {
+    const message = reason && reason.message ? reason.message : String(reason);
+    hostLog.record({
+        level: 'error',
+        source: 'process',
+        message: 'Unhandled promise rejection: ' + message,
+    });
+}
+
+function clearUnhandledRejectionHandler() {
+    if (!unhandledRejectionHandler) return;
+    process.removeListener('unhandledRejection', unhandledRejectionHandler);
+    unhandledRejectionHandler = null;
 }
 
 async function invalidateConnectedNativeProjectGraph(deadlineUnixMs) {
@@ -605,6 +632,40 @@ function wrapForEvalScriptTransport(code, options) {
         : wrapForEvalScriptTransportDefault(code);
 }
 
+function repairLatin1Utf8(text) {
+    const value = String(text);
+    for (let i = 0; i < value.length; i += 1) {
+        if (value.charCodeAt(i) > 0xff) return value;
+    }
+    const bytes = Buffer.from(value, 'latin1');
+    let hasMultibyte = false;
+    for (let i = 0; i < bytes.length; i += 1) {
+        if (bytes[i] >= 0xc2 && bytes[i] <= 0xf4) {
+            hasMultibyte = true;
+            break;
+        }
+    }
+    if (!hasMultibyte) return value;
+    try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch (e) {
+        return value;
+    }
+}
+
+function repairTransportJson(value) {
+    if (typeof value === 'string') return repairLatin1Utf8(value);
+    if (Array.isArray(value)) return value.map(repairTransportJson);
+    if (value && typeof value === 'object') {
+        const repaired = {};
+        Object.keys(value).forEach(function (key) {
+            repaired[key] = repairTransportJson(value[key]);
+        });
+        return repaired;
+    }
+    return value;
+}
+
 function decodeEvalScriptTransportResult(text) {
     let payload = null;
     if (String(text || '').trim() === '') {
@@ -640,9 +701,12 @@ function decodeEvalScriptTransportResult(text) {
         // error: the script executed, so this is `failed`, not `uncertain`
         // (#260 real-machine check). Undecodable / empty output stays untagged
         // and is classified as uncertain by the caller.
-        const error = new Error('ExtendScript error: ' + payload.error);
+        const error = new Error('ExtendScript error: ' + repairLatin1Utf8(payload.error));
         error.disposition = 'failed';
         if (Object.prototype.hasOwnProperty.call(payload, 'line')) error.line = payload.line;
+        if (Object.prototype.hasOwnProperty.call(payload, 'errorSource')) {
+            error.errorSource = repairLatin1Utf8(payload.errorSource);
+        }
         if (Object.prototype.hasOwnProperty.call(payload, 'touched')) error.touched = payload.touched;
         if (Object.prototype.hasOwnProperty.call(payload, 'logs')) error.logs = payload.logs;
         if (Object.prototype.hasOwnProperty.call(payload, 'logsTruncated')) {
@@ -658,7 +722,17 @@ function decodeEvalScriptTransportResult(text) {
     if (payload.resultType !== 'string' && payload.resultType !== 'json') {
         throw new Error('invalid evalScript transport envelope resultType');
     }
-    const decoded = { resultType: payload.resultType, result: payload.result };
+    let result = payload.result;
+    if (payload.resultType === 'string') {
+        result = repairLatin1Utf8(result);
+    } else {
+        try {
+            result = JSON.stringify(repairTransportJson(JSON.parse(result)));
+        } catch (e) {
+            result = payload.result;
+        }
+    }
+    const decoded = { resultType: payload.resultType, result };
     if (Object.prototype.hasOwnProperty.call(payload, 'logs')) decoded.logs = payload.logs;
     if (Object.prototype.hasOwnProperty.call(payload, 'logsTruncated')) {
         decoded.logsTruncated = payload.logsTruncated;
@@ -710,7 +784,9 @@ async function executeJsx(request) {
             payload: { ok: false, error: '`nativeProjectGraphEffect` must be invalidate or preserve' },
         };
     }
-    const t = Number.isFinite(input.timeoutMs) && input.timeoutMs > 0 ? input.timeoutMs : 30000;
+    const requestedTimeoutMs = Number.isFinite(input.timeoutMs) && input.timeoutMs > 0
+        ? input.timeoutMs : 30000;
+    const t = Math.min(Math.max(requestedTimeoutMs, 1), EXEC_TIMEOUT_MAX_MS);
     const wrapped = undoGroup ? wrapWithUndoGroup(code, undoGroup) : code;
     const transported = wrapForEvalScriptTransport(wrapped, {
         diagnostics: input.diagnostics === true,
@@ -769,6 +845,9 @@ async function executeJsx(request) {
             jsxBridge: bridgeState,
         };
         if (Object.prototype.hasOwnProperty.call(e, 'line')) payload.errorLine = e.line;
+        if (Object.prototype.hasOwnProperty.call(e, 'errorSource')) {
+            payload.errorSource = e.errorSource;
+        }
         ['touched', 'logs', 'logsTruncated', 'revision', 'projectPath'].forEach(function (field) {
             if (Object.prototype.hasOwnProperty.call(e, field)) payload[field] = e[field];
         });
@@ -785,7 +864,17 @@ function buildApp() {
     ensureClientBlocklist();
     const a = express();
     a.use(express.json({ limit: '5mb' }));
-    const toolLibrary = new ToolLibrary({ statePaths: statePathsForHost() });
+    const toolLibrary = new ToolLibrary({
+        statePaths: statePathsForHost(),
+        warn: function (event) {
+            hostLog.record({
+                level: 'warn',
+                source: 'host',
+                message: 'Tool Library skipped a legacy skill file: ' + event.path + ' (' + event.error + ')',
+                event: event.type,
+            });
+        },
+    });
     async function nativeNegotiate(deadlineUnixMs) {
         const client = await connectedNativeClient(deadlineUnixMs);
         const hello = await client.negotiate({ deadlineUnixMs });
@@ -1230,6 +1319,7 @@ function start(port, callback) {
         return callback(new Error('already started; call restart() to change port'));
     }
     hostLog.init({ statePaths: statePathsForHost() });
+    registerUnhandledRejectionHandler();
     restoreHostConsole = hostLog.captureConsole(console);
     unsubscribeHostActivity = hostLog.subscribeActivity(activity);
     // Ensure the shared-secret token exists (generate on first run) before we
@@ -1248,9 +1338,23 @@ function start(port, callback) {
     httpServer.on('error', (err) => {
         if (callback) callback(err);
     });
+    httpServer.on('connection', function (socket) {
+        trackedSockets.add(socket);
+        socket.on('close', function () { trackedSockets.delete(socket); });
+    });
 }
 
 function stop(callback) {
+    let finished = false;
+    let fallbackTimer = null;
+    const finish = function () {
+        if (finished) return;
+        finished = true;
+        if (fallbackTimer) clearTimeout(fallbackTimer);
+        httpServer = null;
+        currentPort = null;
+        if (callback) callback();
+    };
     if (restoreHostConsole) {
         try { restoreHostConsole(); } catch (error) { /* best effort */ }
         restoreHostConsole = null;
@@ -1260,12 +1364,33 @@ function stop(callback) {
         unsubscribeHostActivity = null;
     }
     closeNativeAegpClient();
-    if (!httpServer) return callback ? callback() : null;
-    httpServer.close(() => {
-        httpServer = null;
-        currentPort = null;
-        if (callback) callback();
-    });
+    const server = httpServer;
+    if (!server) return finish();
+
+    const mounted = module.exports.mcp;
+    if (mounted && mounted.sessions && typeof mounted.sessions.list === 'function'
+        && typeof mounted.sessions.delete === 'function') {
+        mounted.sessions.list().forEach(function (session) {
+            mounted.sessions.delete(session.sessionId);
+        });
+    }
+
+    try {
+        server.close(finish);
+    } catch (error) {
+        finish();
+        return;
+    }
+
+    if (typeof server.closeAllConnections === 'function') {
+        server.closeAllConnections();
+    } else {
+        // CEP hosts can predate closeAllConnections; keep their long-lived SSE
+        // sockets visible so close cannot wait forever on a client stream.
+        trackedSockets.forEach(function (socket) { socket.destroy(); });
+    }
+    fallbackTimer = setTimeout(finish, STOP_FALLBACK_TIMEOUT_MS);
+    if (fallbackTimer && typeof fallbackTimer.unref === 'function') fallbackTimer.unref();
 }
 
 function restart(port, callback) {
@@ -1293,6 +1418,7 @@ module.exports = {
     // Exported for unit-testing the wrap shape without spinning up Express.
     wrapWithUndoGroup,
     wrapForEvalScriptTransport,
+    repairLatin1Utf8,
     decodeEvalScriptTransportResult,
     executeJsx,
     mcp: null,
@@ -1315,4 +1441,8 @@ module.exports = {
         closeNativeAegpClient();
         nativeAegpClientFactory = factory;
     },
+    _makeNativeAegpClientForTest: makeNativeAegpClient,
+    _registerUnhandledRejectionHandlerForTest: registerUnhandledRejectionHandler,
+    _clearUnhandledRejectionHandlerForTest: clearUnhandledRejectionHandler,
+    _recordUnhandledRejectionForTest: recordUnhandledRejection,
 };

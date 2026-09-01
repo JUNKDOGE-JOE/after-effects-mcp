@@ -57,6 +57,7 @@ const CEP_EXECUTED_FILES = [
     'mcp/tools/exec-recover.js',
     'mcp/tools/preview-frame.js',
     'mcp/png.js',
+    'mcp/preview-prune.js',
     'mcp/image-ops.js',
     'mcp/tools/read.js',
     'mcp/tools/checkpoint.js',

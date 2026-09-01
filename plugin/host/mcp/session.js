@@ -2,16 +2,43 @@
 
 const crypto = require('crypto');
 
+const MAX_SESSIONS = 64;
+
 function createSessionId() {
     return crypto.randomBytes(16).toString('hex');
 }
 
 class SessionStore {
-    constructor() {
+    constructor(options) {
+        const input = options || {};
         this.sessions = new Map();
+        this.logger = typeof input.logger === 'function' ? input.logger : null;
+    }
+
+    evictInactiveSessions() {
+        while (this.sessions.size >= MAX_SESSIONS) {
+            let oldest = null;
+            this.sessions.forEach(function (session) {
+                if (session.writers.size > 0) return;
+                if (!oldest || session.lastActivityAt < oldest.lastActivityAt) oldest = session;
+            });
+            if (!oldest) {
+                if (this.logger) {
+                    this.logger({
+                        level: 'warn',
+                        source: 'mcp-session-store',
+                        message: 'MCP session limit reached with active writers',
+                        maxSessions: MAX_SESSIONS,
+                    });
+                }
+                return;
+            }
+            this.delete(oldest.id);
+        }
     }
 
     create(protocolVersion, clientName, conversationId) {
+        this.evictInactiveSessions();
         const id = createSessionId();
         const session = {
             id,
@@ -80,4 +107,4 @@ class SessionStore {
     }
 }
 
-module.exports = { SessionStore, createSessionId };
+module.exports = { SessionStore, createSessionId, MAX_SESSIONS };

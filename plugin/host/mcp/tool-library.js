@@ -312,13 +312,20 @@ function assertSecretFree(value, name) {
     ];
     const credentialAssignment = new RegExp([
         "(?<![A-Za-z0-9_.-])['\"]?([A-Za-z][A-Za-z0-9_.-]*)['\"]?[ \\t]*[:=][ \\t]*",
-        "(?:['\"][^'\"\\r\\n]+['\"]|[^'\"\\s,;&{}\\[\\]]+)",
+        "(?:\"([^\"\\r\\n]*)\"|'([^'\\r\\n]*)'|([^\\r\\n,;&{}\\[\\]]+))",
     ].join(''), 'gm');
+    const credentialValuePrefix = /^(?:sk-|Bearer[ \t]+\S+|ghp_|gho_|xoxb-|xoxp-|AKIA|AIza|-----BEGIN)/i;
+    function secretShapedAssignmentValue(match) {
+        const quoted = match[2] === undefined ? match[3] : match[2];
+        const value = (quoted === undefined ? match[4] : quoted).trim();
+        return credentialValuePrefix.test(value)
+            || (quoted !== undefined && Array.from(value).length >= 16);
+    }
     function hasCredentialAssignment(current) {
         credentialAssignment.lastIndex = 0;
         let match = credentialAssignment.exec(current);
         while (match) {
-            if (sensitiveName(match[1])) return true;
+            if (sensitiveName(match[1]) && secretShapedAssignmentValue(match)) return true;
             match = credentialAssignment.exec(current);
         }
         return false;
@@ -469,8 +476,10 @@ class ToolLibrary {
         this.skillRoot = path.resolve(input.skillRoot || statePaths.skills);
         this.bundledRoot = input.bundledRoot || path.join(__dirname, 'skills_bundled');
         this.indexPath = path.join(this.toolRoot, 'index.json');
+        this.skillUsagePath = path.join(this.toolRoot, 'skill-usage.json');
         this.artifactsRoot = path.join(this.toolRoot, 'artifacts');
         this.now = input.now || function () { return Date.now(); };
+        this.warn = typeof input.warn === 'function' ? input.warn : function () {};
         fs.mkdirSync(this.artifactsRoot, { recursive: true, mode: 0o700 });
         fs.mkdirSync(this.skillRoot, { recursive: true, mode: 0o700 });
     }
@@ -563,6 +572,59 @@ class ToolLibrary {
         }));
     }
 
+    skillUsageId(record) {
+        if (record && record.artifact) return record.artifact.id;
+        if (!record || !record.skill) throw new Error('skill usage record is invalid');
+        if (record.source === 'bundled') return 'builtin:skill:' + record.skill.name;
+        return 'legacy:' + crypto.createHash('sha256').update(
+            path.resolve(record.path).normalize('NFC'), 'utf8',
+        ).digest('hex').slice(0, 24);
+    }
+
+    readSkillUsage() {
+        if (!fs.existsSync(this.skillUsagePath)) return {};
+        try {
+            const usage = this.readJson(this.skillUsagePath, 'skill-usage.json');
+            if (!isObject(usage)) throw new Error('invalid skill usage');
+            Object.keys(usage).forEach(function (id) {
+                const entry = usage[id];
+                if (!isObject(entry) || !Number.isInteger(entry.useCount) || entry.useCount < 0
+                    || (entry.lastUsedAt !== null
+                        && (!Number.isInteger(entry.lastUsedAt) || entry.lastUsedAt < 0))) {
+                    throw new Error('invalid skill usage');
+                }
+            });
+            return usage;
+        } catch (error) {
+            return {};
+        }
+    }
+
+    skillUsage(record) {
+        if (record && record.artifact && record.artifact.source.type !== 'bundled'
+            && record.artifact.source.type !== 'legacy') {
+            return {
+                useCount: record.artifact.useCount,
+                lastUsedAt: record.artifact.lastUsedAt,
+            };
+        }
+        const usage = this.readSkillUsage()[this.skillUsageId(record)];
+        return usage || { useCount: 0, lastUsedAt: null };
+    }
+
+    touchSkillUsage(record) {
+        const id = this.skillUsageId(record);
+        const usage = this.readSkillUsage();
+        const current = usage[id] || { useCount: 0, lastUsedAt: null };
+        const next = {
+            useCount: current.useCount + 1,
+            lastUsedAt: Math.max(0, Math.floor(this.now())),
+        };
+        usage[id] = next;
+        atomicWrite(this.skillUsagePath, canonicalJson(usage) + '\n');
+        return next;
+    }
+
     removeArtifact(id) {
         const artifactPath = this.artifactPath(id);
         const index = this.readIndex();
@@ -646,15 +708,27 @@ class ToolLibrary {
         });
     }
 
-    readSkillDirectory(root, source) {
+    warnLegacyArtifact(filePath, error) {
+        this.warn({
+            type: 'tool-library-legacy-artifact-skipped',
+            path: path.resolve(filePath),
+            error: error && error.message ? error.message : String(error),
+        });
+    }
+
+    readSkillDirectory(root, source, onError) {
         if (!fs.existsSync(root)) return [];
         return fs.readdirSync(root).filter(function (name) {
             return name.endsWith('.json') && !(source === 'bundled' && name === 'manifest.json');
         }).sort().map(function (name) {
+            const filePath = path.join(root, name);
             try {
-                const skill = skillFromWire(JSON.parse(fs.readFileSync(path.join(root, name), 'utf8')));
-                return { skill, source, path: path.join(root, name) };
-            } catch (error) { return null; }
+                const skill = skillFromWire(JSON.parse(fs.readFileSync(filePath, 'utf8')));
+                return { skill, source, path: filePath };
+            } catch (error) {
+                if (onError) onError(filePath, error);
+                return null;
+            }
         }).filter(Boolean);
     }
 
@@ -681,7 +755,7 @@ class ToolLibrary {
 
     allSkillRecords() {
         return this.readSkillDirectory(this.bundledRoot, 'bundled').concat(
-            this.readSkillDirectory(this.skillRoot, 'user'),
+            this.readSkillDirectory(this.skillRoot, 'user', this.warnLegacyArtifact.bind(this)),
         );
     }
 
@@ -704,60 +778,66 @@ class ToolLibrary {
         const hashes = new Map(manifest.artifacts.map(function (item) {
             return [item.path, item.sha256];
         }));
-        return this.allSkillRecords().map(function (record) {
-            const skill = record.skill;
-            const kind = skill.template_type === 'jsx' ? 'jsx' : 'prompt-skill';
-            if (skill.template_type !== 'jsx' && skill.template_type !== 'prompt') {
-                throw new Error('legacy skill template type is unsupported');
+        return this.allSkillRecords().reduce(function (artifacts, record) {
+            try {
+                const skill = record.skill;
+                const kind = skill.template_type === 'jsx' ? 'jsx' : 'prompt-skill';
+                if (skill.template_type !== 'jsx' && skill.template_type !== 'prompt') {
+                    throw new Error('legacy skill template type is unsupported');
+                }
+                const contentHash = computeContentHash(kind, skill.template, skill.args_schema);
+                const info = fs.statSync(record.path);
+                const createdAt = Math.max(0, Math.floor(info.birthtimeMs));
+                const updatedAt = Math.max(0, Math.floor(info.mtimeMs));
+                const bundled = record.source === 'bundled';
+                const digest = bundled ? hashes.get(path.basename(record.path)) : null;
+                if (bundled && (!SHA256.test(digest || '') || crypto.createHash('sha256')
+                    .update(fs.readFileSync(record.path)).digest('hex') !== digest)) {
+                    throw new Error('bundled skill manifest is invalid');
+                }
+                const artifact = {
+                    schemaVersion: 1,
+                    id: bundled ? 'builtin:skill:' + skill.name : 'legacy:'
+                        + crypto.createHash('sha256').update(path.resolve(record.path).normalize('NFC'), 'utf8')
+                            .digest('hex').slice(0, 24),
+                    name: skill.name,
+                    description: skill.description,
+                    kind,
+                    category: 'workflow',
+                    tags: [],
+                    compatibility: {},
+                    declaredRisk: kind === 'jsx' ? 'write' : 'read',
+                    source: {
+                        type: bundled ? 'bundled' : 'legacy',
+                        ref: path.resolve(record.path),
+                        client: null,
+                        productVersion: bundled ? manifest.productVersion : null,
+                        provenance: bundled ? { manifestSha256: digest } : { contentHash },
+                    },
+                    status: 'saved',
+                    verified: bundled,
+                    verification: bundled ? {
+                        method: 'signed-manifest',
+                        verifiedAt: 0,
+                        evidenceHash: digest,
+                    } : null,
+                    content: skill.template,
+                    argsSchema: skill.args_schema,
+                    contentHash,
+                    revision: 1,
+                    createdAt,
+                    updatedAt,
+                    lastUsedAt: null,
+                    useCount: 0,
+                };
+                assertSecretFree(artifact, 'legacy-artifact.json');
+                artifacts.push(validateArtifact(artifact));
+            } catch (error) {
+                if (record.source === 'bundled') throw error;
+                this.warnLegacyArtifact(record.path, error);
             }
-            const contentHash = computeContentHash(kind, skill.template, skill.args_schema);
-            const info = fs.statSync(record.path);
-            const createdAt = Math.max(0, Math.floor(info.birthtimeMs));
-            const updatedAt = Math.max(0, Math.floor(info.mtimeMs));
-            const bundled = record.source === 'bundled';
-            const digest = bundled ? hashes.get(path.basename(record.path)) : null;
-            if (bundled && (!SHA256.test(digest || '') || crypto.createHash('sha256')
-                .update(fs.readFileSync(record.path)).digest('hex') !== digest)) {
-                throw new Error('bundled skill manifest is invalid');
-            }
-            const artifact = {
-                schemaVersion: 1,
-                id: bundled ? 'builtin:skill:' + skill.name : 'legacy:'
-                    + crypto.createHash('sha256').update(path.resolve(record.path).normalize('NFC'), 'utf8')
-                        .digest('hex').slice(0, 24),
-                name: skill.name,
-                description: skill.description,
-                kind,
-                category: 'workflow',
-                tags: [],
-                compatibility: {},
-                declaredRisk: kind === 'jsx' ? 'write' : 'read',
-                source: {
-                    type: bundled ? 'bundled' : 'legacy',
-                    ref: path.resolve(record.path),
-                    client: null,
-                    productVersion: bundled ? manifest.productVersion : null,
-                    provenance: bundled ? { manifestSha256: digest } : { contentHash },
-                },
-                status: 'saved',
-                verified: bundled,
-                verification: bundled ? {
-                    method: 'signed-manifest',
-                    verifiedAt: 0,
-                    evidenceHash: digest,
-                } : null,
-                content: skill.template,
-                argsSchema: skill.args_schema,
-                contentHash,
-                revision: 1,
-                createdAt,
-                updatedAt,
-                lastUsedAt: null,
-                useCount: 0,
-            };
-            assertSecretFree(artifact, 'legacy-artifact.json');
-            return validateArtifact(artifact);
-        });
+            return artifacts;
+        }.bind(this), []);
     }
 
     allSummaries() {
@@ -812,12 +892,15 @@ class ToolLibrary {
     }
 
     skillMeta(record, includeTemplate) {
+        const usage = this.skillUsage(record);
         const meta = {
             name: record.skill.name,
             description: record.skill.description,
             template_type: record.skill.template_type,
             args: skillArgs(record.skill.args_schema),
             source: record.source,
+            useCount: usage.useCount,
+            lastUsedAt: usage.lastUsedAt,
         };
         if (includeTemplate) {
             meta.template = record.skill.template;

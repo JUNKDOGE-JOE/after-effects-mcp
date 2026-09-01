@@ -13,6 +13,7 @@ const { skillPlan, assertSkillPlanCurrent } = skillUse;
 const {
     ENVIRONMENT,
     ToolLibrary,
+    assertSecretFree,
     canonicalJson,
     computeContentHash,
     validateArgsSchema,
@@ -176,6 +177,57 @@ test('secret-shaped artifact content is rejected before it reaches disk', (t) =>
     secret.contentHash = computeContentHash(secret.kind, secret.content, secret.argsSchema);
     assert.throws(function () { library.saveArtifact(secret); }, /secret-shaped content/i);
     assert.equal(fs.existsSync(path.join(library.toolRoot, 'index.json')), false);
+});
+
+test('secret scanner distinguishes ExtendScript values from credential-shaped assignments', () => {
+    [
+        'var key = prop.keyTime(1);',
+        'var key = layer.property("Position").addKey(1);',
+        'var token = layer.name.split("_")[0];',
+        'var session = app.project;',
+        'for (var i = 1; i <= prop.numKeys; i++) { var t = prop.keyTime(i); }',
+    ].forEach(function (content) {
+        assert.doesNotThrow(function () { assertSecretFree(content, 'artifact.json'); });
+    });
+    [
+        'Authorization: Bearer secret-value',
+        'x-api-key: secret-value',
+        'aaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbb.cccccccc',
+        '-----BEGIN PRIVATE KEY-----',
+        'sk-abcdefghijklmnop',
+        'var apiKey = "sk-abcdefghijklmnop";',
+        'token: "ghp_abcdefghijklmnop"',
+        'var token = "Bearer abc";',
+        'auth: "AKIAIOSFODNN7"',
+    ].forEach(function (content) {
+        assert.throws(function () { assertSecretFree(content, 'artifact.json'); }, /secret-shaped/i);
+    });
+});
+
+test('legacy artifact scan skips one unsafe file and records a warning', (t) => {
+    const root = tempRoot(t);
+    const warnings = [];
+    const library = new ToolLibrary({
+        statePaths: createStatePaths({ stateDir: root }),
+        bundledRoot: path.join(__dirname, 'skills_bundled'),
+        now: function () { return 1000; },
+        warn: function (warning) { warnings.push(warning); },
+    });
+    library.writeSkill({
+        name: 'safe-legacy', description: 'Safe legacy skill.', template_type: 'jsx',
+        template: 'var key = prop.keyTime(1);', args_schema: {},
+    });
+    library.writeSkill({
+        name: 'unsafe-legacy', description: 'Unsafe legacy skill.', template_type: 'jsx',
+        template: 'var apiKey = "sk-abcdefghijklmnop";', args_schema: {},
+    });
+    const names = library.allSummaries().map(function (item) { return item.name; });
+    assert.equal(names.includes('safe-legacy'), true);
+    assert.equal(names.includes('unsafe-legacy'), false);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].type, 'tool-library-legacy-artifact-skipped');
+    assert.match(warnings[0].path, /unsafe-legacy\.json$/);
+    assert.match(warnings[0].error, /secret-shaped content/i);
 });
 
 test('argsSchema accepts descriptions and fails closed on unsupported keys', () => {
@@ -518,6 +570,64 @@ test('skillUse touches and records a named library render, including include_tem
     assert.equal(failOpen.result.structuredContent.ok, true);
 });
 
+test('bundled and legacy skill usage persists in the state tools directory', async (t) => {
+    const library = makeLibrary(t);
+    library.writeSkill({
+        name: 'legacy-review',
+        description: 'Legacy review prompt.',
+        template_type: 'prompt',
+        template: 'Review the current composition.',
+        args_schema: {},
+    });
+    const deps = { toolLibrary: library };
+    for (let index = 0; index < 2; index += 1) {
+        const rendered = await skillUse.call({
+            name: 'builtin:skill:ae-execution-guide',
+        }, toolContext(), deps);
+        assert.equal(rendered.result.structuredContent.ok, true);
+    }
+    const legacyRendered = await skillUse.call({
+        name: 'legacy-review',
+    }, toolContext(), deps);
+    assert.equal(legacyRendered.result.structuredContent.ok, true);
+
+    const listed = await skillUse.call({}, toolContext(), deps);
+    const bundledMeta = listed.result.structuredContent.skills.find(function (item) {
+        return item.name === 'ae-execution-guide';
+    });
+    const legacyMeta = listed.result.structuredContent.skills.find(function (item) {
+        return item.name === 'legacy-review';
+    });
+    assert.deepEqual(
+        { useCount: bundledMeta.useCount, lastUsedAt: bundledMeta.lastUsedAt },
+        { useCount: 2, lastUsedAt: 1000 },
+    );
+    assert.deepEqual(
+        { useCount: legacyMeta.useCount, lastUsedAt: legacyMeta.lastUsedAt },
+        { useCount: 1, lastUsedAt: 1000 },
+    );
+    const usage = JSON.parse(fs.readFileSync(library.skillUsagePath, 'utf8'));
+    assert.equal(usage['builtin:skill:ae-execution-guide'].useCount, 2);
+
+    const restarted = new ToolLibrary({
+        toolRoot: library.toolRoot,
+        skillRoot: library.skillRoot,
+        bundledRoot: library.bundledRoot,
+        now: function () { return 2000; },
+    });
+    const afterRestart = restarted.skillMeta(restarted.resolveSkill('ae-execution-guide'));
+    assert.equal(afterRestart.useCount, 2);
+    assert.equal(afterRestart.lastUsedAt, 1000);
+});
+
+test('corrupt bundled and legacy skill usage is treated as empty', (t) => {
+    const library = makeLibrary(t);
+    fs.writeFileSync(library.skillUsagePath, '{not-json', 'utf8');
+    const record = library.resolveSkill('ae-execution-guide');
+    assert.deepEqual(library.skillUsage(record), { useCount: 0, lastUsedAt: null });
+    assert.deepEqual(library.touchSkillUsage(record), { useCount: 1, lastUsedAt: 1000 });
+});
+
 test('skillUse touches and records a successful library skill execution', async () => {
     const stored = artifact({
         id: 'user:33333333-3333-4333-8333-333333333333',
@@ -676,6 +786,69 @@ test('bundled execution guide advertises the Tool Library workflow and matches i
     assert.equal(makeLibrary(t).getArtifact('builtin:skill:ae-execution-guide').verified, true);
 });
 
+test('all bundled skill descriptions use the three-sentence trigger template', () => {
+    const requiredKeywords = {
+        'ae-execution-guide': 'execution route',
+        'ease-and-timing': 'ease pair',
+        'extendscript-cookbook': 'extendscript traps',
+        'glow-recipes': 'glow',
+        'grade-stack': 'grade-stack',
+        'kinetic-typography': 'kinetic typography',
+        'project-organization': 'project organization',
+        'render-order': 'render order',
+    };
+    Object.keys(requiredKeywords).forEach(function (name) {
+        const skill = JSON.parse(fs.readFileSync(
+            path.join(__dirname, 'skills_bundled', name + '.json'), 'utf8',
+        ));
+        const description = skill.description.toLowerCase();
+        assert.ok(description.length <= 220, name + ' description is too long');
+        assert.match(skill.description, /^Use when .+\. Gives .+\. Needs .+\.$/);
+        assert.match(description, new RegExp(requiredKeywords[name]));
+    });
+});
+
+test('bundled skill manifest matches every bundled skill file', () => {
+    const bundledRoot = path.join(__dirname, 'skills_bundled');
+    const manifest = JSON.parse(fs.readFileSync(path.join(bundledRoot, 'manifest.json'), 'utf8'));
+    const files = fs.readdirSync(bundledRoot).filter(function (name) {
+        return name.endsWith('.json') && name !== 'manifest.json';
+    }).sort();
+    const entries = manifest.artifacts.slice().sort(function (left, right) {
+        return left.path.localeCompare(right.path);
+    });
+    assert.deepEqual(entries.map(function (entry) { return entry.path; }), files);
+    entries.forEach(function (entry) {
+        const digest = crypto.createHash('sha256').update(
+            fs.readFileSync(path.join(bundledRoot, entry.path)),
+        ).digest('hex');
+        assert.equal(entry.sha256, digest, entry.path);
+    });
+});
+
+test('new ExtendScript cookbook entries keep the Symptom/Cause/Fix shape', () => {
+    const cookbook = JSON.parse(fs.readFileSync(
+        path.join(__dirname, 'skills_bundled', 'extendscript-cookbook.json'), 'utf8',
+    ));
+    const titles = [
+        'Error object where a number/array/property was expected',
+        'Text animator skeleton: use match names',
+        'Project bit depth and previews',
+        'Reading ExtendScript errors',
+        'Replay candidates instead of resending scripts',
+    ];
+    titles.forEach(function (title) {
+        const start = cookbook.template.indexOf('=== ' + title + ' ===');
+        const next = cookbook.template.indexOf('\n\n===', start + title.length + 8);
+        const section = cookbook.template.slice(start, next < 0 ? undefined : next);
+        assert.ok(start >= 0, title + ' is missing');
+        assert.ok(section.split('\n').length <= 12, title + ' is too long');
+        assert.match(section, /\nSymptom:/);
+        assert.match(section, /\nCause:/);
+        assert.match(section, /\nFix:/);
+    });
+});
+
 test('library export only permits saved and pinned user artifacts', (t) => {
     const library = makeLibrary(t);
     const saved = library.saveArtifact(artifact());
@@ -730,7 +903,7 @@ test('library import verifies content, rejects duplicates, and records imported 
     assert.throws(function () { target.importArtifact(tampered); }, /contentHash does not match/i);
 
     const secret = JSON.parse(JSON.stringify(exported));
-    secret.artifact.content = 'var apiKey = "not-allowed";';
+    secret.artifact.content = 'var apiKey = "sk-abcdefghijklmnop";';
     secret.artifact.contentHash = computeContentHash(
         secret.artifact.kind,
         secret.artifact.content,
@@ -768,4 +941,3 @@ test('library management transitions and deletion respect artifact lifecycle', (
     assert.equal(library.managementList().candidates[0].contentCharacters > 0, true);
     assert.deepEqual(library.clearCandidates(), { removedIds: [secondCandidate.id], count: 1 });
 });
-

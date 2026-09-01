@@ -68,6 +68,19 @@ std::vector<std::uint8_t> frame(const std::string &json) {
   return result;
 }
 
+std::string json_value_at_depth(std::size_t depth) {
+  std::string result(depth > 0 ? depth - 1 : 0, '[');
+  result += '0';
+  result.append(depth > 0 ? depth - 1 : 0, ']');
+  return result;
+}
+
+void json_parser_enforces_depth_limit() {
+  (void)aemcp::native::parse_json(json_value_at_depth(32));
+  rejects([] { (void)aemcp::native::parse_json(json_value_at_depth(33)); },
+          "33-level JSON value");
+}
+
 void read_program_needs_no_write_key() {
   const ProgramAdmission admission =
       admit(R"({"operations":[{"op":"composition.resolve","args":{"locator":)" +
@@ -484,6 +497,7 @@ void property_and_keyframe_adapters_emit_generated_time_shapes() {
 
 int main() {
   try {
+    json_parser_enforces_depth_limit();
     read_program_needs_no_write_key();
     read_program_rejects_write_metadata();
     write_program_requires_operation_key_and_undo_group();
