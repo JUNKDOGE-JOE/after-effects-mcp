@@ -835,7 +835,17 @@ function buildApp() {
     ensureClientBlocklist();
     const a = express();
     a.use(express.json({ limit: '5mb' }));
-    const toolLibrary = new ToolLibrary({ statePaths: statePathsForHost() });
+    const toolLibrary = new ToolLibrary({
+        statePaths: statePathsForHost(),
+        warn: function (event) {
+            hostLog.record({
+                level: 'warn',
+                source: 'host',
+                message: 'Tool Library skipped a legacy skill file: ' + event.path + ' (' + event.error + ')',
+                event: event.type,
+            });
+        },
+    });
     async function nativeNegotiate(deadlineUnixMs) {
         const client = await connectedNativeClient(deadlineUnixMs);
         const hello = await client.negotiate({ deadlineUnixMs });

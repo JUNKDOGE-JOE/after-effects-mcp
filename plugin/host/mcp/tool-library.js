@@ -312,13 +312,20 @@ function assertSecretFree(value, name) {
     ];
     const credentialAssignment = new RegExp([
         "(?<![A-Za-z0-9_.-])['\"]?([A-Za-z][A-Za-z0-9_.-]*)['\"]?[ \\t]*[:=][ \\t]*",
-        "(?:['\"][^'\"\\r\\n]+['\"]|[^'\"\\s,;&{}\\[\\]]+)",
+        "(?:\"([^\"\\r\\n]*)\"|'([^'\\r\\n]*)'|([^\\r\\n,;&{}\\[\\]]+))",
     ].join(''), 'gm');
+    const credentialValuePrefix = /^(?:sk-|Bearer[ \t]+\S+|ghp_|gho_|xoxb-|xoxp-|AKIA|AIza|-----BEGIN)/i;
+    function secretShapedAssignmentValue(match) {
+        const quoted = match[2] === undefined ? match[3] : match[2];
+        const value = (quoted === undefined ? match[4] : quoted).trim();
+        return credentialValuePrefix.test(value)
+            || (quoted !== undefined && Array.from(value).length >= 16);
+    }
     function hasCredentialAssignment(current) {
         credentialAssignment.lastIndex = 0;
         let match = credentialAssignment.exec(current);
         while (match) {
-            if (sensitiveName(match[1])) return true;
+            if (sensitiveName(match[1]) && secretShapedAssignmentValue(match)) return true;
             match = credentialAssignment.exec(current);
         }
         return false;
@@ -471,6 +478,7 @@ class ToolLibrary {
         this.indexPath = path.join(this.toolRoot, 'index.json');
         this.artifactsRoot = path.join(this.toolRoot, 'artifacts');
         this.now = input.now || function () { return Date.now(); };
+        this.warn = typeof input.warn === 'function' ? input.warn : function () {};
         fs.mkdirSync(this.artifactsRoot, { recursive: true, mode: 0o700 });
         fs.mkdirSync(this.skillRoot, { recursive: true, mode: 0o700 });
     }
@@ -646,15 +654,27 @@ class ToolLibrary {
         });
     }
 
-    readSkillDirectory(root, source) {
+    warnLegacyArtifact(filePath, error) {
+        this.warn({
+            type: 'tool-library-legacy-artifact-skipped',
+            path: path.resolve(filePath),
+            error: error && error.message ? error.message : String(error),
+        });
+    }
+
+    readSkillDirectory(root, source, onError) {
         if (!fs.existsSync(root)) return [];
         return fs.readdirSync(root).filter(function (name) {
             return name.endsWith('.json') && !(source === 'bundled' && name === 'manifest.json');
         }).sort().map(function (name) {
+            const filePath = path.join(root, name);
             try {
-                const skill = skillFromWire(JSON.parse(fs.readFileSync(path.join(root, name), 'utf8')));
-                return { skill, source, path: path.join(root, name) };
-            } catch (error) { return null; }
+                const skill = skillFromWire(JSON.parse(fs.readFileSync(filePath, 'utf8')));
+                return { skill, source, path: filePath };
+            } catch (error) {
+                if (onError) onError(filePath, error);
+                return null;
+            }
         }).filter(Boolean);
     }
 
@@ -681,7 +701,7 @@ class ToolLibrary {
 
     allSkillRecords() {
         return this.readSkillDirectory(this.bundledRoot, 'bundled').concat(
-            this.readSkillDirectory(this.skillRoot, 'user'),
+            this.readSkillDirectory(this.skillRoot, 'user', this.warnLegacyArtifact.bind(this)),
         );
     }
 
@@ -704,60 +724,66 @@ class ToolLibrary {
         const hashes = new Map(manifest.artifacts.map(function (item) {
             return [item.path, item.sha256];
         }));
-        return this.allSkillRecords().map(function (record) {
-            const skill = record.skill;
-            const kind = skill.template_type === 'jsx' ? 'jsx' : 'prompt-skill';
-            if (skill.template_type !== 'jsx' && skill.template_type !== 'prompt') {
-                throw new Error('legacy skill template type is unsupported');
+        return this.allSkillRecords().reduce(function (artifacts, record) {
+            try {
+                const skill = record.skill;
+                const kind = skill.template_type === 'jsx' ? 'jsx' : 'prompt-skill';
+                if (skill.template_type !== 'jsx' && skill.template_type !== 'prompt') {
+                    throw new Error('legacy skill template type is unsupported');
+                }
+                const contentHash = computeContentHash(kind, skill.template, skill.args_schema);
+                const info = fs.statSync(record.path);
+                const createdAt = Math.max(0, Math.floor(info.birthtimeMs));
+                const updatedAt = Math.max(0, Math.floor(info.mtimeMs));
+                const bundled = record.source === 'bundled';
+                const digest = bundled ? hashes.get(path.basename(record.path)) : null;
+                if (bundled && (!SHA256.test(digest || '') || crypto.createHash('sha256')
+                    .update(fs.readFileSync(record.path)).digest('hex') !== digest)) {
+                    throw new Error('bundled skill manifest is invalid');
+                }
+                const artifact = {
+                    schemaVersion: 1,
+                    id: bundled ? 'builtin:skill:' + skill.name : 'legacy:'
+                        + crypto.createHash('sha256').update(path.resolve(record.path).normalize('NFC'), 'utf8')
+                            .digest('hex').slice(0, 24),
+                    name: skill.name,
+                    description: skill.description,
+                    kind,
+                    category: 'workflow',
+                    tags: [],
+                    compatibility: {},
+                    declaredRisk: kind === 'jsx' ? 'write' : 'read',
+                    source: {
+                        type: bundled ? 'bundled' : 'legacy',
+                        ref: path.resolve(record.path),
+                        client: null,
+                        productVersion: bundled ? manifest.productVersion : null,
+                        provenance: bundled ? { manifestSha256: digest } : { contentHash },
+                    },
+                    status: 'saved',
+                    verified: bundled,
+                    verification: bundled ? {
+                        method: 'signed-manifest',
+                        verifiedAt: 0,
+                        evidenceHash: digest,
+                    } : null,
+                    content: skill.template,
+                    argsSchema: skill.args_schema,
+                    contentHash,
+                    revision: 1,
+                    createdAt,
+                    updatedAt,
+                    lastUsedAt: null,
+                    useCount: 0,
+                };
+                assertSecretFree(artifact, 'legacy-artifact.json');
+                artifacts.push(validateArtifact(artifact));
+            } catch (error) {
+                if (record.source === 'bundled') throw error;
+                this.warnLegacyArtifact(record.path, error);
             }
-            const contentHash = computeContentHash(kind, skill.template, skill.args_schema);
-            const info = fs.statSync(record.path);
-            const createdAt = Math.max(0, Math.floor(info.birthtimeMs));
-            const updatedAt = Math.max(0, Math.floor(info.mtimeMs));
-            const bundled = record.source === 'bundled';
-            const digest = bundled ? hashes.get(path.basename(record.path)) : null;
-            if (bundled && (!SHA256.test(digest || '') || crypto.createHash('sha256')
-                .update(fs.readFileSync(record.path)).digest('hex') !== digest)) {
-                throw new Error('bundled skill manifest is invalid');
-            }
-            const artifact = {
-                schemaVersion: 1,
-                id: bundled ? 'builtin:skill:' + skill.name : 'legacy:'
-                    + crypto.createHash('sha256').update(path.resolve(record.path).normalize('NFC'), 'utf8')
-                        .digest('hex').slice(0, 24),
-                name: skill.name,
-                description: skill.description,
-                kind,
-                category: 'workflow',
-                tags: [],
-                compatibility: {},
-                declaredRisk: kind === 'jsx' ? 'write' : 'read',
-                source: {
-                    type: bundled ? 'bundled' : 'legacy',
-                    ref: path.resolve(record.path),
-                    client: null,
-                    productVersion: bundled ? manifest.productVersion : null,
-                    provenance: bundled ? { manifestSha256: digest } : { contentHash },
-                },
-                status: 'saved',
-                verified: bundled,
-                verification: bundled ? {
-                    method: 'signed-manifest',
-                    verifiedAt: 0,
-                    evidenceHash: digest,
-                } : null,
-                content: skill.template,
-                argsSchema: skill.args_schema,
-                contentHash,
-                revision: 1,
-                createdAt,
-                updatedAt,
-                lastUsedAt: null,
-                useCount: 0,
-            };
-            assertSecretFree(artifact, 'legacy-artifact.json');
-            return validateArtifact(artifact);
-        });
+            return artifacts;
+        }.bind(this), []);
     }
 
     allSummaries() {
