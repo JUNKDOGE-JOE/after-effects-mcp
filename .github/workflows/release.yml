@@ -1,7 +1,6 @@
 name: Release
 
 on:
-  workflow_dispatch:
   push:
     tags: ['v*']
 
@@ -10,22 +9,7 @@ permissions:
 
 jobs:
   contracts:
-    name: Validate release contracts
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - name: Checkout the tagged source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          persist-credentials: false
-
-      - name: Select exact Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24.17.0
-
-      - name: Run release evidence contracts
-        run: |
-          node --test scripts/release/test/artifact-manifest.test.mjs
-          node --test scripts/release/test/attestation.test.mjs
-          node --test scripts/release/test/version-consistency.test.mjs
+    name: Run the full CI suite for the tagged source
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read

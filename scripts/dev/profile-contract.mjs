@@ -1,10 +1,7 @@
 import path from 'node:path';
 
 export const COMPONENTS = Object.freeze(['core', 'cep', 'native']);
-export const DAILY_ACTIONS = Object.freeze(['doctor', 'launch-ae', 'sync', 'smoke']);
-// Must match SCENARIO_ID in scripts/hardware/development_smoke_spec.py; the
-// driver rejects any other value, so a divergence makes `smoke` unrunnable.
-export const HDEV_SCENARIO = 'native-exec-ir@1';
+export const DAILY_ACTIONS = Object.freeze(['doctor', 'launch-ae', 'sync']);
 
 const ACTIONS = new Set(['bootstrap', ...DAILY_ACTIONS]);
 const PATH_OPTIONS = new Map([
@@ -13,15 +10,8 @@ const PATH_OPTIONS = new Map([
   ['--formal-ae-app', 'formalAeApp'],
   ['--sdk-archive', 'sdkArchive'],
   ['--sdk-root', 'sdkRoot'],
-  ['--fixture-path', 'fixturePath'],
-  ['--recovery-archive-root', 'recoveryRoot'],
-  ['--evidence-dir', 'evidenceDir'],
 ]);
 const PATH_MEMBERS = new Set(PATH_OPTIONS.values());
-const STRING_OPTIONS = new Map([
-  ['--scenario', 'scenario'],
-  ['--plugin-url', 'pluginUrl'],
-]);
 
 export function developmentError(code, message, details = {}) {
   return Object.assign(new Error(message), { code, ...details });
@@ -77,7 +67,7 @@ export function parseDevelopmentCommand(argv, defaults) {
       components.push(requiredString(value, name));
       continue;
     }
-    const member = PATH_OPTIONS.get(name) ?? STRING_OPTIONS.get(name);
+    const member = PATH_OPTIONS.get(name);
     if (!member) invalid(`unsupported option ${name}`);
     if (optionValues.has(member)) invalid(`${name} may be supplied only once`);
     optionValues.set(member, value);
@@ -98,14 +88,6 @@ export function parseDevelopmentCommand(argv, defaults) {
     result[member] = PATH_MEMBERS.has(member)
       ? requireAbsolute(value, member)
       : requiredString(value, member);
-  }
-  if (action === 'smoke') {
-    for (const member of ['scenario', 'fixturePath', 'recoveryRoot', 'evidenceDir']) {
-      if (!(member in result)) invalid(`smoke requires ${member}`);
-    }
-    if (result.scenario !== HDEV_SCENARIO) {
-      invalid(`smoke scenario must be ${HDEV_SCENARIO}`);
-    }
   }
   return Object.freeze(result);
 }
@@ -192,29 +174,6 @@ function nativeSteps(paths) {
   ];
 }
 
-function smokeStep(command, paths, reused) {
-  return processStep(
-    'hdev-native-exec-ir',
-    'core',
-    'public-smoke',
-    paths.python,
-    [
-      '-B', '-I',
-      paths.developmentSmoke,
-      '--scenario', command.scenario,
-      '--selected-components', command.components.join(','),
-      '--reused-components', reused.join(','),
-      '--checkout', paths.repoRoot,
-      '--fixture-path', command.fixturePath,
-      '--recovery-archive-root', command.recoveryRoot,
-      '--evidence-dir', command.evidenceDir,
-      '--formal-ae-app', command.formalAeApp,
-      ...(command.pluginUrl ? ['--plugin-url', command.pluginUrl] : []),
-    ],
-    paths.repoRoot,
-  );
-}
-
 export function buildDevelopmentPlan(command, paths) {
   const steps = [];
   const actions = [];
@@ -241,8 +200,6 @@ export function buildDevelopmentPlan(command, paths) {
         steps.push(...nativeSteps(paths));
       }
     }
-  } else if (command.action === 'smoke') {
-    steps.push(smokeStep(command, paths, reused));
   }
 
   const plan = Object.freeze({

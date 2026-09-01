@@ -21954,6 +21954,7 @@
     return Object.freeze({
       id: "macos-arm64",
       pid: deps.pid,
+      canManageUserPath: false,
       paths,
       fs: deps.fs,
       requestJson: createHttpJsonRequester(deps),
@@ -22041,6 +22042,44 @@
     const match = line && line.trim().match(/^"((?:[^"]|"")*)"/);
     return match ? match[1].replace(/""/g, '"') : "";
   }
+  var USER_PATH_DEFAULT = Object.freeze({ value: "", type: "REG_EXPAND_SZ" });
+  var BROADCAST_SCRIPT = [
+    "Add-Type @'",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public static class EnvironmentChange {",
+    "  public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);",
+    "  public const uint WM_SETTINGCHANGE = 0x001A;",
+    "  public const uint SMTO_ABORTIFHUNG = 0x0002;",
+    '  [DllImport("user32.dll", CharSet = CharSet.Unicode)]',
+    "  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);",
+    "}",
+    "'@",
+    "$result = [UIntPtr]::Zero",
+    '[EnvironmentChange]::SendMessageTimeout([EnvironmentChange]::HWND_BROADCAST, [EnvironmentChange]::WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", [EnvironmentChange]::SMTO_ABORTIFHUNG, 2000, [ref]$result) | Out-Null'
+  ].join("\n");
+  function normalizedPathEntry(value) {
+    let result = String(value || "").trim().replace(/\//g, "\\");
+    while (result.length > 3 && result.endsWith("\\")) result = result.slice(0, -1);
+    return result.toLowerCase();
+  }
+  function expandEnvironmentEntry(value, environment) {
+    return String(value || "").replace(/%([^%]+)%/g, (match, name) => {
+      const replacement = envValue(environment, name);
+      return replacement === void 0 ? match : String(replacement);
+    });
+  }
+  function pathIncludesEntry(rawValue, directory, environment) {
+    const expected = normalizedPathEntry(directory);
+    if (!expected) return false;
+    return String(rawValue || "").split(";").some((entry2) => normalizedPathEntry(entry2) === expected || normalizedPathEntry(expandEnvironmentEntry(entry2, environment)) === expected);
+  }
+  function parseUserPath(output) {
+    const line = String(output || "").split(/\r?\n/).find((entry2) => /^\s*Path\s+REG_(?:SZ|EXPAND_SZ)\s+/i.test(entry2));
+    if (!line) return null;
+    const match = line.match(/^\s*Path\s+(REG_(?:SZ|EXPAND_SZ))\s+(.*)$/i);
+    return match ? { value: match[2].trim(), type: match[1].toUpperCase() } : null;
+  }
   function createWindowsAdapter(deps) {
     if (!deps || deps.platform !== "win32" || deps.arch !== "x64") throw new Error("Windows x64 dependencies are required");
     const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
@@ -22052,9 +22091,61 @@
     });
     const systemRoot = String(envValue(deps.env, "SystemRoot") || envValue(deps.env, "WINDIR") || "C:\\Windows");
     const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "x64" });
+    const registry = fixed("reg", paths.join([systemRoot, "System32", "reg.exe"]));
+    const powershell = fixed(
+      "powershell",
+      paths.join([systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"])
+    );
+    async function readUserPath() {
+      const result = await boundary.run({
+        executable: registry,
+        args: ["query", "HKCU\\Environment", "/v", "Path"]
+      });
+      if (result.exitCode !== 0 || result.timedOut || result.aborted) return { ...USER_PATH_DEFAULT };
+      return parseUserPath(result.stdout) || { ...USER_PATH_DEFAULT };
+    }
+    async function addUserPathEntry(directory) {
+      var _a, _b;
+      const entry2 = String(directory || "").trim();
+      if (!entry2) throw new Error("A non-empty PATH directory is required");
+      const current = await readUserPath();
+      const environment = boundary.completeSpawnEnv();
+      if (pathIncludesEntry(current.value, entry2, environment)) return { changed: false };
+      const value = current.value ? current.value + ";" + entry2 : entry2;
+      const written = await boundary.run({
+        executable: registry,
+        args: [
+          "add",
+          "HKCU\\Environment",
+          "/v",
+          "Path",
+          "/t",
+          current.type,
+          "/d",
+          value,
+          "/f"
+        ]
+      });
+      if (written.exitCode !== 0 || written.timedOut || written.aborted) {
+        throw new Error((written.stderr || written.stdout || "reg add failed").trim());
+      }
+      try {
+        const broadcast = await boundary.run({
+          executable: powershell,
+          args: ["-NoProfile", "-Command", BROADCAST_SCRIPT]
+        });
+        if (broadcast.exitCode !== 0 || broadcast.timedOut || broadcast.aborted) {
+          throw new Error((broadcast.stderr || broadcast.stdout || "broadcast failed").trim());
+        }
+      } catch (error) {
+        (_b = (_a = globalThis.console) == null ? void 0 : _a.warn) == null ? void 0 : _b.call(_a, "User PATH broadcast failed:", error);
+      }
+      return { changed: true };
+    }
     return Object.freeze({
       id: "windows-x64",
       pid: deps.pid,
+      canManageUserPath: true,
       paths,
       fs: deps.fs,
       requestJson: createHttpJsonRequester(deps),
@@ -22124,9 +22215,25 @@
         const args = tool === "claude" ? ["start", "", "claude"] : ["start", "", "codex", "login"];
         return boundary.run({ executable: fixed(tool, cmd, ["/d", "/s", "/c"]), args, timeoutMs: 5e3 });
       },
+      readUserPath,
+      userPathIncludes(rawValue, directory) {
+        return pathIncludesEntry(rawValue, directory, boundary.completeSpawnEnv());
+      },
+      addUserPathEntry,
       legacyWizardInstallCommands() {
         return {
-          node: { file: "winget", executableId: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] }
+          node: { file: "winget", executableId: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
+          claude: {
+            file: "powershell",
+            executableId: "powershell",
+            args: [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-Command",
+              "irm https://claude.ai/install.ps1 | iex"
+            ]
+          }
         };
       }
     });
@@ -35391,19 +35498,9 @@ ${command}`
       repoRoot: "",
       repo: ""
     }) : {};
-    const result = commands && commands.node ? { node: commands.node } : {};
-    if (adapter.id === "windows-x64" || adapter.platform === "win32") {
-      result.claude = {
-        file: "powershell",
-        executableId: "powershell",
-        args: [
-          "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-Command",
-          "irm https://claude.ai/install.ps1 | iex"
-        ]
-      };
+    const result = {};
+    for (const id of ["node", "claude"]) {
+      if (commands == null ? void 0 : commands[id]) result[id] = commands[id];
     }
     return result;
   }
@@ -35472,146 +35569,6 @@ ${command}`
     return [file, ...(args || []).map((value) => /\s/.test(value) ? `"${value}"` : value)].join(" ");
   }
 
-  // src/cep/registryPath.js
-  init_cep_runtime_inject();
-  var REG_EXECUTABLE = {
-    ok: true,
-    id: "reg",
-    path: "reg.exe",
-    argsPrefix: [],
-    source: "override",
-    version: null,
-    arch: "x64"
-  };
-  var USER_PATH_QUERY = ["query", "HKCU\\Environment", "/v", "Path"];
-  var USER_PATH_DEFAULT = { value: "", type: "REG_EXPAND_SZ" };
-  function isWindowsPlatform(adapter) {
-    return (adapter == null ? void 0 : adapter.id) === "windows-x64" || (adapter == null ? void 0 : adapter.platform) === "win32";
-  }
-  function requireWindows(adapter) {
-    if (!isWindowsPlatform(adapter)) {
-      throw new Error("User PATH updates are only supported on Windows");
-    }
-  }
-  function normalizedPathEntry(value) {
-    let result = String(value || "").trim().replace(/\//g, "\\");
-    while (result.length > 3 && result.endsWith("\\")) result = result.slice(0, -1);
-    return result.toLowerCase();
-  }
-  function expandEnvironmentEntry(value, environment) {
-    return String(value || "").replace(/%([^%]+)%/g, (match, name) => {
-      const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
-      return key === void 0 ? match : String(environment[key]);
-    });
-  }
-  function pathIncludesEntry(rawValue, directory, environment = {}) {
-    const expected = normalizedPathEntry(directory);
-    if (!expected) return false;
-    return String(rawValue || "").split(";").some((entry2) => normalizedPathEntry(entry2) === expected || normalizedPathEntry(expandEnvironmentEntry(entry2, environment)) === expected);
-  }
-  async function resolvePowerShell(adapter) {
-    const executable = await adapter.resolveExecutable("powershell");
-    if (!executable || !executable.ok) {
-      throw new Error("powershell resolution failed: " + ((executable == null ? void 0 : executable.code) || "NOT_FOUND"));
-    }
-    return executable;
-  }
-  function spawnAndCollect(adapter, executable, args) {
-    return new Promise((resolve, reject) => {
-      var _a, _b, _c, _d, _e, _f;
-      let stdout = "";
-      let stderr = "";
-      let settled = false;
-      const finish = (result, error) => {
-        if (settled) return;
-        settled = true;
-        if (error) reject(error);
-        else resolve({ ...result, stdout, stderr });
-      };
-      try {
-        const child = adapter.spawn(executable, args, { windowsHide: true });
-        (_b = (_a = child.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", (chunk) => {
-          stdout += String(chunk || "");
-        });
-        (_d = (_c = child.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", (chunk) => {
-          stderr += String(chunk || "");
-        });
-        (_e = child.on) == null ? void 0 : _e.call(child, "error", (error) => finish({}, error));
-        (_f = child.on) == null ? void 0 : _f.call(child, "close", (code) => finish({ code }, null));
-      } catch (error) {
-        finish({}, error);
-      }
-    });
-  }
-  function parseUserPath(output) {
-    const line = String(output || "").split(/\r?\n/).find((entry2) => /^\s*Path\s+REG_(?:SZ|EXPAND_SZ)\s+/i.test(entry2));
-    if (!line) return null;
-    const match = line.match(/^\s*Path\s+(REG_(?:SZ|EXPAND_SZ))\s+(.*)$/i);
-    return match ? { value: match[2].trim(), type: match[1].toUpperCase() } : null;
-  }
-  async function readUserPath(adapter) {
-    requireWindows(adapter);
-    const result = await spawnAndCollect(adapter, REG_EXECUTABLE, USER_PATH_QUERY);
-    if (result.code !== 0) return { ...USER_PATH_DEFAULT };
-    return parseUserPath(result.stdout) || { ...USER_PATH_DEFAULT };
-  }
-  async function addRegistryPath(adapter, value, type) {
-    const result = await spawnAndCollect(adapter, REG_EXECUTABLE, [
-      "add",
-      "HKCU\\Environment",
-      "/v",
-      "Path",
-      "/t",
-      type,
-      "/d",
-      value,
-      "/f"
-    ]);
-    if (result.code !== 0) {
-      throw new Error((result.stderr || result.stdout || "reg add failed").trim());
-    }
-  }
-  var BROADCAST_SCRIPT = [
-    "Add-Type @'",
-    "using System;",
-    "using System.Runtime.InteropServices;",
-    "public static class EnvironmentChange {",
-    "  public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);",
-    "  public const uint WM_SETTINGCHANGE = 0x001A;",
-    "  public const uint SMTO_ABORTIFHUNG = 0x0002;",
-    '  [DllImport("user32.dll", CharSet = CharSet.Unicode)]',
-    "  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);",
-    "}",
-    "'@",
-    "$result = [UIntPtr]::Zero",
-    '[EnvironmentChange]::SendMessageTimeout([EnvironmentChange]::HWND_BROADCAST, [EnvironmentChange]::WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", [EnvironmentChange]::SMTO_ABORTIFHUNG, 2000, [ref]$result) | Out-Null'
-  ].join("\n");
-  async function broadcastEnvironmentChange(adapter) {
-    const executable = await resolvePowerShell(adapter);
-    const result = await spawnAndCollect(adapter, executable, [
-      "-NoProfile",
-      "-Command",
-      BROADCAST_SCRIPT
-    ]);
-    if (result.code !== 0) throw new Error((result.stderr || result.stdout || "broadcast failed").trim());
-  }
-  async function addUserPathEntry(adapter, directory) {
-    var _a, _b;
-    requireWindows(adapter);
-    const entry2 = String(directory || "").trim();
-    if (!entry2) throw new Error("A non-empty PATH directory is required");
-    const current = await readUserPath(adapter);
-    if (pathIncludesEntry(current.value, entry2)) return { changed: false };
-    const newValue = current.value ? current.value + ";" + entry2 : entry2;
-    await addRegistryPath(adapter, newValue, current.type);
-    try {
-      await broadcastEnvironmentChange(adapter);
-    } catch (error) {
-      (_b = (_a = globalThis.console) == null ? void 0 : _a.warn) == null ? void 0 : _b.call(_a, "User PATH broadcast failed:", error);
-    }
-    return { changed: true };
-  }
-
   // src/app/wizardWiring.js
   function useWizardWiring({
     port = 11488,
@@ -35629,8 +35586,8 @@ ${command}`
       claude: commandPreview(commands.claude)
     }), [commands]);
     const updatePathOffer = import_react47.default.useCallback(async (id, result) => {
-      var _a, _b;
-      if (!isWindowsPlatform(platform) || !result.ok || !result.path) {
+      var _a;
+      if (!(platform == null ? void 0 : platform.canManageUserPath) || !result.ok || !result.path) {
         setPathOffers((current) => {
           if (!current[id]) return current;
           const next = { ...current };
@@ -35641,11 +35598,10 @@ ${command}`
       }
       const directory = ((_a = platform.paths) == null ? void 0 : _a.dirname) ? platform.paths.dirname(result.path) : String(result.path).replace(/[\\/][^\\/]*$/, "");
       try {
-        const userPath = await readUserPath(platform);
-        const environment = ((_b = platform.paths) == null ? void 0 : _b.home) ? { USERPROFILE: platform.paths.home, HOME: platform.paths.home } : {};
+        const userPath = await platform.readUserPath();
         setPathOffers((current) => {
           const next = { ...current };
-          if (pathIncludesEntry(userPath.value, directory, environment)) delete next[id];
+          if (platform.userPathIncludes(userPath.value, directory)) delete next[id];
           else next[id] = { directory };
           return next;
         });
@@ -35693,7 +35649,7 @@ ${command}`
     const addToPath = import_react47.default.useCallback(async (id) => {
       const offer = pathOffers[id];
       if (!offer) return { changed: false };
-      const result = await addUserPathEntry(platform, offer.directory);
+      const result = await platform.addUserPathEntry(offer.directory);
       if (result.changed) {
         setPathOffers((current) => {
           const next = { ...current };
