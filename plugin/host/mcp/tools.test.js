@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { assertPatternDescriptions, buildTools, noTopLevelCombinator } = require('./tools');
+const { assertPatternDescriptions, buildTools, noTopLevelCombinator, TOOL_MODULES } = require('./tools');
 
 test('MCP input-schema patterns must explain their value constraint', () => {
     assert.doesNotThrow(function () {
@@ -142,4 +142,24 @@ test('registry passes the MCP tool identity to the execution dependency', async 
     });
     assert.equal(request.tool, 'ae_exec');
     assert.equal(request.transport, 'mcp');
+});
+
+test('tool calls returning no output are converted to a structured tool error', async () => {
+    const tool = TOOL_MODULES.find(function (item) { return item.definition.name === 'ae_status'; });
+    const originalCall = tool.call;
+    tool.call = async function () { return undefined; };
+    try {
+        const registry = buildTools({ sessionCount: function () { return 1; } });
+        const output = await registry.call({ name: 'ae_status', arguments: {} }, {
+            session: { clientName: 'test', protocolVersion: '2025-06-18' },
+            port: 1,
+        });
+        assert.equal(output.result.isError, true);
+        assert.deepEqual(output.result.structuredContent, {
+            ok: false,
+            error: 'tool returned no result',
+        });
+    } finally {
+        tool.call = originalCall;
+    }
 });

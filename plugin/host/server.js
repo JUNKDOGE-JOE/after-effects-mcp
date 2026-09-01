@@ -8,6 +8,7 @@ const authToken = require('./auth-token');
 const activity = require('./activity');
 const hostLog = require('./host-log');
 const nativeAegp = require('./native-aegp-client');
+const { NATIVE_EXEC_TIMEOUT_MS } = require('./mcp/native-program');
 const mountMcp = require('./mcp');
 const { createClientBlocklist } = require('./mcp/client-blocklist');
 const { ToolLibrary } = require('./mcp/tool-library');
@@ -28,6 +29,7 @@ let nativeAegpClientFactory = null;
 let nativeAegpRuntime = null;
 let restoreHostConsole = null;
 let unsubscribeHostActivity = null;
+let unhandledRejectionHandler = null;
 const clients = new Map();
 const blocked = new Set();
 let clientBlocklist = null;
@@ -152,6 +154,7 @@ function makeNativeAegpClient() {
         version: PKG_VERSION,
         component: 'core-broker',
         runtime: nativeAegpRuntime,
+        requestTimeoutMs: NATIVE_EXEC_TIMEOUT_MS,
     });
     if (!nativeAegpClient
         || typeof nativeAegpClient.connect !== 'function'
@@ -169,6 +172,27 @@ function makeNativeAegpClient() {
         throw error;
     }
     return nativeAegpClient;
+}
+
+function registerUnhandledRejectionHandler() {
+    if (unhandledRejectionHandler) return;
+    unhandledRejectionHandler = recordUnhandledRejection;
+    process.on('unhandledRejection', unhandledRejectionHandler);
+}
+
+function recordUnhandledRejection(reason) {
+    const message = reason && reason.message ? reason.message : String(reason);
+    hostLog.record({
+        level: 'error',
+        source: 'process',
+        message: 'Unhandled promise rejection: ' + message,
+    });
+}
+
+function clearUnhandledRejectionHandler() {
+    if (!unhandledRejectionHandler) return;
+    process.removeListener('unhandledRejection', unhandledRejectionHandler);
+    unhandledRejectionHandler = null;
 }
 
 async function invalidateConnectedNativeProjectGraph(deadlineUnixMs) {
@@ -1230,6 +1254,7 @@ function start(port, callback) {
         return callback(new Error('already started; call restart() to change port'));
     }
     hostLog.init({ statePaths: statePathsForHost() });
+    registerUnhandledRejectionHandler();
     restoreHostConsole = hostLog.captureConsole(console);
     unsubscribeHostActivity = hostLog.subscribeActivity(activity);
     // Ensure the shared-secret token exists (generate on first run) before we
@@ -1315,4 +1340,8 @@ module.exports = {
         closeNativeAegpClient();
         nativeAegpClientFactory = factory;
     },
+    _makeNativeAegpClientForTest: makeNativeAegpClient,
+    _registerUnhandledRejectionHandlerForTest: registerUnhandledRejectionHandler,
+    _clearUnhandledRejectionHandlerForTest: clearUnhandledRejectionHandler,
+    _recordUnhandledRejectionForTest: recordUnhandledRejection,
 };

@@ -10,6 +10,8 @@ const os = require('os');
 const path = require('path');
 
 const MAX_FRAME_BYTES = 524288;
+const EXPIRED_REQUEST_TTL_MS = 60000;
+const MAX_EXPIRED_REQUEST_IDS = 256;
 const MAX_BUFFERED_BYTES = MAX_FRAME_BYTES * 8;
 const MAX_ENDPOINT_ENTRIES = 128;
 const AUTH_CHALLENGE_BYTES = 57;
@@ -688,6 +690,30 @@ function createNativeAegpClient(options) {
     let connectedReject;
     let connectedPromise = null;
     const pendingRequests = new Map();
+    const expiredRequestIds = new Map();
+
+    function pruneExpiredRequestIds() {
+        const cutoff = now();
+        for (const [requestId, expiresAt] of expiredRequestIds) {
+            if (expiresAt > cutoff) break;
+            expiredRequestIds.delete(requestId);
+        }
+    }
+
+    function rememberExpiredRequestId(requestId) {
+        pruneExpiredRequestIds();
+        expiredRequestIds.set(requestId, now() + EXPIRED_REQUEST_TTL_MS);
+        while (expiredRequestIds.size > MAX_EXPIRED_REQUEST_IDS) {
+            expiredRequestIds.delete(expiredRequestIds.keys().next().value);
+        }
+    }
+
+    function consumeExpiredRequestId(requestId) {
+        pruneExpiredRequestIds();
+        if (!expiredRequestIds.has(requestId)) return false;
+        expiredRequestIds.delete(requestId);
+        return true;
+    }
 
     function pendingTransportFailure(pending, error, message) {
         return pending?.mutating
@@ -869,6 +895,7 @@ function createNativeAegpClient(options) {
         }
         if (response.kind === 'event') return;
         const pending = pendingRequests.get(response.requestId);
+        if (!pending && consumeExpiredRequestId(response.requestId)) return;
         const replayValid = pending?.method === 'invoke'
             ? typeof response.replayed === 'boolean'
             : response.replayed === false;
@@ -974,6 +1001,7 @@ function createNativeAegpClient(options) {
                 ? requestTimeoutMs : Math.max(1, deadlineUnixMs - now());
             const timer = setTimeout(function () {
                 pendingRequests.delete(requestId);
+                rememberExpiredRequestId(requestId);
                 reject(mutating
                     ? nativeMutationUncertain(
                         'Native mutation response timed out after dispatch.',

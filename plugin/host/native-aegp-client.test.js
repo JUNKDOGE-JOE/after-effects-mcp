@@ -198,6 +198,7 @@ async function endpointFixture(t) {
 function installProtocol(server, options) {
     const input = options || {};
     const requests = [];
+    let invokeCount = 0;
     server.on('connection', function (socket) {
         let bytes = Buffer.alloc(0);
         let authenticated = false;
@@ -283,6 +284,7 @@ function installProtocol(server, options) {
                         terminalResponseExpected: true,
                     };
                 } else if (request.method === 'invoke') {
+                    invokeCount += 1;
                     if (input.invokeError) {
                         error = typeof input.invokeError === 'function'
                             ? input.invokeError(request) : input.invokeError;
@@ -364,7 +366,11 @@ function installProtocol(server, options) {
                     ...(error === null ? { result } : { error }),
                 };
                 if (input.mutateEnvelope) input.mutateEnvelope(response, request);
-                socket.write(frame(response));
+                if (input.delayFirstInvokeMs && request.method === 'invoke' && invokeCount === 1) {
+                    setTimeout(function () { socket.write(frame(response)); }, input.delayFirstInvokeMs);
+                } else {
+                    socket.write(frame(response));
+                }
             }
         }
     });
@@ -775,6 +781,33 @@ test('client rejects a response rebound to another native session', UNIX_SOCKET_
             return error.code === 'NATIVE_CONTRACT_MISMATCH';
         },
     );
+});
+
+test('client rejects a response for an unknown request id', UNIX_SOCKET_TEST, async (t) => {
+    const { client } = await connectedFixture(t, {
+        mutateEnvelope: function (response, request) {
+            if (request.method === 'invoke') response.requestId = 'native-program-unknown-0001';
+        },
+    });
+    await assert.rejects(
+        invoke(client, 'native-program-known-0001', readProgram()),
+        function (error) { return error.code === 'NATIVE_CONTRACT_MISMATCH'; },
+    );
+});
+
+test('client ignores a late timed-out response and remains connected', UNIX_SOCKET_TEST, async (t) => {
+    const { client } = await connectedFixture(t, {
+        requestTimeoutMs: 20,
+        delayFirstInvokeMs: 60,
+    });
+    await assert.rejects(
+        invoke(client, 'native-program-late-0001', readProgram()),
+        function (error) { return error.code === 'DEADLINE_EXCEEDED'; },
+    );
+    await new Promise(function (resolve) { setTimeout(resolve, 80); });
+    assert.equal(client.status().state, 'connected');
+    const capabilities = await client.capabilities({ detail: 'summary', limit: 50 });
+    assert.equal(capabilities.items.length, 1);
 });
 
 test('client surfaces a duplicate request id as a typed error, not a contract mismatch', UNIX_SOCKET_TEST, async (t) => {

@@ -128,6 +128,52 @@ test('mountMcp requires explicit state paths', () => {
     );
 });
 
+test('initialize negotiates its declared protocol and replaces a supplied existing session', async () => {
+    const fixture = await start();
+    try {
+        const selected = await request(fixture.port, 'POST', '/mcp', {}, {
+            jsonrpc: '2.0', id: 1, method: 'initialize',
+            params: { protocolVersion: '2025-06-18', clientInfo: { name: 'new-protocol' } },
+        });
+        assert.equal(selected.body.result.protocolVersion, '2025-06-18');
+        const priorId = selected.headers['mcp-session-id'];
+        const replacement = await request(fixture.port, 'POST', '/mcp', {
+            'Mcp-Session-Id': priorId,
+        }, {
+            jsonrpc: '2.0', id: 2, method: 'initialize',
+            params: { protocolVersion: 'unsupported-version', clientInfo: { name: 'replacement' } },
+        });
+        assert.equal(replacement.body.result.protocolVersion, '2025-06-18');
+        assert.notEqual(replacement.headers['mcp-session-id'], priorId);
+        assert.equal(fixture.mounted.sessions.get(priorId), null);
+        assert.equal(fixture.mounted.sessions.size, 1);
+    } finally {
+        await new Promise(function (resolve) { fixture.listener.close(resolve); });
+        fs.rmSync(fixture.stateRoot, { recursive: true, force: true });
+    }
+});
+
+test('batch requests with a notification return a successful response body when another request responds', async () => {
+    const fixture = await start();
+    try {
+        const initial = await initialize(fixture.port);
+        const batch = await request(fixture.port, 'POST', '/mcp', {
+            'Mcp-Session-Id': initial.session,
+        }, [
+            { jsonrpc: '2.0', method: 'notifications/initialized', params: {} },
+            { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} },
+        ]);
+        assert.equal(batch.status, 200);
+        assert.equal(Array.isArray(batch.body), true);
+        assert.equal(batch.body.some(function (entry) {
+            return entry.id === 2 && Array.isArray(entry.result.tools);
+        }), true);
+    } finally {
+        await new Promise(function (resolve) { fixture.listener.close(resolve); });
+        fs.rmSync(fixture.stateRoot, { recursive: true, force: true });
+    }
+});
+
 test('progress notifications retain their token and report elapsed seconds', () => {
     assert.deepEqual(mountMcp.progressMessage('progress-1', 1000, 6200), {
         jsonrpc: '2.0',

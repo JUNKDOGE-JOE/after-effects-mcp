@@ -13,7 +13,7 @@ const { buildInstructions } = require('./instructions');
 const { TOOL_MODULES } = require('./tools');
 
 const PROTOCOLS = ['2025-06-18', '2025-03-26'];
-const DEFAULT_PROTOCOL = '2025-03-26';
+const DEFAULT_PROTOCOL = PROTOCOLS[0];
 const MCP_PATHS = ['/mcp', '/mcp/c/:token'];
 const EXTERNAL_POLICY = Object.freeze({
     approvalTier: null,
@@ -35,8 +35,9 @@ function allowedLocalRequest(req) {
     return ['http://127.0.0.1:' + port, 'http://localhost:' + port].indexOf(origin.toLowerCase()) !== -1;
 }
 
-function selectProtocol(req) {
-    const requested = req.get('mcp-protocol-version');
+function selectProtocol(req, params) {
+    const requested = params && typeof params.protocolVersion === 'string'
+        ? params.protocolVersion : req.get('mcp-protocol-version');
     return PROTOCOLS.indexOf(requested) !== -1 ? requested : DEFAULT_PROTOCOL;
 }
 
@@ -102,7 +103,10 @@ function mountMcp(app, deps) {
     if (!deps || !deps.statePaths) {
         throw new TypeError('mountMcp requires deps.statePaths');
     }
-    const sessions = new SessionStore();
+    const sessions = new SessionStore({
+        logger: deps.hostLog && typeof deps.hostLog.record === 'function'
+            ? function (event) { deps.hostLog.record(event); } : null,
+    });
     const conversations = new ConversationStore(sessions);
     const approvals = deps.approvals || new ApprovalQueue({ timeoutMs: deps.approvalTimeoutMs });
     let checkpointStore = deps.checkpointStore || null;
@@ -198,7 +202,9 @@ function mountMcp(app, deps) {
         const params = message.params || {};
         if (message.method === 'initialize') {
             if (!jsonrpc.isObject(params)) return { status: 200, response: jsonrpc.invalidParams(message, 'initialize params must be an object') };
-            const protocolVersion = selectProtocol(req);
+            const priorSessionId = sessionId(req);
+            if (sessions.get(priorSessionId)) sessions.delete(priorSessionId);
+            const protocolVersion = selectProtocol(req, params);
             const session = sessions.create(
                 protocolVersion,
                 'pending',
@@ -330,13 +336,13 @@ function mountMcp(app, deps) {
         let initializedSession = null;
         for (let i = 0; i < messages.length; i += 1) {
             const output = await dispatch(req, messages[i], req.mcpConversation);
-            status = Math.max(status, output.status);
+            status = output.status;
             if (output.session && output.session.id) initializedSession = output.session;
             if (output.response) responses.push(output.response);
         }
         if (initializedSession) res.set('Mcp-Session-Id', initializedSession.id);
         if (responses.length === 0) return res.status(202).end();
-        res.status(status).json(batch ? responses : responses[0]);
+        res.status(batch ? 200 : status).json(batch ? responses : responses[0]);
     });
 
     app.use('/mcp', function (error, req, res, next) {
