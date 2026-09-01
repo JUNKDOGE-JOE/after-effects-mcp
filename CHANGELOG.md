@@ -19,9 +19,10 @@ Format based on Keep a Changelog; versioning follows SemVer.
 - **宿主生命周期与恢复安全（#354，PR #363 / #368）**——改端口重启不再被在线 MCP 客户端卡死；`ae_execRecover` 只在审批通过后才覆写恢复脚本；`ae_revert` 不再留下空的隐藏目录；`/exec` 的 `timeoutMs` 夹到 1–600000 ms；`ae_nativeExec` 真正享有 30 秒时限且迟到应答不再断开连接；MCP 会话封顶 64 条；协议版本从 initialize 参数协商；含通知的批量请求返回 200；工具无返回值与 unhandled rejection 都有兜底。
 - **Windows 原生 IPC 稳定性（#354，PR #365）**——命名管道读取在超时取消的竞态下不再丢字节；端点描述符原子发布并在启动时清理损坏或残留文件，AE 崩溃后原生平面不再静默不可用；原生 JSON 解析限制 32 层嵌套。
 - **模型选择按通道保存，旧版 Claude Code 选 Fable 5.1 会被拦下（#355，PR #364）**——偏好按通道各存一份并一次性迁移旧值，作曲区芯片选的模型成为该通道默认，绕一圈其它通道回来仍是原来的选择；Claude 通道在发送前比对模型要求的最低 CLI 版本，不满足时给出"运行 `claude update` 升级或换模型"的提示；会话元数据随实际在用的模型刷新。
+- **跨后端打开会话不再被清空，OpenCode 收尾不再卡死（#355，PR #369，经 #371 落地）**——从 Claude 通道点开 Codex/OpenCode 的历史会话时，探针返回后不再触发重置新建空会话，transcript 原样保留；OpenCode 回合收尾设 5 s 超时，`reset()` 会以 TURN_ABORTED 结束挂着的请求；传输重建后不再重放整轮（避免重复写 AE），改为发出 `AE_MCP_TRANSPORT_REBUILT` 提示重发。
 - **修复中文版 AE 报错乱码（#356，PR #360）**——ExtendScript 的本地化错误文本经传输信封回到宿主后是可读中文，覆盖错误消息、`errorSource`、字符串返回值与 JSON 字符串叶子。
 - **内置 Skill 第一轮迭代（#335，PR #367）**——ExtendScript cookbook 新增 5 条来自真实会话的条目（含真机验证的文本动画器骨架）；8 条 skill 描述统一为三句式触发文案；内置与 legacy skill 的使用次数持久化并在 `ae_skillUse list` 里展示。
-- **工程卫生（#358，PR #366）**——CI 目录级运行 scripts 契约测试并在两个平台跑齐；删除腐烂测试、退役的签名/证明/平台包脚本与两条死 workflow、遗留 Python 与零引用截图；注册表 PATH 处理搬进 platform adapter；打包时重算 opencode.exe 的大小与 SHA-256。
+- **工程卫生（#358，PR #366，经 #371 落地）**——CI 目录级运行 scripts 契约测试并在两个平台跑齐；删除腐烂测试、退役的签名/证明/平台包脚本与两条死 workflow、遗留 Python 与零引用截图；注册表 PATH 处理搬进 platform adapter；打包时重算 opencode.exe 的大小与 SHA-256。
 
 ### [0.10.5] — 2026-08-28
 
@@ -387,9 +388,10 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 - **Host lifecycle and recovery safety (#354, PR #363 / #368)** — port restarts no longer hang behind live MCP event streams; recovery scripts are written only after approval; `ae_revert` stops leaving hidden directories; `/exec` timeouts are bounded; `ae_nativeExec` gets its full 30 s window and tolerates late replies; MCP sessions are capped at 64; the protocol is negotiated from initialize params; mixed batches answer 200; dispatch guards for missing tool results and unhandled rejections.
 - **Windows native IPC resilience (#354, PR #365)** — preserve bytes across cancellation races, publish and recover endpoint descriptors atomically, and bound native JSON parsing depth.
 - **Per-channel model choice and a Claude CLI version gate for Fable 5.1 (#355, PR #364)** — preferences are keyed per channel (one-time migration), the composer chip choice becomes the channel default, `minCliVersion` blocks Fable 5.1 on Claude Code < 2.1.251 with a bilingual hint, and session metadata tracks the model actually in use.
+- **Cross-backend session opens survive the probe, OpenCode finalization is bounded (#355, PR #369, landed via #371)** — opening a Codex/OpenCode session from the Claude channel no longer resets into a fresh empty session once the probe returns; OpenCode turn finalization times out after 5 s and `reset()` aborts hung requests with TURN_ABORTED; a transport rebuild no longer replays the whole turn (which could double-write AE) and emits `AE_MCP_TRANSPORT_REBUILT` instead.
 - **Fix mojibake in localized AE errors (#356, PR #360)** — localized ExtendScript error text arrives readable on the host (error message, `errorSource`, string results, JSON string leaves).
 - **Bundled skills, round one (#335, PR #367)** — five cookbook traps from a real session (including a machine-verified text-animator skeleton), uniform trigger descriptions, and persistent usage counts for bundled and legacy skills.
-- **Repository hygiene (#358, PR #366)** — directory-wide script contracts in CI on both runners, rotten and dead tooling removed with grep evidence, Windows PATH handling moved behind the platform adapter, opencode.exe re-hashed at package time.
+- **Repository hygiene (#358, PR #366, landed via #371)** — directory-wide script contracts in CI on both runners, rotten and dead tooling removed with grep evidence, Windows PATH handling moved behind the platform adapter, opencode.exe re-hashed at package time.
 
 ### [0.10.5] — 2026-08-28
 
