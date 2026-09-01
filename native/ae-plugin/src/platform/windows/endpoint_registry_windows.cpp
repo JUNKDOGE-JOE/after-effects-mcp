@@ -265,9 +265,22 @@ EndpointResult WindowsEndpointRegistry::cleanup_stale() {
     if (++entries > config_.maximum_directory_entries) {
       return {EndpointCode::kDirectoryLimitExceeded, "endpoint-directory-overflow"};
     }
-    if (!item.is_regular_file(error) || error || item.path().extension() != ".endpoint") {
+    if (!item.is_regular_file(error) || error) {
       continue;
     }
+    const std::wstring name = item.path().filename().wstring();
+    const bool temporary = name.compare(0, 5, L".tmp-") == 0;
+    if (temporary) {
+      if (DeleteFileW(item.path().c_str()) == 0) {
+        const DWORD removal_error = GetLastError();
+        // A sharing violation means another publisher still owns this temporary file.
+        if (removal_error != ERROR_FILE_NOT_FOUND && removal_error != ERROR_SHARING_VIOLATION) {
+          return {EndpointCode::kStaleEntryUnsafe, "stale-descriptor-remove-failed"};
+        }
+      }
+      continue;
+    }
+    if (item.path().extension() != ".endpoint") continue;
     std::string text;
     {
       std::ifstream input(item.path(), std::ios::binary);
@@ -275,7 +288,9 @@ EndpointResult WindowsEndpointRegistry::cleanup_stale() {
     }
     NativeEndpointDescriptor candidate{};
     if (!WindowsEndpointRegistry::parse_descriptor(text, candidate)) {
-      return {EndpointCode::kStaleEntryUnsafe, "stale-descriptor-unparseable"};
+      std::filesystem::remove(item.path(), error);
+      if (error) return {EndpointCode::kStaleEntryUnsafe, "stale-descriptor-remove-failed"};
+      continue;
     }
     if (!host_descriptor_alive(candidate)) {
       std::filesystem::remove(item.path(), error);
@@ -329,16 +344,43 @@ HANDLE WindowsEndpointRegistry::take_listener_pipe() noexcept {
 EndpointResult WindowsEndpointRegistry::publish_descriptor() {
   // Descriptor files carry the host instance UUID (d-<uuid>.endpoint), the
   // same naming the macOS registry and the shared client discovery use.
-  descriptor_path_ =
-      (std::filesystem::path(directory_path_) / ("d-" + descriptor_.host_instance_id + ".endpoint"))
-          .string();
+  const std::filesystem::path final_path =
+      std::filesystem::path(directory_path_) /
+      ("d-" + descriptor_.host_instance_id + ".endpoint");
+  descriptor_path_ = final_path.string();
   const std::string body = serialize_descriptor(descriptor_);
-  {
-    std::ofstream output(descriptor_path_, std::ios::binary | std::ios::trunc);
-    if (!output) return {EndpointCode::kDescriptorPublishFailed, "descriptor-write-failed"};
-    output << body;
-    output.flush();
-    if (!output) return {EndpointCode::kDescriptorPublishFailed, "descriptor-write-failed"};
+  const std::filesystem::path temporary_path =
+      std::filesystem::path(directory_path_) / (".tmp-" + config_.endpoint_nonce);
+  HANDLE file = CreateFileW(temporary_path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH, nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
+    return {EndpointCode::kDescriptorPublishFailed, "descriptor-write-failed"};
+  }
+  std::size_t written = 0;
+  while (written < body.size()) {
+    DWORD count = 0;
+    if (WriteFile(file, body.data() + written,
+                  static_cast<DWORD>(body.size() - written), &count, nullptr) == 0 ||
+        count == 0) {
+      (void)CloseHandle(file);
+      std::error_code error;
+      std::filesystem::remove(temporary_path, error);
+      return {EndpointCode::kDescriptorPublishFailed, "descriptor-write-failed"};
+    }
+    written += count;
+  }
+  const bool flushed = FlushFileBuffers(file) != 0;
+  const bool closed = CloseHandle(file) != 0;
+  if (!flushed || !closed) {
+    std::error_code error;
+    std::filesystem::remove(temporary_path, error);
+    return {EndpointCode::kDescriptorPublishFailed, "descriptor-write-failed"};
+  }
+  if (MoveFileExW(temporary_path.c_str(), final_path.c_str(),
+                  MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == 0) {
+    std::error_code error;
+    std::filesystem::remove(temporary_path, error);
+    return {EndpointCode::kDescriptorPublishFailed, "descriptor-write-failed"};
   }
   std::ifstream verify_input(descriptor_path_, std::ios::binary);
   std::string reread((std::istreambuf_iterator<char>(verify_input)),

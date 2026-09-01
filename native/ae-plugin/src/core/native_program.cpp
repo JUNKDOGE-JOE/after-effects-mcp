@@ -15,6 +15,8 @@
 namespace aemcp::native {
 namespace {
 
+constexpr std::size_t kMaximumJsonDepth = 32;
+
 [[noreturn]] void invalid(std::string message) {
   throw std::runtime_error("invalid native program: " + std::move(message));
 }
@@ -237,7 +239,7 @@ public:
 
   JsonValue parse() {
     space();
-    JsonValue result = value();
+    JsonValue result = value(1);
     space();
     if (offset_ != text_.size())
       invalid("trailing JSON");
@@ -257,14 +259,16 @@ private:
     }
     return false;
   }
-  JsonValue value() {
+  JsonValue value(std::size_t depth) {
+    if (depth > kMaximumJsonDepth)
+      invalid("JSON depth exceeded");
     if (offset_ == text_.size())
       invalid("missing JSON value");
     switch (text_[offset_]) {
     case '{':
-      return JsonValue{object()};
+      return JsonValue{object(depth)};
     case '[':
-      return JsonValue{array()};
+      return JsonValue{array(depth)};
     case '"':
       return JsonValue{string()};
     case 't':
@@ -285,7 +289,7 @@ private:
       invalid("invalid literal");
     offset_ += literal_value.size();
   }
-  JsonObject object() {
+  JsonObject object(std::size_t depth) {
     ++offset_;
     space();
     JsonObject result;
@@ -302,7 +306,7 @@ private:
       if (!consume(':'))
         invalid("object colon");
       space();
-      result.emplace_back(std::move(key), value());
+      result.emplace_back(std::move(key), value(depth + 1));
       space();
       if (consume('}'))
         return result;
@@ -311,14 +315,14 @@ private:
       space();
     }
   }
-  JsonValue::Array array() {
+  JsonValue::Array array(std::size_t depth) {
     ++offset_;
     space();
     JsonValue::Array result;
     if (consume(']'))
       return result;
     while (true) {
-      result.push_back(value());
+      result.push_back(value(depth + 1));
       space();
       if (consume(']'))
         return result;

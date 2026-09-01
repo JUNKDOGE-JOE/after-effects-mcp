@@ -20,6 +20,11 @@
 #include "aemcp_native/transport_io.hpp"
 #include "aemcp_native/win_ipc_server.hpp"
 
+namespace aemcp::native::detail {
+int complete_overlapped_io(HANDLE pipe, OVERLAPPED *operation, DWORD &transferred,
+                           bool reading) noexcept;
+}
+
 namespace {
 
 using namespace std::chrono_literals;
@@ -344,12 +349,37 @@ void non_reading_client_write_times_out() {
   require(elapsed < 1s, "backpressure write exceeded its bounded timeout");
 }
 
+void cancellation_after_completed_read_preserves_bytes() {
+  ConnectedPipePair pair = create_connected_pipe_pair();
+  constexpr std::array<std::uint8_t, 4> expected = {1, 2, 3, 4};
+  std::array<std::uint8_t, expected.size()> received{};
+  OwnedHandle event(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+  require(event.get() != nullptr, "could not create completed-read event");
+  OVERLAPPED operation{};
+  operation.hEvent = event.get();
+  DWORD transferred = 0;
+  const BOOL completed = ReadFile(pair.server.get(), received.data(),
+                                  static_cast<DWORD>(received.size()), &transferred, &operation);
+  require(completed == 0 && GetLastError() == ERROR_IO_PENDING,
+          "completed-read fixture did not begin an overlapped read");
+  require(write_all(pair.client.get(), expected), "client could not satisfy completed read");
+  require(WaitForSingleObject(event.get(), 2000) == WAIT_OBJECT_0,
+          "completed read did not signal");
+  require(CancelIoEx(pair.server.get(), &operation) == 0 && GetLastError() == ERROR_NOT_FOUND,
+          "cancellation did not observe the completed read");
+  const int count = aemcp::native::detail::complete_overlapped_io(
+      pair.server.get(), &operation, transferred, true);
+  require(count == static_cast<int>(expected.size()) && received == expected,
+          "completed read bytes were not preserved after cancellation");
+}
+
 }  // namespace
 
 int main() {
   waiting_listener_shutdown_is_bounded();
   idle_authenticated_client_shutdown_is_bounded();
   non_reading_client_write_times_out();
+  cancellation_after_completed_read_preserves_bytes();
   std::cout << "win_ipc_server_windows_test: PASS\n";
   return 0;
 }
