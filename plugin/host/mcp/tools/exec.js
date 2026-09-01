@@ -457,7 +457,6 @@ async function runRecovery(args, context, deps) {
     const meta = store.readMeta(entry);
     const code = hasOwn(args, 'code') ? args.code : store.readScript(entry);
     if (!code) return { ok: false, error: 'recovery script is empty: ' + args.recoveryId };
-    if (hasOwn(args, 'code')) store.writeScript(entry, code);
     const retryMode = args.retryMode || 'restore';
     const resolvedArgs = effectiveArgs(meta, args);
     const approvalArguments = Object.assign({}, resolvedArgs, {
@@ -472,6 +471,7 @@ async function runRecovery(args, context, deps) {
         deps,
     );
     if (denied) return denied;
+    if (hasOwn(args, 'code')) store.writeScript(entry, code);
     const restoration = await restoreForRetry(args.recoveryId, retryMode, meta, context, deps);
     if (!restoration.ok) return restoration;
     const checkpointRun = await autoCheckpoint(resolvedArgs, context, deps);

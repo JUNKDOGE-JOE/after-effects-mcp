@@ -288,6 +288,42 @@ test('continue skips restore and inline code replaces the recovery script', asyn
     }
 });
 
+test('declined ae_execRecover approval preserves the stored recovery script', async () => {
+    const f = fixture();
+    try {
+        f.deps.setUserHandler(async function () {
+            return failed('boom', { revision: { before: 1, after: 1 }, projectPath: f.project });
+        });
+        const first = value(await execTool.call({ code: 'stored-script' }, context(null), f.deps));
+        const entry = f.recoveryStore.lookup(first.recoveryId, f.project);
+        f.deps.approvals = { request: async function () { return 'decline'; } };
+
+        const declined = value(await execRecoverTool.call({
+            recoveryId: first.recoveryId,
+            retryMode: 'continue',
+            code: 'rejected-replacement',
+        }, context('manual'), f.deps));
+        assert.equal(declined.ok, false);
+        assert.match(declined.error, /User denied/);
+        assert.equal(f.recoveryStore.readScript(entry), 'stored-script');
+
+        f.deps.approvals = { request: async function () { return 'accept'; } };
+        f.deps.setUserHandler(async function (input) {
+            assert.equal(input.code, 'approved-replacement');
+            return success({ ok: true }, { projectPath: f.project });
+        });
+        const approved = value(await execRecoverTool.call({
+            recoveryId: first.recoveryId,
+            retryMode: 'continue',
+            code: 'approved-replacement',
+        }, context('manual'), f.deps));
+        assert.equal(approved.ok, true);
+        assert.equal(f.recoveryStore.readScript(entry), 'approved-replacement');
+    } finally {
+        f.close();
+    }
+});
+
 test('retry rejects unknown ids, project mismatch, and changed projects without checkpoints', async () => {
     const f = fixture();
     try {
