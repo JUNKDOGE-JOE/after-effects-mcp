@@ -54,6 +54,17 @@ test('OpenCode pending probes become retryable and stale rechecks reset idle run
   assert.match(APP, /openCodeProbe === null && !openCodeProbeStale/);
 });
 
+test('model preferences are channel-scoped and Codex waits for live model facts', () => {
+  assert.doesNotMatch(APP, /['"]ae_mcp_model['"]/);
+  assert.match(APP, /providerFactsPending:[\s\S]*backendPref === 'codex'[\s\S]*codexProbe === null[\s\S]*codexModels === null/);
+});
+
+test('model chips persist the selected model as the current channel default', () => {
+  assert.match(APP, /onChipModel=\{\(m\) => \{ setSessionModel\(m\); setModel\(m\); writePref\(modelPreferenceKey\(backendPref\), m\); \}\}/);
+  assert.match(APP, /onChipEffort=\{setSessionEffort\}/);
+  assert.match(APP, /onChipFast=\{\(v\) => setSessionFast\(Boolean\(v\)\)\}/);
+});
+
 test('turn progress is reduced in App and rendered below the transcript', () => {
   assert.match(APP, /const \[turnStage, setTurnStage\] = React\.useState\(null\)/);
   assert.match(APP, /setTurnStage\(\(current\) => reduceTurnStage\(current, evt,/);

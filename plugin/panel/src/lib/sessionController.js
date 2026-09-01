@@ -145,12 +145,18 @@ export function createSessionController({
     }
   }
 
+  function refreshActiveModel() {
+    if (!activeMeta || typeof deps.currentModel !== 'function') return;
+    activeMeta.model = deps.currentModel() || null;
+  }
+
   function persistActive() {
     if (!activeMeta || !activeId) return false;
     const currentRef = backendRef(
       typeof deps.getBackendRef === 'function' ? deps.getBackendRef() : null,
     );
     if (currentRef) activeMeta.backendRef = currentRef;
+    refreshActiveModel();
     refreshActiveMeta();
     if (!materialized()) {
       if (index.activeId === activeId) {
@@ -307,6 +313,7 @@ export function createSessionController({
     if (!activeMeta) return;
     latestEntries = clone(Array.isArray(entries) ? entries : []);
     activeMeta.updatedAt = isoTime(now);
+    refreshActiveModel();
     refreshActiveMeta();
     if (latestEntries.length) upsertActiveMeta();
     dirty = true;

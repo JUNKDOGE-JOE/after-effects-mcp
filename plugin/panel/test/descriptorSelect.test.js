@@ -2,6 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { selectDescriptor, reconcileModelPref } from '../src/lib/descriptorSelect.js';
 import {
+  LEGACY_MODEL_PREF_KEY,
+  modelPreferenceKey,
+  resolveModelPreference,
+} from '../src/lib/modelPreference.js';
+import {
   claudeSubDescriptor,
   codexStaticDescriptor,
   openCodeStaticDescriptor,
@@ -46,4 +51,34 @@ test('reconcileModelPref resets stale models but waits for pending facts', () =>
     reconcileModelPref('missing', descriptor, { providerFactsPending: true }),
     'missing',
   );
+});
+
+test('model preferences use independent channel keys and migrate legacy storage once', () => {
+  assert.equal(modelPreferenceKey('subscription'), 'ae_mcp_model_subscription');
+  assert.equal(modelPreferenceKey('codex'), 'ae_mcp_model_codex');
+  assert.equal(modelPreferenceKey('opencode'), 'ae_mcp_model_opencode');
+  assert.equal(LEGACY_MODEL_PREF_KEY, 'ae_mcp_model');
+  assert.deepEqual(resolveModelPreference({
+    channelValue: '',
+    legacyValue: 'claude-fable-5-1',
+    fallback: 'claude-opus-5',
+  }), {
+    value: 'claude-fable-5-1',
+    migrateLegacy: true,
+  });
+  assert.deepEqual(resolveModelPreference({
+    channelValue: 'gpt-5.6-sol',
+    legacyValue: 'claude-fable-5-1',
+    fallback: 'claude-opus-5',
+  }), {
+    value: 'gpt-5.6-sol',
+    migrateLegacy: false,
+  });
+});
+
+test('reconcileModelPref preserves Codex preferences while live facts are pending', () => {
+  assert.equal(reconcileModelPref('gpt-live-only', {
+    defaultModelId: 'gpt-5.6-sol',
+    models: [{ id: 'gpt-5.6-sol' }],
+  }, { providerFactsPending: true }), 'gpt-live-only');
 });
