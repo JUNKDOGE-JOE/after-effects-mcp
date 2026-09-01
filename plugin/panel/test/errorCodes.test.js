@@ -9,6 +9,7 @@ import {
 test('error code table is frozen and contains the complete panel vocabulary', () => {
   const expected = [
     'AE_MCP_REBUILD_FAILED',
+    'AE_MCP_TRANSPORT_REBUILT',
     'AUTH_REQUIRED',
     'BACKEND_ERROR',
     'BACKEND_UNAVAILABLE',
@@ -88,6 +89,8 @@ test('every error hint is available in Chinese and English', () => {
   assert.match(errorHint('UPSTREAM_HTTP_429', 'en'), /status code/i);
   assert.match(errorHint('AUTH_REQUIRED', 'zh'), /设置 → AI/);
   assert.match(errorHint('AUTH_REQUIRED', 'en'), /Settings → AI/);
+  assert.match(errorHint('AE_MCP_TRANSPORT_REBUILT', 'zh'), /本轮已停止/);
+  assert.match(errorHint('AE_MCP_TRANSPORT_REBUILT', 'en'), /turn was stopped/i);
 });
 
 test('free-form process output requires HTTP context and authentication failure context', () => {

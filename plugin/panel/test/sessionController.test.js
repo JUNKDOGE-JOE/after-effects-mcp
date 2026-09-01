@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSessionController, sanitizeRestored } from '../src/lib/sessionController.js';
+import { decideBackendReset } from '../src/lib/backendResetDecision.js';
 
 function copy(value) {
   return JSON.parse(JSON.stringify(value));
@@ -23,7 +24,13 @@ function meta(id, backend = 'codex', overrides = {}) {
   };
 }
 
-function harness({ index, transcripts = {}, backend = 'codex', sessionRef = null } = {}) {
+function harness({
+  index,
+  transcripts = {},
+  backend = 'codex',
+  sessionRef = null,
+  selectBackendImpl = null,
+} = {}) {
   const calls = [];
   const savedIndexes = [];
   const savedTranscripts = [];
@@ -31,6 +38,8 @@ function harness({ index, transcripts = {}, backend = 'codex', sessionRef = null
   const timers = [];
   let entries = [];
   let currentBackend = backend;
+  let backendRefs = {};
+  let resetCount = 0;
   let currentModel = 'model-1';
   let uuidSequence = 0;
   let clock = Date.parse('2026-08-22T00:00:00.000Z');
@@ -58,10 +67,17 @@ function harness({ index, transcripts = {}, backend = 'codex', sessionRef = null
   };
   const deps = {
     stopActiveTurn: async () => { calls.push('stop'); },
-    resetActiveBackend: () => { calls.push('reset'); },
+    resetActiveBackend: () => {
+      calls.push('reset');
+      resetCount += 1;
+      backendRefs = {};
+    },
     cancelPendingUi: () => { calls.push('cancel-ui'); },
     rotateHostConversation: (id) => { calls.push(`rotate:${id}`); },
-    adoptBackendRef: (name, ref) => { calls.push(`adopt:${name}:${ref?.id || 'null'}`); },
+    adoptBackendRef: (name, ref) => {
+      calls.push(`adopt:${name}:${ref?.id || 'null'}`);
+      backendRefs[name] = ref;
+    },
     getBackendRef: () => sessionRef,
     setEntries(value) {
       entries = copy(value);
@@ -70,7 +86,16 @@ function harness({ index, transcripts = {}, backend = 'codex', sessionRef = null
     getEntries: () => entries,
     async selectBackend(value) {
       calls.push(`select:${value}`);
-      currentBackend = value;
+      if (selectBackendImpl) {
+        await selectBackendImpl({
+          value,
+          currentBackend: () => currentBackend,
+          setCurrentBackend(next) { currentBackend = next; },
+          resetActiveBackend: deps.resetActiveBackend,
+        });
+      } else {
+        currentBackend = value;
+      }
     },
     currentBackend: () => currentBackend,
     currentModel: () => currentModel,
@@ -99,6 +124,8 @@ function harness({ index, transcripts = {}, backend = 'codex', sessionRef = null
     deleted,
     timers,
     get entries() { return entries; },
+    get backendRefs() { return copy(backendRefs); },
+    get resetCount() { return resetCount; },
     setClock(value) { clock = value; },
     setModel(value) { currentModel = value; },
   };
@@ -168,6 +195,50 @@ test('createSession and switchTo settle the old session before loading and adopt
   assert.deepEqual(h.calls.filter((call) => ['stop', 'reset', 'cancel-ui'].includes(call) || call.startsWith('persist:')).slice(0, 5), [
     'persist:chat-second', 'stop', 'reset', 'cancel-ui', 'persist:chat-second',
   ]);
+});
+
+test('switchTo adopts the target backend reference after an asynchronous probe transition', async () => {
+  const first = meta('chat-first', 'subscription');
+  const second = meta('chat-second', 'codex', {
+    backendRef: { kind: 'codex-thread', id: 'thread-second' },
+  });
+  let releaseProbe;
+  const probePending = new Promise((resolve) => { releaseProbe = resolve; });
+  let probeStarted;
+  const started = new Promise((resolve) => { probeStarted = resolve; });
+  let lastReal = 'subscription';
+  const h = harness({
+    backend: 'subscription',
+    index: { version: 1, activeId: first.id, sessions: [first, second] },
+    transcripts: {
+      [first.id]: { version: 1, id: first.id, entries: [{ type: 'user-text', text: 'one' }] },
+      [second.id]: { version: 1, id: second.id, entries: [{ type: 'user-text', text: 'two' }] },
+    },
+    async selectBackendImpl({ value, setCurrentBackend, resetActiveBackend }) {
+      lastReal = value;
+      setCurrentBackend('none');
+      probeStarted();
+      await probePending;
+      const decision = decideBackendReset({
+        lastReal,
+        effective: value,
+        selectedPref: value,
+        pendingSessionLoad: second.id,
+      });
+      lastReal = decision.nextReal;
+      if (decision.reset) resetActiveBackend();
+      setCurrentBackend(value);
+    },
+  });
+  await h.controller.boot();
+  const switching = h.controller.switchTo(second.id);
+  await started;
+  assert.equal(h.backendRefs.codex, undefined);
+  releaseProbe();
+  await switching;
+
+  assert.equal(h.resetCount, 1);
+  assert.deepEqual(h.backendRefs.codex, { kind: 'codex-thread', id: 'thread-second' });
 });
 
 test('entries materialize the draft, derive a title, and manual rename remains authoritative', async () => {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   createOpenCodeBackend,
   OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES,
+  OPENCODE_FINALIZATION_TIMEOUT_MS,
   OPENCODE_STALL_WARNING_MS,
   OPENCODE_STALL_TIMEOUT_MS,
 } from '../src/cep/openCodeBackend.js';
@@ -134,7 +135,7 @@ function jsonResponse(value, ok = true, status = 200) {
   };
 }
 
-function makeFetch({ holdMessage = false } = {}) {
+function makeFetch({ holdMessage = false, holdAbort = false } = {}) {
   const calls = [];
   const sseStreams = [];
   let sse = null;
@@ -150,6 +151,11 @@ function makeFetch({ holdMessage = false } = {}) {
     if (parsed.pathname === '/mcp') return jsonResponse({ ae: { status: 'connected' } });
     if (parsed.pathname === '/session' && options.method === 'POST') return jsonResponse({ id: 'session_1' });
     if (parsed.pathname === '/session/session_1/message' && holdMessage) {
+      return new Promise((_resolve, reject) => {
+        options.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      });
+    }
+    if (parsed.pathname === '/session/session_1/abort' && holdAbort) {
       return new Promise((_resolve, reject) => {
         options.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
       });
@@ -1563,6 +1569,26 @@ test('OpenCode reset and failed turns settle pending built-in questions', async 
   });
 });
 
+test('OpenCode reset aborts and resolves an active sendUser call', async () => {
+  const h = makeBackend();
+  const run = h.backend.sendUser({ turnId: 'turn-reset', text: 'reset me', attachments: [] });
+  await flush();
+  h.backend.reset();
+
+  const outcome = await Promise.race([
+    run.then(() => 'resolved'),
+    new Promise((resolve) => setTimeout(() => resolve('pending'), 50)),
+  ]);
+  assert.equal(outcome, 'resolved');
+  assert.deepEqual(h.events.find((event) => event.code === 'TURN_ABORTED'), {
+    type: 'error',
+    kind: 'aborted',
+    code: 'TURN_ABORTED',
+    message: 'Turn aborted.',
+    turnId: 'turn-reset',
+  });
+});
+
 test('OpenCode approval adapter applies annotation tiers and posts approval replies', async () => {
   const { backend, events, fetched } = makeBackend({ getPermissionMode: () => 'auto' });
   const pending = backend.sendUser('approve');
@@ -1626,6 +1652,30 @@ test('OpenCode stop aborts the session, drains pending approvals, and emits one 
   ]);
   await pending;
   assert.equal(events.filter((event) => event.type === 'error').length, 1);
+});
+
+test('OpenCode stop bounds a hanging abort request and still settles the turn', async () => {
+  const timers = watchdogTimers();
+  const h = makeBackend({
+    fetchOptions: { holdAbort: true },
+    setTimeoutImpl: timers.setTimeoutImpl,
+    clearTimeoutImpl: timers.clearTimeoutImpl,
+  });
+  const run = h.backend.sendUser({ turnId: 'turn-stop-timeout', text: 'stop', attachments: [] });
+  await flush();
+
+  const stopping = h.backend.stop();
+  await flush();
+  const deadline = timers.timers.find((timer) => (
+    !timer.cleared && timer.delay === OPENCODE_FINALIZATION_TIMEOUT_MS
+  ));
+  assert.ok(deadline);
+  deadline.callback();
+  await stopping;
+  await run;
+
+  assert.equal(h.events.filter((event) => event.code === 'TURN_ABORTED').length, 1);
+  assert.equal(h.fetched.calls.filter((call) => call.path === '/session/session_1/abort').length, 1);
 });
 
 test('openCode descriptors use the free default and map provider model metadata', () => {
@@ -1855,7 +1905,7 @@ test('OpenCode maps session.error HTTP status to an upstream HTTP category', asy
   await retry;
 });
 
-test('OpenCode rebuilds the AE MCP transport and retries once after a -32000 connection close', async (t) => {
+test('OpenCode rebuilds the AE MCP transport without replaying the uncertain turn', async (t) => {
   const timers = watchdogTimers();
   const h = makeBackend({
     now: () => 0,
@@ -1880,26 +1930,34 @@ test('OpenCode rebuilds the AE MCP transport and retries once after a -32000 con
   for (let index = 0; index < 30
     && (h.spawned.calls.length < 2
       || h.fetched.sseStreams.length < 2
-      || h.fetched.calls.filter((call) => call.path === '/session/session_1/message').length < 2); index += 1) {
+      || !h.events.some((event) => event.code === 'AE_MCP_TRANSPORT_REBUILT')); index += 1) {
     await flush();
   }
 
   assert.equal(h.spawned.calls.length, 2);
   assert.ok(h.terminated.some((request) => request.pid === 7001 && request.executableName === 'opencode'));
   assert.ok(h.events.some((event) => event.type === 'turn-progress' && event.stage === 'mcp-rebuild'));
-  assert.equal(h.events.some((event) => event.type === 'error'), false);
-  completeTurn(h.fetched);
-  for (let index = 0; index < 30
-    && !h.events.some((event) => event.type === 'turn-end'); index += 1) {
-    await flush();
-  }
-  assert.ok(h.events.some((event) => event.type === 'turn-end'));
+  assert.equal(h.fetched.calls.filter((call) => call.path === '/session/session_1/message').length, 1);
+  assert.deepEqual(h.events.find((event) => event.code === 'AE_MCP_TRANSPORT_REBUILT'), {
+    type: 'error',
+    kind: 'network',
+    code: 'AE_MCP_TRANSPORT_REBUILT',
+    message: '与 AE 宿主的连接已重建，本轮已停止；请确认没有未完成的写入后重新发送。',
+    detail: { recoveryAttempts: 1 },
+    turnId: 'turn-ae-mcp-rebuild',
+  });
   await run;
 });
 
-test('OpenCode reports a repair hint after the one AE MCP retry also gets Not connected', async (t) => {
+test('OpenCode reports a repair hint when rebuilding the AE MCP transport fails', async (t) => {
   const timers = watchdogTimers();
+  let portRequestCount = 0;
   const h = makeBackend({
+    getPort: async () => {
+      portRequestCount += 1;
+      if (portRequestCount === 1) return 4567;
+      throw new Error('replacement port unavailable');
+    },
     now: () => 0,
     setTimeoutImpl: timers.setTimeoutImpl,
     clearTimeoutImpl: timers.clearTimeoutImpl,
@@ -1912,7 +1970,7 @@ test('OpenCode reports a repair hint after the one AE MCP retry also gets Not co
     await flush();
   }
 
-  const disconnected = () => h.fetched.sse.push({
+  h.fetched.sse.push({
     type: 'message.part.updated',
     properties: {
       sessionID: 'session_1',
@@ -1924,18 +1982,14 @@ test('OpenCode reports a repair hint after the one AE MCP retry also gets Not co
       },
     },
   });
-  disconnected();
   for (let index = 0; index < 30
-    && (h.spawned.calls.length < 2
-      || h.fetched.sseStreams.length < 2
-      || h.fetched.calls.filter((call) => call.path === '/session/session_1/message').length < 2); index += 1) {
+    && !h.events.some((event) => event.code === 'AE_MCP_REBUILD_FAILED'); index += 1) {
     await flush();
   }
-  disconnected();
   await run;
 
   const errors = h.events.filter((event) => event.type === 'error');
-  assert.equal(h.spawned.calls.length, 2);
+  assert.equal(h.spawned.calls.length, 1);
   assert.equal(errors.length, 1);
   assert.equal(errors[0].code, 'AE_MCP_REBUILD_FAILED');
   assert.equal(errors[0].message, '与 AE 宿主的连接重建失败。请重载面板或新建会话后再试。');
