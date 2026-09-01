@@ -14,13 +14,7 @@
 #include <limits>
 
 namespace aemcp::native {
-namespace {
-
-[[nodiscard]] HANDLE pipe_handle(int fd) noexcept {
-  const HANDLE pipe = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
-  return pipe == INVALID_HANDLE_VALUE ? nullptr : pipe;
-}
-
+namespace detail {
 [[nodiscard]] int error_result(DWORD error, bool reading) noexcept {
   switch (error) {
     case ERROR_BROKEN_PIPE:
@@ -39,6 +33,23 @@ namespace {
       errno = EIO;
       return -1;
   }
+}
+
+int complete_overlapped_io(HANDLE pipe, OVERLAPPED *operation, DWORD &transferred,
+                           bool reading) noexcept {
+  if (GetOverlappedResult(pipe, operation, &transferred, FALSE) == 0) {
+    return error_result(GetLastError(), reading);
+  }
+  return static_cast<int>(transferred);
+}
+
+}  // namespace detail
+
+namespace {
+
+[[nodiscard]] HANDLE pipe_handle(int fd) noexcept {
+  const HANDLE pipe = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+  return pipe == INVALID_HANDLE_VALUE ? nullptr : pipe;
 }
 
 [[nodiscard]] int overlapped_io(int fd, void *buffer, std::size_t size, int timeout_ms,
@@ -72,31 +83,26 @@ namespace {
   const DWORD start_error = GetLastError();
   if (start_error != ERROR_IO_PENDING) {
     CloseHandle(event);
-    return error_result(start_error, reading);
+    return detail::error_result(start_error, reading);
   }
   const DWORD waited = WaitForSingleObject(event, static_cast<DWORD>(timeout_ms));
-  if (waited == WAIT_TIMEOUT) {
+  if (waited != WAIT_OBJECT_0) {
     (void)CancelIoEx(pipe, &operation);
     // The OVERLAPPED storage must outlive cancellation completion.
     (void)WaitForSingleObject(event, INFINITE);
+    const int result = detail::complete_overlapped_io(pipe, &operation, transferred, reading);
     CloseHandle(event);
-    errno = ETIMEDOUT;
+    if (result >= 0) return result;
+    if (waited == WAIT_TIMEOUT && errno == ECANCELED) {
+      errno = ETIMEDOUT;
+    } else if (waited != WAIT_TIMEOUT) {
+      errno = EIO;
+    }
     return -1;
   }
-  if (waited != WAIT_OBJECT_0) {
-    (void)CancelIoEx(pipe, &operation);
-    (void)WaitForSingleObject(event, INFINITE);
-    CloseHandle(event);
-    errno = EIO;
-    return -1;
-  }
-  if (GetOverlappedResult(pipe, &operation, &transferred, FALSE) == 0) {
-    const DWORD completion_error = GetLastError();
-    CloseHandle(event);
-    return error_result(completion_error, reading);
-  }
+  const int result = detail::complete_overlapped_io(pipe, &operation, transferred, reading);
   CloseHandle(event);
-  return static_cast<int>(transferred);
+  return result;
 }
 
 }  // namespace
@@ -117,7 +123,7 @@ int transport_wait_readable(int fd, int timeout_ms) noexcept {
   for (;;) {
     DWORD available = 0;
     if (PeekNamedPipe(pipe, nullptr, 0, nullptr, &available, nullptr) == 0) {
-      return error_result(GetLastError(), false);
+      return detail::error_result(GetLastError(), false);
     }
     if (available > 0) return 1;
     if (std::chrono::steady_clock::now() >= deadline) return 0;

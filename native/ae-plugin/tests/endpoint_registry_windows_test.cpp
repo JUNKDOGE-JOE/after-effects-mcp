@@ -139,6 +139,80 @@ void stale_owned_endpoint_is_recovered() {
   require(!std::filesystem::exists(stale_path, error), "stale descriptor was not removed");
 }
 
+void unparseable_descriptor_is_collected() {
+  TempRoot root;
+  FakeBackend backend;
+  const std::string stale_path = (std::filesystem::path(root.path) / "aemcp-n1" /
+                                  "d-22222222-2222-4222-8222-222222222222.endpoint")
+                                     .string();
+  std::filesystem::create_directories(std::filesystem::path(stale_path).parent_path());
+  {
+    std::ofstream stale(stale_path, std::ios::binary | std::ios::trunc);
+    stale << "truncated";
+  }
+  WindowsEndpointRegistry fresh(backend, EndpointRegistryConfig{root.path, "ddddeeeeffff", 2, 32});
+  require(fresh.start(descriptor()).ok(), "fresh endpoint did not recover an unparseable descriptor");
+  std::error_code error;
+  require(!std::filesystem::exists(stale_path, error),
+          "unparseable descriptor was not removed");
+}
+
+void residual_temporary_descriptor_is_collected() {
+  TempRoot root;
+  FakeBackend backend;
+  const std::filesystem::path directory = std::filesystem::path(root.path) / "aemcp-n1";
+  std::error_code error;
+  std::filesystem::create_directories(directory, error);
+  require(!error, "could not create temporary descriptor directory");
+  const std::filesystem::path temporary_path = directory / ".tmp-aaaabbbbcccc";
+  {
+    std::ofstream temporary(temporary_path, std::ios::binary | std::ios::trunc);
+    temporary << "partial";
+  }
+  WindowsEndpointRegistry fresh(backend, EndpointRegistryConfig{root.path, "ddddeeeeffff", 2, 32});
+  require(fresh.start(descriptor()).ok(), "fresh endpoint did not recover a temporary descriptor");
+  require(!std::filesystem::exists(temporary_path, error),
+          "residual temporary descriptor was not removed");
+}
+
+void active_temporary_descriptor_is_not_collected() {
+  TempRoot root;
+  FakeBackend backend;
+  const std::filesystem::path directory = std::filesystem::path(root.path) / "aemcp-n1";
+  std::error_code error;
+  std::filesystem::create_directories(directory, error);
+  require(!error, "could not create active temporary descriptor directory");
+  const std::filesystem::path temporary_path = directory / ".tmp-aaaabbbbcccc";
+  const HANDLE temporary = CreateFileW(temporary_path.c_str(), GENERIC_WRITE, 0, nullptr,
+                                       CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+  require(temporary != INVALID_HANDLE_VALUE, "could not create active temporary descriptor");
+  WindowsEndpointRegistry fresh(backend, EndpointRegistryConfig{root.path, "ddddeeeeffff", 2, 32});
+  const auto started = fresh.start(descriptor());
+  CloseHandle(temporary);
+  require(started.ok(), "fresh endpoint did not ignore an active temporary descriptor");
+  require(std::filesystem::exists(temporary_path, error),
+          "cleanup removed an active temporary descriptor");
+}
+
+void failed_publication_leaves_no_truncated_descriptor() {
+  TempRoot root;
+  FakeBackend backend;
+  const std::filesystem::path directory = std::filesystem::path(root.path) / "aemcp-n1";
+  const std::filesystem::path final_path =
+      directory / "d-11111111-1111-4111-8111-111111111111.endpoint";
+  std::error_code error;
+  std::filesystem::create_directories(final_path, error);
+  require(!error, "could not reserve descriptor final path");
+  WindowsEndpointRegistry registry(backend,
+                                   EndpointRegistryConfig{root.path, "ddddeeeeffff", 2, 32});
+  require(!registry.start(descriptor()).ok(), "publication unexpectedly replaced a directory");
+  require(!std::filesystem::is_regular_file(final_path, error),
+          "failed publication left a truncated final descriptor");
+  const std::filesystem::path temporary_path = directory / ".tmp-ddddeeeeffff";
+  require(!std::filesystem::exists(temporary_path, error),
+          "failed publication left its temporary descriptor");
+}
+
 void live_endpoint_is_never_collected() {
   TempRoot root;
   FakeBackend backend;
@@ -197,6 +271,10 @@ int main() {
   publish_verify_and_cleanup();
   replacement_is_detected_and_not_deleted();
   stale_owned_endpoint_is_recovered();
+  unparseable_descriptor_is_collected();
+  residual_temporary_descriptor_is_collected();
+  active_temporary_descriptor_is_not_collected();
+  failed_publication_leaves_no_truncated_descriptor();
   live_endpoint_is_never_collected();
   descriptor_parser_is_closed();
   std::cout << "endpoint_registry_windows_test: PASS\n";
