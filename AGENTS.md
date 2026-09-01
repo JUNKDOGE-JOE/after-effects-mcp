@@ -12,11 +12,11 @@ Three standing decisions constrain new work until the direction document says ot
 - **The former package server plane has been removed.** Do not add handlers,
   backends, schemas, or entry points under `packages/`; the MCP server lives in
   the CEP Node context (`plugin/host/`).
-- **The provider layer is collapsing to three channels** — claude CLI, codex CLI, opencode. Do not add a fourth backend adapter or extend `universalProviderRoute` / `providerCapabilityProbe` / `codexResponsesRoute`; those are scheduled for deletion.
+- **The provider layer is three channels** — claude CLI, codex CLI, opencode. Do not add a fourth backend adapter; the retired `universalProviderRoute` / `providerCapabilityProbe` / `codexResponsesRoute` facades are gone and must not return.
 
-Two things are known-broken and already assigned; do not re-diagnose them from scratch:
+Two things are settled; do not re-diagnose them from scratch:
 
-- `plugin/host/jsx-bridge.js` releases the serialization queue on timeout without cancelling the ExtendScript, opening the overlap window the queue exists to prevent. `plugin/host/jsx-bridge.test.js:59-83` currently enshrines that behavior as intended.
+- `plugin/host/jsx-bridge.js` keeps the serialization lock across a timeout and drains the persistent engine with a sentinel before releasing it (#260); `plugin/host/jsx-bridge.test.js` asserts that a timeout keeps the lock. Do not reintroduce an early release.
 - Claude Desktop uses the installed extension's dependency-free
   `host/stdio-shim.js` with the user's system Node. Claude Code uses the panel
   URL directly; no package-server installation flow is supported.

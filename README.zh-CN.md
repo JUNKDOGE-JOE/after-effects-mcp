@@ -23,8 +23,10 @@ After Effects 状态通过 ExtendScript 和冻结的原生 AEGP 平面访问。
 
 1. 在 After Effects 中安装签名 ZXP。
 2. 把同一版本的原生插件装到该 After Effects 宿主使用的插件目录——Windows 用
-   `.aex`，macOS 用 `AeMcpNative.plugin` 包。ZXP 不含任何平台二进制，两个系统
-   通用；只有原生插件按平台分别构建，`ae_nativeExec` 是唯一需要它的工具。
+   `.aex`，macOS 用 `AeMcpNative.plugin` 包。同一个 ZXP 两个系统通用；包内随附
+   Windows 版 OpenCode 运行时（`runtime/opencode/opencode.exe`，约 60 MB），
+   面板只在 Windows 上使用它，macOS 回退到 PATH 里的 `opencode`。只有原生插件
+   按平台分别构建，`ae_nativeExec` 是唯一需要它的工具。
    两个平台的确切安装位置见[安装文档](docs/INSTALL.md)；macOS 的包还需要先去掉
    下载隔离属性，After Effects 才会加载它。
 3. 启动 After Effects，打开 **Window > Extensions > ae-mcp**。外部客户端
@@ -157,15 +159,16 @@ node --test scripts/package/test/verify-windows-zxp-stage.test.mjs
 node --test scripts/package/test/zxp-payload-audit.test.mjs
 ```
 
-Windows ZXP 暂存只复制面板、宿主、JSX、shared、图标和宿主生成资产；它
-精确校验宿主 Express `4.22.2`，并在一次签名步骤中完成 ZXP 签名：
+Windows ZXP 暂存复制面板、宿主、JSX、shared、图标、宿主生成资产，以及由
+`node scripts/package/fetch-opencode-runtime.mjs` 钉版拉取的 OpenCode 运行时；
+它精确校验宿主 Express `4.22.2`，并在一次签名步骤中完成 ZXP 签名：
 
 ```powershell
 .\scripts\package-zxp.ps1 -SkipSigning
 ```
 
-签名 ZXP 不得包含嵌套原生二进制；原有机制明确处理的 `.aex` 除外，且
-产物必须小于 20 MB。
+签名 ZXP 不得包含嵌套原生二进制；随附的 `opencode.exe` 是唯一明确放行的可执行
+文件。打包脚本在产物超过 80 MB 时失败，随附运行时后的正式包约 60 MB。
 
 详见[安装文档](docs/INSTALL.md)、[参考](docs/REFERENCE.md)、
 [Tool Library](docs/TOOL_LIBRARY.md)、[架构方向](docs/ARCHITECTURE_DIRECTION.md)、

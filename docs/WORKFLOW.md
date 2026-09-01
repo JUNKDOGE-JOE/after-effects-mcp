@@ -65,12 +65,16 @@ inspect state and audit evidence before retrying.
 ## Package checks
 
 The Windows ZXP contains the direct extension roots: `client`, `CSXS`, `host`,
-`icons`, `jsx`, and `shared`. Host dependencies are installed from the locked
-`express` `4.22.2` package. The staged payload rejects retired roots, nested
-native binaries, and development tests.
+`icons`, `jsx`, and `shared`, plus the pinned OpenCode runtime at
+`runtime/opencode/opencode.exe` (stage it first with
+`node scripts/package/fetch-opencode-runtime.mjs`). Host dependencies are
+installed from the locked `express` `4.22.2` package. The staged payload
+rejects retired roots, nested native binaries other than that runtime, and
+development tests.
 
 ```powershell
 .\scripts\package-zxp.ps1 -SkipSigning
 ```
 
-The signed ZXP is signed once, verified once, and must be smaller than 20 MB.
+The signed ZXP is signed once and verified once. The packaging script fails
+above 80 MB; a release with the bundled runtime is roughly 60 MB.

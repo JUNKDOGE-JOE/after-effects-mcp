@@ -36,7 +36,8 @@ test('externalClientSetupPrompt localizes English and falls back to Chinese', ()
 test('externalClientSetupPrompt includes the verification and stdio environment contracts', () => {
   for (const lang of ['zh', 'en']) {
     const prompt = externalClientSetupPrompt({ lang });
-    assert.match(prompt, /ae_ping/);
+    assert.match(prompt, /ae_status/);
+    assert.doesNotMatch(prompt, /ae_ping/);
     assert.match(prompt, /AE_MCP_HTTP_URL/);
   }
 });

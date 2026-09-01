@@ -1,59 +1,32 @@
 ---
-name: Native capability package
-about: Plan related native public MCP tools with one review and real-AE closure loop
-title: "[Native Capability Package] "
+name: Capability or fix
+about: Plan an ExtendScript-plane capability or a fix with a real-AE acceptance path
+title: ""
 labels: ""
 assignees: ""
 ---
 
-Follow `docs/CAPABILITY_PACKAGE_WORKFLOW.md`. This Issue is the single source of truth for package scope and the acceptance matrix.
+Read `docs/ARCHITECTURE_DIRECTION.md` first. The native AEGP plane is frozen (23 primitives, no new ones); the provider layer is the claude, codex, and opencode channels. New capability work runs on the ExtendScript plane and must prove a user-visible After Effects outcome through the public MCP surface. This Issue is the source of truth for scope and acceptance.
 
-## Package identity
+## Identity
 
-- Parent Epic:
-- Priority: P0 / P1 / P2 / P3
-- Owner worktree/branch:
+- Priority: P0 (blocks use or masks failures) / P1 (data safety or security) / P2 (robustness, i18n, docs)
 - User-visible outcome:
-- Normal target: 6-10 tools (allowed range 5-15)
+- Explicit non-goals:
 
-## Child Issues (optional)
+## Public surface
 
-- [ ] #
-
-## Scope freeze
-
-### Shared implementation
-
-- AEGP suites / native primitive:
-- Locator / lifecycle:
-- Dispatcher path:
-- Disposable fixture:
-- Undo / recovery model:
-- User scenario:
-
-### Explicit exclusions
-
--
-
-### Native novelty
-
-- [ ] No new real-AE primitive; T4 is not required.
-- [ ] New suite/lifecycle/main-thread mechanism; one narrow T4 smoke is required.
-- T4 hypothesis and observable result:
-
-## Public capability and acceptance matrix
-
-| Optional child Issue | Public MCP tool and schema | Capability ID / shared primitive | R/W | Postcondition | Undo | Important interaction | Status |
-|---|---|---|---|---|---|---|---|
-| # |  |  |  |  |  |  | planned |
+- Public MCP tool(s) and request shape, exactly as a client sends them:
+- Read or write:
+- Postcondition a client can verify by reading AE state back:
+- Undo model (writes):
 
 ## Executable acceptance path
 
 ```text
 public MCP tool
-  -> Core handler/backend
-  -> native RPC
-  -> AEGP main-thread dispatcher
+  -> plugin/host/mcp handler
+  -> /exec -> jsx-bridge -> ExtendScript
   -> After Effects state
   -> typed result
   -> audit evidence
@@ -64,32 +37,18 @@ public MCP tool
 - Write before/after evidence:
 - Undo execution and verification:
 - Recovery / uncertain-failure check:
-- Restart/reconnect check:
 
 ## Test plan
 
-- T0 commands:
-- T1 commands:
-- T2 commands:
-- T3 full regression / required CI for each frozen candidate SHA:
-- T4 narrow hardware smoke, if required:
-- T5 candidate harness:
-- T6 clean-main harness (every included public tool; accepted optional child Issues; every write Undo):
-
-## Hardware preflight
-
-- [ ] Formal AE path/version/build selected; Beta excluded.
-- [ ] Target machine unlocked/awake; OS permissions and GUI control prepared.
-- [ ] Canonical CEP/native paths and scan roots checked.
-- [ ] Disposable fixture and evidence root prepared.
-- [ ] Known modal-dialog recovery prepared; the supported local single-user path requires no pairing, connection code, or fingerprint ceremony.
-- [ ] Exact SHA, clean state, artifact hashes, and installed receipts will be captured.
+- Unit and contract tests (`npm test` in `plugin/host` and `plugin/panel`, `node --test` for scripts):
+- CI status on the candidate SHA:
+- Real-AE check (After Effects version, platform, project bit depth):
 
 ## Exit conditions
 
-- [ ] All included tools pass the public-MCP candidate session.
-- [ ] Typed result, AE state, provenance, audit, and postcondition agree.
+- [ ] The public MCP call returns the typed result and the AE state agrees with it.
 - [ ] Every write has executed and verified Undo.
-- [ ] Review/CI pass and candidate identity is exact.
-- [ ] Clean-main rebuild/reinstall and package smoke pass.
-- [ ] Per-tool acceptance, optional per-Issue disposition, and remaining risks are recorded.
+- [ ] Review and CI pass on the exact candidate SHA.
+- [ ] Docs (`docs/REFERENCE.md`, `docs/TOOL_LIBRARY.md`) and the `### Unreleased` changelog section are updated.
+
+The historical native capability-package template is archived at `docs/archive/templates/capability-package-completion.md`.

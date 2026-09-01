@@ -1,11 +1,11 @@
-Follow `docs/CAPABILITY_PACKAGE_WORKFLOW.md`. The linked Issue is the source of truth for a capability package's scope and acceptance matrix; do not copy it here.
+Read `docs/ARCHITECTURE_DIRECTION.md` and `docs/WORKFLOW.md` first. The native AEGP plane is frozen; new capability work runs on the ExtendScript plane (public MCP tool → host handler → `/exec` → `jsx-bridge` → After Effects → typed result → audit evidence). The linked Issue is the source of truth for scope and acceptance; do not copy it here.
 
-Complete **Common** for every PR. For an AE-dependent capability package, also complete **Native package evidence**. For any other PR, delete that section or write one `N/A` line with the reason and observable acceptance check; do not fill field-by-field `N/A` values.
+Complete **Common** for every PR. Complete **Real-AE evidence** for any change that alters AE-facing behavior; for any other PR write one `N/A` line with the reason and the observable check you ran instead.
 
 ## Common
 
-- Change type: native capability package / isolated fix / docs / infrastructure
-- Issue or package Issue:
+- Change type: ExtendScript capability / isolated fix / docs / infrastructure
+- Issue:
 - User-visible outcome:
 - Scope and explicit non-goals:
 
@@ -17,13 +17,12 @@ Commands and results:
 
 Review findings and disposition (blocker / follow-up / out of scope):
 
-## Native package evidence (conditional)
+## Real-AE evidence (conditional)
 
-- Deviation from the frozen Issue: none / describe and link the decision
-- Frozen candidate SHA:
-- T3 and required CI status on that SHA:
-- All relevant Core / CEP / native / protocol identities match: yes / no
-- Redacted T5 real-AE evidence link or summary:
-- Post-freeze SHA replacement and reason: none / describe; if replaced, record required CI for the replacement SHA
+- Public MCP request(s) exercised, exactly as a client sends them:
+- Read-state evidence, or before/after state for writes:
+- Undo executed and verified (writes):
+- Recovery / uncertain-failure check:
+- After Effects version and platform:
 
-After merge, record per-tool T6, any optional child-Issue closure, and efficiency counters once in the package completion comment using `docs/templates/capability-package-completion.md`.
+The historical native capability-package process is archived at `docs/archive/CAPABILITY_PACKAGE_WORKFLOW.md`; do not open new native packages.

@@ -1,11 +1,8 @@
 {
   "mcpServers": {
     "ae": {
-      "command": "ae-mcp",
-      "env": {
-        "AE_MCP_BACKEND": "ae-mcp",
-        "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
-      }
+      "command": "npx",
+      "args": ["-y", "ae-mcp-jkdg"]
     }
   }
 }

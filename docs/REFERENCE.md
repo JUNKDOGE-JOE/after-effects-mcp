@@ -187,6 +187,7 @@ stderr evidence is available.
 | `RPC_TIMEOUT` | A Codex app-server RPC method timed out. | Inspect the method detail and check the CLI process/network. |
 | `UPSTREAM_HTTP_<status>` | An upstream service returned a three-digit HTTP status. `401`/`403` are authentication failures. | Use the numeric status to check login, quota, model access, or relay health. |
 | `UPSTREAM_ERROR` | The model/upstream failed without a usable HTTP status. | Check model availability and provider service status. |
+| `UPSTREAM_CONNECTION_CLOSED` | The upstream connection closed while it was returning an error. The turn is not retried automatically. | Send the next message; it starts a fresh session. Check the channel process if it repeats. |
 | `EVENT_STREAM_FAILED` | The OpenCode SSE event stream disconnected. | Check the OpenCode process and local network. |
 | `PROVIDER_STREAM_STALLED` | The provider stream was silent for more than five minutes and the turn was stopped. | Check relay or proxy connectivity, then retry. |
 | `TURN_INPUT_INVALID` | The turn or one of its attachments is invalid/unavailable. | Re-select or remove the unavailable attachment. |
@@ -197,7 +198,7 @@ stderr evidence is available.
 | `BACKEND_ERROR` | A backend failure did not match a more specific category. | Expand details and attach an exported diagnostics bundle. |
 
 Settings → Export log writes the last 50 structured chat failures under
-`## backend errors (last 50)`, per-line-cleaned process output under
+`## backend errors (last 50, memory + disk)`, per-line-cleaned process output under
 `## backend stderr tails`, and persisted chat events in both host-log sections.
 These sections are complementary: the category is the routing handle, while
 the process/RPC detail and host timeline provide the failure context.
@@ -225,3 +226,15 @@ checkpoints, recovery files, blocked-client state, logs, tools, legacy skills,
 and Tool Library exports derive from the selected root. Panel conversation
 history continues to use the panel platform path `~/.ae-mcp/sessions`. Host
 tests must inject a temporary root instead of using the developer's real state.
+
+Other environment variables the host and panel read:
+
+| Variable | Effect |
+|---|---|
+| `AE_MCP_CHECKPOINT_KEEP` | Number of `.aep` checkpoints retained per project (default 50, minimum 1). |
+| `AE_MCP_CLAUDE_CLI`, `AE_MCP_CODEX_CLI` | Explicit executable path for the Claude or Codex CLI when it is not on the panel PATH. Restart After Effects after setting them. |
+| `AE_MCP_APPROVAL_TIER_FILE` | Path to a file holding `readonly`, `manual`, `auto`, or `none`. When set, the host enforces that tier on the verb tools for an embedding UI; when unset the gate is a no-op and the connecting client's own permission system applies. |
+
+External MCP clients always receive the ExtendScript expert guardrails in the
+server instructions; the expert-guidance switch in Settings applies to the
+panel's own conversations.

@@ -17,13 +17,13 @@ not parity by tool count.
   bundled generation → `useCount`/`lastUsedAt` and funnel telemetry.
 - History-redaction placeholders are rejected before dispatch, pointed to
   captured candidates, and stopped by a per-session circuit breaker.
+- The Tools page is the single Tool Library management surface (#350,
+  v0.10.5).
+- `jsx-bridge` keeps its serialization lock across a timeout and drains the
+  engine with a sentinel before releasing it (#260).
 
 ## Current focus
 
-- Complete issue #350 by making the Tools page the single Tool Library
-  management surface.
-- Fix the already-assigned `jsx-bridge` timeout overlap window without opening
-  a second execution plane.
 - Admit new ExtendScript capabilities only when a public MCP call can prove a
   user-visible AE outcome through typed response, state readback, audit, and
   Undo verification for writes.
