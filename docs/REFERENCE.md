@@ -182,6 +182,7 @@ stderr evidence is available.
 | `PROCESS_EXITED` | A running CLI process exited unexpectedly. | Expand the exit/signal and stderr detail. |
 | `AUTH_REQUIRED` | The CLI or upstream requires login or credentials. | Complete that CLI's login flow and re-check. |
 | `MCP_UNREACHABLE` | The channel could not prepare or reach the conversation MCP server. | Keep the panel host running and inspect the MCP diagnostic row. |
+| `AE_MCP_TRANSPORT_REBUILT` | The OpenCode connection to the AE host was rebuilt after an uncertain transport failure, and the turn was stopped without replay. | Confirm that no write remains unresolved before resending the turn. |
 | `SESSION_START_FAILED` | A Codex thread or OpenCode session was not created. | Repair the channel, then retry; the turn was not dispatched. |
 | `TURN_START_FAILED` | Starting or posting a turn failed. | Check `dispatchState` before retrying because dispatch may be uncertain. |
 | `RPC_TIMEOUT` | A Codex app-server RPC method timed out. | Inspect the method detail and check the CLI process/network. |

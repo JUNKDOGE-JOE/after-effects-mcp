@@ -29,8 +29,11 @@ test('status bar and session drawer are wired to the controller actions', () => 
 
 test('unload flushes first and controlled backend switches guard restored entries', () => {
   assert.match(APP, /installBeforeUnloadReset\([\s\S]*?window,[\s\S]*?\[codexBackend, openCodeBackend, claudeBackend\],[\s\S]*?\(\) => sessionController\.flush\(\)/);
-  assert.match(APP, /if \(pendingSessionLoadRef\.current\) return;/);
+  assert.match(APP, /if \(pendingSessionLoad\) return;/);
   assert.match(APP, /selectBackend: async \(backend\)/);
+  assert.match(APP, /selectBackend: async \(backend\)[\s\S]*?lastRealBackendRef\.current = backend;[\s\S]*?setBackendPref\(backend\)/);
+  assert.match(APP, /decideBackendReset\(\{[\s\S]*?pendingSessionLoad: pendingSessionLoadRef\.current/);
+  assert.match(APP, /effectiveBackendRef\.current === target\?\.backend[\s\S]*?pendingSessionLoadRef\.current = null/);
 });
 
 test('chat screen exposes session history and new-session actions', () => {

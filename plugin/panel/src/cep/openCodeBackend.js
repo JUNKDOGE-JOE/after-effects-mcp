@@ -22,6 +22,7 @@ const READY_POLL_MS = 250;
 const READY_REQUEST_TIMEOUT_MS = 1500;
 export const OPENCODE_STALL_WARNING_MS = 180000;
 export const OPENCODE_STALL_TIMEOUT_MS = 300000;
+export const OPENCODE_FINALIZATION_TIMEOUT_MS = 5000;
 const DEFAULT_PROVIDER_ID = 'opencode';
 const DEFAULT_MODEL_ID = 'hy3-free';
 const STDERR_TAIL_LIMIT = 4096;
@@ -526,11 +527,7 @@ export function createOpenCodeBackend({
     if (!activeRun || stopRequested) return;
     stopRequested = true;
     messageAbortController?.abort();
-    await rejectPendingQuestions();
-    if (sessionId) {
-      await postJson('/session/' + encodeURIComponent(sessionId) + '/abort', {}).catch(() => {});
-    }
-    await drainApprovals();
+    await finalizeActiveTurnRequests();
     if (activeRun) {
       emitAfterText({
         type: 'error',
@@ -859,6 +856,12 @@ export function createOpenCodeBackend({
       : 'The connection to the AE host could not be rebuilt. Reload the panel or start a new session, then try again.';
   }
 
+  function aeMcpTransportRebuiltMessage() {
+    return /^zh/i.test(currentLang())
+      ? '与 AE 宿主的连接已重建，本轮已停止；请确认没有未完成的写入后重新发送。'
+      : 'The connection to the AE host was rebuilt and this turn was stopped. Confirm that no write remains unresolved before resending.';
+  }
+
   async function recycleAeMcpServer() {
     const staleProc = proc;
     const staleHome = configHome;
@@ -904,15 +907,23 @@ export function createOpenCodeBackend({
       return true;
     }
 
-    const retryTurn = activeTurn;
     aeMcpRecoveryAttempts += 1;
     aeMcpRecoveryStarted = true;
     emitTurnProgress('mcp-rebuild');
     const pendingRecovery = (async () => {
       await recycleAeMcpServer();
-      if (!activeRun || stopRequested || !retryTurn) return;
-      const replacementId = await prepareTurnSession();
-      await dispatchTurnMessage(replacementId, retryTurn);
+      if (!activeRun || stopRequested) return;
+      await prepareTurnSession();
+      if (!activeRun || stopRequested) return;
+      emitAfterText({
+        type: 'error',
+        kind: 'network',
+        code: 'AE_MCP_TRANSPORT_REBUILT',
+        message: aeMcpTransportRebuiltMessage(),
+        detail: { recoveryAttempts: aeMcpRecoveryAttempts },
+        ...activeTurnFailureFields(),
+      });
+      finishActive();
     })();
     aeMcpRecoveryPromise = pendingRecovery;
     void pendingRecovery.then(
@@ -939,6 +950,30 @@ export function createOpenCodeBackend({
       body: JSON.stringify(body || {}),
       ...(signal ? { signal } : {}),
     });
+  }
+
+  async function finalizeActiveTurnRequests() {
+    const controller = new AbortController();
+    const requests = Promise.allSettled([
+      rejectPendingQuestions(controller.signal),
+      sessionId
+        ? postJson('/session/' + encodeURIComponent(sessionId) + '/abort', {}, controller.signal)
+        : Promise.resolve(),
+      drainApprovals(controller.signal),
+    ]);
+    let timer = null;
+    const deadline = new Promise((resolve) => {
+      timer = setTimeoutImpl(() => {
+        controller.abort();
+        resolve();
+      }, OPENCODE_FINALIZATION_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([requests, deadline]);
+    } finally {
+      if (timer !== null) clearTimeoutImpl(timer);
+      controller.abort();
+    }
   }
 
   async function waitForMcp(requestBaseUrl, isCancelled = () => false) {
@@ -1333,15 +1368,16 @@ export function createOpenCodeBackend({
     return annotations[name] || {};
   }
 
-  async function replyPermission(permissionId, decision) {
+  async function replyPermission(permissionId, decision, signal) {
     if (!sessionId || !permissionId) return;
-    await postJson(permissionReplyPath(sessionId, permissionId), permissionReplyBody(decision));
+    await postJson(permissionReplyPath(sessionId, permissionId), permissionReplyBody(decision), signal);
   }
 
-  async function autoReply(permissionId, decision) {
+  async function autoReply(permissionId, decision, signal) {
     try {
-      await replyPermission(permissionId, decision);
+      await replyPermission(permissionId, decision, signal);
     } catch (e) {
+      if (signal?.aborted) return;
       const httpStatus = extractHttpStatus(e?.httpStatus);
       const classified = classifyErrorCode({
         error: e,
@@ -1587,11 +1623,11 @@ export function createOpenCodeBackend({
     }
   }
 
-  function drainApprovals() {
+  function drainApprovals(signal) {
     const replies = [];
     for (const [permissionId] of Array.from(pendingApprovals.entries())) {
       pendingApprovals.delete(permissionId);
-      replies.push(autoReply(permissionId, 'deny'));
+      replies.push(autoReply(permissionId, 'deny', signal));
       emit({ type: 'tool-denied', toolUseId: permissionId });
     }
     return Promise.allSettled(replies);
@@ -1795,12 +1831,12 @@ export function createOpenCodeBackend({
     return true;
   }
 
-  async function rejectPendingQuestions() {
+  async function rejectPendingQuestions(signal) {
     const rejects = [];
     for (const [questionId, pending] of Array.from(pendingQuestions.entries())) {
       pendingQuestions.delete(questionId);
       if (!pending.settling && baseUrl) {
-        rejects.push(postJson(questionReplyPath(questionId, 'reject'), {}));
+        rejects.push(postJson(questionReplyPath(questionId, 'reject'), {}, signal));
       }
       emitAfterText({ type: 'question-resolved', toolUseId: questionId, outcome: 'cancelled' });
     }
@@ -1810,11 +1846,7 @@ export function createOpenCodeBackend({
   async function stop() {
     if (activeRun) stopRequested = true;
     messageAbortController?.abort();
-    await rejectPendingQuestions();
-    if (sessionId) {
-      await postJson('/session/' + encodeURIComponent(sessionId) + '/abort', {}).catch(() => {});
-    }
-    await drainApprovals();
+    await finalizeActiveTurnRequests();
     if (activeRun) {
       emitAfterText({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
@@ -1822,6 +1854,16 @@ export function createOpenCodeBackend({
   }
 
   function reset() {
+    if (activeRun) {
+      emitAfterText({
+        type: 'error',
+        kind: 'aborted',
+        code: 'TURN_ABORTED',
+        message: 'Turn aborted.',
+        ...activeTurnFailureFields(),
+      });
+      finishActive();
+    }
     generation += 1;
     const stoppedProc = proc;
     const stoppedHome = configHome;

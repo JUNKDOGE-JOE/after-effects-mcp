@@ -26571,6 +26571,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     AUTH_REQUIRED: entry("AUTH_REQUIRED", "auth", "\u8BF7\u6309\u300C\u8BBE\u7F6E \u2192 AI\u300D\u901A\u9053\u5361\u4E0A\u7684\u767B\u5F55\u6307\u5F15\u5B8C\u6210\u5BF9\u5E94 CLI \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", "Follow the sign-in guidance on the channel card under Settings \u2192 AI for this CLI, then re-check."),
     MCP_UNREACHABLE: entry("MCP_UNREACHABLE", "mcp", "\u8BF7\u4FDD\u6301\u9762\u677F\u5BBF\u4E3B\u8FD0\u884C\uFF0C\u5E76\u68C0\u67E5\u672C\u673A\u4F1A\u8BDD MCP \u72B6\u6001\u3002", "Keep the panel host running and check the local conversation MCP status."),
     AE_MCP_REBUILD_FAILED: entry("AE_MCP_REBUILD_FAILED", "network", "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u91CD\u5EFA\u5931\u8D25\u3002\u8BF7\u91CD\u8F7D\u9762\u677F\u6216\u65B0\u5EFA\u4F1A\u8BDD\u540E\u518D\u8BD5\u3002", "The connection to the AE host could not be rebuilt. Reload the panel or start a new session, then try again."),
+    AE_MCP_TRANSPORT_REBUILT: entry("AE_MCP_TRANSPORT_REBUILT", "network", "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u5DF2\u91CD\u5EFA\uFF0C\u672C\u8F6E\u5DF2\u505C\u6B62\uFF1B\u8BF7\u786E\u8BA4\u6CA1\u6709\u672A\u5B8C\u6210\u7684\u5199\u5165\u540E\u91CD\u65B0\u53D1\u9001\u3002", "The connection to the AE host was rebuilt and this turn was stopped. Confirm that no write remains unresolved before resending."),
     SESSION_START_FAILED: entry("SESSION_START_FAILED", "backend", "\u4F1A\u8BDD\u5C1A\u672A\u521B\u5EFA\uFF1B\u53EF\u4FEE\u590D\u901A\u9053\u72B6\u6001\u540E\u5B89\u5168\u91CD\u8BD5\u3002", "The session was not created; retry after fixing the channel state."),
     TURN_START_FAILED: entry("TURN_START_FAILED", "backend", "\u53D1\u9001\u53EF\u80FD\u5DF2\u7ECF\u5F00\u59CB\uFF1B\u8BF7\u5148\u6309\u8BE6\u60C5\u4E2D\u7684\u6D3E\u53D1\u72B6\u6001\u6838\u5BF9\u518D\u91CD\u8BD5\u3002", "Sending may have started; check the dispatch state before retrying."),
     RPC_TIMEOUT: entry("RPC_TIMEOUT", "network", "\u8BF7\u6C42\u7B49\u5F85\u8D85\u65F6\uFF1B\u8BF7\u68C0\u67E5\u901A\u9053\u8FDB\u7A0B\u4E0E\u7F51\u7EDC\u540E\u518D\u8BD5\u3002", "The request timed out; check the channel process and network before retrying."),
@@ -28533,10 +28534,39 @@ When you are done, remind me of two things: MCP tools load only in a new session
     }
     return { allowedTools, annotations };
   }
-  function shouldResetOnBackendChange(prevReal, next) {
-    if (!REAL_BACKENDS.includes(next)) return { reset: false, nextReal: prevReal || null };
-    if (!prevReal) return { reset: false, nextReal: next };
-    if (prevReal === next) return { reset: false, nextReal: prevReal };
+
+  // src/lib/backendResetDecision.js
+  init_cep_runtime_inject();
+  var REAL_BACKENDS2 = /* @__PURE__ */ new Set(["subscription", "codex", "opencode"]);
+  function realBackend(value) {
+    return REAL_BACKENDS2.has(value) ? value : null;
+  }
+  function pendingBackend(pendingSessionLoad, selectedPref) {
+    if (!pendingSessionLoad) return null;
+    if (typeof pendingSessionLoad === "object") {
+      return realBackend(pendingSessionLoad.backend);
+    }
+    return realBackend(selectedPref);
+  }
+  function decideBackendReset({
+    lastReal,
+    effective,
+    selectedPref,
+    pendingSessionLoad
+  } = {}) {
+    const previous = realBackend(lastReal);
+    const next = realBackend(effective);
+    const selected = realBackend(selectedPref);
+    const sessionTarget = pendingBackend(pendingSessionLoad, selected);
+    if (!next) {
+      return {
+        reset: false,
+        nextReal: sessionTarget && selected === sessionTarget ? sessionTarget : previous
+      };
+    }
+    if (!previous || previous === next || sessionTarget === next && selected === next) {
+      return { reset: false, nextReal: next };
+    }
     return { reset: true, nextReal: next };
   }
 
@@ -32341,6 +32371,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   var READY_REQUEST_TIMEOUT_MS = 1500;
   var OPENCODE_STALL_WARNING_MS = 18e4;
   var OPENCODE_STALL_TIMEOUT_MS = 3e5;
+  var OPENCODE_FINALIZATION_TIMEOUT_MS = 5e3;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "hy3-free";
   var STDERR_TAIL_LIMIT3 = 4096;
@@ -32760,12 +32791,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (!activeRun || stopRequested) return;
       stopRequested = true;
       messageAbortController == null ? void 0 : messageAbortController.abort();
-      await rejectPendingQuestions();
-      if (sessionId) {
-        await postJson("/session/" + encodeURIComponent(sessionId) + "/abort", {}).catch(() => {
-        });
-      }
-      await drainApprovals();
+      await finalizeActiveTurnRequests();
       if (activeRun) {
         emitAfterText({
           type: "error",
@@ -33064,6 +33090,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function aeMcpRebuildFailureMessage() {
       return /^zh/i.test(currentLang()) ? "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u91CD\u5EFA\u5931\u8D25\u3002\u8BF7\u91CD\u8F7D\u9762\u677F\u6216\u65B0\u5EFA\u4F1A\u8BDD\u540E\u518D\u8BD5\u3002" : "The connection to the AE host could not be rebuilt. Reload the panel or start a new session, then try again.";
     }
+    function aeMcpTransportRebuiltMessage() {
+      return /^zh/i.test(currentLang()) ? "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u5DF2\u91CD\u5EFA\uFF0C\u672C\u8F6E\u5DF2\u505C\u6B62\uFF1B\u8BF7\u786E\u8BA4\u6CA1\u6709\u672A\u5B8C\u6210\u7684\u5199\u5165\u540E\u91CD\u65B0\u53D1\u9001\u3002" : "The connection to the AE host was rebuilt and this turn was stopped. Confirm that no write remains unresolved before resending.";
+    }
     async function recycleAeMcpServer() {
       var _a;
       const staleProc = proc;
@@ -33111,15 +33140,23 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         failAeMcpRebuild();
         return true;
       }
-      const retryTurn = activeTurn;
       aeMcpRecoveryAttempts += 1;
       aeMcpRecoveryStarted = true;
       emitTurnProgress("mcp-rebuild");
       const pendingRecovery = (async () => {
         await recycleAeMcpServer();
-        if (!activeRun || stopRequested || !retryTurn) return;
-        const replacementId = await prepareTurnSession();
-        await dispatchTurnMessage(replacementId, retryTurn);
+        if (!activeRun || stopRequested) return;
+        await prepareTurnSession();
+        if (!activeRun || stopRequested) return;
+        emitAfterText({
+          type: "error",
+          kind: "network",
+          code: "AE_MCP_TRANSPORT_REBUILT",
+          message: aeMcpTransportRebuiltMessage(),
+          detail: { recoveryAttempts: aeMcpRecoveryAttempts },
+          ...activeTurnFailureFields()
+        });
+        finishActive();
       })();
       aeMcpRecoveryPromise = pendingRecovery;
       void pendingRecovery.then(
@@ -33144,6 +33181,27 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         body: JSON.stringify(body || {}),
         ...signal ? { signal } : {}
       });
+    }
+    async function finalizeActiveTurnRequests() {
+      const controller = new AbortController();
+      const requests = Promise.allSettled([
+        rejectPendingQuestions(controller.signal),
+        sessionId ? postJson("/session/" + encodeURIComponent(sessionId) + "/abort", {}, controller.signal) : Promise.resolve(),
+        drainApprovals(controller.signal)
+      ]);
+      let timer = null;
+      const deadline = new Promise((resolve) => {
+        timer = setTimeoutImpl(() => {
+          controller.abort();
+          resolve();
+        }, OPENCODE_FINALIZATION_TIMEOUT_MS);
+      });
+      try {
+        await Promise.race([requests, deadline]);
+      } finally {
+        if (timer !== null) clearTimeoutImpl(timer);
+        controller.abort();
+      }
     }
     async function waitForMcp(requestBaseUrl, isCancelled = () => false) {
       var _a;
@@ -33531,14 +33589,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const annotations = toolMeta && toolMeta.annotations || {};
       return annotations[name] || {};
     }
-    async function replyPermission(permissionId, decision) {
+    async function replyPermission(permissionId, decision, signal) {
       if (!sessionId || !permissionId) return;
-      await postJson(permissionReplyPath(sessionId, permissionId), permissionReplyBody(decision));
+      await postJson(permissionReplyPath(sessionId, permissionId), permissionReplyBody(decision), signal);
     }
-    async function autoReply(permissionId, decision) {
+    async function autoReply(permissionId, decision, signal) {
       try {
-        await replyPermission(permissionId, decision);
+        await replyPermission(permissionId, decision, signal);
       } catch (e) {
+        if (signal == null ? void 0 : signal.aborted) return;
         const httpStatus = extractHttpStatus(e == null ? void 0 : e.httpStatus);
         const classified = classifyErrorCode({
           error: e,
@@ -33756,11 +33815,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         handlePermission({ ...p, properties: p });
       }
     }
-    function drainApprovals() {
+    function drainApprovals(signal) {
       const replies = [];
       for (const [permissionId] of Array.from(pendingApprovals.entries())) {
         pendingApprovals.delete(permissionId);
-        replies.push(autoReply(permissionId, "deny"));
+        replies.push(autoReply(permissionId, "deny", signal));
         emit({ type: "tool-denied", toolUseId: permissionId });
       }
       return Promise.allSettled(replies);
@@ -33946,12 +34005,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
       return true;
     }
-    async function rejectPendingQuestions() {
+    async function rejectPendingQuestions(signal) {
       const rejects = [];
       for (const [questionId, pending] of Array.from(pendingQuestions.entries())) {
         pendingQuestions.delete(questionId);
         if (!pending.settling && baseUrl) {
-          rejects.push(postJson(questionReplyPath(questionId, "reject"), {}));
+          rejects.push(postJson(questionReplyPath(questionId, "reject"), {}, signal));
         }
         emitAfterText({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
       }
@@ -33960,12 +34019,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     async function stop() {
       if (activeRun) stopRequested = true;
       messageAbortController == null ? void 0 : messageAbortController.abort();
-      await rejectPendingQuestions();
-      if (sessionId) {
-        await postJson("/session/" + encodeURIComponent(sessionId) + "/abort", {}).catch(() => {
-        });
-      }
-      await drainApprovals();
+      await finalizeActiveTurnRequests();
       if (activeRun) {
         emitAfterText({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
@@ -33973,6 +34027,16 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function reset() {
       var _a;
+      if (activeRun) {
+        emitAfterText({
+          type: "error",
+          kind: "aborted",
+          code: "TURN_ABORTED",
+          message: "Turn aborted.",
+          ...activeTurnFailureFields()
+        });
+        finishActive();
+      }
       generation += 1;
       const stoppedProc = proc;
       const stoppedHome = configHome;
@@ -38291,6 +38355,7 @@ ${draft.baseUrl}`)) return;
         },
         getEntries: () => chatEntriesRef.current,
         selectBackend: async (backend) => {
+          lastRealBackendRef.current = backend;
           setBackendPref(backend);
           writePref("ae_mcp_backend", backend);
           await new Promise((resolve) => {
@@ -38565,8 +38630,17 @@ ${draft.baseUrl}`)) return;
       return runOpenCodeProbe();
     }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
     import_react48.default.useEffect(() => {
-      const decision = shouldResetOnBackendChange(lastRealBackendRef.current, effective.backend);
+      const pendingSessionLoad = pendingSessionLoadRef.current;
+      const decision = decideBackendReset({
+        lastReal: lastRealBackendRef.current,
+        effective: effective.backend,
+        selectedPref: backendPref,
+        pendingSessionLoad: pendingSessionLoadRef.current
+      });
       lastRealBackendRef.current = decision.nextReal;
+      if ((pendingSessionLoad == null ? void 0 : pendingSessionLoad.backend) === effective.backend) {
+        pendingSessionLoadRef.current = null;
+      }
       if (!decision.reset) return;
       claudeBackend.reset();
       codexBackend.reset();
@@ -38576,13 +38650,14 @@ ${draft.baseUrl}`)) return;
       setThinkingActive(false);
       setTurnStage(null);
       setTurnProgress(null);
-      if (pendingSessionLoadRef.current) return;
+      if (pendingSessionLoad) return;
       setSessionModel(null);
       setSessionEffort(null);
       setSessionFast(null);
       void sessionController.createSession();
     }, [
       effective.backend,
+      backendPref,
       claudeBackend,
       codexBackend,
       openCodeBackend,
@@ -38678,7 +38753,7 @@ ${draft.baseUrl}`)) return;
     }, [chatStreaming, sessionController]);
     const switchChatSessionNow = import_react48.default.useCallback(async (id) => {
       const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
-      pendingSessionLoadRef.current = id;
+      pendingSessionLoadRef.current = target ? { id, backend: target.backend } : { id, backend: null };
       if (target) {
         setSessionModel(target.model || null);
         setSessionEffort(null);
@@ -38693,7 +38768,9 @@ ${draft.baseUrl}`)) return;
       } catch (error) {
         pushLog("Session switch failed: " + ((error == null ? void 0 : error.message) || String(error)));
       } finally {
-        pendingSessionLoadRef.current = null;
+        if (!target || effectiveBackendRef.current === (target == null ? void 0 : target.backend)) {
+          pendingSessionLoadRef.current = null;
+        }
       }
     }, [pushLog, sessionController]);
     const confirmChatNavigationNow = import_react48.default.useCallback(async () => {

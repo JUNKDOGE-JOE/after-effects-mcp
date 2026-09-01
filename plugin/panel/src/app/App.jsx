@@ -16,7 +16,8 @@ import { QuestionFormDialog } from '../components/tools/QuestionFormDialog';
 import { questionsFromElicitationSchema } from '../lib/questionForm';
 import { createPanelFileDropGuard } from '../lib/panelFileDrop';
 import { revertToPreviousCheckpoint } from '../lib/activityModel';
-import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
+import { pickBackend, deriveToolMeta } from '../lib/backendSelect';
+import { decideBackendReset } from '../lib/backendResetDecision.js';
 import { installBeforeUnloadReset } from '../lib/backendLifecycle.js';
 import { containsExactSecret } from '../lib/exactSecretRedaction.js';
 import { redactCredentialText } from '../lib/credentialTextRedaction.js';
@@ -766,6 +767,7 @@ function Shell({ cs }) {
       },
       getEntries: () => chatEntriesRef.current,
       selectBackend: async (backend) => {
+        lastRealBackendRef.current = backend;
         setBackendPref(backend);
         writePref('ae_mcp_backend', backend);
         await new Promise((resolve) => {
@@ -1065,8 +1067,17 @@ function Shell({ cs }) {
   }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
 
   React.useEffect(() => {
-    const decision = shouldResetOnBackendChange(lastRealBackendRef.current, effective.backend);
+    const pendingSessionLoad = pendingSessionLoadRef.current;
+    const decision = decideBackendReset({
+      lastReal: lastRealBackendRef.current,
+      effective: effective.backend,
+      selectedPref: backendPref,
+      pendingSessionLoad: pendingSessionLoadRef.current,
+    });
     lastRealBackendRef.current = decision.nextReal;
+    if (pendingSessionLoad?.backend === effective.backend) {
+      pendingSessionLoadRef.current = null;
+    }
     if (!decision.reset) return;
     claudeBackend.reset();
     codexBackend.reset();
@@ -1076,13 +1087,14 @@ function Shell({ cs }) {
     setThinkingActive(false);
     setTurnStage(null);
     setTurnProgress(null);
-    if (pendingSessionLoadRef.current) return;
+    if (pendingSessionLoad) return;
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
     void sessionController.createSession();
   }, [
     effective.backend,
+    backendPref,
     claudeBackend,
     codexBackend,
     openCodeBackend,
@@ -1185,7 +1197,7 @@ function Shell({ cs }) {
 
   const switchChatSessionNow = React.useCallback(async (id) => {
     const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
-    pendingSessionLoadRef.current = id;
+    pendingSessionLoadRef.current = target ? { id, backend: target.backend } : { id, backend: null };
     if (target) {
       setSessionModel(target.model || null);
       setSessionEffort(null);
@@ -1200,7 +1212,9 @@ function Shell({ cs }) {
     } catch (error) {
       pushLog('Session switch failed: ' + (error?.message || String(error)));
     } finally {
-      pendingSessionLoadRef.current = null;
+      if (!target || effectiveBackendRef.current === target?.backend) {
+        pendingSessionLoadRef.current = null;
+      }
     }
   }, [pushLog, sessionController]);
 
