@@ -16,6 +16,7 @@ const authToken = require('./auth-token');
 const jsxBridge = require('./jsx-bridge');
 const { createStatePaths } = require('./state-paths');
 const { computeContentHash } = require('./mcp/tool-library');
+const { NATIVE_EXEC_TIMEOUT_MS } = require('./mcp/native-program');
 
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
@@ -1605,5 +1606,31 @@ test('/exec distinguishes uncertain timeout from a queued not_dispatched call', 
     } finally {
         if (sentinelCallback) sentinelCallback('2');
         await closeFixture(fixture);
+    }
+});
+
+test('native client factory receives the public native execution timeout', () => {
+    const server = loadServer();
+    let options = null;
+    server._setNativeAegpClientFactoryForTest(function (input) {
+        options = input;
+        return fakeNativeClient();
+    });
+    server._makeNativeAegpClientForTest();
+    assert.equal(options.requestTimeoutMs, NATIVE_EXEC_TIMEOUT_MS);
+});
+
+test('unhandled rejections are recorded in the host log without crashing the host', () => {
+    const server = loadServer();
+    server.hostLog.init({ statePaths: isolatedStatePaths() });
+    server._registerUnhandledRejectionHandlerForTest();
+    try {
+        server._recordUnhandledRejectionForTest(new Error('test rejection'));
+        const event = server.hostLog.tail(1)[0];
+        assert.equal(event.level, 'error');
+        assert.equal(event.source, 'process');
+        assert.equal(event.message, 'Unhandled promise rejection: test rejection');
+    } finally {
+        server._clearUnhandledRejectionHandlerForTest();
     }
 });
