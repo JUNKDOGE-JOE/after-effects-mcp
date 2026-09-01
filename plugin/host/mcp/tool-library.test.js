@@ -13,6 +13,7 @@ const { skillPlan, assertSkillPlanCurrent } = skillUse;
 const {
     ENVIRONMENT,
     ToolLibrary,
+    assertSecretFree,
     canonicalJson,
     computeContentHash,
     validateArgsSchema,
@@ -176,6 +177,57 @@ test('secret-shaped artifact content is rejected before it reaches disk', (t) =>
     secret.contentHash = computeContentHash(secret.kind, secret.content, secret.argsSchema);
     assert.throws(function () { library.saveArtifact(secret); }, /secret-shaped content/i);
     assert.equal(fs.existsSync(path.join(library.toolRoot, 'index.json')), false);
+});
+
+test('secret scanner distinguishes ExtendScript values from credential-shaped assignments', () => {
+    [
+        'var key = prop.keyTime(1);',
+        'var key = layer.property("Position").addKey(1);',
+        'var token = layer.name.split("_")[0];',
+        'var session = app.project;',
+        'for (var i = 1; i <= prop.numKeys; i++) { var t = prop.keyTime(i); }',
+    ].forEach(function (content) {
+        assert.doesNotThrow(function () { assertSecretFree(content, 'artifact.json'); });
+    });
+    [
+        'Authorization: Bearer secret-value',
+        'x-api-key: secret-value',
+        'aaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbb.cccccccc',
+        '-----BEGIN PRIVATE KEY-----',
+        'sk-abcdefghijklmnop',
+        'var apiKey = "sk-abcdefghijklmnop";',
+        'token: "ghp_abcdefghijklmnop"',
+        'var token = "Bearer abc";',
+        'auth: "AKIAIOSFODNN7"',
+    ].forEach(function (content) {
+        assert.throws(function () { assertSecretFree(content, 'artifact.json'); }, /secret-shaped/i);
+    });
+});
+
+test('legacy artifact scan skips one unsafe file and records a warning', (t) => {
+    const root = tempRoot(t);
+    const warnings = [];
+    const library = new ToolLibrary({
+        statePaths: createStatePaths({ stateDir: root }),
+        bundledRoot: path.join(__dirname, 'skills_bundled'),
+        now: function () { return 1000; },
+        warn: function (warning) { warnings.push(warning); },
+    });
+    library.writeSkill({
+        name: 'safe-legacy', description: 'Safe legacy skill.', template_type: 'jsx',
+        template: 'var key = prop.keyTime(1);', args_schema: {},
+    });
+    library.writeSkill({
+        name: 'unsafe-legacy', description: 'Unsafe legacy skill.', template_type: 'jsx',
+        template: 'var apiKey = "sk-abcdefghijklmnop";', args_schema: {},
+    });
+    const names = library.allSummaries().map(function (item) { return item.name; });
+    assert.equal(names.includes('safe-legacy'), true);
+    assert.equal(names.includes('unsafe-legacy'), false);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].type, 'tool-library-legacy-artifact-skipped');
+    assert.match(warnings[0].path, /unsafe-legacy\.json$/);
+    assert.match(warnings[0].error, /secret-shaped content/i);
 });
 
 test('argsSchema accepts descriptions and fails closed on unsupported keys', () => {
@@ -730,7 +782,7 @@ test('library import verifies content, rejects duplicates, and records imported 
     assert.throws(function () { target.importArtifact(tampered); }, /contentHash does not match/i);
 
     const secret = JSON.parse(JSON.stringify(exported));
-    secret.artifact.content = 'var apiKey = "not-allowed";';
+    secret.artifact.content = 'var apiKey = "sk-abcdefghijklmnop";';
     secret.artifact.contentHash = computeContentHash(
         secret.artifact.kind,
         secret.artifact.content,
@@ -768,4 +820,3 @@ test('library management transitions and deletion respect artifact lifecycle', (
     assert.equal(library.managementList().candidates[0].contentCharacters > 0, true);
     assert.deepEqual(library.clearCandidates(), { removedIds: [secondCandidate.id], count: 1 });
 });
-
