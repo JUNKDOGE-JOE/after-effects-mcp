@@ -59,6 +59,12 @@ test('model preferences are channel-scoped and Codex waits for live model facts'
   assert.match(APP, /providerFactsPending:[\s\S]*backendPref === 'codex'[\s\S]*codexProbe === null[\s\S]*codexModels === null/);
 });
 
+test('model chips persist the selected model as the current channel default', () => {
+  assert.match(APP, /onChipModel=\{\(m\) => \{ setSessionModel\(m\); setModel\(m\); writePref\(modelPreferenceKey\(backendPref\), m\); \}\}/);
+  assert.match(APP, /onChipEffort=\{setSessionEffort\}/);
+  assert.match(APP, /onChipFast=\{\(v\) => setSessionFast\(Boolean\(v\)\)\}/);
+});
+
 test('turn progress is reduced in App and rendered below the transcript', () => {
   assert.match(APP, /const \[turnStage, setTurnStage\] = React\.useState\(null\)/);
   assert.match(APP, /setTurnStage\(\(current\) => reduceTurnStage\(current, evt,/);

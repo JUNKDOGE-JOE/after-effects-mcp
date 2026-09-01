@@ -1587,7 +1587,7 @@ function Shell({ cs }) {
               fast: effectiveFast,
               permissionMode,
             }}
-            onChipModel={setSessionModel}
+            onChipModel={(m) => { setSessionModel(m); setModel(m); writePref(modelPreferenceKey(backendPref), m); }}
             onChipEffort={setSessionEffort}
             onChipFast={(v) => setSessionFast(Boolean(v))}
             onChipApproval={(m) => { setPermissionMode(m); writePref('ae_mcp_perm_mode', m); }}
