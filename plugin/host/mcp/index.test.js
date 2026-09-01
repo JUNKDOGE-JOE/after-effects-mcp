@@ -129,9 +129,14 @@ test('mountMcp requires explicit state paths', () => {
 });
 
 test('progress notifications retain their token and report elapsed seconds', () => {
-    assert.deepEqual(mountMcp.progressMessage('progress-1', 1000, 6200), {
+    assert.deepEqual(mountMcp.progressMessage('progress-1', 'ae_previewFrame', 1000, 6200), {
         jsonrpc: '2.0',
         method: 'notifications/progress',
-        params: { progressToken: 'progress-1', progress: 5, message: 'ae_exec is still running' },
+        params: { progressToken: 'progress-1', progress: 5, message: 'ae_previewFrame is still running' },
+    });
+    assert.deepEqual(mountMcp.progressMessage('progress-2', null, 1000, 6200), {
+        jsonrpc: '2.0',
+        method: 'notifications/progress',
+        params: { progressToken: 'progress-2', progress: 5, message: 'ae_exec is still running' },
     });
 });

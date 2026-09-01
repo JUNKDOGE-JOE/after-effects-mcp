@@ -26,6 +26,30 @@ function pngChunk(type, data) {
     return Buffer.concat([head, data, tail]);
 }
 
+function rgba16Png(width, height) {
+    const stride = width * 8;
+    const raw = Buffer.alloc(height * (stride + 1));
+    let value = 0x13579bdf;
+    for (let y = 0; y < height; y += 1) for (let x = 0; x < stride; x += 2) {
+        value = (value * 1664525 + 1013904223) >>> 0;
+        raw[y * (stride + 1) + x + 1] = value >>> 24;
+        raw[y * (stride + 1) + x + 2] = value >>> 16;
+    }
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 16; ihdr[9] = 6;
+    return Buffer.concat([png.SIGNATURE, pngChunk('IHDR', ihdr), pngChunk('IDAT', zlib.deflateSync(raw)), pngChunk('IEND', Buffer.alloc(0))]);
+}
+
+function noisyPng(width, height, seed) {
+    const rgba = Buffer.alloc(width * height * 4);
+    let value = seed >>> 0;
+    for (let index = 0; index < rgba.length; index += 1) {
+        value = (value * 1664525 + 1013904223) >>> 0;
+        rgba[index] = value >>> 24;
+    }
+    return png.encodePng(rgba, width, height);
+}
+
 function grayscalePng() {
     const ihdr = Buffer.alloc(13);
     ihdr.writeUInt32BE(2, 0); ihdr.writeUInt32BE(1, 4); ihdr[8] = 8; ihdr[9] = 0;
@@ -35,6 +59,8 @@ function grayscalePng() {
 function makeDeps(calls, logs, options) {
     const setting = options || {};
     return {
+        previewRoot: setting.previewRoot || tempDir(),
+        previewSessionId: setting.previewSessionId || 'test-session',
         hostLog: { record: function (entry) { logs.push(entry); } },
         executeJsx: async function (request) {
             calls.push(request);
@@ -101,6 +127,42 @@ test('ae_previewFrame applies scale, honors out_dir, and rejects excessive times
     assert.match(rejected.result.structuredContent.error, /at most 8/);
 });
 
+test('ae_previewFrame replaces a 16-bit source with the returned 8-bit PNG', async () => {
+    const source = rgba16Png(4, 2);
+    const expected = png.decodeRgba(source);
+    const output = await preview.call({ out_dir: tempDir() }, context, makeDeps([], [], {
+        bytes: source, compWidth: 4, compHeight: 2,
+    }));
+    const frame = output.result.structuredContent.frames[0];
+    const disk = fs.readFileSync(frame.path);
+    assert.equal(png.readPngInfo(disk).bitDepth, 8);
+    assert.deepEqual(png.decodeRgba(disk), expected);
+    assert.equal(frame.sourceBitDepth, 16);
+    assert.equal(frame.bitDepth, 8);
+    assert.equal(frame.sizeBytes, disk.length);
+    assert.equal(frame.sha256, crypto.createHash('sha256').update(disk).digest('hex'));
+    assert.notDeepEqual(disk, source);
+});
+
+test('ae_previewFrame scales and grids 16-bit source frames', async () => {
+    const source = rgba16Png(8, 4);
+    const scaled = await preview.call({ scale: 0.5, out_dir: tempDir() }, context, makeDeps([], [], {
+        bytes: source, compWidth: 8, compHeight: 4,
+    }));
+    const frame = scaled.result.structuredContent.frames[0];
+    assert.equal(frame.width, 4);
+    assert.equal(frame.height, 2);
+    assert.equal(frame.bitDepth, 8);
+    assert.equal(frame.downsampleSkipped, undefined);
+
+    const grid = await preview.call({ times: [0, 1], layout: 'grid', out_dir: tempDir() }, context, makeDeps([], [], {
+        bytes: source, compWidth: 8, compHeight: 4,
+    }));
+    assert.equal(grid.result.structuredContent.ok, true);
+    assert.equal(grid.result.structuredContent.frames.every(function (item) { return item.bitDepth === 8; }), true);
+    assert.deepEqual(grid.result.content.map(function (item) { return item.type; }), ['image', 'text']);
+});
+
 test('ae_previewFrame keeps a complete unsupported PNG and records skipped downsampling', async () => {
     const output = await preview.call({ out_dir: tempDir(), scale: 0.5 }, context, makeDeps([], [], { bytes: grayscalePng(), compWidth: 2, compHeight: 1 }));
     const frame = output.result.structuredContent.frames[0];
@@ -125,6 +187,61 @@ test('ae_previewFrame turns a changed frame during image assembly into a tool er
     const output = await preview.call({ out_dir: tempDir() }, context, deps);
     assert.equal(output.result.isError, true);
     assert.match(output.result.structuredContent.error, /preview frame changed after capture/);
+});
+
+test('ae_previewFrame downscales multiple inline images to the total response budget', async () => {
+    const output = await preview.call({ times: [0, 1, 2, 3, 4, 5], out_dir: tempDir() }, context, makeDeps([], [], {
+        width: 800, height: 600, compWidth: 800, compHeight: 600,
+        frameForTime: function (time, index) { return noisyPng(800, 600, index + 1); },
+    }));
+    const value = output.result.structuredContent;
+    const images = output.result.content.filter(function (item) { return item.type === 'image'; });
+    const total = images.reduce(function (sum, item) { return sum + item.data.length; }, 0);
+    assert.ok(total <= preview.IMAGE_BUDGET_TOTAL_BASE64);
+    assert.ok(images.every(function (item) { return item.data.length <= preview.IMAGE_BUDGET_PER_IMAGE_BASE64; }));
+    assert.equal(value.imageBudget.totalBase64Chars, total);
+    assert.equal(value.frames.some(function (frame) { return frame.budgetScale < 1 && frame.downsampled === true; }), true);
+    assert.match(value.warnings.join(' '), /downscaled.*budget/i);
+    value.frames.forEach(function (frame) {
+        const bytes = fs.readFileSync(frame.path);
+        assert.equal(frame.sizeBytes, bytes.length);
+        assert.equal(frame.sha256, crypto.createHash('sha256').update(bytes).digest('hex'));
+    });
+});
+
+test('ae_previewFrame counts include_base64 copies in the shared budget', async () => {
+    const output = await preview.call({ times: [0, 1, 2], include_base64: true, out_dir: tempDir() }, context, makeDeps([], [], {
+        width: 800, height: 600, compWidth: 800, compHeight: 600,
+        frameForTime: function (time, index) { return noisyPng(800, 600, index + 20); },
+    }));
+    const value = output.result.structuredContent;
+    const contentTotal = output.result.content.filter(function (item) { return item.type === 'image'; }).reduce(function (sum, item) {
+        return sum + item.data.length;
+    }, 0);
+    const jsonTotal = value.frames.reduce(function (sum, frame) { return sum + (frame.base64 ? frame.base64.length : 0); }, 0);
+    assert.equal(value.imageBudget.totalBase64Chars, contentTotal + jsonTotal);
+    assert.ok(contentTotal + jsonTotal <= preview.IMAGE_BUDGET_TOTAL_BASE64);
+    assert.ok(Buffer.byteLength(JSON.stringify(output.result)) < 16 * 1024 * 1024);
+    assert.equal(value.frames.some(function (frame) { return frame.budgetScale < 1; }), true);
+    assert.equal(output.result.content[output.result.content.length - 1].text.includes('"base64":'), false);
+});
+
+test('ae_previewFrame falls back to a path and bounded thumbnail at the minimum edge', async () => {
+    const source = noisyPng(5000, 256, 99);
+    assert.ok(source.toString('base64').length > preview.IMAGE_BUDGET_PER_IMAGE_BASE64);
+    const output = await preview.call({ include_base64: true, out_dir: tempDir() }, context, makeDeps([], [], {
+        bytes: source, compWidth: 5000, compHeight: 256,
+    }));
+    const value = output.result.structuredContent;
+    const frame = value.frames[0];
+    const image = output.result.content[0];
+    assert.equal(frame.path.length > 0, true);
+    assert.equal(png.readPngInfo(fs.readFileSync(frame.path)).width, 5000);
+    assert.equal(frame.base64, undefined);
+    assert.equal(frame.inlineKind, 'thumbnail');
+    assert.equal(image._meta.thumbnail, true);
+    assert.ok(Math.max(image._meta.width, image._meta.height) <= 512);
+    assert.match(value.warnings.join(' '), /path plus.*thumbnail/i);
 });
 
 test('preview helpers implement Template dollar escapes and increasing frame budgets', () => {

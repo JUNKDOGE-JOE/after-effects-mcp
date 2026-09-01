@@ -1,8 +1,7 @@
 'use strict';
 
-// Dependency-free PNG subset used by ae_previewFrame. AE's saveFrameToPng
-// produces 8-bit, non-interlaced RGB/RGBA PNGs, which is intentionally the
-// only pixel format we decode and resample here.
+// Dependency-free PNG subset used by ae_previewFrame. After Effects emits
+// 8-bit or 16-bit non-interlaced RGB/RGBA PNGs depending on the project depth.
 
 const zlib = require('zlib');
 
@@ -75,11 +74,15 @@ function paeth(a, b, c) {
 
 function decodeRgba(buffer) {
     const info = readPngInfo(buffer);
-    if (info.bitDepth !== 8 || info.interlace !== 0 || (info.colorType !== 2 && info.colorType !== 6)) {
+    if ((info.bitDepth !== 8 && info.bitDepth !== 16) || info.interlace !== 0
+        || info.compression !== 0 || info.filter !== 0
+        || (info.colorType !== 2 && info.colorType !== 6)) {
         throw new Error('unsupported png');
     }
     const channels = info.colorType === 6 ? 4 : 3;
-    const stride = info.width * channels;
+    const bytesPerSample = info.bitDepth / 8;
+    const bytesPerPixel = channels * bytesPerSample;
+    const stride = info.width * bytesPerPixel;
     const raw = zlib.inflateSync(Buffer.concat(info.idat));
     if (raw.length !== info.height * (stride + 1)) throw new Error('invalid PNG pixel data');
     const rows = Buffer.alloc(info.height * stride);
@@ -90,9 +93,9 @@ function decodeRgba(buffer) {
         const prior = row - stride;
         for (let x = 0; x < stride; x += 1) {
             const source = raw[input++];
-            const left = x >= channels ? rows[row + x - channels] : 0;
+            const left = x >= bytesPerPixel ? rows[row + x - bytesPerPixel] : 0;
             const up = y ? rows[prior + x] : 0;
-            const upLeft = y && x >= channels ? rows[prior + x - channels] : 0;
+            const upLeft = y && x >= bytesPerPixel ? rows[prior + x - bytesPerPixel] : 0;
             if (filter === 0) rows[row + x] = source;
             else if (filter === 1) rows[row + x] = (source + left) & 0xff;
             else if (filter === 2) rows[row + x] = (source + up) & 0xff;
@@ -103,10 +106,11 @@ function decodeRgba(buffer) {
     }
     const rgba = Buffer.alloc(info.width * info.height * 4);
     for (let pixel = 0; pixel < info.width * info.height; pixel += 1) {
-        rgba[pixel * 4] = rows[pixel * channels];
-        rgba[pixel * 4 + 1] = rows[pixel * channels + 1];
-        rgba[pixel * 4 + 2] = rows[pixel * channels + 2];
-        rgba[pixel * 4 + 3] = channels === 4 ? rows[pixel * channels + 3] : 255;
+        const source = pixel * bytesPerPixel;
+        rgba[pixel * 4] = rows[source];
+        rgba[pixel * 4 + 1] = rows[source + bytesPerSample];
+        rgba[pixel * 4 + 2] = rows[source + bytesPerSample * 2];
+        rgba[pixel * 4 + 3] = channels === 4 ? rows[source + bytesPerSample * 3] : 255;
     }
     return { rgba: rgba, width: info.width, height: info.height };
 }

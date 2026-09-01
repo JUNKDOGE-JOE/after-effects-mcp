@@ -86,14 +86,15 @@ function missingSession(message, status, detail) {
     return { status, response: jsonrpc.error(jsonrpc.requestId(message), -32600, 'Invalid Request', detail) };
 }
 
-function progressMessage(token, startedAt, now) {
+function progressMessage(token, toolName, startedAt, now) {
+    const name = typeof toolName === 'string' && toolName ? toolName : 'ae_exec';
     return {
         jsonrpc: '2.0',
         method: 'notifications/progress',
         params: {
             progressToken: token,
             progress: Math.floor(((now === undefined ? Date.now() : now) - startedAt) / 1000),
-            message: 'ae_exec is still running',
+            message: name + ' is still running',
         },
     };
 }
@@ -306,12 +307,13 @@ function mountMcp(app, deps) {
             const writer = new SseWriter(res, sseOptions).start();
             const startedAt = Date.now();
             const token = body.params._meta.progressToken;
+            const toolName = body.params.name;
             // Progress for an in-flight request travels only on that request's
             // own SSE response; publishing it on the standalone GET stream too
             // makes official clients deliver every notification twice
             // (observed live with the TS SDK against AE 2026).
             const notify = function () {
-                writer.send(progressMessage(token, startedAt));
+                writer.send(progressMessage(token, toolName, startedAt));
             };
             notify();
             const timer = setInterval(notify, progressIntervalMs);
