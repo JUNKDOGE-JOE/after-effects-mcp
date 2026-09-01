@@ -605,6 +605,40 @@ function wrapForEvalScriptTransport(code, options) {
         : wrapForEvalScriptTransportDefault(code);
 }
 
+function repairLatin1Utf8(text) {
+    const value = String(text);
+    for (let i = 0; i < value.length; i += 1) {
+        if (value.charCodeAt(i) > 0xff) return value;
+    }
+    const bytes = Buffer.from(value, 'latin1');
+    let hasMultibyte = false;
+    for (let i = 0; i < bytes.length; i += 1) {
+        if (bytes[i] >= 0xc2 && bytes[i] <= 0xf4) {
+            hasMultibyte = true;
+            break;
+        }
+    }
+    if (!hasMultibyte) return value;
+    try {
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch (e) {
+        return value;
+    }
+}
+
+function repairTransportJson(value) {
+    if (typeof value === 'string') return repairLatin1Utf8(value);
+    if (Array.isArray(value)) return value.map(repairTransportJson);
+    if (value && typeof value === 'object') {
+        const repaired = {};
+        Object.keys(value).forEach(function (key) {
+            repaired[key] = repairTransportJson(value[key]);
+        });
+        return repaired;
+    }
+    return value;
+}
+
 function decodeEvalScriptTransportResult(text) {
     let payload = null;
     if (String(text || '').trim() === '') {
@@ -640,9 +674,12 @@ function decodeEvalScriptTransportResult(text) {
         // error: the script executed, so this is `failed`, not `uncertain`
         // (#260 real-machine check). Undecodable / empty output stays untagged
         // and is classified as uncertain by the caller.
-        const error = new Error('ExtendScript error: ' + payload.error);
+        const error = new Error('ExtendScript error: ' + repairLatin1Utf8(payload.error));
         error.disposition = 'failed';
         if (Object.prototype.hasOwnProperty.call(payload, 'line')) error.line = payload.line;
+        if (Object.prototype.hasOwnProperty.call(payload, 'errorSource')) {
+            error.errorSource = repairLatin1Utf8(payload.errorSource);
+        }
         if (Object.prototype.hasOwnProperty.call(payload, 'touched')) error.touched = payload.touched;
         if (Object.prototype.hasOwnProperty.call(payload, 'logs')) error.logs = payload.logs;
         if (Object.prototype.hasOwnProperty.call(payload, 'logsTruncated')) {
@@ -658,7 +695,17 @@ function decodeEvalScriptTransportResult(text) {
     if (payload.resultType !== 'string' && payload.resultType !== 'json') {
         throw new Error('invalid evalScript transport envelope resultType');
     }
-    const decoded = { resultType: payload.resultType, result: payload.result };
+    let result = payload.result;
+    if (payload.resultType === 'string') {
+        result = repairLatin1Utf8(result);
+    } else {
+        try {
+            result = JSON.stringify(repairTransportJson(JSON.parse(result)));
+        } catch (e) {
+            result = payload.result;
+        }
+    }
+    const decoded = { resultType: payload.resultType, result };
     if (Object.prototype.hasOwnProperty.call(payload, 'logs')) decoded.logs = payload.logs;
     if (Object.prototype.hasOwnProperty.call(payload, 'logsTruncated')) {
         decoded.logsTruncated = payload.logsTruncated;
@@ -769,6 +816,9 @@ async function executeJsx(request) {
             jsxBridge: bridgeState,
         };
         if (Object.prototype.hasOwnProperty.call(e, 'line')) payload.errorLine = e.line;
+        if (Object.prototype.hasOwnProperty.call(e, 'errorSource')) {
+            payload.errorSource = e.errorSource;
+        }
         ['touched', 'logs', 'logsTruncated', 'revision', 'projectPath'].forEach(function (field) {
             if (Object.prototype.hasOwnProperty.call(e, field)) payload[field] = e[field];
         });
@@ -1293,6 +1343,7 @@ module.exports = {
     // Exported for unit-testing the wrap shape without spinning up Express.
     wrapWithUndoGroup,
     wrapForEvalScriptTransport,
+    repairLatin1Utf8,
     decodeEvalScriptTransportResult,
     executeJsx,
     mcp: null,

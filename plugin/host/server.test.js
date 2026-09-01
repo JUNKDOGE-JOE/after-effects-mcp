@@ -1233,6 +1233,11 @@ test('ExtendScript transport fails deterministically for cycles and serializatio
 
 test('evalScript transport decoder requires typed successes and preserves error envelopes', () => {
     const server = loadServer();
+    const chinese = '在需要数字、数组或属性的位置找到类型为“Error”的对象';
+    const mojibake = Buffer.from(chinese, 'utf8').toString('latin1');
+    assert.equal(server.repairLatin1Utf8(mojibake), chinese);
+    assert.equal(server.repairLatin1Utf8('plain ASCII'), 'plain ASCII');
+    assert.equal(server.repairLatin1Utf8('café ÿþ'), 'café ÿþ');
     assert.deepEqual(
         server.decodeEvalScriptTransportResult(
             '{"ok":true,"resultType":"string","result":"你好"}',
@@ -1245,6 +1250,24 @@ test('evalScript transport decoder requires typed successes and preserves error 
         ),
         { resultType: 'json', result: '{"n":42}' },
     );
+    assert.deepEqual(
+        server.decodeEvalScriptTransportResult(JSON.stringify({
+            ok: true,
+            resultType: 'string',
+            result: mojibake,
+        })),
+        { resultType: 'string', result: chinese },
+    );
+    const jsonResult = JSON.stringify({
+        ok: true,
+        resultType: 'json',
+        result: JSON.stringify({ text: mojibake, items: [mojibake, { ok: true }] }),
+    });
+    const decodedJsonResult = server.decodeEvalScriptTransportResult(jsonResult);
+    assert.deepEqual(JSON.parse(decodedJsonResult.result), {
+        text: chinese,
+        items: [chinese, { ok: true }],
+    });
     assert.throws(
         function () {
             server.decodeEvalScriptTransportResult('{"ok":true,"result":"legacy"}');
@@ -1267,6 +1290,18 @@ test('evalScript transport decoder requires typed successes and preserves error 
     }
     assert.match(legacyError.message, /boom/);
     assert.equal(legacyError.disposition, 'failed');
+    let localizedError;
+    try {
+        server.decodeEvalScriptTransportResult(JSON.stringify({
+            ok: false,
+            error: mojibake,
+            errorSource: mojibake,
+        }));
+    } catch (error) {
+        localizedError = error;
+    }
+    assert.equal(localizedError.message, 'ExtendScript error: ' + chinese);
+    assert.equal(localizedError.errorSource, chinese);
 });
 
 test('diagnostic decoder and executeJsx preserve optional success and failure evidence', async () => {
