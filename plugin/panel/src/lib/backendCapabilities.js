@@ -2,9 +2,8 @@
 // these, with no hardcoded model ids or tier names elsewhere.
 //
 // Claude ids are the API aliases (no date suffixes); the CLI passes them
-// through unchanged. Claude Fable 5.1 needs Claude Code >= 2.1.251 — older
-// CLIs reject it with an upstream 400 that the panel shows verbatim — so the
-// default stays on Opus 5, which every current CLI accepts.
+// through unchanged. The default stays on Opus 5, which every current CLI
+// accepts.
 export const CLAUDE_PRICE_USD_PER_MTOK = {
   'claude-fable-5-1': { input: 10, output: 50 },
   'claude-opus-5': { input: 5, output: 25 },
@@ -15,6 +14,7 @@ export const CLAUDE_PRICE_USD_PER_MTOK = {
 export const CLAUDE_MODELS = [
   {
     id: 'claude-fable-5-1', label: 'Fable 5.1',
+    minCliVersion: '2.1.251',
     effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], adaptive: true,
   },
   {

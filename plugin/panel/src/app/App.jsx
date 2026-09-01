@@ -45,6 +45,11 @@ import {
 import { createAttachmentStore } from '../cep/attachmentStore.js';
 import { claudeSubDescriptor, resolveEffectiveEffort } from '../lib/backendCapabilities';
 import { selectDescriptor, reconcileModelPref } from '../lib/descriptorSelect';
+import {
+  LEGACY_MODEL_PREF_KEY,
+  modelPreferenceKey,
+  resolveModelPreference,
+} from '../lib/modelPreference.js';
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { costBadge } from '../lib/composerOptions';
 import { useActivity } from '../cep/useActivity';
@@ -148,6 +153,23 @@ function writePref(key, value) {
   try { window.localStorage.setItem(key, value); } catch (e) { /* best-effort */ }
 }
 
+function removePref(key) {
+  try { window.localStorage.removeItem(key); } catch (e) { /* best-effort */ }
+}
+
+function loadModelPref(channel, fallback) {
+  const key = modelPreferenceKey(channel);
+  const legacyValue = readPref(LEGACY_MODEL_PREF_KEY, '');
+  const resolved = resolveModelPreference({
+    channelValue: readPref(key, ''),
+    legacyValue,
+    fallback,
+  });
+  if (resolved.migrateLegacy) writePref(key, resolved.value);
+  if (legacyValue) removePref(LEGACY_MODEL_PREF_KEY);
+  return resolved.value;
+}
+
 function openLoginUrl(url) {
   if (typeof window?.cep?.util?.openURLInDefaultBrowser !== 'function') {
     throw new Error('CEP browser opener is unavailable');
@@ -248,7 +270,8 @@ function Shell({ cs }) {
   const pendingTurnRef = React.useRef(null);
   const acceptedTurnRef = React.useRef(null);
   React.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-  const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
+  const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
+  const [model, setModel] = React.useState(() => loadModelPref(backendMigration.pref, DEFAULT_MODEL));
   const [logLevel, setLogLevel] = React.useState(() => readPref('ae_mcp_log_level', 'info'));
   const logLevelRef = React.useRef(logLevel);
   logLevelRef.current = logLevel;
@@ -295,7 +318,6 @@ function Shell({ cs }) {
     const guard = createPanelFileDropGuard({ target: window });
     return guard.dispose;
   }, []);
-  const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
   const [backendPref, setBackendPref] = React.useState(() => backendMigration.pref);
   // #229: channels are user-enabled per backend; routing follows the choice
   // exactly (no auto-pick, no lock, no pinning by provider selection).
@@ -766,6 +788,7 @@ function Shell({ cs }) {
       },
       getEntries: () => chatEntriesRef.current,
       selectBackend: async (backend) => {
+        setModel(loadModelPref(backend, DEFAULT_MODEL));
         setBackendPref(backend);
         writePref('ae_mcp_backend', backend);
         await new Promise((resolve) => {
@@ -822,12 +845,14 @@ function Shell({ cs }) {
     // fallback descriptor would clobber a valid provider-model pref at boot
     // (live-seen: pref reset to the first relay model on every restart).
     const reconciled = reconcileModelPref(model, nextDescriptor, {
-      providerFactsPending: backendPref === 'opencode'
-        && (providerInit.state !== 'ready' || openCodeProbe === null),
+      providerFactsPending: backendPref === 'codex'
+        ? codexProbe === null || codexModels === null
+        : backendPref === 'opencode'
+          && (providerInit.state !== 'ready' || openCodeProbe === null),
     });
     if (reconciled !== model) {
       setModel(reconciled);
-      writePref('ae_mcp_model', reconciled);
+      writePref(modelPreferenceKey(backendPref), reconciled);
     }
   }, [
     effective.backend,
@@ -835,8 +860,10 @@ function Shell({ cs }) {
     backendPref,
     baseDescriptor,
     codexModels,
+    codexProbe,
     openCodeAvailableProviders,
     openCodeProbe,
+    model,
     providerInit.state,
   ]);
   const lastRealBackendRef = React.useRef(null);
@@ -869,6 +896,7 @@ function Shell({ cs }) {
   const runCodexProbe = React.useCallback(() => {
     let alive = true;
     setCodexProbe(null);
+    setCodexModels(null);
     codexBackend.probeAccount().then((result) => {
       if (!alive) return;
       if (containsExactSecret(result, ['aemcp-secret://'])) {
@@ -881,7 +909,10 @@ function Shell({ cs }) {
         setCodexModels(result.models);
       }
     }).catch((e) => {
-      if (alive) setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+      if (alive) {
+        setCodexModels(null);
+        setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+      }
     });
     return () => { alive = false; };
   }, [codexBackend]);
@@ -1556,7 +1587,7 @@ function Shell({ cs }) {
               fast: effectiveFast,
               permissionMode,
             }}
-            onChipModel={setSessionModel}
+            onChipModel={(m) => { setSessionModel(m); setModel(m); writePref(modelPreferenceKey(backendPref), m); }}
             onChipEffort={setSessionEffort}
             onChipFast={(v) => setSessionFast(Boolean(v))}
             onChipApproval={(m) => { setPermissionMode(m); writePref('ae_mcp_perm_mode', m); }}
@@ -1659,10 +1690,11 @@ function Shell({ cs }) {
             model={effectiveModel}
             modelOptions={modelOptions}
             modelSwitchable={descriptor.perTurnModelSwitch !== false}
-            onModelChange={(m) => { setModel(m); writePref('ae_mcp_model', m); }}
+            onModelChange={(m) => { setModel(m); writePref(modelPreferenceKey(backendPref), m); }}
             backend={backendPref}
             onBackendChange={(m) => {
               sessionController.flush();
+              setModel(loadModelPref(m, DEFAULT_MODEL));
               setBackendPref(m);
               writePref('ae_mcp_backend', m);
             }}

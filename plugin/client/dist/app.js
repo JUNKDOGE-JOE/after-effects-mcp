@@ -22468,6 +22468,7 @@
     {
       id: "claude-fable-5-1",
       label: "Fable 5.1",
+      minCliVersion: "2.1.251",
       effortLevels: ["low", "medium", "high", "xhigh", "max"],
       adaptive: true
     },
@@ -29273,6 +29274,26 @@ When you are done, remind me of two things: MCP tools load only in a new session
     if (adapter.id === "windows-x64") return "x64";
     return void 0;
   }
+  function compareVersions2(actual, minimum) {
+    const left = String(actual || "").match(/\d+(?:\.\d+){0,3}/);
+    const right = String(minimum || "").match(/\d+(?:\.\d+){0,3}/);
+    if (!left || !right) return null;
+    const a = left[0].split(".").map(Number);
+    const b = right[0].split(".").map(Number);
+    for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+      const delta = (a[index] || 0) - (b[index] || 0);
+      if (delta) return delta;
+    }
+    return 0;
+  }
+  function minimumCliVersionForModel(modelId) {
+    var _a;
+    return ((_a = CLAUDE_MODELS.find((model) => model.id === modelId)) == null ? void 0 : _a.minCliVersion) || null;
+  }
+  function unsupportedModelMessage(version, minimum, lang) {
+    const current = version || (lang === "zh" ? "\u672A\u77E5" : "unknown");
+    return lang === "zh" ? `\u5F53\u524D Claude Code ${current} \u4E0D\u652F\u6301\u8BE5\u6A21\u578B\uFF0C\u9700\u8981 \u2265 ${minimum}\uFF1A\u8FD0\u884C \`claude update\` \u5347\u7EA7\uFF0C\u6216\u6362\u4E00\u4E2A\u6A21\u578B\u3002` : `Claude Code ${current} does not support this model; version ${minimum} or newer is required. Run \`claude update\` to upgrade, or choose another model.`;
+  }
   function resolutionArchitecture(resolution) {
     for (const attempt of (resolution == null ? void 0 : resolution.attempts) || []) {
       const match = String((attempt == null ? void 0 : attempt.detail) || "").match(/architecture\s+(arm64|aarch64|x64|amd64|x86_64)\b/i);
@@ -30223,6 +30244,18 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             code: classification.code,
             message: (resolved == null ? void 0 : resolved.detail) || cliResolutionMessage(resolved == null ? void 0 : resolved.code, resolvedLang, (resolved == null ? void 0 : resolved.resolution) || resolved),
             ...resolution ? { detail: { resolution } } : {}
+          });
+          return false;
+        }
+        const minimumCliVersion = minimumCliVersionForModel(session.model);
+        const versionComparison = minimumCliVersion ? compareVersions2(resolved.version, minimumCliVersion) : null;
+        if (minimumCliVersion && (versionComparison === null || versionComparison < 0)) {
+          const classification = classifyErrorCode({ code: "CLI_TOO_OLD" });
+          emitAfterText({
+            type: "error",
+            kind: classification.kind,
+            code: classification.code,
+            message: unsupportedModelMessage(resolved.version, minimumCliVersion, resolvedLang)
           });
           return false;
         }
@@ -35284,6 +35317,30 @@ ${command}`
     return descriptor.defaultModelId;
   }
 
+  // src/lib/modelPreference.js
+  init_cep_runtime_inject();
+  var LEGACY_MODEL_PREF_KEY = "ae_mcp_model";
+  var MODEL_PREF_KEYS = Object.freeze({
+    subscription: "ae_mcp_model_subscription",
+    codex: "ae_mcp_model_codex",
+    opencode: "ae_mcp_model_opencode"
+  });
+  function modelPreferenceKey(channel) {
+    return MODEL_PREF_KEYS[channel] || MODEL_PREF_KEYS.subscription;
+  }
+  function nonEmpty(value) {
+    const normalized = String(value || "").trim();
+    return normalized || "";
+  }
+  function resolveModelPreference({ channelValue, legacyValue, fallback } = {}) {
+    const current = nonEmpty(channelValue);
+    const legacy = nonEmpty(legacyValue);
+    return {
+      value: current || legacy || fallback,
+      migrateLegacy: !current && Boolean(legacy)
+    };
+  }
+
   // src/cep/useActivity.js
   init_cep_runtime_inject();
   var import_react46 = __toESM(require_react(), 1);
@@ -37139,12 +37196,17 @@ ${command}`
         activeMeta.titleSource = "auto";
       }
     }
+    function refreshActiveModel() {
+      if (!activeMeta || typeof deps.currentModel !== "function") return;
+      activeMeta.model = deps.currentModel() || null;
+    }
     function persistActive() {
       if (!activeMeta || !activeId) return false;
       const currentRef = backendRef(
         typeof deps.getBackendRef === "function" ? deps.getBackendRef() : null
       );
       if (currentRef) activeMeta.backendRef = currentRef;
+      refreshActiveModel();
       refreshActiveMeta();
       if (!materialized()) {
         if (index.activeId === activeId) {
@@ -37298,6 +37360,7 @@ ${command}`
       if (!activeMeta) return;
       latestEntries = clone4(Array.isArray(entries) ? entries : []);
       activeMeta.updatedAt = isoTime(now);
+      refreshActiveModel();
       refreshActiveMeta();
       if (latestEntries.length) upsertActiveMeta();
       dirty = true;
@@ -37698,6 +37761,24 @@ ${command}`
     } catch (e) {
     }
   }
+  function removePref(key) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch (e) {
+    }
+  }
+  function loadModelPref(channel, fallback) {
+    const key = modelPreferenceKey(channel);
+    const legacyValue = readPref(LEGACY_MODEL_PREF_KEY, "");
+    const resolved = resolveModelPreference({
+      channelValue: readPref(key, ""),
+      legacyValue,
+      fallback
+    });
+    if (resolved.migrateLegacy) writePref(key, resolved.value);
+    if (legacyValue) removePref(LEGACY_MODEL_PREF_KEY);
+    return resolved.value;
+  }
   function openLoginUrl(url) {
     var _a, _b;
     if (typeof ((_b = (_a = window == null ? void 0 : window.cep) == null ? void 0 : _a.util) == null ? void 0 : _b.openURLInDefaultBrowser) !== "function") {
@@ -37787,7 +37868,8 @@ ${command}`
     const pendingTurnRef = import_react48.default.useRef(null);
     const acceptedTurnRef = import_react48.default.useRef(null);
     import_react48.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-    const [model, setModel] = import_react48.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const backendMigration = import_react48.default.useMemo(() => migrateBackendPref(window.localStorage), []);
+    const [model, setModel] = import_react48.default.useState(() => loadModelPref(backendMigration.pref, DEFAULT_MODEL));
     const [logLevel, setLogLevel] = import_react48.default.useState(() => readPref("ae_mcp_log_level", "info"));
     const logLevelRef = import_react48.default.useRef(logLevel);
     logLevelRef.current = logLevel;
@@ -37830,7 +37912,6 @@ ${command}`
       const guard = createPanelFileDropGuard({ target: window });
       return guard.dispose;
     }, []);
-    const backendMigration = import_react48.default.useMemo(() => migrateBackendPref(window.localStorage), []);
     const [backendPref, setBackendPref] = import_react48.default.useState(() => backendMigration.pref);
     const [channelChoices, setChannelChoices] = import_react48.default.useState(() => backendMigration.channelChoices);
     const openCodeProviderStore = import_react48.default.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
@@ -38291,6 +38372,7 @@ ${draft.baseUrl}`)) return;
         },
         getEntries: () => chatEntriesRef.current,
         selectBackend: async (backend) => {
+          setModel(loadModelPref(backend, DEFAULT_MODEL));
           setBackendPref(backend);
           writePref("ae_mcp_backend", backend);
           await new Promise((resolve) => {
@@ -38347,11 +38429,11 @@ ${draft.baseUrl}`)) return;
       const nextDescriptor = selectDescriptor(facts);
       setDescriptor(nextDescriptor);
       const reconciled = reconcileModelPref(model, nextDescriptor, {
-        providerFactsPending: backendPref === "opencode" && (providerInit.state !== "ready" || openCodeProbe === null)
+        providerFactsPending: backendPref === "codex" ? codexProbe === null || codexModels === null : backendPref === "opencode" && (providerInit.state !== "ready" || openCodeProbe === null)
       });
       if (reconciled !== model) {
         setModel(reconciled);
-        writePref("ae_mcp_model", reconciled);
+        writePref(modelPreferenceKey(backendPref), reconciled);
       }
     }, [
       effective.backend,
@@ -38359,8 +38441,10 @@ ${draft.baseUrl}`)) return;
       backendPref,
       baseDescriptor,
       codexModels,
+      codexProbe,
       openCodeAvailableProviders,
       openCodeProbe,
+      model,
       providerInit.state
     ]);
     const lastRealBackendRef = import_react48.default.useRef(null);
@@ -38392,6 +38476,7 @@ ${draft.baseUrl}`)) return;
     const runCodexProbe = import_react48.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
+      setCodexModels(null);
       codexBackend.probeAccount().then((result) => {
         if (!alive) return;
         if (containsExactSecret(result, ["aemcp-secret://"])) {
@@ -38404,7 +38489,10 @@ ${draft.baseUrl}`)) return;
           setCodexModels(result.models);
         }
       }).catch((e) => {
-        if (alive) setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+        if (alive) {
+          setCodexModels(null);
+          setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+        }
       });
       return () => {
         alive = false;
@@ -39022,7 +39110,11 @@ ${draft.baseUrl}`)) return;
               fast: effectiveFast,
               permissionMode
             },
-            onChipModel: setSessionModel,
+            onChipModel: (m) => {
+              setSessionModel(m);
+              setModel(m);
+              writePref(modelPreferenceKey(backendPref), m);
+            },
             onChipEffort: setSessionEffort,
             onChipFast: (v) => setSessionFast(Boolean(v)),
             onChipApproval: (m) => {
@@ -39124,11 +39216,12 @@ ${draft.baseUrl}`)) return;
             modelSwitchable: descriptor.perTurnModelSwitch !== false,
             onModelChange: (m) => {
               setModel(m);
-              writePref("ae_mcp_model", m);
+              writePref(modelPreferenceKey(backendPref), m);
             },
             backend: backendPref,
             onBackendChange: (m) => {
               sessionController.flush();
+              setModel(loadModelPref(m, DEFAULT_MODEL));
               setBackendPref(m);
               writePref("ae_mcp_backend", m);
             },
