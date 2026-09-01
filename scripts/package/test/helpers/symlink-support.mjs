@@ -32,3 +32,11 @@ export function skipIfSymlinkUnavailable(t) {
   t.skip(windowsProbe.reason);
   return true;
 }
+
+// macOS development tooling (doctor, launcher, dev installer) runs only on
+// macOS; elsewhere these suites skip even when symlinks are available.
+export function skipUnlessMacOS(t) {
+  if (process.platform === 'darwin') return false;
+  t.skip('macOS development tooling only runs on macOS');
+  return true;
+}

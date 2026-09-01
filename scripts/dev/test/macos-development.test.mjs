@@ -9,7 +9,7 @@ import {
   inspectDevelopmentEnvironment,
   launchDevelopmentAe,
 } from '../macos-development.mjs';
-import { skipIfSymlinkUnavailable } from '../../package/test/helpers/symlink-support.mjs';
+import { skipUnlessMacOS } from '../../package/test/helpers/symlink-support.mjs';
 
 async function writeFile(root, relative, contents = '', mode = 0o644) {
   const target = path.join(root, ...relative.split('/'));
@@ -108,7 +108,7 @@ async function fixture(t) {
 }
 
 test('doctor returns the closed read-only development report', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const report = await inspectDevelopmentEnvironment({
     repoRoot: h.repoRoot,
@@ -165,7 +165,7 @@ test('doctor returns the closed read-only development report', async (t) => {
 });
 
 test('doctor reports a missing Core interpreter without writing', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   await fs.promises.unlink(h.interpreter);
   const writes = [];
@@ -197,7 +197,7 @@ test('doctor reports a missing Core interpreter without writing', async (t) => {
 });
 
 test('doctor checks CEP source dependencies only when CEP is selected', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const core = await inspectDevelopmentEnvironment({
     repoRoot: h.repoRoot,
@@ -221,7 +221,7 @@ test('doctor checks CEP source dependencies only when CEP is selected', async (t
 });
 
 test('launch doctor reuses and validates the active RuntimeManager Node without installing', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const runtimeRoot = path.join(h.home, '.ae-mcp', 'runtime');
   const relative = 'generations/g-0123456789abcdef';
@@ -271,7 +271,7 @@ test('launch doctor reuses and validates the active RuntimeManager Node without 
 });
 
 test('launch doctor fails closed when no compatible development Node is available', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const report = await inspectDevelopmentEnvironment({
     repoRoot: h.repoRoot,
@@ -289,7 +289,7 @@ test('launch doctor fails closed when no compatible development Node is availabl
 });
 
 test('launch refuses a running AE and otherwise spawns only the exact formal executable', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const nodePath = await writeFile(
     h.root,

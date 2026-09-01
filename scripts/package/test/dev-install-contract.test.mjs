@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
-import { skipIfSymlinkUnavailable } from './helpers/symlink-support.mjs';
+import { skipIfSymlinkUnavailable, skipUnlessMacOS } from './helpers/symlink-support.mjs';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(import.meta.dirname, '../../..');
@@ -94,7 +94,7 @@ exec /bin/mv "$@"
 }
 
 test('macOS dev install refuses a running AE before touching the deployed panel', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const fixture = await makeMacFixture(t, { pgrepExitCode: 0 });
   await assert.rejects(
     execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
@@ -104,7 +104,7 @@ test('macOS dev install refuses a running AE before touching the deployed panel'
 });
 
 test('macOS dev install fails closed when AE process inspection itself fails', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const fixture = await makeMacFixture(t, { pgrepExitCode: 2 });
   await assert.rejects(
     execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
@@ -114,7 +114,7 @@ test('macOS dev install fails closed when AE process inspection itself fails', a
 });
 
 test('macOS dev install rejects symlinks anywhere in the source tree', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const fixture = await makeMacFixture(t, { sourceSymlink: true });
   await assert.rejects(
     execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
@@ -124,7 +124,7 @@ test('macOS dev install rejects symlinks anywhere in the source tree', async (t)
 });
 
 test('macOS dev install fails closed when the bundle freshness gate rejects (#223)', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const fixture = await makeMacFixture(t, { bundleVerifierExitCode: 1 });
   await assert.rejects(
     execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
@@ -134,7 +134,7 @@ test('macOS dev install fails closed when the bundle freshness gate rejects (#22
 });
 
 test('macOS dev install stages, verifies, swaps, and retains a restorable backup', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const fixture = await makeMacFixture(t);
   const { stdout } = await execFileAsync(fixture.installer, [], {
     cwd: fixture.fixtureRepo,
@@ -154,7 +154,7 @@ test('macOS dev install stages, verifies, swaps, and retains a restorable backup
 });
 
 test('macOS dev install preserves legacy transaction artifacts outside the CEP scan root', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const fixture = await makeMacFixture(t);
   const legacyName = '.com.aemcp.panel.backup.20260714T210715Z.54520.16325';
   const legacyArtifact = path.join(fixture.scanRoot, legacyName);
@@ -174,7 +174,7 @@ test('macOS dev install preserves legacy transaction artifacts outside the CEP s
 });
 
 test('macOS dev install rejects symbolic or non-directory legacy transaction artifacts', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   for (const kind of ['symlink', 'file']) {
     await t.test(kind, async (child) => {
       const fixture = await makeMacFixture(child);
@@ -197,7 +197,7 @@ test('macOS dev install rejects symbolic or non-directory legacy transaction art
 });
 
 test('macOS dev install fails closed when a legacy artifact destination conflicts', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const fixture = await makeMacFixture(t);
   const legacyName = '.com.aemcp.panel.replaced.conflict-fixture';
   const legacyArtifact = path.join(fixture.scanRoot, legacyName);
@@ -220,7 +220,7 @@ test('macOS dev install fails closed when a legacy artifact destination conflict
 });
 
 test('macOS dev install restores the old panel when the second atomic rename fails', async (t) => {
-  if (skipIfSymlinkUnavailable(t)) return;
+  if (skipUnlessMacOS(t)) return;
   const fixture = await makeMacFixture(t, { failSecondMove: true });
   await assert.rejects(
     execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
