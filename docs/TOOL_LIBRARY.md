@@ -149,9 +149,9 @@ placeholder must never be used to overwrite that file.
 
 The management surface belongs on the panel's **Tools page**. It presents
 candidate and retained artifact lists and exposes promote, pin, archive,
-restore, delete, clear-candidates, import, and export actions. This is the
-target location shared with issue #350; developer docs should not direct users
-to Settings for Tool Library management.
+restore, delete, clear-candidates, import, and export actions. Issue #350 moved
+it there in v0.10.5; developer docs should not direct users to Settings for
+Tool Library management.
 
 The panel calls these host routes:
 
@@ -227,6 +227,10 @@ Subdirectories default under that root, with optional fine-grained overrides:
 | Legacy user skills | `<state-root>/skills` | `AE_MCP_SKILL_DIR` |
 | Checkpoints/recovery | `<state-root>/checkpoints` | none |
 | Panel exports | `<state-root>/exports` | none |
+| Checkpoint retention | 50 per project | `AE_MCP_CHECKPOINT_KEEP` (minimum 1) |
+
+CLI path overrides (`AE_MCP_CLAUDE_CLI`, `AE_MCP_CODEX_CLI`) and the approval
+tier file are documented in [Reference](REFERENCE.md#persistent-state).
 
 Tests must inject a temporary `AE_MCP_STATE_DIR`; they must never read or write
 the developer's real state root.

@@ -5,12 +5,16 @@
 1. Start from the final clean candidate commit and record its full SHA.
 2. Verify the developer-supplied Adobe SDK input before a native build.
 3. Build the frozen AEGP `.aex` separately from the CEP extension.
-4. Stage the direct ZXP payload and record its file inventory.
-5. Verify the host package and exact Express `4.22.2` lock entry.
+4. Fetch the pinned OpenCode runtime with
+   `node scripts/package/fetch-opencode-runtime.mjs`; packaging fails without it.
+5. Stage the direct ZXP payload and record its file inventory.
+6. Verify the host package and exact Express `4.22.2` lock entry.
 
 The ZXP payload consists of the panel, CEP manifest, Node host, JSX, shared
-modules, icons, generated host protocol files, and bundled skills. It contains
-no retired package tree, private executable payload, or nested native binary.
+modules, icons, generated host protocol files, bundled skills, and the pinned
+OpenCode runtime for Windows (`runtime/opencode/opencode.exe`, verified by
+SHA-256 and size when fetched). It contains no retired package tree and no
+nested native binary; that runtime is the only allowed executable.
 
 ## npm connector & MCP Registry
 
@@ -46,7 +50,8 @@ installer.
 .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw>
 ```
 
-Record the ZXP and AEX SHA-256 values. The ZXP must be below 20 MB.
+Record the ZXP and AEX SHA-256 values. The packaging script fails above 80 MB;
+a release with the bundled runtime is roughly 60 MB.
 
 ## Acceptance
 

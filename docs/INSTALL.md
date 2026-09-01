@@ -10,7 +10,8 @@ supported client connections.
    release — `AeMcpNative-<version>-windows-x64.aex` on Windows,
    `AeMcpNative-<version>-macos-arm64.plugin.zip` on macOS.
 2. Install the ZXP with a supported ZXP installer. One ZXP serves both
-   Windows and macOS because it contains no platform binaries.
+   Windows and macOS. It bundles the OpenCode runtime for Windows (about
+   60 MB); on macOS the panel uses an `opencode` found on PATH instead.
 3. With After Effects closed, install the native plug-in in the plug-in
    directory used by the selected After Effects host. `ae_nativeExec` is the
    only tool that needs it, so a release that has not yet published the

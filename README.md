@@ -26,10 +26,12 @@ through ExtendScript and the frozen native AEGP plane.
 1. Install the signed ZXP in After Effects.
 2. Install the matching native plug-in beside the After Effects plug-ins
    selected for the host — the `.aex` on Windows, the `AeMcpNative.plugin`
-   bundle on macOS. Keep the version pair from the same release. The ZXP
-   carries no platform binaries and installs on both systems; only this
-   native plug-in is built per platform, and `ae_nativeExec` is the one tool
-   that needs it. [Install](docs/INSTALL.md) has the exact per-platform
+   bundle on macOS. Keep the version pair from the same release. The same
+   ZXP installs on both systems; it bundles the OpenCode runtime for Windows
+   (`runtime/opencode/opencode.exe`, about 60 MB), which the panel uses only
+   on Windows, while macOS falls back to an `opencode` found on PATH. Only
+   this native plug-in is built per platform, and `ae_nativeExec` is the one
+   tool that needs it. [Install](docs/INSTALL.md) has the exact per-platform
    destination, and the macOS bundle additionally needs its download
    quarantine cleared before After Effects will load it.
 3. Start After Effects and open **Window > Extensions > ae-mcp**. Keep the panel
@@ -174,16 +176,18 @@ node --test scripts/package/test/verify-windows-zxp-stage.test.mjs
 node --test scripts/package/test/zxp-payload-audit.test.mjs
 ```
 
-The Windows ZXP staging command copies only the panel, host, JSX, shared
-modules, icons, and generated host assets. It verifies the host's exact
-Express `4.22.2` dependency and signs the ZXP once:
+The Windows ZXP staging command copies the panel, host, JSX, shared modules,
+icons, generated host assets, and the pinned OpenCode runtime staged by
+`node scripts/package/fetch-opencode-runtime.mjs`. It verifies the host's
+exact Express `4.22.2` dependency and signs the ZXP once:
 
 ```powershell
 .\scripts\package-zxp.ps1 -SkipSigning
 ```
 
-The signed ZXP must contain no nested native binary other than an explicitly
-handled `.aex` artifact, and it must remain below 20 MB.
+The signed ZXP must contain no nested native binary; the bundled
+`opencode.exe` is the one explicitly allowed executable. The packaging script
+fails above 80 MB, and a release with the runtime is roughly 60 MB.
 
 See [Install](docs/INSTALL.md), [Reference](docs/REFERENCE.md),
 [Tool Library](docs/TOOL_LIBRARY.md), [Architecture](docs/ARCHITECTURE_DIRECTION.md),

@@ -131,6 +131,13 @@ AE_SDK_ROOT=/path/to/extracted-sdk \
 node scripts/package/ae-sdk-input.mjs verify-input --platform macos-arm64
 ```
 
+To re-check an already-extracted root against the layout lock without the archive:
+
+```sh
+AE_SDK_ROOT=/path/to/extracted-sdk \
+node scripts/package/ae-sdk-input.mjs verify-root --platform macos-arm64
+```
+
 The equivalent Windows platform identifier is `windows-x64`. Missing inputs fail with
 an actionable `AE_SDK_ROOT` or `AE_SDK_ARCHIVE` error; no build may silently use an SDK
 from `PATH`, a global include directory, or a checkout subdirectory.
@@ -160,8 +167,11 @@ support matrix are not native SDK compatibility evidence.
 - `AE_SDK_LAYOUT_INVALID`: the extracted root or required AEGP/build entry differs.
 - `AE_SDK_CONTENT_EVIDENCE_PENDING`: the platform has layout evidence but no canonical
   content lock and therefore cannot enter a build.
-- `AE_SDK_POLICY_INVALID`: the locked policy was weakened or malformed.
+- `AE_SDK_POLICY_INVALID`: the locked policy was weakened, malformed, or no longer
+  matches the canonical SHA-256 compiled into the validator.
 - `AE_SDK_VENDORED`: tracked repository content matches forbidden SDK material.
 - `AE_SDK_REPOSITORY_INVALID`: the tracked checkout cannot be enumerated safely.
 - `AE_SDK_PLATFORM_UNSUPPORTED` / `AE_SDK_ARGUMENT_INVALID`: the requested contract is
   unsupported or ambiguous.
+- `AE_SDK_INTERNAL_ERROR`: an unexpected failure without a more specific code; the
+  message is still printed.

@@ -23573,14 +23573,14 @@
 - \u652F\u6301 Streamable HTTP MCP server \u7684\u5BA2\u6237\u7AEF\uFF08Claude Code\u3001Cursor \u7B49\uFF09\uFF1A\u628A\u4E0A\u9762\u8FD9\u4E2A\u5730\u5740\u52A0\u6210\u540D\u4E3A ae \u7684\u670D\u52A1\u5668\uFF1B\u5982\u679C\u4F60\u7684\u5BA2\u6237\u7AEF\u6709\u4F5C\u7528\u57DF\u6982\u5FF5\uFF0C\u6CE8\u518C\u5230\u7528\u6237\u7EA7\uFF1B\u4E0D\u8981\u6539\u52A8\u6211\u5DF2\u6709\u7684\u5176\u5B83 MCP \u6761\u76EE\uFF1B\u6539\u5B8C\u628A\u6700\u7EC8\u914D\u7F6E\u56DE\u663E\u7ED9\u6211\u3002
 - \u53EA\u652F\u6301 stdio \u7684\u5BA2\u6237\u7AEF\uFF08Claude Desktop \u7B49\uFF09\uFF1A\u7528\u7CFB\u7EDF Node\uFF0818 \u4EE5\u4E0A\uFF09\u6267\u884C ${shimPath}\uFF0C\u5E76\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_HTTP_URL=${url}\u3002
 
-\u5B8C\u6210\u540E\u63D0\u9192\u6211\u4E24\u4EF6\u4E8B\uFF1AMCP \u5DE5\u5177\u53EA\u5728\u65B0\u4F1A\u8BDD\u91CC\u52A0\u8F7D\uFF0C\u8981\u65B0\u5F00\u4E00\u4E2A\u4F1A\u8BDD\u518D\u8C03\u7528 ae_ping \u9A8C\u8BC1\uFF1Bae-mcp \u9762\u677F\u5FC5\u987B\u4FDD\u6301\u6253\u5F00\uFF0C\u5173\u6389\u6216\u91CD\u8F7D\u9762\u677F\u4E4B\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002`,
+\u5B8C\u6210\u540E\u63D0\u9192\u6211\u4E24\u4EF6\u4E8B\uFF1AMCP \u5DE5\u5177\u53EA\u5728\u65B0\u4F1A\u8BDD\u91CC\u52A0\u8F7D\uFF0C\u8981\u65B0\u5F00\u4E00\u4E2A\u4F1A\u8BDD\u518D\u8C03\u7528 ae_status \u9A8C\u8BC1\uFF1Bae-mcp \u9762\u677F\u5FC5\u987B\u4FDD\u6301\u6253\u5F00\uFF0C\u5173\u6389\u6216\u91CD\u8F7D\u9762\u677F\u4E4B\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002`,
     en: ({ url, shimPath }) => `Connect After Effects for me. The ae-mcp panel is already running on this machine and serves MCP at ${url}.
 
 Use whichever form your client supports:
 - Clients that accept a Streamable HTTP MCP server (Claude Code, Cursor, and similar): add that URL as a server named ae; register it at user scope if your client has scopes; leave my other MCP entries untouched; print the final configuration back to me.
 - stdio-only clients (Claude Desktop and similar): run ${shimPath} with system Node 18 or newer and set the environment variable AE_MCP_HTTP_URL=${url}.
 
-When you are done, remind me of two things: MCP tools load only in a new session, so start a fresh session and call ae_ping to verify; and the ae-mcp panel must stay open \u2014 clients need to reconnect after it closes or reloads.`
+When you are done, remind me of two things: MCP tools load only in a new session, so start a fresh session and call ae_status to verify; and the ae-mcp panel must stay open \u2014 clients need to reconnect after it closes or reloads.`
   };
   function externalClientSetupPrompt({
     lang = "zh",
