@@ -518,6 +518,64 @@ test('skillUse touches and records a named library render, including include_tem
     assert.equal(failOpen.result.structuredContent.ok, true);
 });
 
+test('bundled and legacy skill usage persists in the state tools directory', async (t) => {
+    const library = makeLibrary(t);
+    library.writeSkill({
+        name: 'legacy-review',
+        description: 'Legacy review prompt.',
+        template_type: 'prompt',
+        template: 'Review the current composition.',
+        args_schema: {},
+    });
+    const deps = { toolLibrary: library };
+    for (let index = 0; index < 2; index += 1) {
+        const rendered = await skillUse.call({
+            name: 'builtin:skill:ae-execution-guide',
+        }, toolContext(), deps);
+        assert.equal(rendered.result.structuredContent.ok, true);
+    }
+    const legacyRendered = await skillUse.call({
+        name: 'legacy-review',
+    }, toolContext(), deps);
+    assert.equal(legacyRendered.result.structuredContent.ok, true);
+
+    const listed = await skillUse.call({}, toolContext(), deps);
+    const bundledMeta = listed.result.structuredContent.skills.find(function (item) {
+        return item.name === 'ae-execution-guide';
+    });
+    const legacyMeta = listed.result.structuredContent.skills.find(function (item) {
+        return item.name === 'legacy-review';
+    });
+    assert.deepEqual(
+        { useCount: bundledMeta.useCount, lastUsedAt: bundledMeta.lastUsedAt },
+        { useCount: 2, lastUsedAt: 1000 },
+    );
+    assert.deepEqual(
+        { useCount: legacyMeta.useCount, lastUsedAt: legacyMeta.lastUsedAt },
+        { useCount: 1, lastUsedAt: 1000 },
+    );
+    const usage = JSON.parse(fs.readFileSync(library.skillUsagePath, 'utf8'));
+    assert.equal(usage['builtin:skill:ae-execution-guide'].useCount, 2);
+
+    const restarted = new ToolLibrary({
+        toolRoot: library.toolRoot,
+        skillRoot: library.skillRoot,
+        bundledRoot: library.bundledRoot,
+        now: function () { return 2000; },
+    });
+    const afterRestart = restarted.skillMeta(restarted.resolveSkill('ae-execution-guide'));
+    assert.equal(afterRestart.useCount, 2);
+    assert.equal(afterRestart.lastUsedAt, 1000);
+});
+
+test('corrupt bundled and legacy skill usage is treated as empty', (t) => {
+    const library = makeLibrary(t);
+    fs.writeFileSync(library.skillUsagePath, '{not-json', 'utf8');
+    const record = library.resolveSkill('ae-execution-guide');
+    assert.deepEqual(library.skillUsage(record), { useCount: 0, lastUsedAt: null });
+    assert.deepEqual(library.touchSkillUsage(record), { useCount: 1, lastUsedAt: 1000 });
+});
+
 test('skillUse touches and records a successful library skill execution', async () => {
     const stored = artifact({
         id: 'user:33333333-3333-4333-8333-333333333333',
@@ -676,6 +734,69 @@ test('bundled execution guide advertises the Tool Library workflow and matches i
     assert.equal(makeLibrary(t).getArtifact('builtin:skill:ae-execution-guide').verified, true);
 });
 
+test('all bundled skill descriptions use the three-sentence trigger template', () => {
+    const requiredKeywords = {
+        'ae-execution-guide': 'execution route',
+        'ease-and-timing': 'ease pair',
+        'extendscript-cookbook': 'extendscript traps',
+        'glow-recipes': 'glow',
+        'grade-stack': 'grade-stack',
+        'kinetic-typography': 'kinetic typography',
+        'project-organization': 'project organization',
+        'render-order': 'render order',
+    };
+    Object.keys(requiredKeywords).forEach(function (name) {
+        const skill = JSON.parse(fs.readFileSync(
+            path.join(__dirname, 'skills_bundled', name + '.json'), 'utf8',
+        ));
+        const description = skill.description.toLowerCase();
+        assert.ok(description.length <= 220, name + ' description is too long');
+        assert.match(skill.description, /^Use when .+\. Gives .+\. Needs .+\.$/);
+        assert.match(description, new RegExp(requiredKeywords[name]));
+    });
+});
+
+test('bundled skill manifest matches every bundled skill file', () => {
+    const bundledRoot = path.join(__dirname, 'skills_bundled');
+    const manifest = JSON.parse(fs.readFileSync(path.join(bundledRoot, 'manifest.json'), 'utf8'));
+    const files = fs.readdirSync(bundledRoot).filter(function (name) {
+        return name.endsWith('.json') && name !== 'manifest.json';
+    }).sort();
+    const entries = manifest.artifacts.slice().sort(function (left, right) {
+        return left.path.localeCompare(right.path);
+    });
+    assert.deepEqual(entries.map(function (entry) { return entry.path; }), files);
+    entries.forEach(function (entry) {
+        const digest = crypto.createHash('sha256').update(
+            fs.readFileSync(path.join(bundledRoot, entry.path)),
+        ).digest('hex');
+        assert.equal(entry.sha256, digest, entry.path);
+    });
+});
+
+test('new ExtendScript cookbook entries keep the Symptom/Cause/Fix shape', () => {
+    const cookbook = JSON.parse(fs.readFileSync(
+        path.join(__dirname, 'skills_bundled', 'extendscript-cookbook.json'), 'utf8',
+    ));
+    const titles = [
+        'Error object where a number/array/property was expected',
+        'Text animator skeleton: use match names',
+        'Project bit depth and previews',
+        'Reading ExtendScript errors',
+        'Replay candidates instead of resending scripts',
+    ];
+    titles.forEach(function (title) {
+        const start = cookbook.template.indexOf('=== ' + title + ' ===');
+        const next = cookbook.template.indexOf('\n\n===', start + title.length + 8);
+        const section = cookbook.template.slice(start, next < 0 ? undefined : next);
+        assert.ok(start >= 0, title + ' is missing');
+        assert.ok(section.split('\n').length <= 12, title + ' is too long');
+        assert.match(section, /\nSymptom:/);
+        assert.match(section, /\nCause:/);
+        assert.match(section, /\nFix:/);
+    });
+});
+
 test('library export only permits saved and pinned user artifacts', (t) => {
     const library = makeLibrary(t);
     const saved = library.saveArtifact(artifact());
@@ -768,4 +889,3 @@ test('library management transitions and deletion respect artifact lifecycle', (
     assert.equal(library.managementList().candidates[0].contentCharacters > 0, true);
     assert.deepEqual(library.clearCandidates(), { removedIds: [secondCandidate.id], count: 1 });
 });
-
