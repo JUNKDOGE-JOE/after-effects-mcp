@@ -36,6 +36,9 @@ let clientBlocklist = null;
 const INTERNAL_CLIENT = 'panel-diagnostics/internal';
 const NATIVE_MAX_REQUEST_WINDOW_MS = 30000;
 const NATIVE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const EXEC_TIMEOUT_MAX_MS = 600000;
+const STOP_FALLBACK_TIMEOUT_MS = 3000;
+const trackedSockets = new Set();
 
 function setRuntimeDependencies(dependencies) {
     if (!dependencies || typeof dependencies.express !== 'function') {
@@ -710,7 +713,9 @@ async function executeJsx(request) {
             payload: { ok: false, error: '`nativeProjectGraphEffect` must be invalidate or preserve' },
         };
     }
-    const t = Number.isFinite(input.timeoutMs) && input.timeoutMs > 0 ? input.timeoutMs : 30000;
+    const requestedTimeoutMs = Number.isFinite(input.timeoutMs) && input.timeoutMs > 0
+        ? input.timeoutMs : 30000;
+    const t = Math.min(Math.max(requestedTimeoutMs, 1), EXEC_TIMEOUT_MAX_MS);
     const wrapped = undoGroup ? wrapWithUndoGroup(code, undoGroup) : code;
     const transported = wrapForEvalScriptTransport(wrapped, {
         diagnostics: input.diagnostics === true,
@@ -1248,9 +1253,23 @@ function start(port, callback) {
     httpServer.on('error', (err) => {
         if (callback) callback(err);
     });
+    httpServer.on('connection', function (socket) {
+        trackedSockets.add(socket);
+        socket.on('close', function () { trackedSockets.delete(socket); });
+    });
 }
 
 function stop(callback) {
+    let finished = false;
+    let fallbackTimer = null;
+    const finish = function () {
+        if (finished) return;
+        finished = true;
+        if (fallbackTimer) clearTimeout(fallbackTimer);
+        httpServer = null;
+        currentPort = null;
+        if (callback) callback();
+    };
     if (restoreHostConsole) {
         try { restoreHostConsole(); } catch (error) { /* best effort */ }
         restoreHostConsole = null;
@@ -1260,12 +1279,33 @@ function stop(callback) {
         unsubscribeHostActivity = null;
     }
     closeNativeAegpClient();
-    if (!httpServer) return callback ? callback() : null;
-    httpServer.close(() => {
-        httpServer = null;
-        currentPort = null;
-        if (callback) callback();
-    });
+    const server = httpServer;
+    if (!server) return finish();
+
+    const mounted = module.exports.mcp;
+    if (mounted && mounted.sessions && typeof mounted.sessions.list === 'function'
+        && typeof mounted.sessions.delete === 'function') {
+        mounted.sessions.list().forEach(function (session) {
+            mounted.sessions.delete(session.sessionId);
+        });
+    }
+
+    try {
+        server.close(finish);
+    } catch (error) {
+        finish();
+        return;
+    }
+
+    if (typeof server.closeAllConnections === 'function') {
+        server.closeAllConnections();
+    } else {
+        // CEP hosts can predate closeAllConnections; keep their long-lived SSE
+        // sockets visible so close cannot wait forever on a client stream.
+        trackedSockets.forEach(function (socket) { socket.destroy(); });
+    }
+    fallbackTimer = setTimeout(finish, STOP_FALLBACK_TIMEOUT_MS);
+    if (fallbackTimer && typeof fallbackTimer.unref === 'function') fallbackTimer.unref();
 }
 
 function restart(port, callback) {

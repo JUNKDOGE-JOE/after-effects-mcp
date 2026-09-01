@@ -1,5 +1,6 @@
 'use strict';
 const { appendHint } = require('./error-hints');
+const crypto = require('crypto');
 
 // Shared checkpoint mechanics. ae_exec uses the best-effort wrapper while
 // ae_checkpoint and ae_revert use the explicit result-producing primitives.
@@ -100,8 +101,27 @@ function atomicReplace(source, destination, fsImpl) {
     const io = fsImpl || fs;
     const directory = path.dirname(destination);
     io.mkdirSync(directory, { recursive: true });
-    const temporary =
-        io.mkdtempSync(path.join(directory, '.' + path.basename(destination) + '.')) + '.aep.tmp';
+    let temporary = null;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+        const candidate = path.join(
+            directory,
+            '.' + path.basename(destination) + '.' + crypto.randomBytes(8).toString('hex') + '.aep.tmp',
+        );
+        try {
+            const descriptor = io.openSync(candidate, 'wx');
+            io.closeSync(descriptor);
+            temporary = candidate;
+            break;
+        } catch (error) {
+            try {
+                if (io.existsSync(candidate)) io.unlinkSync(candidate);
+            } catch (cleanupError) {
+                /* best effort */
+            }
+            if (!error || error.code !== 'EEXIST') throw error;
+        }
+    }
+    if (!temporary) throw new Error('could not create an atomic replacement temp file');
     try {
         io.copyFileSync(source, temporary);
         io.renameSync(temporary, destination);
