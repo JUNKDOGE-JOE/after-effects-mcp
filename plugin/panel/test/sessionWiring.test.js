@@ -54,6 +54,11 @@ test('OpenCode pending probes become retryable and stale rechecks reset idle run
   assert.match(APP, /openCodeProbe === null && !openCodeProbeStale/);
 });
 
+test('model preferences are channel-scoped and Codex waits for live model facts', () => {
+  assert.doesNotMatch(APP, /['"]ae_mcp_model['"]/);
+  assert.match(APP, /providerFactsPending:[\s\S]*backendPref === 'codex'[\s\S]*codexProbe === null[\s\S]*codexModels === null/);
+});
+
 test('turn progress is reduced in App and rendered below the transcript', () => {
   assert.match(APP, /const \[turnStage, setTurnStage\] = React\.useState\(null\)/);
   assert.match(APP, /setTurnStage\(\(current\) => reduceTurnStage\(current, evt,/);

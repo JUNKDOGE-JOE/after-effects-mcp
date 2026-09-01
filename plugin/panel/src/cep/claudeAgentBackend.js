@@ -22,6 +22,7 @@ import {
   displayAnswers,
   questionsFromAskUserQuestion,
 } from '../lib/questionForm.js';
+import { CLAUDE_MODELS } from '../lib/backendCapabilities.js';
 
 export const CLAUDE_MINIMUM_VERSION = '2.0.0';
 export const CLAUDE_NO_PROGRESS_WARNING_MS = 180000;
@@ -102,6 +103,30 @@ function requiredArchitecture(adapter) {
   if (adapter.id === 'macos-arm64') return 'arm64';
   if (adapter.id === 'windows-x64') return 'x64';
   return undefined;
+}
+
+function compareVersions(actual, minimum) {
+  const left = String(actual || '').match(/\d+(?:\.\d+){0,3}/);
+  const right = String(minimum || '').match(/\d+(?:\.\d+){0,3}/);
+  if (!left || !right) return null;
+  const a = left[0].split('.').map(Number);
+  const b = right[0].split('.').map(Number);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const delta = (a[index] || 0) - (b[index] || 0);
+    if (delta) return delta;
+  }
+  return 0;
+}
+
+function minimumCliVersionForModel(modelId) {
+  return CLAUDE_MODELS.find((model) => model.id === modelId)?.minCliVersion || null;
+}
+
+function unsupportedModelMessage(version, minimum, lang) {
+  const current = version || (lang === 'zh' ? '未知' : 'unknown');
+  return lang === 'zh'
+    ? `当前 Claude Code ${current} 不支持该模型，需要 ≥ ${minimum}：运行 \`claude update\` 升级，或换一个模型。`
+    : `Claude Code ${current} does not support this model; version ${minimum} or newer is required. Run \`claude update\` to upgrade, or choose another model.`;
 }
 
 function resolutionArchitecture(resolution) {
@@ -1124,6 +1149,20 @@ export function createClaudeAgentBackend({
           code: classification.code,
           message: resolved?.detail || cliResolutionMessage(resolved?.code, resolvedLang, resolved?.resolution || resolved),
           ...(resolution ? { detail: { resolution } } : {}),
+        });
+        return false;
+      }
+      const minimumCliVersion = minimumCliVersionForModel(session.model);
+      const versionComparison = minimumCliVersion
+        ? compareVersions(resolved.version, minimumCliVersion)
+        : null;
+      if (minimumCliVersion && (versionComparison === null || versionComparison < 0)) {
+        const classification = classifyErrorCode({ code: 'CLI_TOO_OLD' });
+        emitAfterText({
+          type: 'error',
+          kind: classification.kind,
+          code: classification.code,
+          message: unsupportedModelMessage(resolved.version, minimumCliVersion, resolvedLang),
         });
         return false;
       }
