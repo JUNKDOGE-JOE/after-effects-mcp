@@ -21954,6 +21954,7 @@
     return Object.freeze({
       id: "macos-arm64",
       pid: deps.pid,
+      canManageUserPath: false,
       paths,
       fs: deps.fs,
       requestJson: createHttpJsonRequester(deps),
@@ -22041,6 +22042,44 @@
     const match = line && line.trim().match(/^"((?:[^"]|"")*)"/);
     return match ? match[1].replace(/""/g, '"') : "";
   }
+  var USER_PATH_DEFAULT = Object.freeze({ value: "", type: "REG_EXPAND_SZ" });
+  var BROADCAST_SCRIPT = [
+    "Add-Type @'",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public static class EnvironmentChange {",
+    "  public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);",
+    "  public const uint WM_SETTINGCHANGE = 0x001A;",
+    "  public const uint SMTO_ABORTIFHUNG = 0x0002;",
+    '  [DllImport("user32.dll", CharSet = CharSet.Unicode)]',
+    "  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);",
+    "}",
+    "'@",
+    "$result = [UIntPtr]::Zero",
+    '[EnvironmentChange]::SendMessageTimeout([EnvironmentChange]::HWND_BROADCAST, [EnvironmentChange]::WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", [EnvironmentChange]::SMTO_ABORTIFHUNG, 2000, [ref]$result) | Out-Null'
+  ].join("\n");
+  function normalizedPathEntry(value) {
+    let result = String(value || "").trim().replace(/\//g, "\\");
+    while (result.length > 3 && result.endsWith("\\")) result = result.slice(0, -1);
+    return result.toLowerCase();
+  }
+  function expandEnvironmentEntry(value, environment) {
+    return String(value || "").replace(/%([^%]+)%/g, (match, name) => {
+      const replacement = envValue(environment, name);
+      return replacement === void 0 ? match : String(replacement);
+    });
+  }
+  function pathIncludesEntry(rawValue, directory, environment) {
+    const expected = normalizedPathEntry(directory);
+    if (!expected) return false;
+    return String(rawValue || "").split(";").some((entry2) => normalizedPathEntry(entry2) === expected || normalizedPathEntry(expandEnvironmentEntry(entry2, environment)) === expected);
+  }
+  function parseUserPath(output) {
+    const line = String(output || "").split(/\r?\n/).find((entry2) => /^\s*Path\s+REG_(?:SZ|EXPAND_SZ)\s+/i.test(entry2));
+    if (!line) return null;
+    const match = line.match(/^\s*Path\s+(REG_(?:SZ|EXPAND_SZ))\s+(.*)$/i);
+    return match ? { value: match[2].trim(), type: match[1].toUpperCase() } : null;
+  }
   function createWindowsAdapter(deps) {
     if (!deps || deps.platform !== "win32" || deps.arch !== "x64") throw new Error("Windows x64 dependencies are required");
     const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
@@ -22052,9 +22091,61 @@
     });
     const systemRoot = String(envValue(deps.env, "SystemRoot") || envValue(deps.env, "WINDIR") || "C:\\Windows");
     const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "x64" });
+    const registry = fixed("reg", paths.join([systemRoot, "System32", "reg.exe"]));
+    const powershell = fixed(
+      "powershell",
+      paths.join([systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"])
+    );
+    async function readUserPath() {
+      const result = await boundary.run({
+        executable: registry,
+        args: ["query", "HKCU\\Environment", "/v", "Path"]
+      });
+      if (result.exitCode !== 0 || result.timedOut || result.aborted) return { ...USER_PATH_DEFAULT };
+      return parseUserPath(result.stdout) || { ...USER_PATH_DEFAULT };
+    }
+    async function addUserPathEntry(directory) {
+      var _a, _b;
+      const entry2 = String(directory || "").trim();
+      if (!entry2) throw new Error("A non-empty PATH directory is required");
+      const current = await readUserPath();
+      const environment = boundary.completeSpawnEnv();
+      if (pathIncludesEntry(current.value, entry2, environment)) return { changed: false };
+      const value = current.value ? current.value + ";" + entry2 : entry2;
+      const written = await boundary.run({
+        executable: registry,
+        args: [
+          "add",
+          "HKCU\\Environment",
+          "/v",
+          "Path",
+          "/t",
+          current.type,
+          "/d",
+          value,
+          "/f"
+        ]
+      });
+      if (written.exitCode !== 0 || written.timedOut || written.aborted) {
+        throw new Error((written.stderr || written.stdout || "reg add failed").trim());
+      }
+      try {
+        const broadcast = await boundary.run({
+          executable: powershell,
+          args: ["-NoProfile", "-Command", BROADCAST_SCRIPT]
+        });
+        if (broadcast.exitCode !== 0 || broadcast.timedOut || broadcast.aborted) {
+          throw new Error((broadcast.stderr || broadcast.stdout || "broadcast failed").trim());
+        }
+      } catch (error) {
+        (_b = (_a = globalThis.console) == null ? void 0 : _a.warn) == null ? void 0 : _b.call(_a, "User PATH broadcast failed:", error);
+      }
+      return { changed: true };
+    }
     return Object.freeze({
       id: "windows-x64",
       pid: deps.pid,
+      canManageUserPath: true,
       paths,
       fs: deps.fs,
       requestJson: createHttpJsonRequester(deps),
@@ -22124,9 +22215,25 @@
         const args = tool === "claude" ? ["start", "", "claude"] : ["start", "", "codex", "login"];
         return boundary.run({ executable: fixed(tool, cmd, ["/d", "/s", "/c"]), args, timeoutMs: 5e3 });
       },
+      readUserPath,
+      userPathIncludes(rawValue, directory) {
+        return pathIncludesEntry(rawValue, directory, boundary.completeSpawnEnv());
+      },
+      addUserPathEntry,
       legacyWizardInstallCommands() {
         return {
-          node: { file: "winget", executableId: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] }
+          node: { file: "winget", executableId: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
+          claude: {
+            file: "powershell",
+            executableId: "powershell",
+            args: [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-Command",
+              "irm https://claude.ai/install.ps1 | iex"
+            ]
+          }
         };
       }
     });
@@ -22468,6 +22575,7 @@
     {
       id: "claude-fable-5-1",
       label: "Fable 5.1",
+      minCliVersion: "2.1.251",
       effortLevels: ["low", "medium", "high", "xhigh", "max"],
       adaptive: true
     },
@@ -29303,6 +29411,26 @@ When you are done, remind me of two things: MCP tools load only in a new session
     if (adapter.id === "windows-x64") return "x64";
     return void 0;
   }
+  function compareVersions2(actual, minimum) {
+    const left = String(actual || "").match(/\d+(?:\.\d+){0,3}/);
+    const right = String(minimum || "").match(/\d+(?:\.\d+){0,3}/);
+    if (!left || !right) return null;
+    const a = left[0].split(".").map(Number);
+    const b = right[0].split(".").map(Number);
+    for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+      const delta = (a[index] || 0) - (b[index] || 0);
+      if (delta) return delta;
+    }
+    return 0;
+  }
+  function minimumCliVersionForModel(modelId) {
+    var _a;
+    return ((_a = CLAUDE_MODELS.find((model) => model.id === modelId)) == null ? void 0 : _a.minCliVersion) || null;
+  }
+  function unsupportedModelMessage(version, minimum, lang) {
+    const current = version || (lang === "zh" ? "\u672A\u77E5" : "unknown");
+    return lang === "zh" ? `\u5F53\u524D Claude Code ${current} \u4E0D\u652F\u6301\u8BE5\u6A21\u578B\uFF0C\u9700\u8981 \u2265 ${minimum}\uFF1A\u8FD0\u884C \`claude update\` \u5347\u7EA7\uFF0C\u6216\u6362\u4E00\u4E2A\u6A21\u578B\u3002` : `Claude Code ${current} does not support this model; version ${minimum} or newer is required. Run \`claude update\` to upgrade, or choose another model.`;
+  }
   function resolutionArchitecture(resolution) {
     for (const attempt of (resolution == null ? void 0 : resolution.attempts) || []) {
       const match = String((attempt == null ? void 0 : attempt.detail) || "").match(/architecture\s+(arm64|aarch64|x64|amd64|x86_64)\b/i);
@@ -30253,6 +30381,18 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             code: classification.code,
             message: (resolved == null ? void 0 : resolved.detail) || cliResolutionMessage(resolved == null ? void 0 : resolved.code, resolvedLang, (resolved == null ? void 0 : resolved.resolution) || resolved),
             ...resolution ? { detail: { resolution } } : {}
+          });
+          return false;
+        }
+        const minimumCliVersion = minimumCliVersionForModel(session.model);
+        const versionComparison = minimumCliVersion ? compareVersions2(resolved.version, minimumCliVersion) : null;
+        if (minimumCliVersion && (versionComparison === null || versionComparison < 0)) {
+          const classification = classifyErrorCode({ code: "CLI_TOO_OLD" });
+          emitAfterText({
+            type: "error",
+            kind: classification.kind,
+            code: classification.code,
+            message: unsupportedModelMessage(resolved.version, minimumCliVersion, resolvedLang)
           });
           return false;
         }
@@ -35348,6 +35488,30 @@ ${command}`
     return descriptor.defaultModelId;
   }
 
+  // src/lib/modelPreference.js
+  init_cep_runtime_inject();
+  var LEGACY_MODEL_PREF_KEY = "ae_mcp_model";
+  var MODEL_PREF_KEYS = Object.freeze({
+    subscription: "ae_mcp_model_subscription",
+    codex: "ae_mcp_model_codex",
+    opencode: "ae_mcp_model_opencode"
+  });
+  function modelPreferenceKey(channel) {
+    return MODEL_PREF_KEYS[channel] || MODEL_PREF_KEYS.subscription;
+  }
+  function nonEmpty(value) {
+    const normalized = String(value || "").trim();
+    return normalized || "";
+  }
+  function resolveModelPreference({ channelValue, legacyValue, fallback } = {}) {
+    const current = nonEmpty(channelValue);
+    const legacy = nonEmpty(legacyValue);
+    return {
+      value: current || legacy || fallback,
+      migrateLegacy: !current && Boolean(legacy)
+    };
+  }
+
   // src/cep/useActivity.js
   init_cep_runtime_inject();
   var import_react46 = __toESM(require_react(), 1);
@@ -35455,19 +35619,9 @@ ${command}`
       repoRoot: "",
       repo: ""
     }) : {};
-    const result = commands && commands.node ? { node: commands.node } : {};
-    if (adapter.id === "windows-x64" || adapter.platform === "win32") {
-      result.claude = {
-        file: "powershell",
-        executableId: "powershell",
-        args: [
-          "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-Command",
-          "irm https://claude.ai/install.ps1 | iex"
-        ]
-      };
+    const result = {};
+    for (const id of ["node", "claude"]) {
+      if (commands == null ? void 0 : commands[id]) result[id] = commands[id];
     }
     return result;
   }
@@ -35536,146 +35690,6 @@ ${command}`
     return [file, ...(args || []).map((value) => /\s/.test(value) ? `"${value}"` : value)].join(" ");
   }
 
-  // src/cep/registryPath.js
-  init_cep_runtime_inject();
-  var REG_EXECUTABLE = {
-    ok: true,
-    id: "reg",
-    path: "reg.exe",
-    argsPrefix: [],
-    source: "override",
-    version: null,
-    arch: "x64"
-  };
-  var USER_PATH_QUERY = ["query", "HKCU\\Environment", "/v", "Path"];
-  var USER_PATH_DEFAULT = { value: "", type: "REG_EXPAND_SZ" };
-  function isWindowsPlatform(adapter) {
-    return (adapter == null ? void 0 : adapter.id) === "windows-x64" || (adapter == null ? void 0 : adapter.platform) === "win32";
-  }
-  function requireWindows(adapter) {
-    if (!isWindowsPlatform(adapter)) {
-      throw new Error("User PATH updates are only supported on Windows");
-    }
-  }
-  function normalizedPathEntry(value) {
-    let result = String(value || "").trim().replace(/\//g, "\\");
-    while (result.length > 3 && result.endsWith("\\")) result = result.slice(0, -1);
-    return result.toLowerCase();
-  }
-  function expandEnvironmentEntry(value, environment) {
-    return String(value || "").replace(/%([^%]+)%/g, (match, name) => {
-      const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
-      return key === void 0 ? match : String(environment[key]);
-    });
-  }
-  function pathIncludesEntry(rawValue, directory, environment = {}) {
-    const expected = normalizedPathEntry(directory);
-    if (!expected) return false;
-    return String(rawValue || "").split(";").some((entry2) => normalizedPathEntry(entry2) === expected || normalizedPathEntry(expandEnvironmentEntry(entry2, environment)) === expected);
-  }
-  async function resolvePowerShell(adapter) {
-    const executable = await adapter.resolveExecutable("powershell");
-    if (!executable || !executable.ok) {
-      throw new Error("powershell resolution failed: " + ((executable == null ? void 0 : executable.code) || "NOT_FOUND"));
-    }
-    return executable;
-  }
-  function spawnAndCollect(adapter, executable, args) {
-    return new Promise((resolve, reject) => {
-      var _a, _b, _c, _d, _e, _f;
-      let stdout = "";
-      let stderr = "";
-      let settled = false;
-      const finish = (result, error) => {
-        if (settled) return;
-        settled = true;
-        if (error) reject(error);
-        else resolve({ ...result, stdout, stderr });
-      };
-      try {
-        const child = adapter.spawn(executable, args, { windowsHide: true });
-        (_b = (_a = child.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", (chunk) => {
-          stdout += String(chunk || "");
-        });
-        (_d = (_c = child.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", (chunk) => {
-          stderr += String(chunk || "");
-        });
-        (_e = child.on) == null ? void 0 : _e.call(child, "error", (error) => finish({}, error));
-        (_f = child.on) == null ? void 0 : _f.call(child, "close", (code) => finish({ code }, null));
-      } catch (error) {
-        finish({}, error);
-      }
-    });
-  }
-  function parseUserPath(output) {
-    const line = String(output || "").split(/\r?\n/).find((entry2) => /^\s*Path\s+REG_(?:SZ|EXPAND_SZ)\s+/i.test(entry2));
-    if (!line) return null;
-    const match = line.match(/^\s*Path\s+(REG_(?:SZ|EXPAND_SZ))\s+(.*)$/i);
-    return match ? { value: match[2].trim(), type: match[1].toUpperCase() } : null;
-  }
-  async function readUserPath(adapter) {
-    requireWindows(adapter);
-    const result = await spawnAndCollect(adapter, REG_EXECUTABLE, USER_PATH_QUERY);
-    if (result.code !== 0) return { ...USER_PATH_DEFAULT };
-    return parseUserPath(result.stdout) || { ...USER_PATH_DEFAULT };
-  }
-  async function addRegistryPath(adapter, value, type) {
-    const result = await spawnAndCollect(adapter, REG_EXECUTABLE, [
-      "add",
-      "HKCU\\Environment",
-      "/v",
-      "Path",
-      "/t",
-      type,
-      "/d",
-      value,
-      "/f"
-    ]);
-    if (result.code !== 0) {
-      throw new Error((result.stderr || result.stdout || "reg add failed").trim());
-    }
-  }
-  var BROADCAST_SCRIPT = [
-    "Add-Type @'",
-    "using System;",
-    "using System.Runtime.InteropServices;",
-    "public static class EnvironmentChange {",
-    "  public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);",
-    "  public const uint WM_SETTINGCHANGE = 0x001A;",
-    "  public const uint SMTO_ABORTIFHUNG = 0x0002;",
-    '  [DllImport("user32.dll", CharSet = CharSet.Unicode)]',
-    "  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);",
-    "}",
-    "'@",
-    "$result = [UIntPtr]::Zero",
-    '[EnvironmentChange]::SendMessageTimeout([EnvironmentChange]::HWND_BROADCAST, [EnvironmentChange]::WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", [EnvironmentChange]::SMTO_ABORTIFHUNG, 2000, [ref]$result) | Out-Null'
-  ].join("\n");
-  async function broadcastEnvironmentChange(adapter) {
-    const executable = await resolvePowerShell(adapter);
-    const result = await spawnAndCollect(adapter, executable, [
-      "-NoProfile",
-      "-Command",
-      BROADCAST_SCRIPT
-    ]);
-    if (result.code !== 0) throw new Error((result.stderr || result.stdout || "broadcast failed").trim());
-  }
-  async function addUserPathEntry(adapter, directory) {
-    var _a, _b;
-    requireWindows(adapter);
-    const entry2 = String(directory || "").trim();
-    if (!entry2) throw new Error("A non-empty PATH directory is required");
-    const current = await readUserPath(adapter);
-    if (pathIncludesEntry(current.value, entry2)) return { changed: false };
-    const newValue = current.value ? current.value + ";" + entry2 : entry2;
-    await addRegistryPath(adapter, newValue, current.type);
-    try {
-      await broadcastEnvironmentChange(adapter);
-    } catch (error) {
-      (_b = (_a = globalThis.console) == null ? void 0 : _a.warn) == null ? void 0 : _b.call(_a, "User PATH broadcast failed:", error);
-    }
-    return { changed: true };
-  }
-
   // src/app/wizardWiring.js
   function useWizardWiring({
     port = 11488,
@@ -35693,8 +35707,8 @@ ${command}`
       claude: commandPreview(commands.claude)
     }), [commands]);
     const updatePathOffer = import_react47.default.useCallback(async (id, result) => {
-      var _a, _b;
-      if (!isWindowsPlatform(platform) || !result.ok || !result.path) {
+      var _a;
+      if (!(platform == null ? void 0 : platform.canManageUserPath) || !result.ok || !result.path) {
         setPathOffers((current) => {
           if (!current[id]) return current;
           const next = { ...current };
@@ -35705,11 +35719,10 @@ ${command}`
       }
       const directory = ((_a = platform.paths) == null ? void 0 : _a.dirname) ? platform.paths.dirname(result.path) : String(result.path).replace(/[\\/][^\\/]*$/, "");
       try {
-        const userPath = await readUserPath(platform);
-        const environment = ((_b = platform.paths) == null ? void 0 : _b.home) ? { USERPROFILE: platform.paths.home, HOME: platform.paths.home } : {};
+        const userPath = await platform.readUserPath();
         setPathOffers((current) => {
           const next = { ...current };
-          if (pathIncludesEntry(userPath.value, directory, environment)) delete next[id];
+          if (platform.userPathIncludes(userPath.value, directory)) delete next[id];
           else next[id] = { directory };
           return next;
         });
@@ -35757,7 +35770,7 @@ ${command}`
     const addToPath = import_react47.default.useCallback(async (id) => {
       const offer = pathOffers[id];
       if (!offer) return { changed: false };
-      const result = await addUserPathEntry(platform, offer.directory);
+      const result = await platform.addUserPathEntry(offer.directory);
       if (result.changed) {
         setPathOffers((current) => {
           const next = { ...current };
@@ -37203,12 +37216,17 @@ ${command}`
         activeMeta.titleSource = "auto";
       }
     }
+    function refreshActiveModel() {
+      if (!activeMeta || typeof deps.currentModel !== "function") return;
+      activeMeta.model = deps.currentModel() || null;
+    }
     function persistActive() {
       if (!activeMeta || !activeId) return false;
       const currentRef = backendRef(
         typeof deps.getBackendRef === "function" ? deps.getBackendRef() : null
       );
       if (currentRef) activeMeta.backendRef = currentRef;
+      refreshActiveModel();
       refreshActiveMeta();
       if (!materialized()) {
         if (index.activeId === activeId) {
@@ -37362,6 +37380,7 @@ ${command}`
       if (!activeMeta) return;
       latestEntries = clone4(Array.isArray(entries) ? entries : []);
       activeMeta.updatedAt = isoTime(now);
+      refreshActiveModel();
       refreshActiveMeta();
       if (latestEntries.length) upsertActiveMeta();
       dirty = true;
@@ -37762,6 +37781,24 @@ ${command}`
     } catch (e) {
     }
   }
+  function removePref(key) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch (e) {
+    }
+  }
+  function loadModelPref(channel, fallback) {
+    const key = modelPreferenceKey(channel);
+    const legacyValue = readPref(LEGACY_MODEL_PREF_KEY, "");
+    const resolved = resolveModelPreference({
+      channelValue: readPref(key, ""),
+      legacyValue,
+      fallback
+    });
+    if (resolved.migrateLegacy) writePref(key, resolved.value);
+    if (legacyValue) removePref(LEGACY_MODEL_PREF_KEY);
+    return resolved.value;
+  }
   function openLoginUrl(url) {
     var _a, _b;
     if (typeof ((_b = (_a = window == null ? void 0 : window.cep) == null ? void 0 : _a.util) == null ? void 0 : _b.openURLInDefaultBrowser) !== "function") {
@@ -37851,7 +37888,8 @@ ${command}`
     const pendingTurnRef = import_react48.default.useRef(null);
     const acceptedTurnRef = import_react48.default.useRef(null);
     import_react48.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-    const [model, setModel] = import_react48.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const backendMigration = import_react48.default.useMemo(() => migrateBackendPref(window.localStorage), []);
+    const [model, setModel] = import_react48.default.useState(() => loadModelPref(backendMigration.pref, DEFAULT_MODEL));
     const [logLevel, setLogLevel] = import_react48.default.useState(() => readPref("ae_mcp_log_level", "info"));
     const logLevelRef = import_react48.default.useRef(logLevel);
     logLevelRef.current = logLevel;
@@ -37894,7 +37932,6 @@ ${command}`
       const guard = createPanelFileDropGuard({ target: window });
       return guard.dispose;
     }, []);
-    const backendMigration = import_react48.default.useMemo(() => migrateBackendPref(window.localStorage), []);
     const [backendPref, setBackendPref] = import_react48.default.useState(() => backendMigration.pref);
     const [channelChoices, setChannelChoices] = import_react48.default.useState(() => backendMigration.channelChoices);
     const openCodeProviderStore = import_react48.default.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
@@ -38356,6 +38393,7 @@ ${draft.baseUrl}`)) return;
         getEntries: () => chatEntriesRef.current,
         selectBackend: async (backend) => {
           lastRealBackendRef.current = backend;
+          setModel(loadModelPref(backend, DEFAULT_MODEL));
           setBackendPref(backend);
           writePref("ae_mcp_backend", backend);
           await new Promise((resolve) => {
@@ -38412,11 +38450,11 @@ ${draft.baseUrl}`)) return;
       const nextDescriptor = selectDescriptor(facts);
       setDescriptor(nextDescriptor);
       const reconciled = reconcileModelPref(model, nextDescriptor, {
-        providerFactsPending: backendPref === "opencode" && (providerInit.state !== "ready" || openCodeProbe === null)
+        providerFactsPending: backendPref === "codex" ? codexProbe === null || codexModels === null : backendPref === "opencode" && (providerInit.state !== "ready" || openCodeProbe === null)
       });
       if (reconciled !== model) {
         setModel(reconciled);
-        writePref("ae_mcp_model", reconciled);
+        writePref(modelPreferenceKey(backendPref), reconciled);
       }
     }, [
       effective.backend,
@@ -38424,8 +38462,10 @@ ${draft.baseUrl}`)) return;
       backendPref,
       baseDescriptor,
       codexModels,
+      codexProbe,
       openCodeAvailableProviders,
       openCodeProbe,
+      model,
       providerInit.state
     ]);
     const lastRealBackendRef = import_react48.default.useRef(null);
@@ -38457,6 +38497,7 @@ ${draft.baseUrl}`)) return;
     const runCodexProbe = import_react48.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
+      setCodexModels(null);
       codexBackend.probeAccount().then((result) => {
         if (!alive) return;
         if (containsExactSecret(result, ["aemcp-secret://"])) {
@@ -38469,7 +38510,10 @@ ${draft.baseUrl}`)) return;
           setCodexModels(result.models);
         }
       }).catch((e) => {
-        if (alive) setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+        if (alive) {
+          setCodexModels(null);
+          setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
+        }
       });
       return () => {
         alive = false;
@@ -39099,7 +39143,11 @@ ${draft.baseUrl}`)) return;
               fast: effectiveFast,
               permissionMode
             },
-            onChipModel: setSessionModel,
+            onChipModel: (m) => {
+              setSessionModel(m);
+              setModel(m);
+              writePref(modelPreferenceKey(backendPref), m);
+            },
             onChipEffort: setSessionEffort,
             onChipFast: (v) => setSessionFast(Boolean(v)),
             onChipApproval: (m) => {
@@ -39201,11 +39249,12 @@ ${draft.baseUrl}`)) return;
             modelSwitchable: descriptor.perTurnModelSwitch !== false,
             onModelChange: (m) => {
               setModel(m);
-              writePref("ae_mcp_model", m);
+              writePref(modelPreferenceKey(backendPref), m);
             },
             backend: backendPref,
             onBackendChange: (m) => {
               sessionController.flush();
+              setModel(loadModelPref(m, DEFAULT_MODEL));
               setBackendPref(m);
               writePref("ae_mcp_backend", m);
             },

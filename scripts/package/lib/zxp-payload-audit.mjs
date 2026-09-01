@@ -7,7 +7,6 @@ import {
   readRegularFileSnapshot,
   sha256Directory,
 } from './files.mjs';
-import { signingError } from '../signing-plan.mjs';
 
 const MAX_ARCHIVE_BYTES = 1024 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 512 * 1024 * 1024;
@@ -15,6 +14,12 @@ const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_ENTRIES = 50_000;
 const MIMETYPE = Buffer.from('application/vnd.adobe.air-ucf-package+zip', 'ascii');
 const SHA256 = /^[a-f0-9]{64}$/;
+
+function signingError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
 
 function invalid(message, cause) {
   const error = signingError('SIGNING_ZXP_ARCHIVE_INVALID', message);

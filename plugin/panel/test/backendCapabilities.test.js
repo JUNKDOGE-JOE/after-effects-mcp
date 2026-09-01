@@ -32,6 +32,13 @@ test('Claude ids are current API aliases and the default is selectable', () => {
   assert.ok(ids.includes(claudeSubDescriptor().defaultModelId));
 });
 
+test('only Fable 5.1 declares its minimum Claude CLI version', () => {
+  assert.equal(CLAUDE_MODELS.find((model) => model.id === 'claude-fable-5-1').minCliVersion, '2.1.251');
+  for (const model of CLAUDE_MODELS.filter((model) => model.id !== 'claude-fable-5-1')) {
+    assert.equal(Object.hasOwn(model, 'minCliVersion'), false, model.id);
+  }
+});
+
 test('cost tiers derive from the Claude price map', () => {
   assert.equal(costTier('claude-haiku-4-5'), 1);
   assert.equal(costTier('claude-sonnet-5'), 2);

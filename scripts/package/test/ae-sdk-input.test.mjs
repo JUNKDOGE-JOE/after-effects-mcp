@@ -36,7 +36,7 @@ test('SDK input parsing has no private Python or sidecar bootstrap path', () => 
 test('current workflows and install docs contain the direct Node/URL setup only', async () => {
   const files = [
     '.github/workflows/ci.yml',
-    '.github/workflows/build-rc.yml',
+    '.github/workflows/release.yml',
     'README.md',
     'README.zh-CN.md',
   ];

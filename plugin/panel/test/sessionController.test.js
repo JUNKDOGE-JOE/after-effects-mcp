@@ -40,6 +40,7 @@ function harness({
   let currentBackend = backend;
   let backendRefs = {};
   let resetCount = 0;
+  let currentModel = 'model-1';
   let uuidSequence = 0;
   let clock = Date.parse('2026-08-22T00:00:00.000Z');
   const store = {
@@ -97,7 +98,7 @@ function harness({
       }
     },
     currentBackend: () => currentBackend,
-    currentModel: () => 'model-1',
+    currentModel: () => currentModel,
     currentChannel: () => (currentBackend === 'codex' ? 'cli' : 'subscription'),
     log: (line) => calls.push(`log:${line}`),
   };
@@ -126,6 +127,7 @@ function harness({
     get backendRefs() { return copy(backendRefs); },
     get resetCount() { return resetCount; },
     setClock(value) { clock = value; },
+    setModel(value) { currentModel = value; },
   };
 }
 
@@ -294,6 +296,15 @@ test('recordEntries debounces ordinary updates and flushes turn settlement immed
   assert.equal(h.savedTranscripts.length, 1);
   h.controller.recordEntries([{ type: 'user-text', text: 'hello' }, { type: 'ai-text', text: 'done' }], { type: 'turn-end' });
   assert.equal(h.savedTranscripts.length, 2);
+});
+
+test('persistence refreshes session metadata after the active model changes', async () => {
+  const h = harness();
+  await h.controller.boot();
+  h.setModel('model-2');
+  h.controller.recordEntries([{ type: 'user-text', text: 'hello' }], { type: 'turn-end' });
+  assert.equal(h.controller.snapshot().sessions[0].model, 'model-2');
+  assert.equal(h.savedIndexes.at(-1).sessions[0].model, 'model-2');
 });
 
 test('sanitizeRestored cancels non-resumable UI state and clears streaming flags', () => {

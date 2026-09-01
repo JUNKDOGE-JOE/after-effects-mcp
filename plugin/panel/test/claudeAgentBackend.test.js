@@ -103,7 +103,7 @@ function createFs() {
   };
 }
 
-function resolvedClaude() {
+function resolvedClaude(version = '2.1.257') {
   const executable = {
     ok: true,
     id: 'claude',
@@ -111,7 +111,7 @@ function resolvedClaude() {
     displayPath: 'C:\\npm\\claude.cmd',
     argsPrefix: [],
     source: 'path',
-    version: '2.1.227',
+    version,
     arch: 'x64',
   };
   return {
@@ -482,6 +482,40 @@ test('Claude serializes every advertised model and effort pair', async () => {
       await run;
       h.backend.reset();
     }
+  }
+});
+
+test('Claude blocks a model when the resolved CLI is below its declared minimum', async () => {
+  const h = makeHarness({
+    state: { model: 'claude-fable-5-1' },
+    resolveClaude: async () => resolvedClaude('2.1.227'),
+  });
+  const run = h.backend.sendUser('should not spawn');
+  await flush();
+  assert.equal(h.spawns.length, 0);
+  const error = h.events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'CLI_TOO_OLD');
+  assert.match(error.message, /2\.1\.227/);
+  assert.match(error.message, /2\.1\.251/);
+  assert.match(error.message, /claude update/i);
+  assert.match(error.message, /换一个模型|another model/i);
+  await run;
+});
+
+test('Claude spawns Fable on a supported CLI and Opus on an older supported CLI', async () => {
+  for (const state of [
+    { model: 'claude-fable-5-1', version: '2.1.257' },
+    { model: 'claude-opus-5', version: '2.1.227' },
+  ]) {
+    const h = makeHarness({
+      state: { model: state.model },
+      resolveClaude: async () => resolvedClaude(state.version),
+    });
+    const run = h.backend.sendUser('spawn');
+    await flush();
+    assert.equal(h.spawns.length, 1, state.model);
+    finishTurn(h.processes[0]);
+    await run;
   }
 });
 

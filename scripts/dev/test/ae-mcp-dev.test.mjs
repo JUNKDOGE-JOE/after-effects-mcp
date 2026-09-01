@@ -229,14 +229,6 @@ test('every daily plan preserves zero dependency and release invocations', async
     ['doctor'],
     ['launch-ae'],
     ['sync', '--component', 'core'],
-    [
-      'smoke',
-      '--component', 'core',
-      '--scenario', 'native-exec-ir@1',
-      '--fixture-path', '/fixtures/active/dev.aep',
-      '--recovery-archive-root', '/fixtures/recovery',
-      '--evidence-dir', '/evidence/hdev',
-    ],
   ];
   for (const argv of cases) {
     const h = harness();

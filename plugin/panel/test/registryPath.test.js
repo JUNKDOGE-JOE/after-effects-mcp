@@ -1,27 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import {
-  addUserPathEntry,
-  readUserPath,
-} from '../src/cep/registryPath.js';
+import { createWindowsAdapter } from '../src/cep/platform/windows.js';
 
 function adapterFor(steps) {
   const calls = [];
-  return {
-    id: 'windows-x64',
-    calls,
-    resolveExecutable: async (id) => ({
-      ok: true,
-      id,
-      path: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-      argsPrefix: [],
-      source: 'standard',
-      version: null,
-      arch: 'x64',
-    }),
-    spawn: (executable, args, options) => {
-      calls.push({ executable, args, options });
+  const adapter = createWindowsAdapter({
+    platform: 'win32',
+    arch: 'x64',
+    pid: 1,
+    home: 'C:\\Users\\a',
+    temp: 'C:\\Temp',
+    env: { SystemRoot: 'C:\\Windows' },
+    extensionRoot: 'C:\\Extension',
+    fs: {},
+    now: () => 0,
+    spawnImpl: (file, args, options) => {
+      calls.push({ file, args, options });
       const child = new EventEmitter();
       child.stdout = new EventEmitter();
       child.stderr = new EventEmitter();
@@ -34,7 +29,8 @@ function adapterFor(steps) {
       });
       return child;
     },
-  };
+  });
+  return Object.assign(Object.create(adapter), { calls });
 }
 
 test('readUserPath parses REG_SZ values', async () => {
@@ -42,7 +38,7 @@ test('readUserPath parses REG_SZ values', async () => {
     { stdout: '\r\nHKEY_CURRENT_USER\\Environment\r\n    Path    REG_SZ    C:\\Tools;C:\\Other\r\n' },
   ]);
 
-  assert.deepEqual(await readUserPath(adapter), {
+  assert.deepEqual(await adapter.readUserPath(), {
     value: 'C:\\Tools;C:\\Other',
     type: 'REG_SZ',
   });
@@ -52,13 +48,13 @@ test('readUserPath parses REG_EXPAND_SZ values and defaults missing values', asy
   const expanded = adapterFor([
     { stdout: '    Path    REG_EXPAND_SZ    %USERPROFILE%\\.local\\bin\r\n' },
   ]);
-  assert.deepEqual(await readUserPath(expanded), {
+  assert.deepEqual(await expanded.readUserPath(), {
     value: '%USERPROFILE%\\.local\\bin',
     type: 'REG_EXPAND_SZ',
   });
 
   const missing = adapterFor([{ code: 1, stderr: 'ERROR: The system was unable to find the specified registry key.' }]);
-  assert.deepEqual(await readUserPath(missing), { value: '', type: 'REG_EXPAND_SZ' });
+  assert.deepEqual(await missing.readUserPath(), { value: '', type: 'REG_EXPAND_SZ' });
 });
 
 test('addUserPathEntry deduplicates case-insensitively and ignores trailing slashes', async () => {
@@ -66,7 +62,7 @@ test('addUserPathEntry deduplicates case-insensitively and ignores trailing slas
     { stdout: '    Path    REG_SZ    C:\\Tools\\;C:\\Other\r\n' },
   ]);
 
-  assert.deepEqual(await addUserPathEntry(adapter, 'c:/tools'), { changed: false });
+  assert.deepEqual(await adapter.addUserPathEntry('c:/tools'), { changed: false });
   assert.equal(adapter.calls.length, 1);
 });
 
@@ -77,16 +73,20 @@ test('addUserPathEntry preserves type, raw variables, semicolon joining, and bro
     {},
   ]);
 
-  assert.deepEqual(await addUserPathEntry(adapter, 'C:\\New Tools'), { changed: true });
+  assert.equal(
+    adapter.userPathIncludes('%USERPROFILE%\\.local\\bin', 'C:\\Users\\a\\.local\\bin'),
+    true,
+  );
+  assert.deepEqual(await adapter.addUserPathEntry('C:\\New Tools'), { changed: true });
   assert.equal(adapter.calls.length, 3);
-  assert.equal(adapter.calls[0].executable.path, 'reg.exe');
+  assert.match(adapter.calls[0].file, /System32\\reg\.exe$/i);
   assert.deepEqual(adapter.calls[0].args, ['query', 'HKCU\\Environment', '/v', 'Path']);
-  assert.equal(adapter.calls[1].executable.path, 'reg.exe');
+  assert.match(adapter.calls[1].file, /System32\\reg\.exe$/i);
   assert.deepEqual(adapter.calls[1].args, [
     'add', 'HKCU\\Environment', '/v', 'Path', '/t', 'REG_EXPAND_SZ',
     '/d', '%USERPROFILE%\\.local\\bin;C:\\Tools;C:\\New Tools', '/f',
   ]);
-  assert.match(adapter.calls[2].executable.path, /powershell\.exe$/i);
+  assert.match(adapter.calls[2].file, /powershell\.exe$/i);
   assert.equal(adapter.calls[2].args[0], '-NoProfile');
   assert.equal(adapter.calls[2].args[1], '-Command');
   assert.match(adapter.calls[2].args[2], /HWND_BROADCAST/);
@@ -103,5 +103,5 @@ test('broadcast failure does not turn a completed user PATH write into a failure
     { code: 1, stderr: 'broadcast failed' },
   ]);
 
-  assert.deepEqual(await addUserPathEntry(adapter, 'C:\\New'), { changed: true });
+  assert.deepEqual(await adapter.addUserPathEntry('C:\\New'), { changed: true });
 });
