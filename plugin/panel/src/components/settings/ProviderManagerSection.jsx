@@ -281,7 +281,7 @@ export function ProviderManagerSection({
                     ...draft,
                     modelId: value,
                   })}
-                  placeholder="claude-sonnet-4"
+                  placeholder="claude-sonnet-5"
                 />
                 <Button
                   type="button"

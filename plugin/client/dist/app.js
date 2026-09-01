@@ -22456,8 +22456,325 @@
     return failure2;
   }
 
+  // src/lib/backendCapabilities.js
+  init_cep_runtime_inject();
+  var CLAUDE_PRICE_USD_PER_MTOK = {
+    "claude-fable-5-1": { input: 10, output: 50 },
+    "claude-opus-5": { input: 5, output: 25 },
+    "claude-sonnet-5": { input: 2, output: 10 },
+    "claude-haiku-4-5": { input: 1, output: 5 }
+  };
+  var CLAUDE_MODELS = [
+    {
+      id: "claude-fable-5-1",
+      label: "Fable 5.1",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      adaptive: true
+    },
+    {
+      id: "claude-opus-5",
+      label: "Opus 5",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      adaptive: true
+    },
+    {
+      id: "claude-sonnet-5",
+      label: "Sonnet 5",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      adaptive: true
+    },
+    {
+      id: "claude-haiku-4-5",
+      label: "Haiku 4.5",
+      effortLevels: ["low", "medium", "high"],
+      adaptive: false
+    }
+  ];
+  var APPROVAL_MODES = [
+    {
+      id: "readonly",
+      zh: "\u53EA\u8BFB",
+      en: "Read-only",
+      anchorZh: "\u4EC5\u653E\u884C\u53EA\u8BFB\u5DE5\u5177 \xB7 dontAsk",
+      anchorEn: "read-only allowlist \xB7 dontAsk"
+    },
+    {
+      id: "manual",
+      zh: "\u624B\u52A8",
+      en: "Manual",
+      anchorZh: "\u6BCF\u4E2A\u5199\u64CD\u4F5C\u5F39\u5361 \xB7 canUseTool",
+      anchorEn: "every write asks \xB7 canUseTool"
+    },
+    {
+      id: "auto",
+      zh: "\u81EA\u52A8",
+      en: "Auto",
+      anchorZh: "\u4EC5\u7834\u574F\u6027\u5F39\u5361 \xB7 \u6CE8\u89E3\u5206\u7EA7",
+      anchorEn: "destructive asks \xB7 annotations"
+    },
+    {
+      id: "none",
+      zh: "\u514D\u5BA1",
+      en: "Bypass",
+      anchorZh: "\u5168\u653E\uFF08\u4EC5 ae \u5DE5\u5177\uFF09\xB7 dontAsk",
+      anchorEn: "allow all ae tools \xB7 dontAsk"
+    }
+  ];
+  var TIER_ORDER = [1, 2, 5, 10];
+  function costTier(modelId) {
+    const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
+    if (!price) return 2;
+    const index = TIER_ORDER.indexOf(price.input);
+    return index === -1 ? 2 : index + 1;
+  }
+  function withCost(models) {
+    return models.map((model) => ({ ...model, cost: costTier(model.id) }));
+  }
+  function claudeSubDescriptor() {
+    return {
+      id: "claude-sub",
+      label: "\u8BA2\u9605",
+      models: withCost(CLAUDE_MODELS),
+      defaultModelId: "claude-opus-5",
+      defaultEffort: "high",
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  var CODEX_OFFICIAL_LOGIN_56_MODELS = [
+    {
+      id: "gpt-5.6-sol",
+      label: "GPT-5.6-Sol",
+      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+      cost: 2,
+      adaptive: false
+    },
+    {
+      id: "gpt-5.6-terra",
+      label: "GPT-5.6-Terra",
+      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+      cost: 2,
+      adaptive: false
+    },
+    {
+      id: "gpt-5.6-luna",
+      label: "GPT-5.6-Luna",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      cost: 2,
+      adaptive: false
+    }
+  ];
+  var CODEX_OFFICIAL_LOGIN_56_MODEL_IDS = new Set(
+    CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => model.id)
+  );
+  function codexOfficialLogin56Models() {
+    return CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => ({
+      ...model,
+      effortLevels: [...model.effortLevels]
+    }));
+  }
+  var CODEX_STATIC_EXTRA_MODELS = [
+    {
+      id: "gpt-5.5",
+      label: "GPT-5.5",
+      effortLevels: ["low", "medium", "high", "xhigh"],
+      cost: 2,
+      adaptive: false
+    },
+    {
+      id: "gpt-5.4",
+      label: "GPT-5.4",
+      effortLevels: ["low", "medium", "high", "xhigh"],
+      cost: 2,
+      adaptive: false
+    },
+    {
+      id: "gpt-5.4-mini",
+      label: "GPT-5.4 mini",
+      effortLevels: ["low", "medium", "high", "xhigh"],
+      cost: 1,
+      adaptive: false
+    },
+    {
+      id: "gpt-5.3-codex-spark",
+      label: "GPT-5.3 Codex Spark",
+      effortLevels: ["low", "medium", "high", "xhigh"],
+      cost: 1,
+      adaptive: false
+    }
+  ];
+  var CODEX_STATIC_FAST_MODEL_IDS = /* @__PURE__ */ new Set([
+    ...CODEX_OFFICIAL_LOGIN_56_MODEL_IDS,
+    "gpt-5.5",
+    "gpt-5.4"
+  ]);
+  function codexStaticDescriptor() {
+    return {
+      id: "codex",
+      label: "Codex",
+      models: [
+        ...codexOfficialLogin56Models(),
+        ...CODEX_STATIC_EXTRA_MODELS.map((model) => ({
+          ...model,
+          effortLevels: [...model.effortLevels]
+        }))
+      ],
+      defaultModelId: "gpt-5.6-sol",
+      defaultEffort: "medium",
+      supportsFast: (modelId) => CODEX_STATIC_FAST_MODEL_IDS.has(String(modelId || "")),
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function mergeCodexOfficialLoginModels(descriptor) {
+    const models = Array.isArray(descriptor == null ? void 0 : descriptor.models) ? descriptor.models : [];
+    const present = new Set(models.map((model) => model == null ? void 0 : model.id).filter(Boolean));
+    const missing = codexOfficialLogin56Models().filter((model) => !present.has(model.id));
+    const supportsFast = typeof (descriptor == null ? void 0 : descriptor.supportsFast) === "function" ? descriptor.supportsFast : () => false;
+    return {
+      ...descriptor,
+      models: missing.length ? [...models, ...missing] : models,
+      supportsFast: (modelId) => CODEX_OFFICIAL_LOGIN_56_MODEL_IDS.has(String(modelId || "")) || supportsFast(modelId)
+    };
+  }
+  function modelListArray(modelListResult) {
+    if (Array.isArray(modelListResult)) return modelListResult;
+    if (Array.isArray(modelListResult == null ? void 0 : modelListResult.models)) return modelListResult.models;
+    return Array.isArray(modelListResult == null ? void 0 : modelListResult.data) ? modelListResult.data : [];
+  }
+  function codexDescriptorFromModels(modelListResult) {
+    var _a;
+    const rawModels = modelListArray(modelListResult).filter((model) => (model == null ? void 0 : model.hidden) !== true);
+    if (!rawModels.length) return codexStaticDescriptor();
+    const fastModels = /* @__PURE__ */ new Set();
+    const models = rawModels.map((model) => {
+      const id = String(model.id || "");
+      if (Array.isArray(model.additionalSpeedTiers) && model.additionalSpeedTiers.includes("fast")) {
+        fastModels.add(id);
+      }
+      return {
+        id,
+        label: model.displayName || model.display_name || id,
+        effortLevels: Array.isArray(model.supportedReasoningEfforts) ? model.supportedReasoningEfforts.map((effort) => effort == null ? void 0 : effort.reasoningEffort).filter(Boolean) : [],
+        cost: 2,
+        adaptive: false
+      };
+    }).filter((model) => model.id);
+    if (!models.length) return codexStaticDescriptor();
+    const defaultRaw = rawModels.find((model) => (model == null ? void 0 : model.isDefault) === true) || rawModels[0];
+    const defaultModelId = (defaultRaw == null ? void 0 : defaultRaw.id) ? String(defaultRaw.id) : models[0].id;
+    const defaultEffort = (defaultRaw == null ? void 0 : defaultRaw.defaultReasoningEffort) || ((_a = models.find((model) => model.id === defaultModelId)) == null ? void 0 : _a.effortLevels[0]) || "medium";
+    return {
+      id: "codex",
+      label: "Codex",
+      models,
+      defaultModelId,
+      defaultEffort,
+      supportsFast: (modelId) => fastModels.has(String(modelId || "")),
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function openCodeStaticDescriptor() {
+    return {
+      id: "opencode",
+      label: "OpenCode",
+      models: [
+        {
+          id: "hy3-free",
+          label: "HY 3 Free",
+          effortLevels: [],
+          cost: 1,
+          adaptive: false
+        }
+      ],
+      defaultModelId: "hy3-free",
+      defaultEffort: null,
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function providerEntries(providerResult) {
+    if (Array.isArray(providerResult)) {
+      return providerResult.map((provider) => [
+        (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || (provider == null ? void 0 : provider.name),
+        provider
+      ]);
+    }
+    if (Array.isArray(providerResult == null ? void 0 : providerResult.providers)) {
+      return providerResult.providers.map((provider) => [
+        (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || (provider == null ? void 0 : provider.name),
+        provider
+      ]);
+    }
+    return providerResult && typeof providerResult === "object" ? Object.entries(providerResult) : [];
+  }
+  function modelEntries(provider) {
+    if (Array.isArray(provider == null ? void 0 : provider.models)) {
+      return provider.models.map((model) => [
+        (model == null ? void 0 : model.id) || (model == null ? void 0 : model.modelID) || (model == null ? void 0 : model.modelId) || (model == null ? void 0 : model.name),
+        model
+      ]);
+    }
+    return (provider == null ? void 0 : provider.models) && typeof provider.models === "object" ? Object.entries(provider.models) : [];
+  }
+  function openCodeDescriptorFromModels(providerResult) {
+    const models = [];
+    for (const [providerKey, provider] of providerEntries(providerResult)) {
+      const providerId = String(
+        (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || providerKey || "opencode"
+      );
+      for (const [modelKey, raw] of modelEntries(provider)) {
+        const modelId = String((raw == null ? void 0 : raw.id) || (raw == null ? void 0 : raw.modelID) || (raw == null ? void 0 : raw.modelId) || modelKey || "");
+        if (!modelId) continue;
+        models.push({
+          id: providerId === "opencode" ? modelId : `${providerId}/${modelId}`,
+          label: (raw == null ? void 0 : raw.name) || (raw == null ? void 0 : raw.displayName) || (raw == null ? void 0 : raw.display_name) || modelId,
+          effortLevels: [],
+          cost: modelId.endsWith("-free") ? 1 : 2,
+          adaptive: false
+        });
+      }
+    }
+    if (!models.length) return openCodeStaticDescriptor();
+    const defaultModel = models.find((model) => model.id === "hy3-free") || models.find((model) => model.id.endsWith("/hy3-free")) || models[0];
+    return {
+      id: "opencode",
+      label: "OpenCode",
+      models,
+      defaultModelId: defaultModel.id,
+      defaultEffort: null,
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  var EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max", "ultra"];
+  function resolveEffectiveEffort({ requested, model, defaultEffort }) {
+    const levels = Array.isArray(model == null ? void 0 : model.effortLevels) ? model.effortLevels : [];
+    if (!levels.length) return null;
+    if (requested && levels.includes(requested)) return requested;
+    if (requested && EFFORT_ORDER.includes(requested)) {
+      const ranked = levels.filter((level) => EFFORT_ORDER.includes(level)).sort((left, right) => EFFORT_ORDER.indexOf(left) - EFFORT_ORDER.indexOf(right));
+      const atOrBelow = ranked.filter(
+        (level) => EFFORT_ORDER.indexOf(level) <= EFFORT_ORDER.indexOf(requested)
+      );
+      if (atOrBelow.length) return atOrBelow[atOrBelow.length - 1];
+      if (ranked.length) return ranked[0];
+    }
+    if (defaultEffort && levels.includes(defaultEffort)) return defaultEffort;
+    return levels[0];
+  }
+
   // src/screens/SettingsScreen.jsx
   var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
+  var FALLBACK_CLAUDE_DESCRIPTOR = claudeSubDescriptor();
+  var FALLBACK_MODEL_OPTIONS = FALLBACK_CLAUDE_DESCRIPTOR.models.map((entry2) => ({
+    value: entry2.id,
+    label: "Claude " + entry2.label
+  }));
   var S = {
     zh: {
       ai: "AI \u670D\u52A1",
@@ -22740,7 +23057,7 @@
     onBlockMcpClient,
     onRegenToken,
     hostVersion = "-",
-    model = "claude-sonnet-4-6",
+    model = FALLBACK_CLAUDE_DESCRIPTOR.defaultModelId,
     modelOptions,
     modelSwitchable = true,
     onModelChange,
@@ -22827,11 +23144,7 @@
           providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : ""
         ] }) : null,
         providerManager,
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
-          { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
-          { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-          { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
-        ] }) })
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || FALLBACK_MODEL_OPTIONS }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { id: "conn", title: t.conn, expanded: sections.conn, onToggle: onToggleSection, children: [
         /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
@@ -28144,308 +28457,6 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/cep/backends/index.js
   init_cep_runtime_inject();
-
-  // src/lib/backendCapabilities.js
-  init_cep_runtime_inject();
-  var CLAUDE_PRICE_USD_PER_MTOK = {
-    "claude-fable-5": { input: 10, output: 50 },
-    "claude-opus-4-8": { input: 5, output: 25 },
-    "claude-sonnet-5": { input: 3, output: 15 },
-    "claude-sonnet-4-6": { input: 3, output: 15 },
-    "claude-haiku-4-5-20251001": { input: 1, output: 5 }
-  };
-  var CLAUDE_MODELS = [
-    {
-      id: "claude-fable-5",
-      label: "Fable 5",
-      effortLevels: ["low", "medium", "high", "xhigh", "max"],
-      adaptive: true
-    },
-    {
-      id: "claude-opus-4-8",
-      label: "Opus 4.8",
-      effortLevels: ["low", "medium", "high", "xhigh", "max"],
-      adaptive: true
-    },
-    {
-      id: "claude-sonnet-5",
-      label: "Sonnet 5",
-      effortLevels: ["low", "medium", "high", "xhigh"],
-      adaptive: true
-    },
-    {
-      id: "claude-sonnet-4-6",
-      label: "Sonnet 4.6",
-      effortLevels: ["low", "medium", "high", "max"],
-      adaptive: true
-    },
-    {
-      id: "claude-haiku-4-5-20251001",
-      label: "Haiku 4.5",
-      effortLevels: ["low", "medium", "high"],
-      adaptive: false
-    }
-  ];
-  var APPROVAL_MODES = [
-    {
-      id: "readonly",
-      zh: "\u53EA\u8BFB",
-      en: "Read-only",
-      anchorZh: "\u4EC5\u653E\u884C\u53EA\u8BFB\u5DE5\u5177 \xB7 dontAsk",
-      anchorEn: "read-only allowlist \xB7 dontAsk"
-    },
-    {
-      id: "manual",
-      zh: "\u624B\u52A8",
-      en: "Manual",
-      anchorZh: "\u6BCF\u4E2A\u5199\u64CD\u4F5C\u5F39\u5361 \xB7 canUseTool",
-      anchorEn: "every write asks \xB7 canUseTool"
-    },
-    {
-      id: "auto",
-      zh: "\u81EA\u52A8",
-      en: "Auto",
-      anchorZh: "\u4EC5\u7834\u574F\u6027\u5F39\u5361 \xB7 \u6CE8\u89E3\u5206\u7EA7",
-      anchorEn: "destructive asks \xB7 annotations"
-    },
-    {
-      id: "none",
-      zh: "\u514D\u5BA1",
-      en: "Bypass",
-      anchorZh: "\u5168\u653E\uFF08\u4EC5 ae \u5DE5\u5177\uFF09\xB7 dontAsk",
-      anchorEn: "allow all ae tools \xB7 dontAsk"
-    }
-  ];
-  var TIER_ORDER = [1, 3, 5, 10];
-  function costTier(modelId) {
-    const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
-    if (!price) return 2;
-    const index = TIER_ORDER.indexOf(price.input);
-    return index === -1 ? 2 : index + 1;
-  }
-  function withCost(models) {
-    return models.map((model) => ({ ...model, cost: costTier(model.id) }));
-  }
-  function claudeSubDescriptor() {
-    return {
-      id: "claude-sub",
-      label: "\u8BA2\u9605",
-      models: withCost(CLAUDE_MODELS),
-      defaultModelId: "claude-sonnet-5",
-      defaultEffort: "high",
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  var CODEX_OFFICIAL_LOGIN_56_MODELS = [
-    {
-      id: "gpt-5.6-sol",
-      label: "GPT-5.6-Sol",
-      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
-      cost: 2,
-      adaptive: false
-    },
-    {
-      id: "gpt-5.6-terra",
-      label: "GPT-5.6-Terra",
-      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
-      cost: 2,
-      adaptive: false
-    },
-    {
-      id: "gpt-5.6-luna",
-      label: "GPT-5.6-Luna",
-      effortLevels: ["low", "medium", "high", "xhigh", "max"],
-      cost: 2,
-      adaptive: false
-    }
-  ];
-  var CODEX_OFFICIAL_LOGIN_56_MODEL_IDS = new Set(
-    CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => model.id)
-  );
-  function codexOfficialLogin56Models() {
-    return CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => ({
-      ...model,
-      effortLevels: [...model.effortLevels]
-    }));
-  }
-  function codexStaticDescriptor() {
-    return {
-      id: "codex",
-      label: "Codex",
-      models: [
-        {
-          id: "gpt-5.5",
-          label: "GPT-5.5",
-          effortLevels: ["low", "medium", "high", "xhigh"],
-          cost: 2,
-          adaptive: false
-        },
-        {
-          id: "gpt-5.4",
-          label: "GPT-5.4",
-          effortLevels: ["low", "medium", "high", "xhigh"],
-          cost: 2,
-          adaptive: false
-        },
-        {
-          id: "gpt-5.4-mini",
-          label: "GPT-5.4 mini",
-          effortLevels: ["low", "medium", "high", "xhigh"],
-          cost: 1,
-          adaptive: false
-        }
-      ],
-      defaultModelId: "gpt-5.5",
-      defaultEffort: "medium",
-      supportsFast: (modelId) => modelId === "gpt-5.5",
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  function mergeCodexOfficialLoginModels(descriptor) {
-    const models = Array.isArray(descriptor == null ? void 0 : descriptor.models) ? descriptor.models : [];
-    const present = new Set(models.map((model) => model == null ? void 0 : model.id).filter(Boolean));
-    const missing = codexOfficialLogin56Models().filter((model) => !present.has(model.id));
-    const supportsFast = typeof (descriptor == null ? void 0 : descriptor.supportsFast) === "function" ? descriptor.supportsFast : () => false;
-    return {
-      ...descriptor,
-      models: missing.length ? [...models, ...missing] : models,
-      supportsFast: (modelId) => CODEX_OFFICIAL_LOGIN_56_MODEL_IDS.has(String(modelId || "")) || supportsFast(modelId)
-    };
-  }
-  function modelListArray(modelListResult) {
-    if (Array.isArray(modelListResult)) return modelListResult;
-    if (Array.isArray(modelListResult == null ? void 0 : modelListResult.models)) return modelListResult.models;
-    return Array.isArray(modelListResult == null ? void 0 : modelListResult.data) ? modelListResult.data : [];
-  }
-  function codexDescriptorFromModels(modelListResult) {
-    var _a;
-    const rawModels = modelListArray(modelListResult).filter((model) => (model == null ? void 0 : model.hidden) !== true);
-    if (!rawModels.length) return codexStaticDescriptor();
-    const fastModels = /* @__PURE__ */ new Set();
-    const models = rawModels.map((model) => {
-      const id = String(model.id || "");
-      if (Array.isArray(model.additionalSpeedTiers) && model.additionalSpeedTiers.includes("fast")) {
-        fastModels.add(id);
-      }
-      return {
-        id,
-        label: model.displayName || model.display_name || id,
-        effortLevels: Array.isArray(model.supportedReasoningEfforts) ? model.supportedReasoningEfforts.map((effort) => effort == null ? void 0 : effort.reasoningEffort).filter(Boolean) : [],
-        cost: 2,
-        adaptive: false
-      };
-    }).filter((model) => model.id);
-    if (!models.length) return codexStaticDescriptor();
-    const defaultRaw = rawModels.find((model) => (model == null ? void 0 : model.isDefault) === true) || rawModels[0];
-    const defaultModelId = (defaultRaw == null ? void 0 : defaultRaw.id) ? String(defaultRaw.id) : models[0].id;
-    const defaultEffort = (defaultRaw == null ? void 0 : defaultRaw.defaultReasoningEffort) || ((_a = models.find((model) => model.id === defaultModelId)) == null ? void 0 : _a.effortLevels[0]) || "medium";
-    return {
-      id: "codex",
-      label: "Codex",
-      models,
-      defaultModelId,
-      defaultEffort,
-      supportsFast: (modelId) => fastModels.has(String(modelId || "")),
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  function openCodeStaticDescriptor() {
-    return {
-      id: "opencode",
-      label: "OpenCode",
-      models: [
-        {
-          id: "hy3-free",
-          label: "HY 3 Free",
-          effortLevels: [],
-          cost: 1,
-          adaptive: false
-        }
-      ],
-      defaultModelId: "hy3-free",
-      defaultEffort: null,
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  function providerEntries(providerResult) {
-    if (Array.isArray(providerResult)) {
-      return providerResult.map((provider) => [
-        (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || (provider == null ? void 0 : provider.name),
-        provider
-      ]);
-    }
-    if (Array.isArray(providerResult == null ? void 0 : providerResult.providers)) {
-      return providerResult.providers.map((provider) => [
-        (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || (provider == null ? void 0 : provider.name),
-        provider
-      ]);
-    }
-    return providerResult && typeof providerResult === "object" ? Object.entries(providerResult) : [];
-  }
-  function modelEntries(provider) {
-    if (Array.isArray(provider == null ? void 0 : provider.models)) {
-      return provider.models.map((model) => [
-        (model == null ? void 0 : model.id) || (model == null ? void 0 : model.modelID) || (model == null ? void 0 : model.modelId) || (model == null ? void 0 : model.name),
-        model
-      ]);
-    }
-    return (provider == null ? void 0 : provider.models) && typeof provider.models === "object" ? Object.entries(provider.models) : [];
-  }
-  function openCodeDescriptorFromModels(providerResult) {
-    const models = [];
-    for (const [providerKey, provider] of providerEntries(providerResult)) {
-      const providerId = String(
-        (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || providerKey || "opencode"
-      );
-      for (const [modelKey, raw] of modelEntries(provider)) {
-        const modelId = String((raw == null ? void 0 : raw.id) || (raw == null ? void 0 : raw.modelID) || (raw == null ? void 0 : raw.modelId) || modelKey || "");
-        if (!modelId) continue;
-        models.push({
-          id: providerId === "opencode" ? modelId : `${providerId}/${modelId}`,
-          label: (raw == null ? void 0 : raw.name) || (raw == null ? void 0 : raw.displayName) || (raw == null ? void 0 : raw.display_name) || modelId,
-          effortLevels: [],
-          cost: modelId.endsWith("-free") ? 1 : 2,
-          adaptive: false
-        });
-      }
-    }
-    if (!models.length) return openCodeStaticDescriptor();
-    const defaultModel = models.find((model) => model.id === "hy3-free") || models.find((model) => model.id.endsWith("/hy3-free")) || models[0];
-    return {
-      id: "opencode",
-      label: "OpenCode",
-      models,
-      defaultModelId: defaultModel.id,
-      defaultEffort: null,
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  var EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max", "ultra"];
-  function resolveEffectiveEffort({ requested, model, defaultEffort }) {
-    const levels = Array.isArray(model == null ? void 0 : model.effortLevels) ? model.effortLevels : [];
-    if (!levels.length) return null;
-    if (requested && levels.includes(requested)) return requested;
-    if (requested && EFFORT_ORDER.includes(requested)) {
-      const ranked = levels.filter((level) => EFFORT_ORDER.includes(level)).sort((left, right) => EFFORT_ORDER.indexOf(left) - EFFORT_ORDER.indexOf(right));
-      const atOrBelow = ranked.filter(
-        (level) => EFFORT_ORDER.indexOf(level) <= EFFORT_ORDER.indexOf(requested)
-      );
-      if (atOrBelow.length) return atOrBelow[atOrBelow.length - 1];
-      if (ranked.length) return ranked[0];
-    }
-    if (defaultEffort && levels.includes(defaultEffort)) return defaultEffort;
-    return levels[0];
-  }
-
-  // src/cep/backends/index.js
   var BACKENDS = {
     subscription: {
       id: "subscription",
@@ -34699,7 +34710,7 @@ ${command}`
                   ...draft,
                   modelId: value
                 }),
-                placeholder: "claude-sonnet-4"
+                placeholder: "claude-sonnet-5"
               }
             ),
             /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(

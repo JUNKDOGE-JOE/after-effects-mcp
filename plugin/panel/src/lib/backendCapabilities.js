@@ -1,32 +1,32 @@
 // Backend capability descriptors. UI (chips + settings) renders only from
 // these, with no hardcoded model ids or tier names elsewhere.
+//
+// Claude ids are the API aliases (no date suffixes); the CLI passes them
+// through unchanged. Claude Fable 5.1 needs Claude Code >= 2.1.251 — older
+// CLIs reject it with an upstream 400 that the panel shows verbatim — so the
+// default stays on Opus 5, which every current CLI accepts.
 export const CLAUDE_PRICE_USD_PER_MTOK = {
-  'claude-fable-5': { input: 10, output: 50 },
-  'claude-opus-4-8': { input: 5, output: 25 },
-  'claude-sonnet-5': { input: 3, output: 15 },
-  'claude-sonnet-4-6': { input: 3, output: 15 },
-  'claude-haiku-4-5-20251001': { input: 1, output: 5 },
+  'claude-fable-5-1': { input: 10, output: 50 },
+  'claude-opus-5': { input: 5, output: 25 },
+  'claude-sonnet-5': { input: 2, output: 10 },
+  'claude-haiku-4-5': { input: 1, output: 5 },
 };
 
 export const CLAUDE_MODELS = [
   {
-    id: 'claude-fable-5', label: 'Fable 5',
+    id: 'claude-fable-5-1', label: 'Fable 5.1',
     effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], adaptive: true,
   },
   {
-    id: 'claude-opus-4-8', label: 'Opus 4.8',
+    id: 'claude-opus-5', label: 'Opus 5',
     effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], adaptive: true,
   },
   {
     id: 'claude-sonnet-5', label: 'Sonnet 5',
-    effortLevels: ['low', 'medium', 'high', 'xhigh'], adaptive: true,
+    effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], adaptive: true,
   },
   {
-    id: 'claude-sonnet-4-6', label: 'Sonnet 4.6',
-    effortLevels: ['low', 'medium', 'high', 'max'], adaptive: true,
-  },
-  {
-    id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5',
+    id: 'claude-haiku-4-5', label: 'Haiku 4.5',
     effortLevels: ['low', 'medium', 'high'], adaptive: false,
   },
 ];
@@ -50,7 +50,8 @@ export const APPROVAL_MODES = [
   },
 ];
 
-const TIER_ORDER = [1, 3, 5, 10];
+// Input USD/MTok thresholds for the four $ tiers shown on model chips.
+const TIER_ORDER = [1, 2, 5, 10];
 
 export function costTier(modelId) {
   const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
@@ -68,7 +69,7 @@ export function claudeSubDescriptor() {
     id: 'claude-sub',
     label: '订阅',
     models: withCost(CLAUDE_MODELS),
-    defaultModelId: 'claude-sonnet-5',
+    defaultModelId: 'claude-opus-5',
     defaultEffort: 'high',
     supportsFast: () => false,
     approvalModes: APPROVAL_MODES,
@@ -104,27 +105,47 @@ function codexOfficialLogin56Models() {
   }));
 }
 
+// Offline fallback used until model/list answers. Mirrors the inventory
+// codex-cli 0.144.1 reports for an official login (checked 2026-09-02); live
+// model/list data always replaces it.
+const CODEX_STATIC_EXTRA_MODELS = [
+  {
+    id: 'gpt-5.5', label: 'GPT-5.5',
+    effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false,
+  },
+  {
+    id: 'gpt-5.4', label: 'GPT-5.4',
+    effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false,
+  },
+  {
+    id: 'gpt-5.4-mini', label: 'GPT-5.4 mini',
+    effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 1, adaptive: false,
+  },
+  {
+    id: 'gpt-5.3-codex-spark', label: 'GPT-5.3 Codex Spark',
+    effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 1, adaptive: false,
+  },
+];
+const CODEX_STATIC_FAST_MODEL_IDS = new Set([
+  ...CODEX_OFFICIAL_LOGIN_56_MODEL_IDS,
+  'gpt-5.5',
+  'gpt-5.4',
+]);
+
 export function codexStaticDescriptor() {
   return {
     id: 'codex',
     label: 'Codex',
     models: [
-      {
-        id: 'gpt-5.5', label: 'GPT-5.5',
-        effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false,
-      },
-      {
-        id: 'gpt-5.4', label: 'GPT-5.4',
-        effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false,
-      },
-      {
-        id: 'gpt-5.4-mini', label: 'GPT-5.4 mini',
-        effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 1, adaptive: false,
-      },
+      ...codexOfficialLogin56Models(),
+      ...CODEX_STATIC_EXTRA_MODELS.map((model) => ({
+        ...model,
+        effortLevels: [...model.effortLevels],
+      })),
     ],
-    defaultModelId: 'gpt-5.5',
+    defaultModelId: 'gpt-5.6-sol',
     defaultEffort: 'medium',
-    supportsFast: (modelId) => modelId === 'gpt-5.5',
+    supportsFast: (modelId) => CODEX_STATIC_FAST_MODEL_IDS.has(String(modelId || '')),
     approvalModes: APPROVAL_MODES,
     perTurnModelSwitch: true,
   };

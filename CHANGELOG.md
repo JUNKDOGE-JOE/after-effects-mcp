@@ -10,6 +10,10 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### Unreleased
+
+- **内置模型清单换到当前一代**——Claude 通道可选模型改为 Fable 5.1、Opus 5、Sonnet 5、Haiku 4.5，默认 Opus 5；id 统一使用不带日期后缀的官方别名，价格档位随之更新（Sonnet 5 降到 $2/$10）。Codex 通道的离线回退清单对齐 codex-cli 0.144.1 的 `model/list`（默认 GPT-5.6-Sol，并标注支持 fast 档的模型），实时清单仍然优先。设置页的默认模型下拉不再自带一份过期的硬编码列表。注意：Fable 5.1 需要 Claude Code ≥ 2.1.251，更旧的 CLI 会在回合里返回带版本要求的 400 提示，切换模型或执行 `claude update` 即可。
+
 ### [0.10.5] — 2026-08-28
 
 - **新增 `ae-mcp-jkdg` npm 连接器与官方 MCP Registry 清单**——Claude Desktop 等仅支持 stdio 的客户端可通过 `npx -y ae-mcp-jkdg` 连接本机 AE 面板；连接器与产品 major.minor 配对，扩展本体仍须从 GitHub Releases 单独安装。
@@ -364,6 +368,10 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### Unreleased
+
+- **Built-in model lists moved to the current generation** — the Claude channel now offers Fable 5.1, Opus 5, Sonnet 5, and Haiku 4.5 with Opus 5 as the default; ids are the official date-free aliases and the price tiers follow (Sonnet 5 drops to $2/$10). The Codex channel's offline fallback mirrors the `model/list` inventory of codex-cli 0.144.1 (GPT-5.6-Sol default, fast-capable models flagged); the live list still wins. The Settings default-model dropdown no longer carries its own stale hardcoded list. Note: Fable 5.1 requires Claude Code ≥ 2.1.251; older CLIs return a 400 naming the required version — switch models or run `claude update`.
 
 ### [0.10.5] — 2026-08-28
 

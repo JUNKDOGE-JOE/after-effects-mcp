@@ -30,7 +30,7 @@ test('OpenCode models omit unsupported effort and fast controls', () => {
 test('subscription Haiku exposes its three supported effort levels', () => {
   const chips = buildComposerChips({
     descriptor: claudeSubDescriptor(),
-    modelId: 'claude-haiku-4-5-20251001',
+    modelId: 'claude-haiku-4-5',
     effort: 'high',
     fast: false,
     permissionMode: 'manual',

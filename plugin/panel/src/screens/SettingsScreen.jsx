@@ -16,6 +16,15 @@ import { loadSectionState, saveSectionState, toggleSection } from '../lib/settin
 import { createPlatformAdapter } from '../cep/platform/index';
 import { Toast } from '../components/shell/Toast';
 import { docsUrlForLocale, openExternal, REPO_URL } from '../lib/externalLinks.js';
+import { claudeSubDescriptor } from '../lib/backendCapabilities.js';
+
+// Fallbacks for a SettingsScreen rendered without the live descriptor from
+// App; they derive from the curated Claude list so no model id is repeated.
+const FALLBACK_CLAUDE_DESCRIPTOR = claudeSubDescriptor();
+const FALLBACK_MODEL_OPTIONS = FALLBACK_CLAUDE_DESCRIPTOR.models.map((entry) => ({
+  value: entry.id,
+  label: 'Claude ' + entry.label,
+}));
 
 const S = {
   zh: {
@@ -297,7 +306,7 @@ export function SettingsScreen({
   onBlockMcpClient,
   onRegenToken,
   hostVersion = '-',
-  model = 'claude-sonnet-4-6',
+  model = FALLBACK_CLAUDE_DESCRIPTOR.defaultModelId,
   modelOptions,
   modelSwitchable = true,
   onModelChange,
@@ -388,11 +397,7 @@ export function SettingsScreen({
         ) : null}
         {providerManager}
         <Field label={t.modelDefault}>
-          <Select value={model} onChange={onModelChange} options={modelOptions || [
-            { value: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
-            { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-            { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
-          ]} />
+          <Select value={model} onChange={onModelChange} options={modelOptions || FALLBACK_MODEL_OPTIONS} />
         </Field>
       </Section>
 
