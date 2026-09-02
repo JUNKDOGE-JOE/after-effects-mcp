@@ -62,11 +62,13 @@ $openCodeManifestPath = Join-Path $repoRoot 'scripts\package\opencode-runtime.js
 $openCodeManifest = Get-Content -LiteralPath $openCodeManifestPath -Raw | ConvertFrom-Json
 $openCodeFile = Get-Item -LiteralPath $openCodeRuntime
 $openCodeHash = (Get-FileHash -LiteralPath $openCodeRuntime -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($openCodeFile.Length -ne [int64]$openCodeManifest.sizeBytes) {
-    throw "Bundled OpenCode runtime size mismatch: expected $($openCodeManifest.sizeBytes), got $($openCodeFile.Length)"
+# The manifest's sha256/sizeBytes pin the download archive; the staged file is
+# the executable extracted from it, so it is checked against the binary pins.
+if ($openCodeFile.Length -ne [int64]$openCodeManifest.binarySizeBytes) {
+    throw "Bundled OpenCode runtime size mismatch: expected $($openCodeManifest.binarySizeBytes), got $($openCodeFile.Length)"
 }
-if ($openCodeHash -ne [string]$openCodeManifest.sha256) {
-    throw "Bundled OpenCode runtime SHA-256 mismatch: expected $($openCodeManifest.sha256), got $openCodeHash"
+if ($openCodeHash -ne [string]$openCodeManifest.binarySha256) {
+    throw "Bundled OpenCode runtime SHA-256 mismatch: expected $($openCodeManifest.binarySha256), got $openCodeHash"
 }
 New-Item -ItemType Directory -Force -Path (Join-Path $stageDir 'runtime\opencode') | Out-Null
 Copy-Item -LiteralPath $openCodeRuntime `

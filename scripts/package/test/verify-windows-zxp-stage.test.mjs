@@ -9,8 +9,8 @@ import { verifyWindowsZxpStage } from '../verify-windows-zxp-stage.mjs';
 const VERSION = '0.10.3';
 const RUNTIME_BYTES = Buffer.from('fixture OpenCode runtime');
 const RUNTIME_MANIFEST = Object.freeze({
-  sizeBytes: RUNTIME_BYTES.length,
-  sha256: createHash('sha256').update(RUNTIME_BYTES).digest('hex'),
+  binarySizeBytes: RUNTIME_BYTES.length,
+  binarySha256: createHash('sha256').update(RUNTIME_BYTES).digest('hex'),
 });
 
 async function write(root, relative, value) {
@@ -108,13 +108,13 @@ test('accepts semantic versions with any numeric major', async (t) => {
 test('rejects an OpenCode runtime with a mismatched size or SHA-256', async (t) => {
   const wrongSize = await fixture(t);
   assert.throws(
-    () => verify(wrongSize, VERSION, { ...RUNTIME_MANIFEST, sizeBytes: RUNTIME_BYTES.length + 1 }),
+    () => verify(wrongSize, VERSION, { ...RUNTIME_MANIFEST, binarySizeBytes: RUNTIME_BYTES.length + 1 }),
     /runtime size mismatch/,
   );
 
   const wrongHash = await fixture(t);
   assert.throws(
-    () => verify(wrongHash, VERSION, { ...RUNTIME_MANIFEST, sha256: '0'.repeat(64) }),
+    () => verify(wrongHash, VERSION, { ...RUNTIME_MANIFEST, binarySha256: '0'.repeat(64) }),
     /runtime SHA-256 mismatch/,
   );
 });

@@ -71,12 +71,14 @@ function relativeFiles(root) {
 function validateRuntime(stageRoot, manifest) {
   const runtime = regularFile(path.join(stageRoot, ...OPENCODE_RUNTIME_PATH.split('/')));
   const stats = fs.statSync(runtime);
-  if (stats.size !== manifest.sizeBytes) {
-    throw contractError(`OpenCode runtime size mismatch: expected ${manifest.sizeBytes}, got ${stats.size}`);
+  // The payload carries the extracted executable, never the download archive,
+  // so the stage is checked against the manifest's binary pins.
+  if (stats.size !== manifest.binarySizeBytes) {
+    throw contractError(`OpenCode runtime size mismatch: expected ${manifest.binarySizeBytes}, got ${stats.size}`);
   }
   const digest = createHash('sha256').update(fs.readFileSync(runtime)).digest('hex');
-  if (digest !== String(manifest.sha256 || '').toLowerCase()) {
-    throw contractError(`OpenCode runtime SHA-256 mismatch: expected ${manifest.sha256}, got ${digest}`);
+  if (digest !== String(manifest.binarySha256 || '').toLowerCase()) {
+    throw contractError(`OpenCode runtime SHA-256 mismatch: expected ${manifest.binarySha256}, got ${digest}`);
   }
 }
 

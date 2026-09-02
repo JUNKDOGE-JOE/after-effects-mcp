@@ -19,6 +19,10 @@ function runtimeError(code, message) {
   return error;
 }
 
+// The manifest pins two identities: the download archive (sha256/sizeBytes)
+// and the executable extracted from it (binarySha256/binarySizeBytes). The
+// packaging path only ever sees the extracted executable, so every consumer
+// downstream of the fetch verifies against the binary pins.
 export function validateRuntimeManifest(manifest) {
   if (!manifest || typeof manifest !== 'object'
       || typeof manifest.version !== 'string'
@@ -26,6 +30,9 @@ export function validateRuntimeManifest(manifest) {
       || !SHA256.test(manifest.sha256 || '')
       || !Number.isSafeInteger(manifest.sizeBytes)
       || manifest.sizeBytes <= 0
+      || !SHA256.test(manifest.binarySha256 || '')
+      || !Number.isSafeInteger(manifest.binarySizeBytes)
+      || manifest.binarySizeBytes <= 0
       || manifest.binary !== 'opencode.exe') {
     throw runtimeError('OPENCODE_RUNTIME_MANIFEST_INVALID', 'OpenCode runtime manifest is invalid');
   }
@@ -49,6 +56,21 @@ export async function verifyDownloadedArtifact({ filePath, manifest, fsPromises 
   } catch (error) {
     await fsPromises.rm(filePath, { force: true }).catch(() => {});
     throw error;
+  }
+}
+
+export async function verifyExtractedBinary({ filePath, manifest, fsPromises = fs.promises }) {
+  validateRuntimeManifest(manifest);
+  const [stats, bytes] = await Promise.all([
+    fsPromises.stat(filePath),
+    fsPromises.readFile(filePath),
+  ]);
+  if (!stats.isFile() || stats.size !== manifest.binarySizeBytes || bytes.length !== manifest.binarySizeBytes) {
+    throw runtimeError('OPENCODE_RUNTIME_BINARY_SIZE_MISMATCH', 'extracted OpenCode executable size does not match the pinned manifest');
+  }
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  if (sha256 !== manifest.binarySha256) {
+    throw runtimeError('OPENCODE_RUNTIME_BINARY_HASH_MISMATCH', 'extracted OpenCode executable SHA-256 does not match the pinned manifest');
   }
 }
 
@@ -86,6 +108,7 @@ async function hasValidReceipt(stagingRoot, manifest) {
     return binary.isFile() && !binary.isSymbolicLink()
       && receipt.version === manifest.version
       && receipt.sha256 === manifest.sha256
+      && receipt.binarySha256 === manifest.binarySha256
       && typeof receipt.stagedAt === 'string';
   } catch {
     return false;
@@ -128,9 +151,12 @@ export async function fetchOpenCodeRuntime({
     if (!stats.isFile() || stats.isSymbolicLink()) {
       throw runtimeError('OPENCODE_RUNTIME_EXTRACT_INVALID', 'OpenCode runtime archive did not contain one regular opencode.exe');
     }
+    await verifyExtractedBinary({ filePath: binary, manifest });
     await fs.promises.writeFile(path.join(extracted, 'staged.json'), `${JSON.stringify({
       version: manifest.version,
       sha256: manifest.sha256,
+      binarySha256: manifest.binarySha256,
+      binarySizeBytes: manifest.binarySizeBytes,
       stagedAt: new Date().toISOString(),
     })}\n`, { flag: 'wx', mode: 0o600 });
     await fs.promises.rm(stagingRoot, { recursive: true, force: true });
