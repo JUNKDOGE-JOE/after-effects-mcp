@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request: {}
@@ -31,20 +32,18 @@ jobs:
       - name: Verify the native SDK remains developer-supplied
         run: node scripts/package/ae-sdk-input.mjs verify-repository --repo-root .
 
-      - name: Run native and package contracts
+      - name: Run script contracts
         run: |
-          node --test scripts/package/test/ae-sdk-input.test.mjs
-          node --test scripts/package/test/verify-windows-zxp-stage.test.mjs
-          node --test scripts/package/test/zxp-payload-audit.test.mjs
-          node --test native/ae-plugin/protocol/protocol.test.mjs
-          node --test scripts/package/test/windows-native-transport.test.mjs
+          node --test scripts/package/test scripts/release/test scripts/dev/test
+
+      - name: Run frozen native protocol contracts
+        run: node --test native/ae-plugin/protocol/protocol.test.mjs
 
       - name: Run connector and release version contracts
         run: |
           node --test clients/ae-mcp-jkdg/test/bin.test.mjs
           node --test clients/ae-mcp-jkdg/test/package.test.mjs
           node --test clients/ae-mcp-jkdg/test/sync.test.mjs
-          node --test scripts/release/test/version-consistency.test.mjs
 
       - name: Run host tests
         working-directory: plugin/host
@@ -114,8 +113,8 @@ jobs:
         with:
           node-version: 24.17.0
 
-      - name: Check direct ZXP staging and signing contracts
-        run: |
-          node --test scripts/package/test/legacy-zxp.test.mjs
-          node --test scripts/package/test/verify-windows-zxp-stage.test.mjs
-          node --test scripts/package/test/zxp-payload-audit.test.mjs
+      - name: Run script contracts
+        run: node --test scripts/package/test scripts/release/test scripts/dev/test
+
+      - name: Run frozen native protocol contracts
+        run: node --test native/ae-plugin/protocol/protocol.test.mjs

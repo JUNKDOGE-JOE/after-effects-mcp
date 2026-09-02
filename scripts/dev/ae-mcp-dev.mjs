@@ -55,7 +55,6 @@ function planPaths(command, report, dependencies, nativeOutput) {
     uv: commands.uv || 'uv',
     npm: commands.npm || 'npm',
     node: commands.node || process.execPath,
-    python: report.interpreterPath,
     hostRoot: path.join(command.repoRoot, 'plugin', 'host'),
     sidecarRoot: path.join(command.repoRoot, 'plugin', 'sidecar'),
     panelRoot: path.join(command.repoRoot, 'plugin', 'panel'),
@@ -71,12 +70,6 @@ function planPaths(command, report, dependencies, nativeOutput) {
     sdkArchive: command.sdkArchive
       || dependencies.environment?.AE_MCP_SDK_ARCHIVE,
     sdkRoot: command.sdkRoot || dependencies.environment?.AE_MCP_SDK_ROOT,
-    developmentSmoke: path.join(
-      command.repoRoot,
-      'scripts',
-      'hardware',
-      'development_smoke.py',
-    ),
   });
 }
 
@@ -171,7 +164,6 @@ export async function main(
     const execute = dependencies.executeDevelopmentPlan || executeDevelopmentPlan;
     const receipt = await execute(plan, {
       execFile: dependencies.execFile,
-      runInteractive: dependencies.runInteractive,
       environment,
     });
     if (command.action === 'sync' && command.components.includes('cep')) {

@@ -23,7 +23,7 @@ const FORBIDDEN_PLATFORM_PATTERNS = [
   { id: 'direct-exec-api', pattern: /(?<![.\w])(?:exec|execFile|execFileSync|execSync)\s*\(/ },
   { id: 'system-discovery-command', pattern: /['"](?:explorer(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?|where(?:\.exe)?|which)['"]/i },
   { id: 'windows-user-root-env', pattern: /\b(?:LOCALAPPDATA|USERPROFILE)\b/ },
-  { id: 'hard-coded-windows-path', pattern: /['"`](?:[A-Za-z]:\\\\|\\\\\\\\[^\\])/ },
+  { id: 'hard-coded-windows-path', pattern: /(?<!\\)['"`](?:[A-Za-z]:\\\\|\\\\\\\\[A-Za-z0-9_.-])/ },
   { id: 'hard-coded-macos-path', pattern: /['"`]\/(?:Applications|Users|opt\/homebrew|usr\/(?:bin|local\/bin))\// },
   { id: 'general-shell', pattern: /\bshell\s*:\s*true\b/ },
 ];

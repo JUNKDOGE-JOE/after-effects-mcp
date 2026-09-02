@@ -51,6 +51,13 @@ function platform(resolutions = {}, id = 'windows-x64') {
         executableId: 'winget',
         args: ['install', '--id', 'OpenJS.NodeJS.LTS'],
       },
+      ...(id === 'windows-x64' ? {
+        claude: {
+          file: 'powershell',
+          executableId: 'powershell',
+          args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', 'irm https://claude.ai/install.ps1 | iex'],
+        },
+      } : {}),
     }),
   };
 }

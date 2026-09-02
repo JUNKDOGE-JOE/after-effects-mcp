@@ -2,6 +2,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 const REQUIRED_FILES = Object.freeze([
@@ -29,6 +30,9 @@ const FORBIDDEN_TOP_LEVEL = new Set([
   'sidecar',
 ]);
 const OPENCODE_RUNTIME_PATH = 'runtime/opencode/opencode.exe';
+const OPENCODE_RUNTIME_MANIFEST = Object.freeze(JSON.parse(
+  fs.readFileSync(new URL('./opencode-runtime.json', import.meta.url), 'utf8'),
+));
 
 function contractError(message) {
   const error = new Error(message);
@@ -64,7 +68,19 @@ function relativeFiles(root) {
   return result.sort();
 }
 
-function validatePayloadBoundary(stageRoot, files) {
+function validateRuntime(stageRoot, manifest) {
+  const runtime = regularFile(path.join(stageRoot, ...OPENCODE_RUNTIME_PATH.split('/')));
+  const stats = fs.statSync(runtime);
+  if (stats.size !== manifest.sizeBytes) {
+    throw contractError(`OpenCode runtime size mismatch: expected ${manifest.sizeBytes}, got ${stats.size}`);
+  }
+  const digest = createHash('sha256').update(fs.readFileSync(runtime)).digest('hex');
+  if (digest !== String(manifest.sha256 || '').toLowerCase()) {
+    throw contractError(`OpenCode runtime SHA-256 mismatch: expected ${manifest.sha256}, got ${digest}`);
+  }
+}
+
+function validatePayloadBoundary(stageRoot, files, runtimeManifest) {
   for (const relativePath of files) {
     const topLevel = relativePath.split('/')[0];
     if (FORBIDDEN_TOP_LEVEL.has(topLevel)) {
@@ -78,7 +94,7 @@ function validatePayloadBoundary(stageRoot, files) {
     }
   }
   for (const required of REQUIRED_FILES) regularFile(path.join(stageRoot, ...required.split('/')));
-  regularFile(path.join(stageRoot, ...OPENCODE_RUNTIME_PATH.split('/')));
+  validateRuntime(stageRoot, runtimeManifest);
   const manifest = JSON.parse(fs.readFileSync(path.join(stageRoot, 'host/package.json'), 'utf8'));
   if (manifest.dependencies?.express !== '4.22.2') {
     throw contractError('host Express dependency is not pinned to 4.22.2');
@@ -99,14 +115,18 @@ function validatePanelContracts(stageRoot, version) {
   }
 }
 
-export function verifyWindowsZxpStage({ stageRoot, version }) {
+export function verifyWindowsZxpStage({
+  stageRoot,
+  version,
+  runtimeManifest = OPENCODE_RUNTIME_MANIFEST,
+}) {
   const resolved = path.resolve(stageRoot);
-  if (!/^0\.\d+\.\d+$/.test(version || '')) throw contractError('release version is invalid');
+  if (!/^\d+\.\d+\.\d+$/.test(version || '')) throw contractError('release version is invalid');
   if (!fs.existsSync(resolved) || !fs.lstatSync(resolved).isDirectory()) {
     throw contractError('Windows ZXP stage root is missing');
   }
   const files = relativeFiles(resolved);
-  validatePayloadBoundary(resolved, files);
+  validatePayloadBoundary(resolved, files, runtimeManifest);
   validatePanelContracts(resolved, version);
   return Object.freeze({ platform: 'windows-x64', version, fileCount: files.length });
 }

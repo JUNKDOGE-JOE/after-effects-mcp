@@ -16,6 +16,7 @@ export function createMacosAdapter(deps) {
   return Object.freeze({
     id: 'macos-arm64',
     pid: deps.pid,
+    canManageUserPath: false,
     paths,
     fs: deps.fs,
     requestJson: createHttpJsonRequester(deps),

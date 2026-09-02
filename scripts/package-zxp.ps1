@@ -58,6 +58,16 @@ $openCodeRuntime = Join-Path $repoRoot 'scripts\package\runtime-staging\opencode
 if (-not (Test-Path -LiteralPath $openCodeRuntime -PathType Leaf)) {
     throw "Bundled OpenCode runtime is missing: $openCodeRuntime - run 'node scripts/package/fetch-opencode-runtime.mjs' first"
 }
+$openCodeManifestPath = Join-Path $repoRoot 'scripts\package\opencode-runtime.json'
+$openCodeManifest = Get-Content -LiteralPath $openCodeManifestPath -Raw | ConvertFrom-Json
+$openCodeFile = Get-Item -LiteralPath $openCodeRuntime
+$openCodeHash = (Get-FileHash -LiteralPath $openCodeRuntime -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($openCodeFile.Length -ne [int64]$openCodeManifest.sizeBytes) {
+    throw "Bundled OpenCode runtime size mismatch: expected $($openCodeManifest.sizeBytes), got $($openCodeFile.Length)"
+}
+if ($openCodeHash -ne [string]$openCodeManifest.sha256) {
+    throw "Bundled OpenCode runtime SHA-256 mismatch: expected $($openCodeManifest.sha256), got $openCodeHash"
+}
 New-Item -ItemType Directory -Force -Path (Join-Path $stageDir 'runtime\opencode') | Out-Null
 Copy-Item -LiteralPath $openCodeRuntime `
     -Destination (Join-Path $stageDir 'runtime\opencode\opencode.exe') -Force

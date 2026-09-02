@@ -21954,6 +21954,7 @@
     return Object.freeze({
       id: "macos-arm64",
       pid: deps.pid,
+      canManageUserPath: false,
       paths,
       fs: deps.fs,
       requestJson: createHttpJsonRequester(deps),
@@ -22041,6 +22042,44 @@
     const match = line && line.trim().match(/^"((?:[^"]|"")*)"/);
     return match ? match[1].replace(/""/g, '"') : "";
   }
+  var USER_PATH_DEFAULT = Object.freeze({ value: "", type: "REG_EXPAND_SZ" });
+  var BROADCAST_SCRIPT = [
+    "Add-Type @'",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public static class EnvironmentChange {",
+    "  public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);",
+    "  public const uint WM_SETTINGCHANGE = 0x001A;",
+    "  public const uint SMTO_ABORTIFHUNG = 0x0002;",
+    '  [DllImport("user32.dll", CharSet = CharSet.Unicode)]',
+    "  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);",
+    "}",
+    "'@",
+    "$result = [UIntPtr]::Zero",
+    '[EnvironmentChange]::SendMessageTimeout([EnvironmentChange]::HWND_BROADCAST, [EnvironmentChange]::WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", [EnvironmentChange]::SMTO_ABORTIFHUNG, 2000, [ref]$result) | Out-Null'
+  ].join("\n");
+  function normalizedPathEntry(value) {
+    let result = String(value || "").trim().replace(/\//g, "\\");
+    while (result.length > 3 && result.endsWith("\\")) result = result.slice(0, -1);
+    return result.toLowerCase();
+  }
+  function expandEnvironmentEntry(value, environment) {
+    return String(value || "").replace(/%([^%]+)%/g, (match, name) => {
+      const replacement = envValue(environment, name);
+      return replacement === void 0 ? match : String(replacement);
+    });
+  }
+  function pathIncludesEntry(rawValue, directory, environment) {
+    const expected = normalizedPathEntry(directory);
+    if (!expected) return false;
+    return String(rawValue || "").split(";").some((entry2) => normalizedPathEntry(entry2) === expected || normalizedPathEntry(expandEnvironmentEntry(entry2, environment)) === expected);
+  }
+  function parseUserPath(output) {
+    const line = String(output || "").split(/\r?\n/).find((entry2) => /^\s*Path\s+REG_(?:SZ|EXPAND_SZ)\s+/i.test(entry2));
+    if (!line) return null;
+    const match = line.match(/^\s*Path\s+(REG_(?:SZ|EXPAND_SZ))\s+(.*)$/i);
+    return match ? { value: match[2].trim(), type: match[1].toUpperCase() } : null;
+  }
   function createWindowsAdapter(deps) {
     if (!deps || deps.platform !== "win32" || deps.arch !== "x64") throw new Error("Windows x64 dependencies are required");
     const paths = createPathCatalog({ home: deps.home, temp: deps.temp, platform: deps.platform });
@@ -22052,9 +22091,61 @@
     });
     const systemRoot = String(envValue(deps.env, "SystemRoot") || envValue(deps.env, "WINDIR") || "C:\\Windows");
     const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "x64" });
+    const registry = fixed("reg", paths.join([systemRoot, "System32", "reg.exe"]));
+    const powershell = fixed(
+      "powershell",
+      paths.join([systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"])
+    );
+    async function readUserPath() {
+      const result = await boundary.run({
+        executable: registry,
+        args: ["query", "HKCU\\Environment", "/v", "Path"]
+      });
+      if (result.exitCode !== 0 || result.timedOut || result.aborted) return { ...USER_PATH_DEFAULT };
+      return parseUserPath(result.stdout) || { ...USER_PATH_DEFAULT };
+    }
+    async function addUserPathEntry(directory) {
+      var _a, _b;
+      const entry2 = String(directory || "").trim();
+      if (!entry2) throw new Error("A non-empty PATH directory is required");
+      const current = await readUserPath();
+      const environment = boundary.completeSpawnEnv();
+      if (pathIncludesEntry(current.value, entry2, environment)) return { changed: false };
+      const value = current.value ? current.value + ";" + entry2 : entry2;
+      const written = await boundary.run({
+        executable: registry,
+        args: [
+          "add",
+          "HKCU\\Environment",
+          "/v",
+          "Path",
+          "/t",
+          current.type,
+          "/d",
+          value,
+          "/f"
+        ]
+      });
+      if (written.exitCode !== 0 || written.timedOut || written.aborted) {
+        throw new Error((written.stderr || written.stdout || "reg add failed").trim());
+      }
+      try {
+        const broadcast = await boundary.run({
+          executable: powershell,
+          args: ["-NoProfile", "-Command", BROADCAST_SCRIPT]
+        });
+        if (broadcast.exitCode !== 0 || broadcast.timedOut || broadcast.aborted) {
+          throw new Error((broadcast.stderr || broadcast.stdout || "broadcast failed").trim());
+        }
+      } catch (error) {
+        (_b = (_a = globalThis.console) == null ? void 0 : _a.warn) == null ? void 0 : _b.call(_a, "User PATH broadcast failed:", error);
+      }
+      return { changed: true };
+    }
     return Object.freeze({
       id: "windows-x64",
       pid: deps.pid,
+      canManageUserPath: true,
       paths,
       fs: deps.fs,
       requestJson: createHttpJsonRequester(deps),
@@ -22124,9 +22215,25 @@
         const args = tool === "claude" ? ["start", "", "claude"] : ["start", "", "codex", "login"];
         return boundary.run({ executable: fixed(tool, cmd, ["/d", "/s", "/c"]), args, timeoutMs: 5e3 });
       },
+      readUserPath,
+      userPathIncludes(rawValue, directory) {
+        return pathIncludesEntry(rawValue, directory, boundary.completeSpawnEnv());
+      },
+      addUserPathEntry,
       legacyWizardInstallCommands() {
         return {
-          node: { file: "winget", executableId: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] }
+          node: { file: "winget", executableId: "winget", args: ["install", "--id", "OpenJS.NodeJS.LTS", "-e", "--accept-source-agreements", "--accept-package-agreements"] },
+          claude: {
+            file: "powershell",
+            executableId: "powershell",
+            args: [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-Command",
+              "irm https://claude.ai/install.ps1 | iex"
+            ]
+          }
         };
       }
     });
@@ -26572,6 +26679,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     AUTH_REQUIRED: entry("AUTH_REQUIRED", "auth", "\u8BF7\u6309\u300C\u8BBE\u7F6E \u2192 AI\u300D\u901A\u9053\u5361\u4E0A\u7684\u767B\u5F55\u6307\u5F15\u5B8C\u6210\u5BF9\u5E94 CLI \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", "Follow the sign-in guidance on the channel card under Settings \u2192 AI for this CLI, then re-check."),
     MCP_UNREACHABLE: entry("MCP_UNREACHABLE", "mcp", "\u8BF7\u4FDD\u6301\u9762\u677F\u5BBF\u4E3B\u8FD0\u884C\uFF0C\u5E76\u68C0\u67E5\u672C\u673A\u4F1A\u8BDD MCP \u72B6\u6001\u3002", "Keep the panel host running and check the local conversation MCP status."),
     AE_MCP_REBUILD_FAILED: entry("AE_MCP_REBUILD_FAILED", "network", "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u91CD\u5EFA\u5931\u8D25\u3002\u8BF7\u91CD\u8F7D\u9762\u677F\u6216\u65B0\u5EFA\u4F1A\u8BDD\u540E\u518D\u8BD5\u3002", "The connection to the AE host could not be rebuilt. Reload the panel or start a new session, then try again."),
+    AE_MCP_TRANSPORT_REBUILT: entry("AE_MCP_TRANSPORT_REBUILT", "network", "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u5DF2\u91CD\u5EFA\uFF0C\u672C\u8F6E\u5DF2\u505C\u6B62\uFF1B\u8BF7\u786E\u8BA4\u6CA1\u6709\u672A\u5B8C\u6210\u7684\u5199\u5165\u540E\u91CD\u65B0\u53D1\u9001\u3002", "The connection to the AE host was rebuilt and this turn was stopped. Confirm that no write remains unresolved before resending."),
     SESSION_START_FAILED: entry("SESSION_START_FAILED", "backend", "\u4F1A\u8BDD\u5C1A\u672A\u521B\u5EFA\uFF1B\u53EF\u4FEE\u590D\u901A\u9053\u72B6\u6001\u540E\u5B89\u5168\u91CD\u8BD5\u3002", "The session was not created; retry after fixing the channel state."),
     TURN_START_FAILED: entry("TURN_START_FAILED", "backend", "\u53D1\u9001\u53EF\u80FD\u5DF2\u7ECF\u5F00\u59CB\uFF1B\u8BF7\u5148\u6309\u8BE6\u60C5\u4E2D\u7684\u6D3E\u53D1\u72B6\u6001\u6838\u5BF9\u518D\u91CD\u8BD5\u3002", "Sending may have started; check the dispatch state before retrying."),
     RPC_TIMEOUT: entry("RPC_TIMEOUT", "network", "\u8BF7\u6C42\u7B49\u5F85\u8D85\u65F6\uFF1B\u8BF7\u68C0\u67E5\u901A\u9053\u8FDB\u7A0B\u4E0E\u7F51\u7EDC\u540E\u518D\u8BD5\u3002", "The request timed out; check the channel process and network before retrying."),
@@ -28534,10 +28642,39 @@ When you are done, remind me of two things: MCP tools load only in a new session
     }
     return { allowedTools, annotations };
   }
-  function shouldResetOnBackendChange(prevReal, next) {
-    if (!REAL_BACKENDS.includes(next)) return { reset: false, nextReal: prevReal || null };
-    if (!prevReal) return { reset: false, nextReal: next };
-    if (prevReal === next) return { reset: false, nextReal: prevReal };
+
+  // src/lib/backendResetDecision.js
+  init_cep_runtime_inject();
+  var REAL_BACKENDS2 = /* @__PURE__ */ new Set(["subscription", "codex", "opencode"]);
+  function realBackend(value) {
+    return REAL_BACKENDS2.has(value) ? value : null;
+  }
+  function pendingBackend(pendingSessionLoad, selectedPref) {
+    if (!pendingSessionLoad) return null;
+    if (typeof pendingSessionLoad === "object") {
+      return realBackend(pendingSessionLoad.backend);
+    }
+    return realBackend(selectedPref);
+  }
+  function decideBackendReset({
+    lastReal,
+    effective,
+    selectedPref,
+    pendingSessionLoad
+  } = {}) {
+    const previous = realBackend(lastReal);
+    const next = realBackend(effective);
+    const selected = realBackend(selectedPref);
+    const sessionTarget = pendingBackend(pendingSessionLoad, selected);
+    if (!next) {
+      return {
+        reset: false,
+        nextReal: sessionTarget && selected === sessionTarget ? sessionTarget : previous
+      };
+    }
+    if (!previous || previous === next || sessionTarget === next && selected === next) {
+      return { reset: false, nextReal: next };
+    }
     return { reset: true, nextReal: next };
   }
 
@@ -32374,6 +32511,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   var READY_REQUEST_TIMEOUT_MS = 1500;
   var OPENCODE_STALL_WARNING_MS = 18e4;
   var OPENCODE_STALL_TIMEOUT_MS = 3e5;
+  var OPENCODE_FINALIZATION_TIMEOUT_MS = 5e3;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "hy3-free";
   var STDERR_TAIL_LIMIT3 = 4096;
@@ -32793,12 +32931,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (!activeRun || stopRequested) return;
       stopRequested = true;
       messageAbortController == null ? void 0 : messageAbortController.abort();
-      await rejectPendingQuestions();
-      if (sessionId) {
-        await postJson("/session/" + encodeURIComponent(sessionId) + "/abort", {}).catch(() => {
-        });
-      }
-      await drainApprovals();
+      await finalizeActiveTurnRequests();
       if (activeRun) {
         emitAfterText({
           type: "error",
@@ -33097,6 +33230,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function aeMcpRebuildFailureMessage() {
       return /^zh/i.test(currentLang()) ? "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u91CD\u5EFA\u5931\u8D25\u3002\u8BF7\u91CD\u8F7D\u9762\u677F\u6216\u65B0\u5EFA\u4F1A\u8BDD\u540E\u518D\u8BD5\u3002" : "The connection to the AE host could not be rebuilt. Reload the panel or start a new session, then try again.";
     }
+    function aeMcpTransportRebuiltMessage() {
+      return /^zh/i.test(currentLang()) ? "\u4E0E AE \u5BBF\u4E3B\u7684\u8FDE\u63A5\u5DF2\u91CD\u5EFA\uFF0C\u672C\u8F6E\u5DF2\u505C\u6B62\uFF1B\u8BF7\u786E\u8BA4\u6CA1\u6709\u672A\u5B8C\u6210\u7684\u5199\u5165\u540E\u91CD\u65B0\u53D1\u9001\u3002" : "The connection to the AE host was rebuilt and this turn was stopped. Confirm that no write remains unresolved before resending.";
+    }
     async function recycleAeMcpServer() {
       var _a;
       const staleProc = proc;
@@ -33144,15 +33280,23 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         failAeMcpRebuild();
         return true;
       }
-      const retryTurn = activeTurn;
       aeMcpRecoveryAttempts += 1;
       aeMcpRecoveryStarted = true;
       emitTurnProgress("mcp-rebuild");
       const pendingRecovery = (async () => {
         await recycleAeMcpServer();
-        if (!activeRun || stopRequested || !retryTurn) return;
-        const replacementId = await prepareTurnSession();
-        await dispatchTurnMessage(replacementId, retryTurn);
+        if (!activeRun || stopRequested) return;
+        await prepareTurnSession();
+        if (!activeRun || stopRequested) return;
+        emitAfterText({
+          type: "error",
+          kind: "network",
+          code: "AE_MCP_TRANSPORT_REBUILT",
+          message: aeMcpTransportRebuiltMessage(),
+          detail: { recoveryAttempts: aeMcpRecoveryAttempts },
+          ...activeTurnFailureFields()
+        });
+        finishActive();
       })();
       aeMcpRecoveryPromise = pendingRecovery;
       void pendingRecovery.then(
@@ -33177,6 +33321,27 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         body: JSON.stringify(body || {}),
         ...signal ? { signal } : {}
       });
+    }
+    async function finalizeActiveTurnRequests() {
+      const controller = new AbortController();
+      const requests = Promise.allSettled([
+        rejectPendingQuestions(controller.signal),
+        sessionId ? postJson("/session/" + encodeURIComponent(sessionId) + "/abort", {}, controller.signal) : Promise.resolve(),
+        drainApprovals(controller.signal)
+      ]);
+      let timer = null;
+      const deadline = new Promise((resolve) => {
+        timer = setTimeoutImpl(() => {
+          controller.abort();
+          resolve();
+        }, OPENCODE_FINALIZATION_TIMEOUT_MS);
+      });
+      try {
+        await Promise.race([requests, deadline]);
+      } finally {
+        if (timer !== null) clearTimeoutImpl(timer);
+        controller.abort();
+      }
     }
     async function waitForMcp(requestBaseUrl, isCancelled = () => false) {
       var _a;
@@ -33564,14 +33729,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const annotations = toolMeta && toolMeta.annotations || {};
       return annotations[name] || {};
     }
-    async function replyPermission(permissionId, decision) {
+    async function replyPermission(permissionId, decision, signal) {
       if (!sessionId || !permissionId) return;
-      await postJson(permissionReplyPath(sessionId, permissionId), permissionReplyBody(decision));
+      await postJson(permissionReplyPath(sessionId, permissionId), permissionReplyBody(decision), signal);
     }
-    async function autoReply(permissionId, decision) {
+    async function autoReply(permissionId, decision, signal) {
       try {
-        await replyPermission(permissionId, decision);
+        await replyPermission(permissionId, decision, signal);
       } catch (e) {
+        if (signal == null ? void 0 : signal.aborted) return;
         const httpStatus = extractHttpStatus(e == null ? void 0 : e.httpStatus);
         const classified = classifyErrorCode({
           error: e,
@@ -33789,11 +33955,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         handlePermission({ ...p, properties: p });
       }
     }
-    function drainApprovals() {
+    function drainApprovals(signal) {
       const replies = [];
       for (const [permissionId] of Array.from(pendingApprovals.entries())) {
         pendingApprovals.delete(permissionId);
-        replies.push(autoReply(permissionId, "deny"));
+        replies.push(autoReply(permissionId, "deny", signal));
         emit({ type: "tool-denied", toolUseId: permissionId });
       }
       return Promise.allSettled(replies);
@@ -33979,12 +34145,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
       return true;
     }
-    async function rejectPendingQuestions() {
+    async function rejectPendingQuestions(signal) {
       const rejects = [];
       for (const [questionId, pending] of Array.from(pendingQuestions.entries())) {
         pendingQuestions.delete(questionId);
         if (!pending.settling && baseUrl) {
-          rejects.push(postJson(questionReplyPath(questionId, "reject"), {}));
+          rejects.push(postJson(questionReplyPath(questionId, "reject"), {}, signal));
         }
         emitAfterText({ type: "question-resolved", toolUseId: questionId, outcome: "cancelled" });
       }
@@ -33993,12 +34159,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     async function stop() {
       if (activeRun) stopRequested = true;
       messageAbortController == null ? void 0 : messageAbortController.abort();
-      await rejectPendingQuestions();
-      if (sessionId) {
-        await postJson("/session/" + encodeURIComponent(sessionId) + "/abort", {}).catch(() => {
-        });
-      }
-      await drainApprovals();
+      await finalizeActiveTurnRequests();
       if (activeRun) {
         emitAfterText({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
@@ -34006,6 +34167,16 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function reset() {
       var _a;
+      if (activeRun) {
+        emitAfterText({
+          type: "error",
+          kind: "aborted",
+          code: "TURN_ABORTED",
+          message: "Turn aborted.",
+          ...activeTurnFailureFields()
+        });
+        finishActive();
+      }
       generation += 1;
       const stoppedProc = proc;
       const stoppedHome = configHome;
@@ -35448,19 +35619,9 @@ ${command}`
       repoRoot: "",
       repo: ""
     }) : {};
-    const result = commands && commands.node ? { node: commands.node } : {};
-    if (adapter.id === "windows-x64" || adapter.platform === "win32") {
-      result.claude = {
-        file: "powershell",
-        executableId: "powershell",
-        args: [
-          "-NoProfile",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-Command",
-          "irm https://claude.ai/install.ps1 | iex"
-        ]
-      };
+    const result = {};
+    for (const id of ["node", "claude"]) {
+      if (commands == null ? void 0 : commands[id]) result[id] = commands[id];
     }
     return result;
   }
@@ -35529,146 +35690,6 @@ ${command}`
     return [file, ...(args || []).map((value) => /\s/.test(value) ? `"${value}"` : value)].join(" ");
   }
 
-  // src/cep/registryPath.js
-  init_cep_runtime_inject();
-  var REG_EXECUTABLE = {
-    ok: true,
-    id: "reg",
-    path: "reg.exe",
-    argsPrefix: [],
-    source: "override",
-    version: null,
-    arch: "x64"
-  };
-  var USER_PATH_QUERY = ["query", "HKCU\\Environment", "/v", "Path"];
-  var USER_PATH_DEFAULT = { value: "", type: "REG_EXPAND_SZ" };
-  function isWindowsPlatform(adapter) {
-    return (adapter == null ? void 0 : adapter.id) === "windows-x64" || (adapter == null ? void 0 : adapter.platform) === "win32";
-  }
-  function requireWindows(adapter) {
-    if (!isWindowsPlatform(adapter)) {
-      throw new Error("User PATH updates are only supported on Windows");
-    }
-  }
-  function normalizedPathEntry(value) {
-    let result = String(value || "").trim().replace(/\//g, "\\");
-    while (result.length > 3 && result.endsWith("\\")) result = result.slice(0, -1);
-    return result.toLowerCase();
-  }
-  function expandEnvironmentEntry(value, environment) {
-    return String(value || "").replace(/%([^%]+)%/g, (match, name) => {
-      const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
-      return key === void 0 ? match : String(environment[key]);
-    });
-  }
-  function pathIncludesEntry(rawValue, directory, environment = {}) {
-    const expected = normalizedPathEntry(directory);
-    if (!expected) return false;
-    return String(rawValue || "").split(";").some((entry2) => normalizedPathEntry(entry2) === expected || normalizedPathEntry(expandEnvironmentEntry(entry2, environment)) === expected);
-  }
-  async function resolvePowerShell(adapter) {
-    const executable = await adapter.resolveExecutable("powershell");
-    if (!executable || !executable.ok) {
-      throw new Error("powershell resolution failed: " + ((executable == null ? void 0 : executable.code) || "NOT_FOUND"));
-    }
-    return executable;
-  }
-  function spawnAndCollect(adapter, executable, args) {
-    return new Promise((resolve, reject) => {
-      var _a, _b, _c, _d, _e, _f;
-      let stdout = "";
-      let stderr = "";
-      let settled = false;
-      const finish = (result, error) => {
-        if (settled) return;
-        settled = true;
-        if (error) reject(error);
-        else resolve({ ...result, stdout, stderr });
-      };
-      try {
-        const child = adapter.spawn(executable, args, { windowsHide: true });
-        (_b = (_a = child.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", (chunk) => {
-          stdout += String(chunk || "");
-        });
-        (_d = (_c = child.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", (chunk) => {
-          stderr += String(chunk || "");
-        });
-        (_e = child.on) == null ? void 0 : _e.call(child, "error", (error) => finish({}, error));
-        (_f = child.on) == null ? void 0 : _f.call(child, "close", (code) => finish({ code }, null));
-      } catch (error) {
-        finish({}, error);
-      }
-    });
-  }
-  function parseUserPath(output) {
-    const line = String(output || "").split(/\r?\n/).find((entry2) => /^\s*Path\s+REG_(?:SZ|EXPAND_SZ)\s+/i.test(entry2));
-    if (!line) return null;
-    const match = line.match(/^\s*Path\s+(REG_(?:SZ|EXPAND_SZ))\s+(.*)$/i);
-    return match ? { value: match[2].trim(), type: match[1].toUpperCase() } : null;
-  }
-  async function readUserPath(adapter) {
-    requireWindows(adapter);
-    const result = await spawnAndCollect(adapter, REG_EXECUTABLE, USER_PATH_QUERY);
-    if (result.code !== 0) return { ...USER_PATH_DEFAULT };
-    return parseUserPath(result.stdout) || { ...USER_PATH_DEFAULT };
-  }
-  async function addRegistryPath(adapter, value, type) {
-    const result = await spawnAndCollect(adapter, REG_EXECUTABLE, [
-      "add",
-      "HKCU\\Environment",
-      "/v",
-      "Path",
-      "/t",
-      type,
-      "/d",
-      value,
-      "/f"
-    ]);
-    if (result.code !== 0) {
-      throw new Error((result.stderr || result.stdout || "reg add failed").trim());
-    }
-  }
-  var BROADCAST_SCRIPT = [
-    "Add-Type @'",
-    "using System;",
-    "using System.Runtime.InteropServices;",
-    "public static class EnvironmentChange {",
-    "  public static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);",
-    "  public const uint WM_SETTINGCHANGE = 0x001A;",
-    "  public const uint SMTO_ABORTIFHUNG = 0x0002;",
-    '  [DllImport("user32.dll", CharSet = CharSet.Unicode)]',
-    "  public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);",
-    "}",
-    "'@",
-    "$result = [UIntPtr]::Zero",
-    '[EnvironmentChange]::SendMessageTimeout([EnvironmentChange]::HWND_BROADCAST, [EnvironmentChange]::WM_SETTINGCHANGE, [UIntPtr]::Zero, "Environment", [EnvironmentChange]::SMTO_ABORTIFHUNG, 2000, [ref]$result) | Out-Null'
-  ].join("\n");
-  async function broadcastEnvironmentChange(adapter) {
-    const executable = await resolvePowerShell(adapter);
-    const result = await spawnAndCollect(adapter, executable, [
-      "-NoProfile",
-      "-Command",
-      BROADCAST_SCRIPT
-    ]);
-    if (result.code !== 0) throw new Error((result.stderr || result.stdout || "broadcast failed").trim());
-  }
-  async function addUserPathEntry(adapter, directory) {
-    var _a, _b;
-    requireWindows(adapter);
-    const entry2 = String(directory || "").trim();
-    if (!entry2) throw new Error("A non-empty PATH directory is required");
-    const current = await readUserPath(adapter);
-    if (pathIncludesEntry(current.value, entry2)) return { changed: false };
-    const newValue = current.value ? current.value + ";" + entry2 : entry2;
-    await addRegistryPath(adapter, newValue, current.type);
-    try {
-      await broadcastEnvironmentChange(adapter);
-    } catch (error) {
-      (_b = (_a = globalThis.console) == null ? void 0 : _a.warn) == null ? void 0 : _b.call(_a, "User PATH broadcast failed:", error);
-    }
-    return { changed: true };
-  }
-
   // src/app/wizardWiring.js
   function useWizardWiring({
     port = 11488,
@@ -35686,8 +35707,8 @@ ${command}`
       claude: commandPreview(commands.claude)
     }), [commands]);
     const updatePathOffer = import_react47.default.useCallback(async (id, result) => {
-      var _a, _b;
-      if (!isWindowsPlatform(platform) || !result.ok || !result.path) {
+      var _a;
+      if (!(platform == null ? void 0 : platform.canManageUserPath) || !result.ok || !result.path) {
         setPathOffers((current) => {
           if (!current[id]) return current;
           const next = { ...current };
@@ -35698,11 +35719,10 @@ ${command}`
       }
       const directory = ((_a = platform.paths) == null ? void 0 : _a.dirname) ? platform.paths.dirname(result.path) : String(result.path).replace(/[\\/][^\\/]*$/, "");
       try {
-        const userPath = await readUserPath(platform);
-        const environment = ((_b = platform.paths) == null ? void 0 : _b.home) ? { USERPROFILE: platform.paths.home, HOME: platform.paths.home } : {};
+        const userPath = await platform.readUserPath();
         setPathOffers((current) => {
           const next = { ...current };
-          if (pathIncludesEntry(userPath.value, directory, environment)) delete next[id];
+          if (platform.userPathIncludes(userPath.value, directory)) delete next[id];
           else next[id] = { directory };
           return next;
         });
@@ -35750,7 +35770,7 @@ ${command}`
     const addToPath = import_react47.default.useCallback(async (id) => {
       const offer = pathOffers[id];
       if (!offer) return { changed: false };
-      const result = await addUserPathEntry(platform, offer.directory);
+      const result = await platform.addUserPathEntry(offer.directory);
       if (result.changed) {
         setPathOffers((current) => {
           const next = { ...current };
@@ -38372,6 +38392,7 @@ ${draft.baseUrl}`)) return;
         },
         getEntries: () => chatEntriesRef.current,
         selectBackend: async (backend) => {
+          lastRealBackendRef.current = backend;
           setModel(loadModelPref(backend, DEFAULT_MODEL));
           setBackendPref(backend);
           writePref("ae_mcp_backend", backend);
@@ -38653,8 +38674,17 @@ ${draft.baseUrl}`)) return;
       return runOpenCodeProbe();
     }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
     import_react48.default.useEffect(() => {
-      const decision = shouldResetOnBackendChange(lastRealBackendRef.current, effective.backend);
+      const pendingSessionLoad = pendingSessionLoadRef.current;
+      const decision = decideBackendReset({
+        lastReal: lastRealBackendRef.current,
+        effective: effective.backend,
+        selectedPref: backendPref,
+        pendingSessionLoad: pendingSessionLoadRef.current
+      });
       lastRealBackendRef.current = decision.nextReal;
+      if ((pendingSessionLoad == null ? void 0 : pendingSessionLoad.backend) === effective.backend) {
+        pendingSessionLoadRef.current = null;
+      }
       if (!decision.reset) return;
       claudeBackend.reset();
       codexBackend.reset();
@@ -38664,13 +38694,14 @@ ${draft.baseUrl}`)) return;
       setThinkingActive(false);
       setTurnStage(null);
       setTurnProgress(null);
-      if (pendingSessionLoadRef.current) return;
+      if (pendingSessionLoad) return;
       setSessionModel(null);
       setSessionEffort(null);
       setSessionFast(null);
       void sessionController.createSession();
     }, [
       effective.backend,
+      backendPref,
       claudeBackend,
       codexBackend,
       openCodeBackend,
@@ -38766,7 +38797,7 @@ ${draft.baseUrl}`)) return;
     }, [chatStreaming, sessionController]);
     const switchChatSessionNow = import_react48.default.useCallback(async (id) => {
       const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
-      pendingSessionLoadRef.current = id;
+      pendingSessionLoadRef.current = target ? { id, backend: target.backend } : { id, backend: null };
       if (target) {
         setSessionModel(target.model || null);
         setSessionEffort(null);
@@ -38781,7 +38812,9 @@ ${draft.baseUrl}`)) return;
       } catch (error) {
         pushLog("Session switch failed: " + ((error == null ? void 0 : error.message) || String(error)));
       } finally {
-        pendingSessionLoadRef.current = null;
+        if (!target || effectiveBackendRef.current === (target == null ? void 0 : target.backend)) {
+          pendingSessionLoadRef.current = null;
+        }
       }
     }, [pushLog, sessionController]);
     const confirmChatNavigationNow = import_react48.default.useCallback(async () => {

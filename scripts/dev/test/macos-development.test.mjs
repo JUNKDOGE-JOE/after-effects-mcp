@@ -9,6 +9,7 @@ import {
   inspectDevelopmentEnvironment,
   launchDevelopmentAe,
 } from '../macos-development.mjs';
+import { skipUnlessMacOS } from '../../package/test/helpers/symlink-support.mjs';
 
 async function writeFile(root, relative, contents = '', mode = 0o644) {
   const target = path.join(root, ...relative.split('/'));
@@ -107,6 +108,7 @@ async function fixture(t) {
 }
 
 test('doctor returns the closed read-only development report', async (t) => {
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const report = await inspectDevelopmentEnvironment({
     repoRoot: h.repoRoot,
@@ -163,6 +165,7 @@ test('doctor returns the closed read-only development report', async (t) => {
 });
 
 test('doctor reports a missing Core interpreter without writing', async (t) => {
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   await fs.promises.unlink(h.interpreter);
   const writes = [];
@@ -194,6 +197,7 @@ test('doctor reports a missing Core interpreter without writing', async (t) => {
 });
 
 test('doctor checks CEP source dependencies only when CEP is selected', async (t) => {
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const core = await inspectDevelopmentEnvironment({
     repoRoot: h.repoRoot,
@@ -217,6 +221,7 @@ test('doctor checks CEP source dependencies only when CEP is selected', async (t
 });
 
 test('launch doctor reuses and validates the active RuntimeManager Node without installing', async (t) => {
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const runtimeRoot = path.join(h.home, '.ae-mcp', 'runtime');
   const relative = 'generations/g-0123456789abcdef';
@@ -266,6 +271,7 @@ test('launch doctor reuses and validates the active RuntimeManager Node without 
 });
 
 test('launch doctor fails closed when no compatible development Node is available', async (t) => {
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const report = await inspectDevelopmentEnvironment({
     repoRoot: h.repoRoot,
@@ -283,6 +289,7 @@ test('launch doctor fails closed when no compatible development Node is availabl
 });
 
 test('launch refuses a running AE and otherwise spawns only the exact formal executable', async (t) => {
+  if (skipUnlessMacOS(t)) return;
   const h = await fixture(t);
   const nodePath = await writeFile(
     h.root,
@@ -393,43 +400,6 @@ test('plan execution uses execFile and reports bounded invocation counts', async
     dependencyBootstrapInvocations: 0,
     releasePackagingInvocations: 0,
   });
-});
-
-test('public smoke inherits the current terminal instead of buffering checkpoints', async () => {
-  const calls = [];
-  const plan = {
-    action: 'smoke',
-    components: ['core', 'cep'],
-    steps: [{
-      id: 'hdev-core-native-write-undo',
-      component: 'core',
-      kind: 'public-smoke',
-      executable: '/checkout/.venv/bin/python3',
-      args: ['-B', '-I', '/checkout/scripts/hardware/development_smoke.py'],
-      cwd: '/checkout',
-    }],
-    actions: [],
-    dependencyBootstrapInvocations: 0,
-    releasePackagingInvocations: 0,
-  };
-
-  await executeDevelopmentPlan(plan, {
-    execFile: async () => {
-      throw new Error('interactive smoke must not use buffered execFile');
-    },
-    runInteractive: async (file, args, options) => {
-      calls.push({ file, args, options });
-    },
-    environment: { HOME: '/private/home' },
-  });
-
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].file, '/checkout/.venv/bin/python3');
-  assert.deepEqual(calls[0].args, [
-    '-B', '-I', '/checkout/scripts/hardware/development_smoke.py',
-  ]);
-  assert.equal(calls[0].options.cwd, '/checkout');
-  assert.equal(calls[0].options.shell, false);
 });
 
 test('daily execution refuses dependency installation even for a forged plan', async () => {

@@ -1,51 +1,43 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 import {
-  HDEV_SCENARIO,
   assertDailyPlanSafe,
   buildDevelopmentPlan,
   parseDevelopmentCommand,
 } from '../profile-contract.mjs';
 
-test('profile scenario matches the driver spec SCENARIO_ID', () => {
-  const spec = readFileSync(
-    new URL('../../hardware/development_smoke_spec.py', import.meta.url),
-    'utf8',
-  );
-  const match = spec.match(/^SCENARIO_ID = "([^"]+)"$/m);
-  assert.ok(match, 'development_smoke_spec.py must declare SCENARIO_ID');
-  assert.equal(
-    HDEV_SCENARIO,
-    match[1],
-    'profile-contract HDEV_SCENARIO must equal the driver spec SCENARIO_ID; '
-      + 'a divergence makes the smoke action unrunnable',
-  );
-});
+const VOLUME_ROOT = path.parse(process.cwd()).root;
+const REPO_ROOT = path.join(VOLUME_ROOT, 'repo');
+const HOME_ROOT = path.join(VOLUME_ROOT, 'Users', 'developer');
+const FORMAL_AE_APP = path.join(
+  VOLUME_ROOT,
+  'Applications',
+  'Adobe After Effects 2026',
+  'Adobe After Effects 2026.app',
+);
 
 const DEFAULTS = Object.freeze({
-  repoRoot: '/repo',
-  home: '/Users/developer',
-  formalAeApp: '/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app',
+  repoRoot: REPO_ROOT,
+  home: HOME_ROOT,
+  formalAeApp: FORMAL_AE_APP,
 });
 
 const PATHS = Object.freeze({
-  repoRoot: '/repo',
-  uv: '/usr/local/bin/uv',
-  npm: '/usr/local/bin/npm',
-  node: '/runtime/node',
-  python: '/repo/.venv/bin/python3',
-  hostRoot: '/repo/plugin/host',
-  sidecarRoot: '/repo/plugin/sidecar',
-  panelRoot: '/repo/plugin/panel',
-  cepInstaller: '/repo/scripts/install-plugin-dev-macos.sh',
-  nativeBuilder: '/repo/native/ae-plugin/build-macos.mjs',
-  nativeInstaller: '/repo/native/ae-plugin/install-dev-macos.mjs',
-  sdkArchive: '/inputs/AfterEffectsSDK.zip',
-  sdkRoot: '/inputs/AfterEffectsSDK',
-  nativeOutput: '/private/tmp/ae-mcp-native-dev-test/artifact',
-  developmentSmoke: '/repo/scripts/hardware/development_smoke.py',
+  repoRoot: REPO_ROOT,
+  uv: path.join(VOLUME_ROOT, 'usr', 'local', 'bin', 'uv'),
+  npm: path.join(VOLUME_ROOT, 'usr', 'local', 'bin', 'npm'),
+  node: path.join(VOLUME_ROOT, 'runtime', 'node'),
+  hostRoot: path.join(REPO_ROOT, 'plugin', 'host'),
+  sidecarRoot: path.join(REPO_ROOT, 'plugin', 'sidecar'),
+  panelRoot: path.join(REPO_ROOT, 'plugin', 'panel'),
+  cepInstaller: path.join(REPO_ROOT, 'scripts', 'install-plugin-dev-macos.sh'),
+  nativeBuilder: path.join(REPO_ROOT, 'native', 'ae-plugin', 'build-macos.mjs'),
+  nativeInstaller: path.join(REPO_ROOT, 'native', 'ae-plugin', 'install-dev-macos.mjs'),
+  sdkArchive: path.join(VOLUME_ROOT, 'inputs', 'AfterEffectsSDK.zip'),
+  sdkRoot: path.join(VOLUME_ROOT, 'inputs', 'AfterEffectsSDK'),
+  nativeOutput: path.join(VOLUME_ROOT, 'tmp', 'ae-mcp-native-dev-test', 'artifact'),
 });
 
 test('parseDevelopmentCommand normalizes one explicit sync component', () => {
@@ -57,13 +49,13 @@ test('parseDevelopmentCommand normalizes one explicit sync component', () => {
   assert.deepEqual(parsed, {
     action: 'sync',
     components: ['cep'],
-    repoRoot: '/repo',
-    home: '/Users/developer',
-    formalAeApp: '/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app',
+    repoRoot: REPO_ROOT,
+    home: HOME_ROOT,
+    formalAeApp: FORMAL_AE_APP,
   });
 });
 
-test('parseDevelopmentCommand expands all and preserves ordered smoke components', () => {
+test('parseDevelopmentCommand expands all components', () => {
   assert.deepEqual(
     parseDevelopmentCommand(
       ['bootstrap', '--component', 'all'],
@@ -71,20 +63,6 @@ test('parseDevelopmentCommand expands all and preserves ordered smoke components
     ).components,
     ['core', 'cep', 'native'],
   );
-  const smoke = parseDevelopmentCommand([
-    'smoke',
-    '--component', 'core',
-    '--component', 'cep',
-    '--scenario', 'native-exec-ir@1',
-    '--fixture-path', '/fixtures/hdev.aep',
-    '--recovery-archive-root', '/fixtures/recovery',
-    '--evidence-dir', '/evidence/hdev',
-  ], DEFAULTS);
-  assert.deepEqual(smoke.components, ['core', 'cep']);
-  assert.equal(smoke.scenario, 'native-exec-ir@1');
-  assert.equal(smoke.fixturePath, '/fixtures/hdev.aep');
-  assert.equal(smoke.recoveryRoot, '/fixtures/recovery');
-  assert.equal(smoke.evidenceDir, '/evidence/hdev');
 });
 
 test('parseDevelopmentCommand rejects unsafe or ambiguous arguments', () => {
@@ -94,14 +72,6 @@ test('parseDevelopmentCommand rejects unsafe or ambiguous arguments', () => {
     ['sync', '--component', 'all', '--component', 'core'],
     ['sync', '--repo-root', 'relative', '--component', 'core'],
     ['smoke', '--component', 'core'],
-    [
-      'smoke',
-      '--component', 'core',
-      '--scenario', 'unbounded',
-      '--fixture-path', '/fixtures/hdev.aep',
-      '--recovery-archive-root', '/fixtures/recovery',
-      '--evidence-dir', '/evidence/hdev',
-    ],
     ['unknown', '--component', 'core'],
   ]) {
     assert.throws(
@@ -152,39 +122,6 @@ test('buildDevelopmentPlan keeps Core live and makes bootstrap explicit', () => 
   );
 });
 
-test('buildDevelopmentPlan passes closed component disposition to HDEV', () => {
-  const command = parseDevelopmentCommand([
-    'smoke',
-    '--component', 'core',
-    '--component', 'cep',
-    '--scenario', 'native-exec-ir@1',
-    '--fixture-path', '/fixtures/hdev.aep',
-    '--recovery-archive-root', '/fixtures/recovery',
-    '--evidence-dir', '/evidence/hdev',
-  ], DEFAULTS);
-  const plan = buildDevelopmentPlan(command, PATHS);
-
-  assert.deepEqual(plan.components, ['core', 'cep']);
-  assert.deepEqual(plan.reused, ['native']);
-  assert.deepEqual(plan.steps.map((step) => step.id), [
-    'hdev-native-exec-ir',
-  ]);
-  assert.deepEqual(plan.steps[0].args.slice(0, 10), [
-    '-B', '-I',
-    '/repo/scripts/hardware/development_smoke.py',
-    '--scenario', 'native-exec-ir@1',
-    '--selected-components', 'core,cep',
-    '--reused-components', 'native',
-    '--checkout',
-  ]);
-  assert.equal(plan.dependencyBootstrapInvocations, 0);
-  assert.equal(plan.steps[0].args.at(-2), '--formal-ae-app');
-  assert.equal(
-    plan.steps[0].args.at(-1),
-    '/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app',
-  );
-});
-
 test('assertDailyPlanSafe rejects an implicit dependency install', () => {
   assert.throws(
     () => assertDailyPlanSafe({
@@ -193,9 +130,9 @@ test('assertDailyPlanSafe rejects an implicit dependency install', () => {
         id: 'forbidden-npm-ci',
         component: 'cep',
         kind: 'dependency-install',
-        executable: '/usr/local/bin/npm',
+        executable: PATHS.npm,
         args: ['ci'],
-        cwd: '/repo/plugin/panel',
+        cwd: PATHS.panelRoot,
       }],
     }),
     (error) => error?.code === 'DEV_IMPLICIT_BOOTSTRAP_FORBIDDEN',

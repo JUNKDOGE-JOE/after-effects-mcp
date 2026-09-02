@@ -24,6 +24,7 @@ export const ERROR_CODES = Object.freeze({
   AUTH_REQUIRED: entry('AUTH_REQUIRED', 'auth', '请按「设置 → AI」通道卡上的登录指引完成对应 CLI 登录后重新检测。', 'Follow the sign-in guidance on the channel card under Settings → AI for this CLI, then re-check.'),
   MCP_UNREACHABLE: entry('MCP_UNREACHABLE', 'mcp', '请保持面板宿主运行，并检查本机会话 MCP 状态。', 'Keep the panel host running and check the local conversation MCP status.'),
   AE_MCP_REBUILD_FAILED: entry('AE_MCP_REBUILD_FAILED', 'network', '与 AE 宿主的连接重建失败。请重载面板或新建会话后再试。', 'The connection to the AE host could not be rebuilt. Reload the panel or start a new session, then try again.'),
+  AE_MCP_TRANSPORT_REBUILT: entry('AE_MCP_TRANSPORT_REBUILT', 'network', '与 AE 宿主的连接已重建，本轮已停止；请确认没有未完成的写入后重新发送。', 'The connection to the AE host was rebuilt and this turn was stopped. Confirm that no write remains unresolved before resending.'),
   SESSION_START_FAILED: entry('SESSION_START_FAILED', 'backend', '会话尚未创建；可修复通道状态后安全重试。', 'The session was not created; retry after fixing the channel state.'),
   TURN_START_FAILED: entry('TURN_START_FAILED', 'backend', '发送可能已经开始；请先按详情中的派发状态核对再重试。', 'Sending may have started; check the dispatch state before retrying.'),
   RPC_TIMEOUT: entry('RPC_TIMEOUT', 'network', '请求等待超时；请检查通道进程与网络后再试。', 'The request timed out; check the channel process and network before retrying.'),

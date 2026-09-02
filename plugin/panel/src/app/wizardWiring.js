@@ -6,12 +6,6 @@ import {
   runAction,
 } from '../cep/wizardActions.js';
 import {
-  addUserPathEntry,
-  isWindowsPlatform,
-  pathIncludesEntry,
-  readUserPath,
-} from '../cep/registryPath.js';
-import {
   CLI_STEPS,
   HOST_STEPS,
   OPTIONAL_CLIENT_STEPS,
@@ -36,7 +30,7 @@ export function useWizardWiring({
   }), [commands]);
 
   const updatePathOffer = React.useCallback(async (id, result) => {
-    if (!isWindowsPlatform(platform) || !result.ok || !result.path) {
+    if (!platform?.canManageUserPath || !result.ok || !result.path) {
       setPathOffers((current) => {
         if (!current[id]) return current;
         const next = { ...current };
@@ -49,13 +43,10 @@ export function useWizardWiring({
       ? platform.paths.dirname(result.path)
       : String(result.path).replace(/[\\/][^\\/]*$/, '');
     try {
-      const userPath = await readUserPath(platform);
-      const environment = platform.paths?.home
-        ? { USERPROFILE: platform.paths.home, HOME: platform.paths.home }
-        : {};
+      const userPath = await platform.readUserPath();
       setPathOffers((current) => {
         const next = { ...current };
-        if (pathIncludesEntry(userPath.value, directory, environment)) delete next[id];
+        if (platform.userPathIncludes(userPath.value, directory)) delete next[id];
         else next[id] = { directory };
         return next;
       });
@@ -106,7 +97,7 @@ export function useWizardWiring({
   const addToPath = React.useCallback(async (id) => {
     const offer = pathOffers[id];
     if (!offer) return { changed: false };
-    const result = await addUserPathEntry(platform, offer.directory);
+    const result = await platform.addUserPathEntry(offer.directory);
     if (result.changed) {
       setPathOffers((current) => {
         const next = { ...current };

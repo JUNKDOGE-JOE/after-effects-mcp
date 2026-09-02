@@ -16,8 +16,9 @@ import {
 } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import nodeTest from 'node:test';
 import { promisify } from 'node:util';
+import { skipIfSymlinkUnavailable } from './helpers/symlink-support.mjs';
 
 import {
   installDevMacPlugin,
@@ -32,6 +33,17 @@ const SOURCE_COMMIT = 'a'.repeat(40);
 const PRODUCT_VERSION = '0.9.2';
 const TX1 = '00000000-0000-4000-8000-000000000001';
 const TX2 = '00000000-0000-4000-8000-000000000002';
+
+function test(name, optionsOrTest, maybeTest) {
+  const options = typeof optionsOrTest === 'function' ? {} : optionsOrTest;
+  const run = typeof optionsOrTest === 'function' ? optionsOrTest : maybeTest;
+  return nodeTest(name, {
+    ...options,
+    skip: process.platform === 'win32'
+      ? 'macOS installer directory durability is not available on Windows'
+      : options?.skip,
+  }, run);
+}
 
 function digest(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -1427,6 +1439,7 @@ for (const invalidLock of [
 
 for (const unsafeLock of ['symlink', 'hardlink', 'directory']) {
   test(`kernel guard refuses an unsafe ${unsafeLock} final owner lock`, async (t) => {
+    if (unsafeLock === 'symlink' && skipIfSymlinkUnavailable(t)) return;
     const state = await fixture(t);
     await mkdir(state.stateBase, { recursive: true });
     const lockPath = path.join(state.stateBase, '.AeMcpNative.install.lock');
@@ -1589,6 +1602,7 @@ test('migration rotates a dead legacy in-scan installer lock before recovery', a
 });
 
 test('installer rejects a symbolic target and an extra loadable bundle', async (t) => {
+  if (skipIfSymlinkUnavailable(t)) return;
   const state = await fixture(t);
   const artifactDir = await makeArtifact(state.root, 'build-one', 'one');
   await mkdir(state.namespace, { recursive: true });

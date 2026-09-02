@@ -56,19 +56,9 @@ export function buildInstallCommands({ platform } = {}) {
       repo: '',
     })
     : {};
-  const result = commands && commands.node ? { node: commands.node } : {};
-  if (adapter.id === 'windows-x64' || adapter.platform === 'win32') {
-    result.claude = {
-      file: 'powershell',
-      executableId: 'powershell',
-      args: [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        'irm https://claude.ai/install.ps1 | iex',
-      ],
-    };
+  const result = {};
+  for (const id of ['node', 'claude']) {
+    if (commands?.[id]) result[id] = commands[id];
   }
   return result;
 }

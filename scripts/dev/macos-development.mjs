@@ -438,28 +438,10 @@ async function inspectRequiredPaths({
 
 export function createDefaultMacosDependencies() {
   const execFile = (file, args, options = {}) => execFileAsync(file, args, options);
-  const runInteractive = (file, args, options = {}) => new Promise(
-    (resolve, reject) => {
-      const child = childProcess.spawn(file, args, {
-        ...options,
-        stdio: 'inherit',
-      });
-      child.once('error', reject);
-      child.once('exit', (code, signal) => {
-        if (code === 0) {
-          resolve();
-          return;
-        }
-        const detail = signal ? `signal ${signal}` : `exit ${code}`;
-        reject(new Error(`interactive process failed with ${detail}`));
-      });
-    },
-  );
   return Object.freeze({
     fs: fs.promises,
     realpath: fs.promises.realpath.bind(fs.promises),
     execFile,
-    runInteractive,
     spawn: childProcess.spawn,
     processInspector: Object.freeze({
       async afterEffectsRunning() {
@@ -576,7 +558,6 @@ export async function launchDevelopmentAe(report, {
 
 export async function executeDevelopmentPlan(plan, {
   execFile = createDefaultMacosDependencies().execFile,
-  runInteractive = createDefaultMacosDependencies().runInteractive,
   environment = process.env,
 } = {}) {
   if (DAILY_ACTIONS.includes(plan.action)
@@ -599,10 +580,7 @@ export async function executeDevelopmentPlan(plan, {
   const stepReceipts = [];
   for (const step of plan.steps) {
     try {
-      const executeStep = step.kind === 'public-smoke'
-        ? runInteractive
-        : execFile;
-      await executeStep(step.executable, step.args, {
+      await execFile(step.executable, step.args, {
         cwd: step.cwd,
         env: environment,
         shell: false,
