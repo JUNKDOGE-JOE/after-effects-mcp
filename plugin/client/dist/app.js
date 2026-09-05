@@ -39108,6 +39108,7 @@ ${draft.baseUrl}`)) return;
     const activeBackendInstanceRef = import_react49.default.useRef(activeBackend);
     activeBackendInstanceRef.current = activeBackend;
     const pendingSessionLoadRef = import_react49.default.useRef(null);
+    const backendResetPromiseRef = import_react49.default.useRef(null);
     const [sessionSnapshot, setSessionSnapshot] = import_react49.default.useState({ sessions: [], activeId: null });
     const sessionController = import_react49.default.useMemo(() => createSessionController({
       store: sessionStore,
@@ -39417,11 +39418,6 @@ ${draft.baseUrl}`)) return;
       return () => clearTimeout(timer);
     }, [backendPref, openCodeProbe, openCodeProbeAttempt]);
     import_react49.default.useEffect(() => {
-      if (backendPref !== "opencode") return void 0;
-      if (status.state !== "ok" || providerInit.state !== "ready") return void 0;
-      return runOpenCodeProbe();
-    }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
-    import_react49.default.useEffect(() => {
       const pendingSessionLoad = pendingSessionLoadRef.current;
       const decision = decideBackendReset({
         lastReal: lastRealBackendRef.current,
@@ -39447,7 +39443,7 @@ ${draft.baseUrl}`)) return;
       setSessionModel(null);
       setSessionEffort(null);
       setSessionFast(null);
-      void sessionController.createSession();
+      backendResetPromiseRef.current = sessionController.createSession();
     }, [
       effective.backend,
       backendPref,
@@ -39457,6 +39453,21 @@ ${draft.baseUrl}`)) return;
       resetAttachmentDraftSession,
       sessionController
     ]);
+    import_react49.default.useEffect(() => {
+      if (backendPref !== "opencode") return void 0;
+      if (status.state !== "ok" || providerInit.state !== "ready") return void 0;
+      let alive = true;
+      let disposeProbe;
+      Promise.resolve(backendResetPromiseRef.current).then(() => {
+        if (alive) disposeProbe = runOpenCodeProbe();
+      }).catch((error) => {
+        if (alive) setOpenCodeProbe({ loggedIn: false, detail: (error == null ? void 0 : error.message) || String(error) });
+      });
+      return () => {
+        alive = false;
+        disposeProbe == null ? void 0 : disposeProbe();
+      };
+    }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
     const sendChat = (input) => {
       var _a;
       if (pendingTurnRef.current || catalogEmpty) return;
