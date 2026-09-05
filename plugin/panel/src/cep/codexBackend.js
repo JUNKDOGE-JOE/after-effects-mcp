@@ -1,4 +1,5 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
+import { captureToolImages, toolDisplayText } from './toolImages.js';
 import { cliIdentity } from '../lib/cliUpdates.js';
 import {
   containsExactSecret,
@@ -507,7 +508,8 @@ export function createCodexBackend({
         toolUseId: String(item.id || ''),
         name: mcpToolName(item),
         ok: !item.error && item.status === 'completed',
-        text: toolResultText(item.result),
+        text: toolDisplayText(toolResultText(item.result)),
+        ...captureToolImages(item.result?.content, adapter),
         durationMs: item.durationMs,
       });
       return;

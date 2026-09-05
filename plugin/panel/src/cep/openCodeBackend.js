@@ -1,4 +1,5 @@
 import { createSseParser } from '../lib/sse.js';
+import { captureToolImages, toolDisplayText } from './toolImages.js';
 import { cliIdentity } from '../lib/cliUpdates.js';
 import { openCodeCatalogId } from '../lib/openCodeCatalogId.js';
 import { createPlatformAdapter } from './platform/index.js';
@@ -1455,7 +1456,8 @@ export function createOpenCodeBackend({
         toolUseId,
         name,
         ok: status === 'completed',
-        text: outputText,
+        text: toolDisplayText(outputText),
+        ...captureToolImages(state.attachments || state.content, adapter),
         durationMs: ms,
       });
       return;

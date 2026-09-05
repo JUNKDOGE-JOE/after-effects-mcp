@@ -12,6 +12,7 @@ import {
   trimStderrTail,
 } from '../lib/errorCodes.js';
 import { createPlatformAdapter } from './platform/index.js';
+import { captureToolImages, toolDisplayText } from './toolImages.js';
 import {
   normalizeTurnInput,
   withAttachmentManifest,
@@ -814,7 +815,8 @@ export function createClaudeAgentBackend({
         type: 'tool-result',
         toolUseId,
         ok: block.is_error !== true,
-        text: toolResultText(block.content),
+        text: toolDisplayText(toolResultText(block.content)),
+        ...captureToolImages(block.content, adapter),
         durationMs: Math.max(0, now() - tool.startedAt),
       });
     }

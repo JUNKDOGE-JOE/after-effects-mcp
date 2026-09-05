@@ -131,6 +131,22 @@ async function startTurn(
   return { pending, proc, thread, turn };
 }
 
+test('Codex completed MCP image results retain their call id and omit data from display text', async () => {
+  const h = makeBackend();
+  try {
+    const { proc } = await startTurn(h.backend, h.spawned);
+    proc.emit({ method: 'item/completed', params: { item: { type: 'mcpToolCall', id: 'preview-1',
+      tool: 'ae_previewFrame', status: 'completed', result: { content: [
+        { type: 'text', text: '{"base64":"AAAA"}' },
+        { type: 'image', mimeType: 'image/png', url: 'file:///tmp/frame.png' },
+      ] } } } });
+    const result = h.events.find((event) => event.type === 'tool-result');
+    assert.equal(result.toolUseId, 'preview-1');
+    assert.deepEqual(result.images, [{ src: 'file:///tmp/frame.png' }]);
+    assert.equal(result.text, '{"base64":"[image]"}');
+  } finally { h.backend.reset(); }
+});
+
 test('resolveCodexCli exposes the CLI shim for diagnostics', async () => {
   const result = await resolveCodexCli({
     env: { AE_MCP_CODEX_CLI: 'C:\\Custom\\codex.cmd' },
