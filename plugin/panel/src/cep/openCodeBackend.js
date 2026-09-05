@@ -1582,6 +1582,10 @@ export function createOpenCodeBackend({
         upstream: true,
         upstreamText: combined,
       });
+      const mediaRejected = activeTurn?.attachments.length > 0
+        && startedTools.size === 0 && !activeAssistantText
+        && !Array.from(partTypes.values()).includes('tool')
+        && /^'(?:file part media type |media type: )[^']+' functionality not supported\.$/.test(detail);
       if (isAeMcpTransportFailure(error, combined)) {
         void recoverAeMcpTransport();
         return;
@@ -1593,18 +1597,22 @@ export function createOpenCodeBackend({
       settleFailedTurnInteractions();
       emitAfterText({
         type: 'error',
-        kind: classified.kind,
-        code: classified.code,
+        kind: mediaRejected ? 'attachment' : classified.kind,
+        code: mediaRejected ? 'ATTACHMENT_TRANSPORT_UNSUPPORTED' : classified.code,
         // OpenCode session errors arrive as {name, data:{message}} objects;
         // String() on that shape rendered "[object Object]" in the chat.
-        message: httpStatus
+        message: mediaRejected
+          ? (currentLang() === 'zh'
+            ? 'OpenCode 的媒体读取通道不支持此格式。这不是模型能力判断；可提供支持的格式，或在消息中给出本地路径供 AE 导入。'
+            : 'The OpenCode media reader cannot send this format. This is a channel limitation; use a supported format or provide a local path in the message for AE import.')
+          : httpStatus
           ? 'OpenCode upstream request failed.'
           : classified.code === 'UPSTREAM_CONNECTION_CLOSED'
             ? 'OpenCode upstream connection was interrupted.'
           : (detail || (error && error.name) || 'OpenCode session error'),
         detail: {
           ...(error?.name ? { errorName: error.name } : {}),
-          ...(httpStatus ? { httpStatus } : {}),
+          ...(httpStatus && !mediaRejected ? { httpStatus } : {}),
           ...(detail ? {
             upstreamMessage: String(redactValue(detail, activeAttachmentPaths)).slice(0, 500),
           } : {}),
@@ -1616,6 +1624,7 @@ export function createOpenCodeBackend({
           } : {}),
         },
         ...activeTurnFailureFields(),
+        ...(mediaRejected ? { dispatchState: 'not-started' } : {}),
       });
       finishActive();
       return;

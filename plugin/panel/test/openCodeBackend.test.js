@@ -653,6 +653,52 @@ test('createOpenCodeBackend sends official file parts and accepts at dispatch', 
   assert.deepEqual(backend.getMessages()[0], { role: 'user', text: 'inspect' });
 });
 
+test('OpenCode sends a blank-MIME image as an image file part', async () => {
+  const h = makeBackend();
+  const pending = h.backend.sendUser({ turnId: 'mime', text: 'inspect', attachments: [
+    { id: 'frame', name: 'FRAME.PNG', localPath: 'C:\\tmp\\FRAME.PNG', size: 4, mediaType: '', temporary: false },
+  ] });
+  await flush();
+  const message = h.fetched.calls.find((call) => call.path === '/session/session_1/message');
+  assert.equal(message.body.parts[1].mime, 'image/png');
+  assert.equal(message.body.parts[1].url, 'file:///C:/tmp/FRAME.PNG');
+  completeTurn(h.fetched);
+  await pending;
+  h.backend.reset();
+});
+
+test('only a media adapter rejection before model or tool activity permits a retry', async () => {
+  for (const [startedTool, mediaPrefix] of [
+    [false, 'file part media type '], [false, 'media type: '],
+    ['running', 'file part media type '], ['completed', 'file part media type '],
+  ]) {
+    const h = makeBackend({ getLang: () => 'en' });
+    try {
+      const pending = h.backend.sendUser({ turnId: 'media-error', text: 'inspect', attachments: [
+        { id: 'clip', name: 'clip.mp4', localPath: 'C:\\tmp\\clip.mp4', size: 4, mediaType: 'video/mp4', temporary: false },
+      ] });
+      await flush();
+      if (startedTool) h.fetched.sse.push({ type: 'message.part.updated', properties: { sessionID: 'session_1', part: {
+        type: 'tool', id: 'write', callID: 'write', tool: 'ae_ae_exec', state: { status: startedTool, input: {} },
+      } } });
+      if (!startedTool) h.spawned.procs[0].pushStderr('INFO run=b7d9d439 local media adapter failed\n');
+      h.fetched.sse.push({ type: 'session.error', properties: { sessionID: 'session_1', error: {
+        name: 'UnknownError', data: { message: `'${mediaPrefix}video/mp4' functionality not supported.` },
+      } } });
+      await pending;
+      const error = h.events.findLast(event => event.type === 'error');
+      assert.equal(error.dispatchState, startedTool ? undefined : 'not-started');
+      assert.equal(error.code, startedTool ? 'UPSTREAM_ERROR' : 'ATTACHMENT_TRANSPORT_UNSUPPORTED');
+      if (!startedTool) {
+        assert.match(error.message, /channel limitation/);
+        assert.equal(Object.hasOwn(error.detail, 'httpStatus'), false);
+        assert.match(error.detail.stderrTail, /run=b7d9d439/);
+      }
+      assert.match(error.detail.upstreamMessage, /video\/mp4/);
+    } finally { h.backend.reset(); }
+  }
+});
+
 test('createOpenCodeBackend redacts an attachment path split across output and transcript', async () => {
   const path = 'C:\\private\\customer.mov';
   const fileUrl = 'file:///C:/private/customer.mov';
@@ -1120,6 +1166,7 @@ test('createOpenCodeBackend injects panel-managed OpenCode provider definitions'
       models: {
         'claude-test': {
           name: 'claude-test',
+          modalities: { input: ['text', 'image', 'audio', 'video', 'pdf'], output: ['text'] },
           limit: { context: 64000, output: 16000 },
         },
       },

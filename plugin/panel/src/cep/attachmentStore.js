@@ -2,6 +2,7 @@ import {
   MAX_ATTACHMENTS_PER_TURN,
   MAX_CLIPBOARD_ITEM_BYTES,
   MAX_CLIPBOARD_TURN_BYTES,
+  attachmentMediaType,
 } from '../../../shared/chat-attachments.mjs';
 
 function attachmentError(code, message, cause) {
@@ -35,7 +36,7 @@ function safeBasename(value, fallback = 'attachment') {
 }
 
 function mediaTypeOf(file) {
-  return typeof file?.type === 'string' ? file.type : '';
+  return attachmentMediaType(file?.name, file?.type);
 }
 
 function writeAll(fs, descriptor, bytes) {
@@ -84,7 +85,7 @@ export function createAttachmentStore({
     if (disposed) throw attachmentError('ATTACHMENT_STORE_DISPOSED', 'Attachment store is disposed');
     const safeSessionId = requireSegment(sessionId, 'sessionId');
     requireSegment(pondId, 'pondId');
-    const existing = sessionRecords(safeSessionId);
+    const existing = [...records.values()];
     if (existing.length >= MAX_ATTACHMENTS_PER_TURN) {
       throw attachmentError('ATTACHMENT_COUNT_LIMIT', 'Attachment count exceeds the per-turn limit');
     }
@@ -224,6 +225,16 @@ export function createAttachmentStore({
   }
 
   return Object.freeze({
+    validate(attachments) {
+      for (const ref of attachments) {
+        try {
+          if (!fs.statSync(ref.localPath).isFile()) throw new Error('not a file');
+          fs.accessSync(ref.localPath, fs.constants.R_OK);
+        } catch (cause) {
+          throw attachmentError('ATTACHMENT_UNREADABLE', 'Attachment file is no longer readable. Remove it and select it again.', cause);
+        }
+      }
+    },
     prepare(file, context = {}) {
       if (file?.path) return preparePathBacked(file, context);
       return preparePathless(file, context);
@@ -236,6 +247,12 @@ export function createAttachmentStore({
     },
     releaseSession(sessionId) {
       for (const record of sessionRecords(String(sessionId || ''))) {
+        cleanupTemporary(record);
+        records.delete(record.id);
+      }
+    },
+    releaseAll() {
+      for (const record of [...records.values()]) {
         cleanupTemporary(record);
         records.delete(record.id);
       }

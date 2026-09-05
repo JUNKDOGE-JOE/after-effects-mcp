@@ -4,6 +4,7 @@ import {
   ATTACHMENT_MANIFEST_CLOSE,
   ATTACHMENT_MANIFEST_OPEN,
   attachmentFileUrl,
+  attachmentMediaType,
   attachmentManifest,
   displayAttachments,
   normalizeTurnInput,
@@ -117,7 +118,7 @@ test('attachment manifest exposes every selected path in order', () => {
 
   assert.equal(manifest, [
     ATTACHMENT_MANIFEST_OPEN,
-    '{"files":[{"id":"att-1","name":"clip.bin","path":"/tmp/private/clip.bin","size":3,"mediaType":"application/octet-stream"},{"id":"att-2","name":"frame.png","path":"/tmp/private/frame.png","size":9,"mediaType":"application/octet-stream"}]}',
+    '{"files":[{"id":"att-1","name":"clip.bin","path":"/tmp/private/clip.bin","size":3,"mediaType":"application/octet-stream"},{"id":"att-2","name":"frame.png","path":"/tmp/private/frame.png","size":9,"mediaType":"image/png"}]}',
     ATTACHMENT_MANIFEST_CLOSE,
   ].join('\n'));
 });
@@ -145,4 +146,16 @@ test('attachmentFileUrl encodes macOS and Windows path components', () => {
     attachmentFileUrl('\\\\server\\share\\AE files\\a#b.png', 'windows-x64'),
     'file://server/share/AE%20files/a%23b.png',
   );
+});
+
+test('missing browser MIME falls back by extension without overriding a specific type', () => {
+  for (const [name, mime] of [['FRAME.PNG', 'image/png'], ['clip.WAV', 'audio/wav'], ['clip.MOV', 'video/quicktime']]) {
+    for (const supplied of ['', 'application/octet-stream']) {
+      const file = normalizeTurnInput({ turnId: 'mime', text: '', attachments: [fixtureAttachment({ name, mediaType: supplied })] }).attachments[0];
+      assert.equal(file.mediaType, mime);
+    }
+  }
+  assert.equal(attachmentMediaType('file.bin', ' Image/JPEG; charset=binary '), 'image/jpeg');
+  assert.equal(attachmentMediaType('file.png', 'text/plain'), 'text/plain');
+  assert.equal(attachmentMediaType('file.unknown'), '');
 });

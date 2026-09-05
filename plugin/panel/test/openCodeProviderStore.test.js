@@ -60,6 +60,7 @@ test('OpenCode provider store merge-writes auth.json and preserves existing prov
         models: {
           'claude-test': {
             name: 'claude-test',
+            modalities: { input: ['text', 'image', 'audio', 'video', 'pdf'], output: ['text'] },
             limit: { context: 128000, output: 32000 },
           },
         },
@@ -128,11 +129,24 @@ test('custom OpenCode models use per-model context windows and safe output reser
     modelContexts: { 'model-a': 32000, 'model-b': 64000, 'model-c': 200000 },
     needsApiKey: false,
   }]);
-  assert.deepEqual(definitions['aemcp-limits'].models, {
+  assert.deepEqual(Object.fromEntries(Object.entries(definitions['aemcp-limits'].models).map(([id, { modalities, ...model }]) => [id, model])), {
     'model-a': { name: 'model-a', limit: { context: 32000, output: 8000 } },
     'model-b': { name: 'model-b', limit: { context: 64000, output: 16000 } },
     'model-c': { name: 'model-c', limit: { context: 200000, output: 32000 } },
   });
+});
+
+test('custom model IDs allow provider validation instead of a text-only default verdict', () => {
+  for (const protocol of ['anthropic', 'openai']) {
+    const definitions = openCodeProviderDefinitions([{
+      id: 'aemcp-media', name: 'Media', baseUrl: 'https://relay.example/v1',
+      protocol, modelIds: ['unknown-model'], needsApiKey: false,
+    }]);
+    assert.deepEqual(definitions['aemcp-media'].models['unknown-model'].modalities, {
+      input: ['text', 'image', 'audio', 'video', 'pdf'], output: ['text'],
+    });
+  }
+  assert.deepEqual(openCodeProviderDefinitions([]), {});
 });
 
 test('the same model id can use independent windows in different providers', () => {
