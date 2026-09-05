@@ -253,6 +253,9 @@ Other environment variables the host and panel read:
 | `AE_MCP_CLAUDE_CLI`, `AE_MCP_CODEX_CLI` | Explicit executable path for the Claude or Codex CLI when it is not on the panel PATH. Restart After Effects after setting them. |
 | `AE_MCP_APPROVAL_TIER_FILE` | Path to a file holding `readonly`, `manual`, `auto`, or `none`. When set, the host enforces that tier on the verb tools for an embedding UI; when unset the gate is a no-op and the connecting client's own permission system applies. |
 
-External MCP clients always receive the ExtendScript expert guardrails in the
-server instructions; the expert-guidance switch in Settings applies to the
-panel's own conversations.
+The host includes ExtendScript guardrails in the default server instructions
+for panel conversations and external MCP clients. Settings no longer offers
+an expert-guidance switch: changing that preference could not reliably change
+instructions already received by a model. The old panel preference and
+`AE_MCP_EXPERT_GUIDANCE` environment variable have no effect. Bundled skills
+remain available through `ae_skillUse`.

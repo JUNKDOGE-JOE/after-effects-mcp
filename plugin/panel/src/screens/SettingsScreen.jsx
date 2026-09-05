@@ -64,8 +64,6 @@ const S = {
     mins: (n) => `${n} 分钟前`,
     hours: (n) => `${n} 小时前`,
     language: '界面语言',
-    expertGuidance: 'AE 专家防错指导',
-    expertGuidanceCap: '增加每会话一次性握手 token，换更少的 AE 脚本报错',
     logLevel: '日志级别',
     exportLog: '导出日志',
     mcp: 'MCP 配置',
@@ -118,8 +116,6 @@ const S = {
     mins: (n) => `${n} min ago`,
     hours: (n) => `${n} h ago`,
     language: 'Language',
-    expertGuidance: 'AE expert anti-error guidance',
-    expertGuidanceCap: 'Adds a one-time handshake token cost per session for fewer AE scripting errors',
     logLevel: 'Log level',
     exportLog: 'Export log',
     mcp: 'MCP config',
@@ -312,8 +308,6 @@ export function SettingsScreen({
   onModelChange,
   backend = 'subscription',
   onBackendChange,
-  expertGuidance = true,
-  onExpertGuidance,
   channels = { claude: [], codex: [], opencode: [] },
   activeChannel = '',
   selectedChannel = '',
@@ -468,9 +462,6 @@ export function SettingsScreen({
       </Section>
 
       <Section id="gen" title={t.gen} expanded={sections.gen} onToggle={onToggleSection}>
-        <Field layout="row" label={t.expertGuidance} caption={t.expertGuidanceCap}>
-          <Switch checked={expertGuidance} onChange={(v) => onExpertGuidance && onExpertGuidance(v)} />
-        </Field>
         <Field label={t.language}>
           <Segmented full value={lang} onChange={onLangChange} options={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }]} />
         </Field>

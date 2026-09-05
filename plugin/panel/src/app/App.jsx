@@ -61,7 +61,6 @@ import { copyText } from '../lib/clipboard';
 import { copyWizardConfig } from '../lib/wizardCopy.js';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, isValidPort } from '../cep/hostBridge';
 import { httpConfigFor } from '../cep/externalClients.js';
-import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
 import pkg from '../../package.json';
 import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
 import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
@@ -77,10 +76,6 @@ import { reduceTurnStage } from '../lib/turnProgress.js';
 import { getMcpSpec as resolveChatMcpSpec } from '../lib/mcpEngine.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
-
-// Re-export so app code has a single import surface; the helpers themselves live
-// in lib/ so the test suite (node --test, which cannot parse JSX) can import them.
-export { loadExpertGuidance, saveExpertGuidance };
 
 const T = {
   zh: {
@@ -333,18 +328,11 @@ function Shell({ cs }) {
   }).filter(Boolean), [openCodeProviderStore, providers]);
   const providerSensitiveValuesRef = React.useRef(providerSensitiveValues);
   providerSensitiveValuesRef.current = providerSensitiveValues;
-  const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
-  const expertGuidanceRef = React.useRef(expertGuidance);
-  expertGuidanceRef.current = expertGuidance;
-  React.useEffect(() => {
-    runHostConversationSync(() => hostConversation.updatePolicy({ expertGuidance }));
-  }, [expertGuidance, hostConversation, runHostConversationSync]);
   React.useEffect(() => {
     if (status.state !== 'ok') return;
     runHostConversationSync(() => hostConversation.ensureConversation({
       label: chatSessionIdRef.current,
       approvalTier: permissionModeRef.current,
-      expertGuidance: expertGuidanceRef.current,
     }));
   }, [hostConversation, runHostConversationSync, status.state]);
   const resolveHostConversationContext = React.useCallback((conversationId) => {
@@ -501,7 +489,6 @@ function Shell({ cs }) {
     port: hostPortRef.current,
     label: chatSessionIdRef.current,
     approvalTier: permissionModeRef.current,
-    expertGuidance: expertGuidanceRef.current,
     hostConversation,
   }), [hostConversation]);
   const mcp = React.useMemo(() => createMcpClient({
@@ -511,7 +498,6 @@ function Shell({ cs }) {
     getConversation: () => hostConversation.ensureConversation({
       label: chatSessionIdRef.current,
       approvalTier: permissionModeRef.current,
-      expertGuidance: expertGuidanceRef.current,
     }),
   }), [extRoot, getHost, hostConversation]);
   const toolsApi = React.useMemo(() => createToolsApi(mcp), [mcp]);
@@ -711,7 +697,6 @@ function Shell({ cs }) {
     getEffort: () => runtimeRef.current.effort,
     getFast: () => runtimeRef.current.fast,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
-    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
     getLang: () => langRef.current,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
@@ -726,7 +711,6 @@ function Shell({ cs }) {
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getProviders: () => providersRef.current,
     getSensitiveValues: () => providerSensitiveValuesRef.current,
-    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     getLang: () => langRef.current,
     onEvent: handleChatEvent,
@@ -775,7 +759,6 @@ function Shell({ cs }) {
           hostConversation.ensureConversation({
             label: sessionId,
             approvalTier: permissionModeRef.current,
-            expertGuidance: expertGuidanceRef.current,
           });
         }
       },
@@ -1712,8 +1695,6 @@ function Shell({ cs }) {
               setBackendPref(m);
               writePref('ae_mcp_backend', m);
             }}
-            expertGuidance={expertGuidance}
-            onExpertGuidance={(v) => { setExpertGuidance(v); saveExpertGuidance(window.localStorage, v); }}
             logLevel={logLevel}
             onLogLevel={(v) => { setLogLevel(v); writePref('ae_mcp_log_level', v); }}
             onExportLogs={exportLogs}

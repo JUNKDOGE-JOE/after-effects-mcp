@@ -20,7 +20,7 @@ inside the function. Merely calling JSON.stringify inside an IIFE evaluates
 the outer script to undefined after AE may already have changed.
 `;
 const EXPERT = `
-EXTENDSCRIPT EXPERT GUARDRAILS — high-frequency AE traps (panel conversations can switch this block off in Settings; external clients always receive it):
+EXTENDSCRIPT EXPERT GUARDRAILS — high-frequency AE traps:
   Text layers: add an empty one (comp.layers.addText("")), then READ the doc
     back from layer.property("ADBE Text Properties").property("ADBE Text Document").value,
     set font/fontSize/fillColor/justification on THAT doc, and setValue() it back.

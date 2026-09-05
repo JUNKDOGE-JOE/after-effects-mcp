@@ -346,7 +346,6 @@ export function createOpenCodeBackend({
   getToolMeta,
   getProviders = () => [],
   getSensitiveValues = () => [],
-  getExpertGuidance = () => true,
   onEvent,
   env,
   getLang,
