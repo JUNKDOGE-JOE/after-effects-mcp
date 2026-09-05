@@ -6,6 +6,7 @@ function initialState() {
     pendingSnapshot: null,
     dispatchState: null,
     sendError: null,
+    acceptedDraft: null,
   };
 }
 
@@ -63,7 +64,22 @@ export function reduceAttachmentDraft(state, action) {
   if (!state || !action) return state;
 
   if (action.type === 'accepted') {
-    return action.turnId === state.pendingTurnId ? initialState() : state;
+    return action.turnId === state.pendingTurnId
+      ? { ...initialState(), acceptedDraft: { turnId: action.turnId, text: state.text, items: state.items, turn: state.pendingSnapshot } }
+      : state;
+  }
+  if (action.type === 'settled') {
+    if (action.turnId !== state.acceptedDraft?.turnId) return state;
+    const saved = state.acceptedDraft;
+    if (!action.error || !saved.items.length) return { ...state, acceptedDraft: null };
+    const uncertain = action.dispatchState !== 'not-started';
+    return {
+      ...state, text: state.text || saved.text, items: [...saved.items, ...state.items],
+      acceptedDraft: null, sendError: action.error,
+      dispatchState: uncertain ? 'uncertain' : 'not-started',
+      pendingTurnId: uncertain ? saved.turnId : null,
+      pendingSnapshot: uncertain ? saved.turn : null,
+    };
   }
   if (action.type === 'rejected') {
     if (action.turnId !== state.pendingTurnId) return state;

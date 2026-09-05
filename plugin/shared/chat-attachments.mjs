@@ -4,6 +4,25 @@ export const MAX_CLIPBOARD_TURN_BYTES = 512 * 1024 * 1024;
 export const ATTACHMENT_MANIFEST_OPEN = '<ae_mcp_attachments version="1">';
 export const ATTACHMENT_MANIFEST_CLOSE = '</ae_mcp_attachments>';
 
+const MEDIA_TYPES = Object.freeze({
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', bmp: 'image/bmp', avif: 'image/avif', svg: 'image/svg+xml',
+  tif: 'image/tiff', tiff: 'image/tiff', heic: 'image/heic',
+  wav: 'audio/wav', mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac',
+  flac: 'audio/flac', ogg: 'audio/ogg', opus: 'audio/ogg',
+  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', avi: 'video/x-msvideo',
+  pdf: 'application/pdf', txt: 'text/plain', md: 'text/plain',
+});
+
+export function attachmentMediaType(name, supplied = '') {
+  const mime = String(supplied || '').split(';')[0].trim().toLowerCase();
+  if (mime && mime !== 'application/octet-stream') {
+    return ({ 'image/jpg': 'image/jpeg', 'audio/x-wav': 'audio/wav', 'audio/mp3': 'audio/mpeg' })[mime] || mime;
+  }
+  const extension = String(name || '').split('.').pop().toLowerCase();
+  return MEDIA_TYPES[extension] || mime;
+}
+
 function requireString(value, field, { allowEmpty = false } = {}) {
   if (typeof value !== 'string' || (!allowEmpty && !value)) {
     throw new TypeError(field + ' must be ' + (allowEmpty ? 'a string' : 'a non-empty string'));
@@ -26,9 +45,9 @@ function normalizeAttachment(value) {
     name: requireString(value.name, 'attachment.name'),
     localPath: requireString(value.localPath, 'attachment.localPath'),
     size: value.size,
-    mediaType: value.mediaType === undefined
+    mediaType: attachmentMediaType(value.name, value.mediaType === undefined
       ? ''
-      : requireString(value.mediaType, 'attachment.mediaType', { allowEmpty: true }),
+      : requireString(value.mediaType, 'attachment.mediaType', { allowEmpty: true })),
     temporary: value.temporary,
   };
   return Object.freeze(attachment);

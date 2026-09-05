@@ -269,6 +269,7 @@ function Shell({ cs }) {
   const attachmentOperationsRef = React.useRef(new Map());
   const pendingTurnRef = React.useRef(null);
   const acceptedTurnRef = React.useRef(null);
+  const preserveAttachmentDraftRef = React.useRef(false);
   React.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
   const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
   const [model, setModel] = React.useState(() => loadModelPref(backendMigration.pref, DEFAULT_MODEL));
@@ -545,14 +546,16 @@ function Shell({ cs }) {
     }
   }, [attachmentStore]);
   const resetAttachmentDraftSession = React.useCallback((nextSessionId = null) => {
-    attachmentStore.releaseSession(chatSessionIdRef.current);
-    attachmentOperationsRef.current.clear();
+    const preserveDraft = preserveAttachmentDraftRef.current;
+    if (!preserveDraft) attachmentStore.releaseAll();
+    if (!preserveDraft) attachmentOperationsRef.current.clear();
     pendingTurnRef.current = null;
     acceptedTurnRef.current = null;
-    dispatchAttachmentDraft({ type: 'reset' });
+    if (!preserveDraft) dispatchAttachmentDraft({ type: 'reset' });
     if (nextSessionId) {
       chatSessionIdRef.current = nextSessionId;
       setChatSessionId(nextSessionId);
+      preserveAttachmentDraftRef.current = false;
     }
   }, [attachmentStore]);
   const addAttachment = React.useCallback(async ({ pondId, file }) => {
@@ -564,7 +567,6 @@ function Shell({ cs }) {
       const ref = await attachmentStore.prepare(file, { sessionId, pondId });
       if (
         attachmentOperationsRef.current.get(pondId) !== operation
-        || chatSessionIdRef.current !== sessionId
       ) {
         attachmentStore.release(ref.id);
         return;
@@ -574,7 +576,6 @@ function Shell({ cs }) {
     } catch (error) {
       if (
         attachmentOperationsRef.current.get(pondId) !== operation
-        || chatSessionIdRef.current !== sessionId
       ) return;
       attachmentOperationsRef.current.delete(pondId);
       dispatchAttachmentDraft({
@@ -696,8 +697,13 @@ function Shell({ cs }) {
     if (evt.type === 'thinking') setThinkingActive(!!evt.active);
     if (evt.type === 'turn-end' || evt.type === 'error') {
       if (pending && acceptedTurnRef.current === pending.turnId) {
-        releaseTurnAttachments(pending);
-        pendingTurnRef.current = null;
+        const failed = evt.type === 'error' && pending.attachments.length > 0;
+        dispatchAttachmentDraft({
+          type: 'settled', turnId: pending.turnId, dispatchState: evt.dispatchState,
+          ...(failed ? { error: { code: evt.code, message: evt.message } } : {}),
+        });
+        if (!failed) releaseTurnAttachments(pending);
+        if (!failed || evt.dispatchState === 'not-started') pendingTurnRef.current = null;
         acceptedTurnRef.current = null;
       }
       setChatStreaming(false);
@@ -1115,6 +1121,7 @@ function Shell({ cs }) {
       pendingSessionLoadRef.current = null;
     }
     if (!decision.reset) return;
+    preserveAttachmentDraftRef.current = !pendingTurnRef.current && !pendingSessionLoad;
     claudeBackend.reset();
     codexBackend.reset();
     openCodeBackend.reset();
@@ -1154,6 +1161,15 @@ function Shell({ cs }) {
     }
     pendingTurnRef.current = turn;
     acceptedTurnRef.current = null;
+    try {
+      attachmentStore.validate(turn.attachments);
+    } catch (error) {
+      handleChatEvent({
+        type: 'error', kind: 'attachment', code: error.code,
+        message: error.message, turnId: turn.turnId, dispatchState: 'not-started',
+      });
+      return;
+    }
     if (!activeBackend) {
       handleChatEvent({
         type: 'error',

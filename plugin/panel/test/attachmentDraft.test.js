@@ -203,3 +203,40 @@ test('attachmentDropFiles returns complete file drops and ignores text drops', (
     [],
   );
 });
+
+test('an accepted attachment failure restores files and preserves newly typed text', () => {
+  const ready = readyState();
+  let state = reduceAttachmentDraft(ready, { type: 'sending', turnId: 'failed' });
+  state = reduceAttachmentDraft(state, { type: 'accepted', turnId: 'failed' });
+  state = reduceAttachmentDraft(state, { type: 'text', value: 'corrected prompt' });
+  assert.equal(reduceAttachmentDraft(state, { type: 'settled', turnId: 'stale' }), state);
+  state = reduceAttachmentDraft(state, { type: 'settled', turnId: 'failed', dispatchState: 'not-started', error: { message: 'Provider rejected format' } });
+  assert.equal(state.text, 'corrected prompt');
+  assert.deepEqual(state.items, ready.items);
+  assert.equal(state.sendError.message, 'Provider rejected format');
+  assert.equal(draftCanSend(state), true);
+  assert.equal(state.acceptedDraft, null);
+});
+
+test('accepted attachment failures remain frozen unless execution was ruled out', () => {
+  for (const dispatchState of ['uncertain', undefined]) {
+    let state = reduceAttachmentDraft(readyState(), { type: 'sending', turnId: 'unknown' });
+    state = reduceAttachmentDraft(state, { type: 'accepted', turnId: 'unknown' });
+    state = reduceAttachmentDraft(state, { type: 'settled', turnId: 'unknown', dispatchState, error: { message: 'disconnected' } });
+    assert.equal(draftCanSend(state), false);
+    assert.equal(state.pendingTurnId, 'unknown');
+    assert.equal(state.dispatchState, 'uncertain');
+    assert.equal(state.pendingSnapshot.turnId, 'unknown');
+    assert.equal(state.items.length, 1);
+  }
+});
+
+test('successful completion clears the retained draft without overwriting the next prompt', () => {
+  let state = reduceAttachmentDraft(readyState(), { type: 'sending', turnId: 'ok' });
+  state = reduceAttachmentDraft(state, { type: 'accepted', turnId: 'ok' });
+  state = reduceAttachmentDraft(state, { type: 'text', value: 'next' });
+  state = reduceAttachmentDraft(state, { type: 'settled', turnId: 'ok' });
+  assert.equal(state.text, 'next');
+  assert.deepEqual(state.items, []);
+  assert.equal(state.acceptedDraft, null);
+});

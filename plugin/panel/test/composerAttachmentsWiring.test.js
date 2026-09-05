@@ -95,7 +95,7 @@ test('App owns the draft above Chat tab and disposes its attachment store', () =
   assert.ok(draftState >= 0 && draftState < conditionalChat);
   assert.match(app, /createAttachmentStore/);
   assert.match(app, /\(\) => attachmentStore\.dispose\(\)/);
-  assert.match(app, /attachmentStore\.releaseSession\(chatSessionIdRef\.current\)/);
+  assert.match(app, /if \(!preserveDraft\) attachmentStore\.releaseAll\(\)/);
 });
 
 test('App includes active attachment paths in exact log-export redaction', () => {
