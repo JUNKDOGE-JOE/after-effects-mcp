@@ -27942,6 +27942,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
       select: "\u9009\u62E9\u4E00\u4E2A\u6761\u76EE",
       selectCap: "\u5148\u4ECE\u5DE6\u4FA7\u9009\u62E9\uFF0C\u518D\u67E5\u770B\u8BE6\u60C5\u6216\u8FD0\u884C\u3002",
       args: "\u53C2\u6570\uFF08JSON\uFF09",
+      argsTab: "\u53C2\u6570",
+      cancel: "\u53D6\u6D88",
       run: "\u8FD0\u884C",
       render: "\u6E32\u67D3\u5E76\u590D\u5236",
       result: "\u7ED3\u679C",
@@ -27988,6 +27990,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
       select: "Select an item",
       selectCap: "Choose an item on the left to inspect or run it.",
       args: "Arguments (JSON)",
+      argsTab: "Args",
+      cancel: "Cancel",
       run: "Run",
       render: "Render & copy",
       result: "Result",
@@ -28117,7 +28121,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     );
   }
   function LibraryActionButtons({ artifact, t, onAction, disabled }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { display: "flex", gap: 5, flexWrap: "wrap" }, children: toolLibraryActions(artifact.status).map((action) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-library-actions", children: toolLibraryActions(artifact.status).map((action) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
       Button,
       {
         variant: action === "delete" ? "danger" : "secondary",
@@ -28135,16 +28139,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
       "div",
       {
         role: feedback.type === "error" ? "alert" : "status",
-        style: {
-          padding: "7px 8px",
-          border: "1px solid var(--border-subtle)",
-          borderRadius: "var(--radius-md)",
-          color: feedback.type === "error" ? "var(--error)" : "var(--text-secondary)",
-          font: "400 10px/1.45 var(--font-ui)",
-          overflowWrap: "anywhere"
-        },
+        className: "tools-feedback",
+        style: { color: feedback.type === "error" ? "var(--error)" : "var(--text-secondary)" },
         children: [
-          feedback.message,
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: feedback.message }),
           feedback.path ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", onClick: onCopy, children: t.copyPath }) : null
         ]
       }
@@ -28165,6 +28163,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const [feedback, setFeedback] = import_react42.default.useState(null);
     const [showImport, setShowImport] = import_react42.default.useState(false);
     const [importText, setImportText] = import_react42.default.useState("");
+    const [pane, setPane] = import_react42.default.useState("content");
     const loadSequence = import_react42.default.useRef(0);
     const selectSequence = import_react42.default.useRef(0);
     const fileInputRef = import_react42.default.useRef(null);
@@ -28216,6 +28215,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
       const timer = setTimeout(load, 120);
       return () => clearTimeout(timer);
     }, [load]);
+    import_react42.default.useEffect(() => {
+      if (result || error) setPane("result");
+    }, [result, error]);
     const changeMode = (next) => {
       setMode(next);
       setSelectedId("");
@@ -28230,6 +28232,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       setSelectedId(id);
       setResult(null);
       setError("");
+      setPane("content");
       try {
         const value = mode === "skills" ? item : (await api.inspect(item.id)).artifact;
         if (sequence !== selectSequence.current) return;
@@ -28258,6 +28261,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       } catch (cause) {
         setError(cause instanceof SyntaxError ? t.invalidArgs : cause.message || String(cause));
       } finally {
+        setPane("result");
         setBusy(false);
       }
     };
@@ -28341,17 +28345,16 @@ When you are done, remind me of two things: MCP tools load only in a new session
       }
     };
     const selected = detail && detail.value;
-    const selectedSchema = selected && (detail.mode === "skills" ? selected.args_schema : selected.argsSchema);
     const selectedContent = selected && (detail.mode === "skills" ? selected.template : selected.content);
     const canExecuteSkill = detail && detail.mode === "skills" && selected.template_type === "jsx";
     const canExecuteTool = detail && detail.mode === "tools" && !["candidate", "archived", "deprecated"].includes(selected.status);
     const groups = mode === "tools" ? groupToolLibraryItems(items) : [];
     return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-screen", children: [
       /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("header", { className: "tools-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-header__title", children: t.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-header__title", title: t.title, children: t.title }),
         /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-header__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", icon: "rotate-cw", onClick: load, disabled: busy, children: t.refresh }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", icon: "upload", onClick: () => setShowImport(!showImport), disabled: busy, children: t.import }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", onClick: load, disabled: busy, children: t.refresh }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", onClick: () => setShowImport(!showImport), disabled: busy, children: t.import }),
           /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "danger", onClick: clearCandidates, disabled: busy || !libraryRows.candidates.length, children: t.clearCandidates })
         ] })
       ] }),
@@ -28376,16 +28379,6 @@ When you are done, remind me of two things: MCP tools load only in a new session
           }
         )
       ] }),
-      showImport ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-import", style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.import }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.importHint }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Textarea, { mono: true, value: importText, onChange: setImportText, rows: 4 }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("input", { ref: fileInputRef, type: "file", accept: "application/json,.json", onChange: chooseFile, style: { display: "none" } }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", disabled: busy, onClick: () => fileInputRef.current && fileInputRef.current.click(), children: t.selectFile }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", disabled: busy || !importText.trim(), onClick: importArtifact, children: t.importJson })
-        ] })
-      ] }) : null,
       /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
         Feedback,
         {
@@ -28397,11 +28390,57 @@ When you are done, remind me of two things: MCP tools load only in a new session
           )
         }
       ),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-error", role: "alert", children: error }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-split", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-list", "aria-label": mode === "skills" ? t.skills : t.tools, children: mode === "tools" && groups.length ? groups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { margin: "4px 2px 2px", color: "var(--text-tertiary)", font: "600 10px/1.35 var(--font-ui)", textTransform: "uppercase" }, children: statusLabel(t, group.status) }),
-          group.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
+      error && !selected ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-error", role: "alert", children: error }) : null,
+      showImport ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-import-view", "aria-label": t.import, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-text-area", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("p", { children: t.importHint }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("label", { children: [
+            t.importJson,
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Textarea, { mono: true, value: importText, onChange: setImportText, rows: 4 })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("input", { ref: fileInputRef, type: "file", accept: "application/json,.json", onChange: chooseFile, style: { display: "none" } }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", disabled: busy, onClick: () => fileInputRef.current && fileInputRef.current.click(), children: t.selectFile }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", disabled: busy || !importText.trim(), onClick: importArtifact, children: t.importJson }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", disabled: busy, onClick: () => setShowImport(false), children: t.cancel })
+        ] })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(
+          "select",
+          {
+            className: "tools-selector ds-focusable",
+            "aria-label": t.select,
+            value: selectedId,
+            onChange: (event) => {
+              const item = items.find((entry2) => itemId(mode, entry2) === event.target.value);
+              if (item) select(item);
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("option", { value: "", disabled: true, children: t.select }),
+              selectedId && !items.some((item) => itemId(mode, item) === selectedId) ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("option", { value: selectedId, children: (selected == null ? void 0 : selected.name) || selectedId }) : null,
+              items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("option", { value: itemId(mode, item), children: [
+                mode === "tools" ? statusLabel(t, item.status) + " \xB7 " : "",
+                item.name || item.id
+              ] }, itemId(mode, item)))
+            ]
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-split", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-list", "aria-label": mode === "skills" ? t.skills : t.tools, children: mode === "tools" && groups.length ? groups.map((group) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { style: { margin: "4px 2px 2px", color: "var(--text-tertiary)", font: "600 10px/1.35 var(--font-ui)", textTransform: "uppercase" }, children: statusLabel(t, group.status) }),
+            group.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
+              ItemRow,
+              {
+                mode,
+                item,
+                selected: itemId(mode, item) === selectedId,
+                onSelect: select,
+                t
+              },
+              itemId(mode, item)
+            ))
+          ] }, group.status)) : mode === "skills" && items.length ? items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
             ItemRow,
             {
               mode,
@@ -28411,56 +28450,47 @@ When you are done, remind me of two things: MCP tools load only in a new session
               t
             },
             itemId(mode, item)
-          ))
-        ] }, group.status)) : mode === "skills" && items.length ? items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
-          ItemRow,
-          {
-            mode,
-            item,
-            selected: itemId(mode, item) === selectedId,
-            onSelect: select,
-            t
-          },
-          itemId(mode, item)
-        )) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.empty, compact: true }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-detail", children: !selected ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-detail__heading", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h2", { children: selected.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("p", { children: selected.description })
+          )) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.empty, compact: true }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-detail", children: !selected ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-detail__heading", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h2", { title: selected.name, children: selected.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: detail.mode === "tools" ? statusBadgeStatus(selected.status) : selected.verified ? "ok" : "neutral", children: detail.mode === "tools" ? statusLabel(t, selected.status) : selected.verified ? t.signed : t.prompt })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: detail.mode === "tools" ? statusBadgeStatus(selected.status) : selected.verified ? "ok" : "neutral", children: detail.mode === "tools" ? statusLabel(t, selected.status) : selected.verified ? t.signed : t.prompt })
-          ] }),
-          detail.mode === "tools" && toolLibraryActions(selected.status).length ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.status }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(LibraryActionButtons, { artifact: selected, t, onAction: runLibraryAction, disabled: busy })
-          ] }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.content }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: selectedContent || "\u2014" })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.args }),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
-              Textarea,
-              {
-                mono: true,
-                value: argsText,
-                onChange: setArgsText,
-                rows: Math.max(4, Object.keys((selectedSchema == null ? void 0 : selectedSchema.properties) || {}).length + 2),
-                disabled: detail.mode === "tools" && !canExecuteTool
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-runner__actions", children: [
-              detail.mode === "skills" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", onClick: () => invoke("render"), disabled: busy, children: t.render }) : null,
-              canExecuteTool || canExecuteSkill ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", onClick: () => invoke("execute"), disabled: busy, children: t.run }) : null
-            ] }),
-            result ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.result }),
-              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: JSON.stringify(result, null, 2) })
-            ] }) : null
-          ] })
-        ] }) })
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-detail__tabs", children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Segmented, { value: pane, onChange: setPane, options: [
+              { value: "content", label: t.content },
+              { value: "args", label: t.argsTab },
+              { value: "result", label: t.result }
+            ] }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-text-area", "aria-label": t[pane], children: pane === "content" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: selected.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("p", { children: selected.description }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: selectedContent || "\u2014" })
+            ] }) : pane === "args" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("label", { className: "tools-args", children: [
+              t.args,
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
+                Textarea,
+                {
+                  mono: true,
+                  value: argsText,
+                  onChange: setArgsText,
+                  rows: 4,
+                  style: { flex: 1, minHeight: 0, resize: "none" },
+                  disabled: detail.mode === "tools" && !canExecuteTool
+                }
+              )
+            ] }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+              error ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-result-error", role: "alert", children: error }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: result ? JSON.stringify(result, null, 2) : "\u2014" })
+            ] }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("footer", { className: "tools-detail__actions", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-runner__actions", children: [
+                detail.mode === "skills" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: () => invoke("render"), disabled: busy, children: t.render }) : null,
+                canExecuteTool || canExecuteSkill ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "primary", onClick: () => invoke("execute"), disabled: busy, children: t.run }) : null
+              ] }),
+              detail.mode === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(LibraryActionButtons, { artifact: selected, t, onAction: runLibraryAction, disabled: busy }) : null
+            ] })
+          ] }) })
+        ] })
       ] })
     ] });
   }

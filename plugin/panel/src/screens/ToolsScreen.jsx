@@ -28,6 +28,8 @@ const TEXT = {
     select: '选择一个条目',
     selectCap: '先从左侧选择，再查看详情或运行。',
     args: '参数（JSON）',
+    argsTab: '参数',
+    cancel: '取消',
     run: '运行',
     render: '渲染并复制',
     result: '结果',
@@ -74,6 +76,8 @@ const TEXT = {
     select: 'Select an item',
     selectCap: 'Choose an item on the left to inspect or run it.',
     args: 'Arguments (JSON)',
+    argsTab: 'Args',
+    cancel: 'Cancel',
     run: 'Run',
     render: 'Render & copy',
     result: 'Result',
@@ -208,7 +212,7 @@ function ItemRow({ mode, item, selected, onSelect, t }) {
 
 function LibraryActionButtons({ artifact, t, onAction, disabled }) {
   return (
-    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+    <div className="tools-library-actions">
       {toolLibraryActions(artifact.status).map((action) => (
         <Button
           key={action}
@@ -229,16 +233,10 @@ function Feedback({ feedback, t, onCopy }) {
   return (
     <div
       role={feedback.type === 'error' ? 'alert' : 'status'}
-      style={{
-        padding: '7px 8px',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-md)',
-        color: feedback.type === 'error' ? 'var(--error)' : 'var(--text-secondary)',
-        font: '400 10px/1.45 var(--font-ui)',
-        overflowWrap: 'anywhere',
-      }}
+      className="tools-feedback"
+      style={{ color: feedback.type === 'error' ? 'var(--error)' : 'var(--text-secondary)' }}
     >
-      {feedback.message}
+      <span>{feedback.message}</span>
       {feedback.path ? (
         <Button size="sm" variant="ghost" onClick={onCopy}>{t.copyPath}</Button>
       ) : null}
@@ -261,6 +259,7 @@ export function ToolsScreen({ api, lang = 'zh', port = 11488 }) {
   const [feedback, setFeedback] = React.useState(null);
   const [showImport, setShowImport] = React.useState(false);
   const [importText, setImportText] = React.useState('');
+  const [pane, setPane] = React.useState('content');
   const loadSequence = React.useRef(0);
   const selectSequence = React.useRef(0);
   const fileInputRef = React.useRef(null);
@@ -322,6 +321,10 @@ export function ToolsScreen({ api, lang = 'zh', port = 11488 }) {
     return () => clearTimeout(timer);
   }, [load]);
 
+  React.useEffect(() => {
+    if (result || error) setPane('result');
+  }, [result, error]);
+
   const changeMode = (next) => {
     setMode(next);
     setSelectedId('');
@@ -337,6 +340,7 @@ export function ToolsScreen({ api, lang = 'zh', port = 11488 }) {
     setSelectedId(id);
     setResult(null);
     setError('');
+    setPane('content');
     try {
       const value = mode === 'skills'
         ? item
@@ -370,6 +374,7 @@ export function ToolsScreen({ api, lang = 'zh', port = 11488 }) {
     } catch (cause) {
       setError(cause instanceof SyntaxError ? t.invalidArgs : cause.message || String(cause));
     } finally {
+      setPane('result');
       setBusy(false);
     }
   };
@@ -458,9 +463,6 @@ export function ToolsScreen({ api, lang = 'zh', port = 11488 }) {
   };
 
   const selected = detail && detail.value;
-  const selectedSchema = selected && (detail.mode === 'skills'
-    ? selected.args_schema
-    : selected.argsSchema);
   const selectedContent = selected && (detail.mode === 'skills'
     ? selected.template
     : selected.content);
@@ -473,12 +475,12 @@ export function ToolsScreen({ api, lang = 'zh', port = 11488 }) {
   return (
     <div className="tools-screen">
       <header className="tools-header">
-        <div className="tools-header__title">{t.title}</div>
+        <div className="tools-header__title" title={t.title}>{t.title}</div>
         <div className="tools-header__actions">
-          <Button size="sm" variant="ghost" icon="rotate-cw" onClick={load} disabled={busy}>
+          <Button size="sm" variant="ghost" onClick={load} disabled={busy}>
             {t.refresh}
           </Button>
-          <Button size="sm" variant="ghost" icon="upload" onClick={() => setShowImport(!showImport)} disabled={busy}>
+          <Button size="sm" variant="ghost" onClick={() => setShowImport(!showImport)} disabled={busy}>
             {t.import}
           </Button>
           <Button size="sm" variant="danger" onClick={clearCandidates} disabled={busy || !libraryRows.candidates.length}>
@@ -501,18 +503,6 @@ export function ToolsScreen({ api, lang = 'zh', port = 11488 }) {
           placeholder={mode === 'skills' ? t.searchSkills : t.searchTools}
         />
       </div>
-      {showImport ? (
-        <section className="tools-import" style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-          <div style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)' }}>{t.import}</div>
-          <div style={{ font: '400 10px/1.4 var(--font-ui)', color: 'var(--text-tertiary)' }}>{t.importHint}</div>
-          <Textarea mono value={importText} onChange={setImportText} rows={4} />
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={chooseFile} style={{ display: 'none' }} />
-            <Button size="sm" variant="secondary" disabled={busy} onClick={() => fileInputRef.current && fileInputRef.current.click()}>{t.selectFile}</Button>
-            <Button size="sm" variant="secondary" disabled={busy || !importText.trim()} onClick={importArtifact}>{t.importJson}</Button>
-          </div>
-        </section>
-      ) : null}
       <Feedback
         feedback={feedback}
         t={t}
@@ -521,15 +511,49 @@ export function ToolsScreen({ api, lang = 'zh', port = 11488 }) {
           (cause) => setFeedback({ type: 'error', message: cause.message || String(cause) }),
         )}
       />
-      {error ? <div className="tools-error" role="alert">{error}</div> : null}
-      <div className="tools-split">
-        <section className="tools-list" aria-label={mode === 'skills' ? t.skills : t.tools}>
-          {mode === 'tools' && groups.length ? groups.map((group) => (
-            <React.Fragment key={group.status}>
-              <div style={{ margin: '4px 2px 2px', color: 'var(--text-tertiary)', font: '600 10px/1.35 var(--font-ui)', textTransform: 'uppercase' }}>
-                {statusLabel(t, group.status)}
-              </div>
-              {group.items.map((item) => (
+      {error && !selected ? <div className="tools-error" role="alert">{error}</div> : null}
+      {showImport ? (
+        <section className="tools-import-view" aria-label={t.import}>
+          <div className="tools-text-area">
+            <p>{t.importHint}</p>
+            <label>{t.importJson}
+              <Textarea mono value={importText} onChange={setImportText} rows={4} />
+            </label>
+          </div>
+          <div className="tools-import__actions">
+            <input ref={fileInputRef} type="file" accept="application/json,.json" onChange={chooseFile} style={{ display: 'none' }} />
+            <Button size="sm" disabled={busy} onClick={() => fileInputRef.current && fileInputRef.current.click()}>{t.selectFile}</Button>
+            <Button size="sm" disabled={busy || !importText.trim()} onClick={importArtifact}>{t.importJson}</Button>
+            <Button size="sm" disabled={busy} onClick={() => setShowImport(false)}>{t.cancel}</Button>
+          </div>
+        </section>
+      ) : (
+        <React.Fragment>
+          <select className="tools-selector ds-focusable" aria-label={t.select} value={selectedId}
+            onChange={(event) => { const item = items.find((entry) => itemId(mode, entry) === event.target.value); if (item) select(item); }}>
+            <option value="" disabled>{t.select}</option>
+            {selectedId && !items.some((item) => itemId(mode, item) === selectedId) ? <option value={selectedId}>{selected?.name || selectedId}</option> : null}
+            {items.map((item) => <option key={itemId(mode, item)} value={itemId(mode, item)}>{mode === 'tools' ? statusLabel(t, item.status) + ' · ' : ''}{item.name || item.id}</option>)}
+          </select>
+          <div className="tools-split">
+            <section className="tools-list" aria-label={mode === 'skills' ? t.skills : t.tools}>
+              {mode === 'tools' && groups.length ? groups.map((group) => (
+                <React.Fragment key={group.status}>
+                  <div style={{ margin: '4px 2px 2px', color: 'var(--text-tertiary)', font: '600 10px/1.35 var(--font-ui)', textTransform: 'uppercase' }}>
+                    {statusLabel(t, group.status)}
+                  </div>
+                  {group.items.map((item) => (
+                    <ItemRow
+                      key={itemId(mode, item)}
+                      mode={mode}
+                      item={item}
+                      selected={itemId(mode, item) === selectedId}
+                      onSelect={select}
+                      t={t}
+                    />
+                  ))}
+                </React.Fragment>
+              )) : mode === 'skills' && items.length ? items.map((item) => (
                 <ItemRow
                   key={itemId(mode, item)}
                   mode={mode}
@@ -538,75 +562,61 @@ export function ToolsScreen({ api, lang = 'zh', port = 11488 }) {
                   onSelect={select}
                   t={t}
                 />
-              ))}
-            </React.Fragment>
-          )) : mode === 'skills' && items.length ? items.map((item) => (
-            <ItemRow
-              key={itemId(mode, item)}
-              mode={mode}
-              item={item}
-              selected={itemId(mode, item) === selectedId}
-              onSelect={select}
-              t={t}
-            />
-          )) : <EmptyState icon="box" title={t.empty} compact />}
-        </section>
-        <section className="tools-detail">
-          {!selected ? (
-            <EmptyState icon="box" title={t.select} caption={t.selectCap} />
-          ) : (
-            <React.Fragment>
-              <div className="tools-detail__heading">
-                <div>
-                  <h2>{selected.name}</h2>
-                  <p>{selected.description}</p>
-                </div>
-                <Badge status={detail.mode === 'tools' ? statusBadgeStatus(selected.status) : selected.verified ? 'ok' : 'neutral'}>
-                  {detail.mode === 'tools' ? statusLabel(t, selected.status) : selected.verified ? t.signed : t.prompt}
-                </Badge>
-              </div>
-              {detail.mode === 'tools' && toolLibraryActions(selected.status).length ? (
-                <section className="tools-detail__section">
-                  <h3>{t.status}</h3>
-                  <LibraryActionButtons artifact={selected} t={t} onAction={runLibraryAction} disabled={busy} />
-                </section>
-              ) : null}
-              <section className="tools-detail__section">
-                <h3>{t.content}</h3>
-                <pre className="tools-content">{selectedContent || '—'}</pre>
-              </section>
-              <section className="tools-detail__section tools-runner">
-                <h3>{t.args}</h3>
-                <Textarea
-                  mono
-                  value={argsText}
-                  onChange={setArgsText}
-                  rows={Math.max(4, Object.keys(selectedSchema?.properties || {}).length + 2)}
-                  disabled={detail.mode === 'tools' && !canExecuteTool}
-                />
-                <div className="tools-runner__actions">
-                  {detail.mode === 'skills' ? (
-                    <Button variant="secondary" onClick={() => invoke('render')} disabled={busy}>
-                      {t.render}
-                    </Button>
-                  ) : null}
-                  {canExecuteTool || canExecuteSkill ? (
-                    <Button variant="primary" onClick={() => invoke('execute')} disabled={busy}>
-                      {t.run}
-                    </Button>
-                  ) : null}
-                </div>
-                {result ? (
-                  <React.Fragment>
-                    <h3>{t.result}</h3>
-                    <pre className="tools-content">{JSON.stringify(result, null, 2)}</pre>
-                  </React.Fragment>
-                ) : null}
-              </section>
-            </React.Fragment>
-          )}
-        </section>
-      </div>
+              )) : <EmptyState icon="box" title={t.empty} compact />}
+            </section>
+            <section className="tools-detail">
+              {!selected ? (
+                <EmptyState icon="box" title={t.select} caption={t.selectCap} />
+              ) : (
+                <React.Fragment>
+                  <div className="tools-detail__heading">
+                    <h2 title={selected.name}>{selected.name}</h2>
+                    <Badge status={detail.mode === 'tools' ? statusBadgeStatus(selected.status) : selected.verified ? 'ok' : 'neutral'}>
+                      {detail.mode === 'tools' ? statusLabel(t, selected.status) : selected.verified ? t.signed : t.prompt}
+                    </Badge>
+                  </div>
+                  <div className="tools-detail__tabs">
+                    <Segmented value={pane} onChange={setPane} options={[
+                      { value: 'content', label: t.content },
+                      { value: 'args', label: t.argsTab },
+                      { value: 'result', label: t.result },
+                    ]} />
+                  </div>
+                  <section className="tools-text-area" aria-label={t[pane]}>
+                    {pane === 'content' ? <React.Fragment>
+                      <h3>{selected.name}</h3>
+                      <p>{selected.description}</p>
+                      <pre className="tools-content">{selectedContent || '—'}</pre>
+                    </React.Fragment> : pane === 'args' ? <label className="tools-args">{t.args}
+                      <Textarea mono value={argsText} onChange={setArgsText} rows={4}
+                        style={{ flex: 1, minHeight: 0, resize: 'none' }}
+                        disabled={detail.mode === 'tools' && !canExecuteTool} />
+                    </label> : <React.Fragment>
+                      {error ? <div className="tools-result-error" role="alert">{error}</div> : null}
+                      <pre className="tools-content">{result ? JSON.stringify(result, null, 2) : '—'}</pre>
+                    </React.Fragment>}
+                  </section>
+                  <footer className="tools-detail__actions">
+                    <div className="tools-runner__actions">
+                      {detail.mode === 'skills' ? (
+                        <Button size="sm" variant="secondary" onClick={() => invoke('render')} disabled={busy}>
+                          {t.render}
+                        </Button>
+                      ) : null}
+                      {canExecuteTool || canExecuteSkill ? (
+                        <Button size="sm" variant="primary" onClick={() => invoke('execute')} disabled={busy}>
+                          {t.run}
+                        </Button>
+                      ) : null}
+                    </div>
+                    {detail.mode === 'tools' ? <LibraryActionButtons artifact={selected} t={t} onAction={runLibraryAction} disabled={busy} /> : null}
+                  </footer>
+                </React.Fragment>
+              )}
+            </section>
+          </div>
+        </React.Fragment>
+      )}
     </div>
   );
 }
