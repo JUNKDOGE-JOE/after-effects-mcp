@@ -786,6 +786,7 @@ function Shell({ cs }) {
   const activeBackendInstanceRef = React.useRef(activeBackend);
   activeBackendInstanceRef.current = activeBackend;
   const pendingSessionLoadRef = React.useRef(null);
+  const backendResetPromiseRef = React.useRef(null);
   const [sessionSnapshot, setSessionSnapshot] = React.useState({ sessions: [], activeId: null });
   const sessionController = React.useMemo(() => createSessionController({
     store: sessionStore,
@@ -1098,17 +1099,6 @@ function Shell({ cs }) {
   }, [backendPref, openCodeProbe, openCodeProbeAttempt]);
 
   React.useEffect(() => {
-    if (backendPref !== 'opencode') return undefined;
-    // Two boot races (both seen live): the host controller effect runs after
-    // this one on mount (probing before status turns ok fails host-not-running),
-    // and the provider registry loads async (probing before it is ready makes
-    // writeConfig inject an empty provider table, so every send dies with
-    // ProviderModelNotFoundError). Gate on both; readiness re-fires the probe.
-    if (status.state !== 'ok' || providerInit.state !== 'ready') return undefined;
-    return runOpenCodeProbe();
-  }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
-
-  React.useEffect(() => {
     const pendingSessionLoad = pendingSessionLoadRef.current;
     const decision = decideBackendReset({
       lastReal: lastRealBackendRef.current,
@@ -1134,7 +1124,7 @@ function Shell({ cs }) {
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
-    void sessionController.createSession();
+    backendResetPromiseRef.current = sessionController.createSession();
   }, [
     effective.backend,
     backendPref,
@@ -1144,6 +1134,24 @@ function Shell({ cs }) {
     resetAttachmentDraftSession,
     sessionController,
   ]);
+
+  React.useEffect(() => {
+    if (backendPref !== 'opencode') return undefined;
+    if (status.state !== 'ok' || providerInit.state !== 'ready') return undefined;
+    let alive = true;
+    let disposeProbe;
+    // Session creation also resets the backend asynchronously. Probe only
+    // after that reset and only while this selected channel is still current.
+    Promise.resolve(backendResetPromiseRef.current).then(() => {
+      if (alive) disposeProbe = runOpenCodeProbe();
+    }).catch((error) => {
+      if (alive) setOpenCodeProbe({ loggedIn: false, detail: error?.message || String(error) });
+    });
+    return () => {
+      alive = false;
+      disposeProbe?.();
+    };
+  }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
 
   const sendChat = (input) => {
     if (pendingTurnRef.current || catalogEmpty) return;

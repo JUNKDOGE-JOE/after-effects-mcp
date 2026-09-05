@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createSessionController } from '../src/lib/sessionController.js';
+import { decideBackendReset } from '../src/lib/backendResetDecision.js';
 import {
   createOpenCodeBackend,
   OPEN_CODE_DISABLED_BUILTIN_TOOL_NAMES,
@@ -283,6 +286,61 @@ function makeBackend(options = {}) {
   });
   return { backend, events, spawned, fetched, fsImpl, terminated };
 }
+
+test('App channel effects wait for session reset before probing and cancel a departed channel', async () => {
+  const app = readFileSync(new URL('../src/app/App.jsx', import.meta.url), 'utf8');
+  const start = app.indexOf('  React.useEffect(() => {', app.indexOf('}, [backendPref, openCodeProbe, openCodeProbeAttempt]);'));
+  const effectsSource = app.slice(start, app.indexOf('  const sendChat =', start));
+  assert.ok(start > 0 && effectsSource.includes('decideBackendReset'));
+  for (const leaveChannel of [false, true]) {
+    const h = makeBackend();
+    let backend = 'subscription';
+    let nextId = 0;
+    let probePromise;
+    const sessionController = createSessionController({
+      store: { loadIndex: () => null, saveIndex() {}, saveTranscript() {} },
+      uuid: () => String(++nextId),
+      deps: {
+        currentBackend: () => backend, currentChannel: () => 'provider', currentModel: () => 'hy3-free',
+        stopActiveTurn: () => h.backend.stop(), resetActiveBackend: () => h.backend.reset(),
+      },
+    });
+    await sessionController.boot();
+    backend = 'opencode';
+    const effects = [];
+    const noop = () => {};
+    const scope = {
+      React: { useEffect: (effect) => effects.push(effect) }, decideBackendReset,
+      pendingSessionLoadRef: { current: null }, lastRealBackendRef: { current: 'subscription' },
+      backendResetPromiseRef: { current: null }, preserveAttachmentDraftRef: { current: false },
+      pendingTurnRef: { current: null }, effective: { backend }, backendPref: backend,
+      claudeBackend: { reset: noop }, codexBackend: { reset: noop }, openCodeBackend: h.backend,
+      resetAttachmentDraftSession: noop, setChatStreaming: noop, setThinkingActive: noop,
+      setTurnStage: noop, setTurnProgress: noop, setSessionModel: noop, setSessionEffort: noop,
+      setSessionFast: noop, sessionController, status: { state: 'ok' }, providerInit: { state: 'ready' },
+      setOpenCodeProbe: noop,
+      runOpenCodeProbe: () => { probePromise = h.backend.probeAccount(); return noop; },
+    };
+    const cleanups = [];
+    try {
+      Function(...Object.keys(scope), effectsSource)(...Object.values(scope));
+      for (const effect of effects) cleanups.push(effect());
+      if (leaveChannel) for (const cleanup of cleanups) cleanup?.();
+      await scope.backendResetPromiseRef.current;
+      await flush();
+      if (leaveChannel) assert.equal(probePromise, undefined);
+      else {
+        assert.ok(probePromise);
+        assert.equal((await probePromise).loggedIn, true);
+        assert.equal(h.spawned.procs.at(-1).killed, false);
+      }
+      assert.equal(h.fetched.calls.some((call) => call.path.endsWith('/message')), false);
+    } finally {
+      for (const cleanup of cleanups) cleanup?.();
+      h.backend.reset();
+    }
+  }
+});
 
 function makeSweepFs(marker, removeImpl) {
   const files = new Map([

@@ -14,6 +14,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [0.10.7] — 2026-09-05
 
+- 切回 OpenCode 时等待会话重置完成后再自动探测，避免启动被自身重置取消而要求手动重新检测。
 - 修复 Windows CEP 文件 URL 路径识别，确保自动选择包内 OpenCode；预览大图打开时接收 Escape，关闭后释放按键。
 - OpenCode 明确拒绝附件格式后，修改草稿重试会保留失败消息之前的对话，排除已拒绝附件，并继续使用所选模型；无法核实恢复时停止发送，保留原历史和草稿。
 
@@ -399,6 +400,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ### [0.10.7] — 2026-09-05
 
+- Returning to OpenCode waits for the session reset before probing, so the reset cannot cancel startup and require a manual recheck.
 - Normalize Windows CEP file URLs so the bundled OpenCode is discovered automatically. Enlarged previews receive Escape while open and release the key when closed.
 - After an explicit OpenCode media-format rejection, a user-edited retry preserves the preceding conversation, excludes the rejected attachments, and uses the selected model. Unverified recovery stops the send and retains history and draft.
 
