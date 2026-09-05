@@ -20613,7 +20613,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.10.6",
+    version: "0.10.7",
     private: true,
     type: "module",
     scripts: {
@@ -29135,7 +29135,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   // src/cep/mcpClient.js
   init_cep_runtime_inject();
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.10.6";
+  var PANEL_VERSION = "0.10.7";
   function defaultFetch() {
     if (globalThis.window && globalThis.window.fetch) {
       return globalThis.window.fetch.bind(globalThis.window);
