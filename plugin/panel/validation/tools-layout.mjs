@@ -20,6 +20,7 @@ const fixture = await build({
     import { ToolsScreen } from './src/screens/ToolsScreen.jsx';
     import { StatusBar } from './src/components/shell/StatusBar.jsx';
     import { TabBar } from './src/components/shell/TabBar.jsx';
+    import { PanelUpdateBanner } from './src/components/shell/PanelUpdate.jsx';
     const root = createRoot(document.getElementById('root'));
     window.reset = (lang, kind, status, notice) => {
       const long = 'VeryLongName超长名称'.repeat(120);
@@ -32,7 +33,8 @@ const fixture = await build({
         inspect:async()=>({artifact:window.item}),listSkills:async()=>({skills:[window.item]}),
         executeTool:async()=>output(),executeSkill:async()=>output(),renderSkill:async()=>output()};
       root.render(<React.Fragment key={Math.random()}>
-        <StatusBar label="Connected"/><div style={{height:notice,flex:'none'}}>Notice 提示</div>
+        <StatusBar label="Connected"/>{notice ? <PanelUpdateBanner lang={lang}
+          update={{current:'0.10.6',latest:'v0.11.0'}} onOpen={()=>{window.releaseOpened=true;}} onDismiss={()=>{window.releaseDismissed=true;}}/> : null}
         <ToolsScreen api={api} lang={lang}/>
         <TabBar active="tools" tabs={['chat','activity','tools','settings'].map(id=>({id,label:id,icon:'box'}))}/>
       </React.Fragment>);
@@ -93,6 +95,9 @@ try {
       else await page.locator('[data-item-id]').first().click();
       await page.locator('.tools-detail__heading').waitFor({state:'attached'});
       await scrollCheck(label+' content');
+      await page.locator('.panel-update-banner button').first().click();
+      await page.locator('.panel-update-banner button').last().click();
+      assert.equal(await page.evaluate(()=>window.releaseOpened && window.releaseDismissed), true);
       await page.getByRole('radio',{name:lang==='zh'?'参数':'Args',exact:true}).click();
       await scrollCheck(label+' args','.tools-args textarea');
       const actions = await page.locator('.tools-detail__actions button').allTextContents();

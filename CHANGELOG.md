@@ -12,6 +12,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [未发布]
 
+- 面板启动时异步检查 GitHub 稳定 Release，成功结果缓存 24 小时；新版横幅可按版本关闭，“设置 → 关于”可手动检查及打开对应 Release。断网、超时、限流和无法比较的版本显示未知；不下载、安装或重启。
 - Codex 模型目录支持有界分页，并尊重隐藏状态；实际目录包含 GPT-6 Astra 时，新用户默认优先 Astra，推理强度与 Fast 使用 CLI 返回能力。保留每通道显式偏好及 OpenCode 自定义模型；目录失败、旧 CLI 和账号/路由未提供 Astra 分别提示。
 - 设置页显示所选 CLI 的真实路径、当前版和官方稳定版，提供匹配安装来源的可关闭更新提示。重新检测刷新版本与目录，聊天期间禁用重检；不自动安装或升级 CLI，已有进程继续服务当前会话。内置 OpenCode 需使用明确附带新版 runtime 的面板 Release。
 - 移除设置中的“AE 专家防错指导”开关及无效的外部环境变量配置入口。宿主默认防错指引与内置 Skill 保留，旧开关偏好不再影响新建面板会话。
@@ -387,6 +388,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ### [Unreleased]
 
+- The panel asynchronously checks stable GitHub releases on startup and caches successful results for 24 hours. Dismiss a version's fixed banner, or manually check and open its release under Settings → About. Offline, timeout, rate-limit and unrecognized versions remain unknown; nothing is downloaded, installed or restarted.
 - Codex discovers all bounded model-list pages and respects hidden entries. When its live catalog includes GPT-6 Astra, new users prefer Astra with the CLI's reasoning and Fast capabilities. Saved channel preferences and custom OpenCode models remain intact; catalog failures, old CLIs and account/route limitations have distinct messages.
 - Settings show the selected CLI path, installed version and official stable version, with dismissible guidance for its installation source. Recheck refreshes versions and catalogs and is disabled during chat. No CLI is installed or upgraded automatically; running sessions keep their existing process. Bundled OpenCode requires a panel release explicitly containing a newer runtime.
 - Removed the expert-guidance switch from Settings and the ineffective external environment toggle. Default host guardrails and bundled skills remain available; the old panel preference no longer affects new panel conversations.
