@@ -668,7 +668,10 @@ test('OpenCode sends a blank-MIME image as an image file part', async () => {
 });
 
 test('only a media adapter rejection before model or tool activity permits a retry', async () => {
-  for (const startedTool of [false, 'running', 'completed']) {
+  for (const [startedTool, mediaPrefix] of [
+    [false, 'file part media type '], [false, 'media type: '],
+    ['running', 'file part media type '], ['completed', 'file part media type '],
+  ]) {
     const h = makeBackend({ getLang: () => 'en' });
     try {
       const pending = h.backend.sendUser({ turnId: 'media-error', text: 'inspect', attachments: [
@@ -678,14 +681,19 @@ test('only a media adapter rejection before model or tool activity permits a ret
       if (startedTool) h.fetched.sse.push({ type: 'message.part.updated', properties: { sessionID: 'session_1', part: {
         type: 'tool', id: 'write', callID: 'write', tool: 'ae_ae_exec', state: { status: startedTool, input: {} },
       } } });
+      if (!startedTool) h.spawned.procs[0].pushStderr('INFO run=b7d9d439 local media adapter failed\n');
       h.fetched.sse.push({ type: 'session.error', properties: { sessionID: 'session_1', error: {
-        name: 'UnknownError', data: { message: "'file part media type video/mp4' functionality not supported." },
+        name: 'UnknownError', data: { message: `'${mediaPrefix}video/mp4' functionality not supported.` },
       } } });
       await pending;
       const error = h.events.findLast(event => event.type === 'error');
       assert.equal(error.dispatchState, startedTool ? undefined : 'not-started');
       assert.equal(error.code, startedTool ? 'UPSTREAM_ERROR' : 'ATTACHMENT_TRANSPORT_UNSUPPORTED');
-      if (!startedTool) assert.match(error.message, /channel limitation/);
+      if (!startedTool) {
+        assert.match(error.message, /channel limitation/);
+        assert.equal(Object.hasOwn(error.detail, 'httpStatus'), false);
+        assert.match(error.detail.stderrTail, /run=b7d9d439/);
+      }
       assert.match(error.detail.upstreamMessage, /video\/mp4/);
     } finally { h.backend.reset(); }
   }

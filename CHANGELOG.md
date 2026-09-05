@@ -12,7 +12,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [未发布]
 
-- 修复 OpenCode 自定义模型因缺少输入模态元数据而误报不支持附件的问题；补全文件 MIME 回退，并区分通道格式限制与模型能力。切换通道保留未发送附件，失败后恢复草稿；结果不确定时保留防重发保护。
+- 修复 OpenCode 自定义模型因缺少输入模态元数据而误报不支持附件的问题；补全文件 MIME 回退，并区分通道格式限制与模型能力。切换通道保留未发送附件，失败后恢复草稿；结果不确定时保留防重发保护。Codex CLI 在接受回合前明确拒绝音频格式时，提示通道限制并保留可修改草稿；OpenCode 本地媒体拒绝不再附带从日志误判的 HTTP 状态。
 - Codex 模型目录支持有界分页，并尊重隐藏状态；实际目录包含 GPT-6 Astra 时，新用户默认优先 Astra，推理强度与 Fast 使用 CLI 返回能力。保留每通道显式偏好及 OpenCode 自定义模型；目录失败、旧 CLI 和账号/路由未提供 Astra 分别提示。
 - 设置页显示所选 CLI 的真实路径、当前版和官方稳定版，提供匹配安装来源的可关闭更新提示。重新检测刷新版本与目录，聊天期间禁用重检；不自动安装或升级 CLI，已有进程继续服务当前会话。内置 OpenCode 需使用明确附带新版 runtime 的面板 Release。
 - 移除设置中的“AE 专家防错指导”开关及无效的外部环境变量配置入口。宿主默认防错指引与内置 Skill 保留，旧开关偏好不再影响新建面板会话。
@@ -388,7 +388,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ### [Unreleased]
 
-- Fixed false unsupported-attachment errors caused by missing input-modality metadata for custom OpenCode models. Added filename-based MIME fallback and distinct channel-format errors. Unsent attachments survive channel switches, and failed turns restore their drafts while uncertain outcomes retain duplicate-send protection.
+- Fixed false unsupported-attachment errors caused by missing input-modality metadata for custom OpenCode models. Added filename-based MIME fallback and distinct channel-format errors. Unsent attachments survive channel switches, and failed turns restore their drafts while uncertain outcomes retain duplicate-send protection. Codex CLI audio schema rejections before turn acceptance now explain the channel limitation and retain an editable draft; local OpenCode media rejections no longer show HTTP statuses misread from logs.
 - Codex discovers all bounded model-list pages and respects hidden entries. When its live catalog includes GPT-6 Astra, new users prefer Astra with the CLI's reasoning and Fast capabilities. Saved channel preferences and custom OpenCode models remain intact; catalog failures, old CLIs and account/route limitations have distinct messages.
 - Settings show the selected CLI path, installed version and official stable version, with dismissible guidance for its installation source. Recheck refreshes versions and catalogs and is disabled during chat. No CLI is installed or upgraded automatically; running sessions keep their existing process. Bundled OpenCode requires a panel release explicitly containing a newer runtime.
 - Removed the expert-guidance switch from Settings and the ineffective external environment toggle. Default host guardrails and bundled skills remain available; the old panel preference no longer affects new panel conversations.

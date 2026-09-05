@@ -1610,7 +1610,7 @@ export function createOpenCodeBackend({
           : (detail || (error && error.name) || 'OpenCode session error'),
         detail: {
           ...(error?.name ? { errorName: error.name } : {}),
-          ...(httpStatus ? { httpStatus } : {}),
+          ...(httpStatus && !mediaRejected ? { httpStatus } : {}),
           ...(detail ? {
             upstreamMessage: String(redactValue(detail, activeAttachmentPaths)).slice(0, 500),
           } : {}),

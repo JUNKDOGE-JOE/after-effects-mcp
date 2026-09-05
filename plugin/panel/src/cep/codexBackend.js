@@ -953,11 +953,11 @@ export function createCodexBackend({
     const turnRequest = rpc.request('turn/start', turnParams(activeTurn, turnText), turnTimeoutMs);
     emitTurnProgress('dispatch');
     turnRequest.catch((error) => {
-      void handleTurnFailure(error);
+      void handleTurnFailure(taggedError(error, 'method', 'turn/start'), true);
     });
   }
 
-  async function handleTurnFailure(error) {
+  async function handleTurnFailure(error, turnStartRejected = false) {
     if (!activeRun || turnFailureInFlight) return;
     turnFailureInFlight = true;
     try {
@@ -977,6 +977,10 @@ export function createCodexBackend({
         spawnError: error?.spawnError === true,
         fallbackCode,
       });
+      const audioRejected = turnStartRejected && error?.code === -32600
+        && activeTurnDispatched && !activeTurnAccepted && !activeAssistantText
+        && activeTurn?.attachments.some((file) => file.mediaType.startsWith('audio/'))
+        && rawMessage === 'Invalid request: unknown variant `localAudio`, expected one of `text`, `image`, `localImage`, `skill`, `mention`';
       const detail = {
         ...(error?.method ? { method: error.method } : {}),
         ...(httpStatus ? { httpStatus } : {}),
@@ -999,16 +1003,22 @@ export function createCodexBackend({
       else if (classified.code === 'MCP_UNREACHABLE') message = 'Codex could not reach the panel MCP server.';
       else if (classified.code === 'SESSION_START_FAILED') message = 'Codex session could not be started.';
       else if (classified.code === 'TURN_START_FAILED') message = 'Codex turn could not be started.';
+      if (audioRejected) {
+        message = currentLang() === 'zh'
+          ? '当前 Codex CLI 输入通道不支持音频附件。请改用可处理此文件的通道，或在消息中提供本地路径供 AE 导入。'
+          : 'The current Codex CLI input channel does not support audio attachments. Use a channel that can read this file, or provide a local path in the message for AE import.';
+      }
       if (message !== rawMessage && rawMessage) {
         detail.upstreamMessage = String(rawMessage).slice(0, 500);
       }
       emitAfterText({
         type: 'error',
-        kind: classified.kind,
-        code: classified.code,
+        kind: audioRejected ? 'attachment' : classified.kind,
+        code: audioRejected ? 'ATTACHMENT_TRANSPORT_UNSUPPORTED' : classified.code,
         message,
         ...(Object.keys(detail).length ? { detail } : {}),
         ...activeTurnFailureFields(),
+        ...(audioRejected ? { dispatchState: 'not-started' } : {}),
       });
       finishActive();
     } finally {

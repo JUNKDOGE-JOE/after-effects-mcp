@@ -32009,10 +32009,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const turnRequest = rpc.request("turn/start", turnParams(activeTurn, turnText), turnTimeoutMs);
       emitTurnProgress("dispatch");
       turnRequest.catch((error) => {
-        void handleTurnFailure(error);
+        void handleTurnFailure(taggedError(error, "method", "turn/start"), true);
       });
     }
-    async function handleTurnFailure(error) {
+    async function handleTurnFailure(error, turnStartRejected = false) {
       if (!activeRun || turnFailureInFlight) return;
       turnFailureInFlight = true;
       try {
@@ -32031,6 +32031,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           spawnError: (error == null ? void 0 : error.spawnError) === true,
           fallbackCode
         });
+        const audioRejected = turnStartRejected && (error == null ? void 0 : error.code) === -32600 && activeTurnDispatched && !activeTurnAccepted && !activeAssistantText && (activeTurn == null ? void 0 : activeTurn.attachments.some((file) => file.mediaType.startsWith("audio/"))) && rawMessage === "Invalid request: unknown variant `localAudio`, expected one of `text`, `image`, `localImage`, `skill`, `mention`";
         const detail = {
           ...(error == null ? void 0 : error.method) ? { method: error.method } : {},
           ...httpStatus ? { httpStatus } : {},
@@ -32050,16 +32051,20 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         else if (classified.code === "MCP_UNREACHABLE") message = "Codex could not reach the panel MCP server.";
         else if (classified.code === "SESSION_START_FAILED") message = "Codex session could not be started.";
         else if (classified.code === "TURN_START_FAILED") message = "Codex turn could not be started.";
+        if (audioRejected) {
+          message = currentLang() === "zh" ? "\u5F53\u524D Codex CLI \u8F93\u5165\u901A\u9053\u4E0D\u652F\u6301\u97F3\u9891\u9644\u4EF6\u3002\u8BF7\u6539\u7528\u53EF\u5904\u7406\u6B64\u6587\u4EF6\u7684\u901A\u9053\uFF0C\u6216\u5728\u6D88\u606F\u4E2D\u63D0\u4F9B\u672C\u5730\u8DEF\u5F84\u4F9B AE \u5BFC\u5165\u3002" : "The current Codex CLI input channel does not support audio attachments. Use a channel that can read this file, or provide a local path in the message for AE import.";
+        }
         if (message !== rawMessage && rawMessage) {
           detail.upstreamMessage = String(rawMessage).slice(0, 500);
         }
         emitAfterText({
           type: "error",
-          kind: classified.kind,
-          code: classified.code,
+          kind: audioRejected ? "attachment" : classified.kind,
+          code: audioRejected ? "ATTACHMENT_TRANSPORT_UNSUPPORTED" : classified.code,
           message,
           ...Object.keys(detail).length ? { detail } : {},
-          ...activeTurnFailureFields()
+          ...activeTurnFailureFields(),
+          ...audioRejected ? { dispatchState: "not-started" } : {}
         });
         finishActive();
       } finally {
@@ -34185,7 +34190,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           message: mediaRejected ? currentLang() === "zh" ? "OpenCode \u7684\u5A92\u4F53\u8BFB\u53D6\u901A\u9053\u4E0D\u652F\u6301\u6B64\u683C\u5F0F\u3002\u8FD9\u4E0D\u662F\u6A21\u578B\u80FD\u529B\u5224\u65AD\uFF1B\u53EF\u63D0\u4F9B\u652F\u6301\u7684\u683C\u5F0F\uFF0C\u6216\u5728\u6D88\u606F\u4E2D\u7ED9\u51FA\u672C\u5730\u8DEF\u5F84\u4F9B AE \u5BFC\u5165\u3002" : "The OpenCode media reader cannot send this format. This is a channel limitation; use a supported format or provide a local path in the message for AE import." : httpStatus ? "OpenCode upstream request failed." : classified.code === "UPSTREAM_CONNECTION_CLOSED" ? "OpenCode upstream connection was interrupted." : detail || error && error.name || "OpenCode session error",
           detail: {
             ...(error == null ? void 0 : error.name) ? { errorName: error.name } : {},
-            ...httpStatus ? { httpStatus } : {},
+            ...httpStatus && !mediaRejected ? { httpStatus } : {},
             ...detail ? {
               upstreamMessage: String(redactValue(detail, activeAttachmentPaths)).slice(0, 500)
             } : {},

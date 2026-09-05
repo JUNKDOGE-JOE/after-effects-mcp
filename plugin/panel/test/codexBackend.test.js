@@ -165,6 +165,50 @@ test('Codex routes blank-MIME images and audio as media with the selected model'
   } finally { h.backend.reset(); }
 });
 
+test('only a pre-acceptance turn/start localAudio schema rejection permits a retry', async () => {
+  const message = 'Invalid request: unknown variant `localAudio`, expected one of `text`, `image`, `localImage`, `skill`, `mention`';
+  for (const scenario of [
+    { name: 'English rejection', retry: true, lang: 'en' },
+    { name: 'Chinese rejection', retry: true, lang: 'zh' },
+    { name: 'different RPC code', code: -32001 },
+    { name: 'other invalid request', message: 'Invalid request: missing field input' },
+    { name: 'different variant', message: message.replace('localAudio', 'localVideo') },
+    { name: 'network failure', code: undefined, message: 'connection closed' },
+    { name: 'accepted turn', accepted: true },
+    { name: 'error notification', notification: true },
+    { name: 'no audio input', image: true },
+  ]) {
+    const h = makeBackend({ getLang: () => scenario.lang || 'en' });
+    try {
+      const name = scenario.image ? 'image.png' : 'audio.wav';
+      const { turn, proc, pending } = await startTurn(h.backend, h.spawned, {
+        turnId: 'schema-rejection', text: 'inspect', attachments: [
+          { id: 'media', name, localPath: `C:\\tmp\\${name}`, size: 4, mediaType: '', temporary: false },
+        ],
+      });
+      if (scenario.accepted) proc.emit({ method: 'turn/started', params: { turn: { id: 'accepted' } } });
+      const rpcError = { code: -32600, message, ...('code' in scenario ? { code: scenario.code } : {}),
+        ...(scenario.message ? { message: scenario.message } : {}) };
+      proc.emit(scenario.notification
+        ? { method: 'error', params: { error: rpcError } }
+        : { id: turn.id, error: rpcError });
+      await pending;
+      const error = h.events.findLast((event) => event.type === 'error');
+      assert.equal(error.dispatchState, scenario.retry ? 'not-started' : scenario.accepted ? undefined : 'uncertain', scenario.name);
+      assert.equal(error.code === 'ATTACHMENT_TRANSPORT_UNSUPPORTED', !!scenario.retry, scenario.name);
+      assert.equal(parseWrites(proc).filter((request) => request.method === 'turn/start').length, 1);
+      if (scenario.retry) {
+        assert.equal(error.kind, 'attachment');
+        assert.equal(error.detail.method, 'turn/start');
+        assert.equal(error.detail.jsonRpcCode, -32600);
+        assert.equal(error.detail.upstreamMessage, message);
+        assert.match(error.message, scenario.lang === 'zh' ? /Codex CLI 输入通道不支持音频附件/ : /Codex CLI input channel does not support audio/);
+        assert.equal(h.events.some((event) => event.type === 'turn-accepted'), false);
+      }
+    } finally { h.backend.reset(); }
+  }
+});
+
 test('Codex starts its CLI app-server with an isolated pre-created CODEX_HOME', async () => {
   const { backend, spawned, mkdirs } = makeBackend();
   try {
