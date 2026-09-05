@@ -22921,8 +22921,6 @@
       mins: (n) => `${n} \u5206\u949F\u524D`,
       hours: (n) => `${n} \u5C0F\u65F6\u524D`,
       language: "\u754C\u9762\u8BED\u8A00",
-      expertGuidance: "AE \u4E13\u5BB6\u9632\u9519\u6307\u5BFC",
-      expertGuidanceCap: "\u589E\u52A0\u6BCF\u4F1A\u8BDD\u4E00\u6B21\u6027\u63E1\u624B token\uFF0C\u6362\u66F4\u5C11\u7684 AE \u811A\u672C\u62A5\u9519",
       logLevel: "\u65E5\u5FD7\u7EA7\u522B",
       exportLog: "\u5BFC\u51FA\u65E5\u5FD7",
       mcp: "MCP \u914D\u7F6E",
@@ -22974,8 +22972,6 @@
       mins: (n) => `${n} min ago`,
       hours: (n) => `${n} h ago`,
       language: "Language",
-      expertGuidance: "AE expert anti-error guidance",
-      expertGuidanceCap: "Adds a one-time handshake token cost per session for fewer AE scripting errors",
       logLevel: "Log level",
       exportLog: "Export log",
       mcp: "MCP config",
@@ -23171,8 +23167,6 @@
     onModelChange,
     backend = "subscription",
     onBackendChange,
-    expertGuidance = true,
-    onExpertGuidance,
     channels = { claude: [], codex: [], opencode: [] },
     activeChannel = "",
     selectedChannel = "",
@@ -23313,7 +23307,6 @@
         ))
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(Section, { id: "gen", title: t.gen, expanded: sections.gen, onToggle: onToggleSection, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { layout: "row", label: t.expertGuidance, caption: t.expertGuidanceCap, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Switch, { checked: expertGuidance, onChange: (v) => onExpertGuidance && onExpertGuidance(v) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: logLevel, onChange: onLogLevel, style: { flex: 1 }, options: [
@@ -32765,7 +32758,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getToolMeta,
     getProviders = () => [],
     getSensitiveValues = () => [],
-    getExpertGuidance = () => true,
     onEvent,
     env,
     getLang,
@@ -36241,23 +36233,6 @@ ${command}`
     return { start, restart, getHost: () => host };
   }
 
-  // src/lib/expertGuidance.js
-  init_cep_runtime_inject();
-  var EXPERT_GUIDANCE_KEY = "ae-mcp.expertGuidance";
-  function loadExpertGuidance(storage) {
-    try {
-      return storage.getItem(EXPERT_GUIDANCE_KEY) !== "0";
-    } catch (e) {
-      return true;
-    }
-  }
-  function saveExpertGuidance(storage, on) {
-    try {
-      storage.setItem(EXPERT_GUIDANCE_KEY, on ? "1" : "0");
-    } catch (e) {
-    }
-  }
-
   // src/lib/logExport.js
   init_cep_runtime_inject();
   function redactSecrets(text, exactSecrets = []) {
@@ -37948,18 +37923,11 @@ ${command}`
     }).filter(Boolean), [openCodeProviderStore, providers]);
     const providerSensitiveValuesRef = import_react48.default.useRef(providerSensitiveValues);
     providerSensitiveValuesRef.current = providerSensitiveValues;
-    const [expertGuidance, setExpertGuidance] = import_react48.default.useState(() => loadExpertGuidance(window.localStorage));
-    const expertGuidanceRef = import_react48.default.useRef(expertGuidance);
-    expertGuidanceRef.current = expertGuidance;
-    import_react48.default.useEffect(() => {
-      runHostConversationSync(() => hostConversation.updatePolicy({ expertGuidance }));
-    }, [expertGuidance, hostConversation, runHostConversationSync]);
     import_react48.default.useEffect(() => {
       if (status.state !== "ok") return;
       runHostConversationSync(() => hostConversation.ensureConversation({
         label: chatSessionIdRef.current,
-        approvalTier: permissionModeRef.current,
-        expertGuidance: expertGuidanceRef.current
+        approvalTier: permissionModeRef.current
       }));
     }, [hostConversation, runHostConversationSync, status.state]);
     const resolveHostConversationContext = import_react48.default.useCallback((conversationId) => {
@@ -38106,7 +38074,6 @@ ${draft.baseUrl}`)) return;
       port: hostPortRef.current,
       label: chatSessionIdRef.current,
       approvalTier: permissionModeRef.current,
-      expertGuidance: expertGuidanceRef.current,
       hostConversation
     }), [hostConversation]);
     const mcp = import_react48.default.useMemo(() => createMcpClient({
@@ -38115,8 +38082,7 @@ ${draft.baseUrl}`)) return;
       getPort: () => hostPortRef.current,
       getConversation: () => hostConversation.ensureConversation({
         label: chatSessionIdRef.current,
-        approvalTier: permissionModeRef.current,
-        expertGuidance: expertGuidanceRef.current
+        approvalTier: permissionModeRef.current
       })
     }), [extRoot, getHost, hostConversation]);
     const toolsApi = import_react48.default.useMemo(() => createToolsApi(mcp), [mcp]);
@@ -38307,7 +38273,6 @@ ${draft.baseUrl}`)) return;
       getEffort: () => runtimeRef.current.effort,
       getFast: () => runtimeRef.current.fast,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
-      getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
       getLang: () => langRef.current,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
@@ -38321,7 +38286,6 @@ ${draft.baseUrl}`)) return;
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getProviders: () => providersRef.current,
       getSensitiveValues: () => providerSensitiveValuesRef.current,
-      getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       getLang: () => langRef.current,
       onEvent: handleChatEvent
@@ -38373,8 +38337,7 @@ ${draft.baseUrl}`)) return;
           if (statusRef.current.state === "ok") {
             hostConversation.ensureConversation({
               label: sessionId,
-              approvalTier: permissionModeRef.current,
-              expertGuidance: expertGuidanceRef.current
+              approvalTier: permissionModeRef.current
             });
           }
         },
@@ -39257,11 +39220,6 @@ ${draft.baseUrl}`)) return;
               setModel(loadModelPref(m, DEFAULT_MODEL));
               setBackendPref(m);
               writePref("ae_mcp_backend", m);
-            },
-            expertGuidance,
-            onExpertGuidance: (v) => {
-              setExpertGuidance(v);
-              saveExpertGuidance(window.localStorage, v);
             },
             logLevel,
             onLogLevel: (v) => {

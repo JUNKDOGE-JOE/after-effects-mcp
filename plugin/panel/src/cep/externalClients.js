@@ -25,12 +25,6 @@ export const EXTERNAL_CLIENTS = [
   },
 ];
 
-// The host defaults expert anti-error guidance ON. Keep this small environment
-// helper for external-client integrations that explicitly opt out.
-export function expertGuidanceEnv(on) {
-  return on ? {} : { AE_MCP_EXPERT_GUIDANCE: '0' };
-}
-
 export function httpConfigFor(client, port = 11488, extensionRoot = '<extension root>') {
   const id = typeof client === 'string' ? client : (client && client.id);
   const url = `http://127.0.0.1:${port}/mcp`;

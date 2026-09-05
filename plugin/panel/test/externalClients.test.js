@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EXTERNAL_CLIENTS,
-  expertGuidanceEnv,
   externalClientConfigText,
   httpConfigFor,
 } from '../src/cep/externalClients.js';
@@ -58,9 +57,4 @@ test('externalClientConfigText no longer accepts an engine or stdio command bran
   assert.match(text, /"command": "node"/);
   assert.match(text, /stdio-shim\.js/);
   assert.doesNotMatch(text, /retired-ae-mcp/);
-});
-
-test('expertGuidanceEnv remains a generic external-client environment toggle', () => {
-  assert.deepEqual(expertGuidanceEnv(true), {});
-  assert.deepEqual(expertGuidanceEnv(false), { AE_MCP_EXPERT_GUIDANCE: '0' });
 });

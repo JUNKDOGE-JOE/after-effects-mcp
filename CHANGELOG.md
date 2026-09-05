@@ -10,6 +10,10 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [未发布]
+
+- 移除设置中的“AE 专家防错指导”开关及无效的外部环境变量配置入口。宿主默认防错指引与内置 Skill 保留，旧开关偏好不再影响新建面板会话。
+
 ### [0.10.6] — 2026-09-02
 
 - **内置模型清单换到当前一代**——Claude 通道可选模型改为 Fable 5.1、Opus 5、Sonnet 5、Haiku 4.5，默认 Opus 5；id 统一使用不带日期后缀的官方别名，价格档位随之更新（Sonnet 5 降到 $2/$10）。Codex 通道的离线回退清单对齐 codex-cli 0.144.1 的 `model/list`（默认 GPT-5.6-Sol，并标注支持 fast 档的模型），实时清单仍然优先。设置页的默认模型下拉不再自带一份过期的硬编码列表。注意：Fable 5.1 需要 Claude Code ≥ 2.1.251，更旧的 CLI 会在回合里返回带版本要求的 400 提示，切换模型或执行 `claude update` 即可。
@@ -378,6 +382,10 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [Unreleased]
+
+- Removed the expert-guidance switch from Settings and the ineffective external environment toggle. Default host guardrails and bundled skills remain available; the old panel preference no longer affects new panel conversations.
 
 ### [0.10.6] — 2026-09-02
 
