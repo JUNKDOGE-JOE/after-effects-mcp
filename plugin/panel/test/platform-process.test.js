@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { createMacosAdapter } from '../src/cep/platform/macos.js';
 import { createWindowsAdapter } from '../src/cep/platform/windows.js';
+import { createPlatformAdapter } from '../src/cep/platform/index.js';
 
 // Static golden outputs copied from the longProg branches of npm/cmd-shim
 // v6.0.3, v7.0.0, and main. Source URLs are stored beside each fixture; these
@@ -181,6 +182,30 @@ test('Windows prefers the bundled OpenCode runtime after an explicit override', 
 
   const result = await adapter.resolveExecutable('opencode', { requiredArch: 'x64' });
 
+  assert.equal(result.ok, true);
+  assert.equal(result.path, bundled);
+  assert.equal(result.source, 'runtime');
+  assert.deepEqual(calls.map((call) => call.file), [bundled]);
+});
+
+test('raw CEP file URLs select bundled OpenCode ahead of PATH', async (t) => {
+  const previous = globalThis.window;
+  t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
+  const bundled = 'C:\\Program Files (x86)\\Common Files\\Adobe\\CEP\\extensions\\com.aemcp.panel\\runtime\\opencode\\opencode.exe';
+  const pathCopy = 'C:\\Tools\\opencode.exe';
+  const calls = [];
+  const modules = {
+    fs: fakeFs(new Set([bundled, pathCopy]), {}, { [bundled]: pe64(0x8664), [pathCopy]: pe64(0x8664) }),
+    os: { homedir: () => 'C:\\Users\\fixture', tmpdir: () => 'C:\\Temp' },
+    http: {}, https: {}, child_process: { spawn: processFactory([{ stdout: 'opencode 1.18.23' }], calls) },
+  };
+  globalThis.window = {
+    __adobe_cep__: { getSystemPath: () => 'file:///C:/Program%20Files%20(x86)/Common%20Files/Adobe/CEP/extensions/com.aemcp.panel' },
+    cep_node: { require: (id) => modules[id], process: {
+      platform: 'win32', arch: 'x64', pid: 100, env: { USERPROFILE: 'C:\\Users\\fixture', Path: 'C:\\Tools' },
+    } },
+  };
+  const result = await createPlatformAdapter().resolveExecutable('opencode', { requiredArch: 'x64' });
   assert.equal(result.ok, true);
   assert.equal(result.path, bundled);
   assert.equal(result.source, 'runtime');

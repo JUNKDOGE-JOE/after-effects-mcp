@@ -631,6 +631,7 @@ test('createOpenCodeBackend sends official file parts and accepts at dispatch', 
 
   const message = fetched.calls.find((call) => call.path === '/session/session_1/message');
   assert.deepEqual(message.body, {
+    model: { providerID: 'opencode', modelID: 'hy3-free' },
     parts: [
       { type: 'text', text: 'inspect' },
       {
@@ -2679,4 +2680,128 @@ test('OpenCode completion clears the stream watchdog timer', async () => {
   await run;
   assert.ok(timers.cleared.length > 0);
   assert.equal(timers.latest(), undefined);
+});
+
+for (const previousContext of [false, true]) {
+  test(`media retry preserves earlier context and excludes rejected files (${previousContext})`, async () => {
+    const fetched = makeFetch();
+    const prefix = previousContext ? [{ info: { id: 'msg_prior', sessionID: 'session_1', role: 'user' },
+      parts: [{ id: 'prt_prior', messageID: 'msg_prior', sessionID: 'session_1', type: 'text', text: 'Remember ORBIT731' }] },
+    { info: { id: 'msg_answer', sessionID: 'session_1', role: 'assistant', parentID: 'msg_prior' },
+      parts: [{ id: 'prt_tool', messageID: 'msg_answer', sessionID: 'session_1', type: 'tool', tool: 'ae_ae_read',
+        state: { status: 'completed', input: {}, output: 'verified prior state' } }] },
+    { info: { id: 'msg_compact', sessionID: 'session_1', role: 'user' }, parts: [
+      { id: 'prt_compact', messageID: 'msg_compact', sessionID: 'session_1', type: 'compaction', auto: true, tail_start_id: 'msg_prior' },
+    ] }] : [];
+    const history = [...prefix, { info: { id: 'msg_bad', sessionID: 'session_1', role: 'user' },
+      parts: [{ type: 'file', mime: 'audio/wav', url: 'file:///C:/tmp/clip.wav' }] },
+    { info: { id: 'msg_error', sessionID: 'session_1', role: 'assistant', parentID: 'msg_bad' }, parts: [] }];
+    const original = JSON.stringify(history);
+    const restored = prefix.map(message => ({ info: { ...message.info, id: message.info.id + '_copy', sessionID: 'session_clean' },
+      parts: message.parts.map(part => ({ ...part,
+        ...(part.type === 'compaction' ? { tail_start_id: part.tail_start_id + '_copy' } : {}),
+        id: part.id + '_copy', sessionID: 'session_clean', messageID: message.info.id + '_copy' })) }));
+    const requests = [];
+    const h = makeBackend({ getModel: () => 'aemcp-test/gpt-5.6-sol', fetchImpl: async (url, options = {}) => {
+      const route = new URL(url).pathname;
+      const method = options.method || 'GET';
+      const body = options.body ? JSON.parse(options.body) : null;
+      requests.push({ route, method, body });
+      if (route === '/session/status') return jsonResponse({});
+      if (route === '/session/session_1/message' && method === 'GET') return jsonResponse(history);
+      if (route === '/session/session_1/fork') {
+        assert.deepEqual(body, { messageID: 'msg_bad' });
+        return jsonResponse({ id: 'session_clean' });
+      }
+      if (route === '/session/session_clean/message' && method === 'GET') return jsonResponse(restored);
+      return fetched.fetchImpl(url, options);
+    } });
+    try {
+      const failed = h.backend.sendUser({ turnId: 'bad-media', text: 'Inspect', attachments: [
+        { id: 'audio', name: 'clip.wav', localPath: 'C:\\tmp\\clip.wav', mediaType: 'audio/wav', size: 4, temporary: false },
+      ] });
+      await flush();
+      fetched.sse.push({ type: 'message.updated', properties: { info: history[prefix.length].info } });
+      fetched.sse.push({ type: 'session.error', properties: { sessionID: 'session_1', error: {
+        name: 'UnknownError', data: { message: "'media type: audio/wav' functionality not supported." },
+      } } });
+      await failed;
+      assert.equal(requests.filter(call => call.route.endsWith('/fork')).length, 0);
+      assert.equal(requests.filter(call => call.method === 'POST' && call.route.endsWith('/message')).length, 1);
+      const retry = h.backend.sendUser({ turnId: 'fixed-media', text: 'Inspect the picture', attachments: [
+        { id: 'picture', name: 'sample.png', localPath: 'C:\\tmp\\sample.png', mediaType: 'image/png', size: 4, temporary: false },
+      ] });
+      for (let i = 0; i < 20 && !requests.some(call => call.route === '/session/session_clean/message' && call.method === 'POST'); i++) await flush();
+      const sent = requests.filter(call => call.route === '/session/session_clean/message' && call.method === 'POST');
+      assert.equal(sent.length, 1);
+      assert.deepEqual(sent[0].body.model, { providerID: 'aemcp-test', modelID: 'gpt-5.6-sol' });
+      assert.deepEqual(sent[0].body.parts.filter(part => part.type === 'file').map(part => part.mime), ['image/png']);
+      assert.equal(JSON.stringify(history), original);
+      assert.deepEqual(h.backend.getSessionRef(), { kind: 'opencode-session', id: 'session_clean' });
+      const beforeReplay = h.events.length;
+      for (const message of restored) {
+        fetched.sse.push({ type: 'message.updated', properties: { info: message.info } });
+        for (const part of message.parts) fetched.sse.push({ type: 'message.part.updated', properties: {
+          sessionID: 'session_clean', part: { ...part, callID: 'old-call' },
+        } });
+        fetched.sse.push({ type: 'message.part.updated', properties: { sessionID: 'session_clean',
+          part: { id: 'old-reasoning', messageID: message.info.id, type: 'reasoning', text: 'old' } } });
+        fetched.sse.push({ type: 'message.part.delta', properties: { sessionID: 'session_clean',
+          messageID: message.info.id, partID: 'old-reasoning', field: 'reasoning', delta: 'old' } });
+      }
+      await flush();
+      assert.equal(h.events.slice(beforeReplay).some(event => ['tool-start', 'tool-result', 'thinking'].includes(event.type)), false);
+      fetched.sse.push({ type: 'message.updated', properties: { info: {
+        id: 'msg_current', sessionID: 'session_clean', role: 'user',
+      } } });
+      fetched.sse.push({ type: 'message.part.delta', properties: {
+        sessionID: 'session_clean', messageID: 'msg_reply', field: 'text', delta: 'ORBIT731',
+      } });
+      completeTurn(fetched, 'session_clean');
+      await retry;
+      assert.ok(h.events.some(event => event.type === 'assistant-text' && event.text === 'ORBIT731')
+        || h.backend.getMessages().some(message => message.role === 'assistant' && message.text === 'ORBIT731'));
+    } finally { h.backend.reset(); }
+  });
+}
+
+test('unverified or interrupted media recovery never sends another model request', async () => {
+  for (const failure of ['missing-id', 'busy', 'tool-activity', 'fork-failed', 'changed-prefix', 'reset']) {
+    const fetched = makeFetch();
+    let h;
+    const requests = [];
+    const history = [{ info: { id: 'msg_bad', role: 'user', sessionID: 'session_1' }, parts: [{ type: 'file', mime: 'audio/wav' }] }];
+    if (failure === 'tool-activity') history.push({ info: { id: 'msg_write', role: 'assistant', parentID: 'msg_bad' },
+      parts: [{ type: 'tool', state: { status: 'completed' } }] });
+    h = makeBackend({ fetchImpl: async (url, options = {}) => {
+      const route = new URL(url).pathname;
+      const method = options.method || 'GET';
+      requests.push({ route, method });
+      if (route === '/session/status') return jsonResponse(failure === 'busy' ? { session_1: { type: 'busy' } } : {});
+      if (route === '/session/session_1/message' && method === 'GET') return jsonResponse(history);
+      if (route.endsWith('/fork')) {
+        if (failure === 'reset') h.backend.reset();
+        return jsonResponse({ id: 'session_clean' }, failure !== 'fork-failed', failure === 'fork-failed' ? 500 : 200);
+      }
+      if (route === '/session/session_clean/message' && method === 'GET') return jsonResponse(history);
+      return fetched.fetchImpl(url, options);
+    } });
+    try {
+      const failed = h.backend.sendUser({ turnId: 'bad', text: 'inspect', attachments: [
+        { id: 'audio', name: 'a.wav', localPath: 'C:\\tmp\\a.wav', size: 4, mediaType: 'audio/wav', temporary: false },
+      ] });
+      await flush();
+      if (failure !== 'missing-id') fetched.sse.push({ type: 'message.updated', properties: { info: history[0].info } });
+      fetched.sse.push({ type: 'session.error', properties: { sessionID: 'session_1', error: {
+        name: 'UnknownError', data: { message: "'media type: audio/wav' functionality not supported." },
+      } } });
+      await failed;
+      await h.backend.sendUser({ turnId: 'retry', text: 'try text instead', attachments: [] });
+      assert.equal(requests.filter(call => call.method === 'POST' && call.route.endsWith('/message')).length, 1, failure);
+      if (failure !== 'reset') {
+        assert.deepEqual(h.backend.getSessionRef(), { kind: 'opencode-session', id: 'session_1' }, failure);
+        assert.equal(h.events.findLast(event => event.type === 'error').code, 'ATTACHMENT_RETRY_BLOCKED', failure);
+      } else assert.equal(h.backend.getSessionRef(), null);
+    } finally { h.backend.reset(); }
+  }
 });
