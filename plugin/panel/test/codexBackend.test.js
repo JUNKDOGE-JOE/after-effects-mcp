@@ -149,6 +149,22 @@ test('resolveCodexCli exposes the CLI shim for diagnostics', async () => {
   assert.equal(result.version, '1.2.3');
 });
 
+test('Codex routes blank-MIME images and audio as media with the selected model', async () => {
+  const h = makeBackend({ state: { model: 'selected-model' } });
+  try {
+    const attachments = ['image.PNG', 'audio.WAV', 'clip.MOV'].map((name) => ({ id: name, name, localPath: `C:\\tmp\\${name}`, size: 4, mediaType: '', temporary: false }));
+    const { turn, proc, pending } = await startTurn(h.backend, h.spawned, { turnId: 'mime', text: 'inspect', attachments });
+    assert.equal(turn.params.model, 'selected-model');
+    assert.match(turn.params.input[0].text, /clip.MOV/);
+    assert.deepEqual(turn.params.input.slice(1), [
+      { type: 'localImage', path: 'C:\\tmp\\image.PNG' },
+      { type: 'localAudio', path: 'C:\\tmp\\audio.WAV' },
+    ]);
+    proc.emit({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+    await pending;
+  } finally { h.backend.reset(); }
+});
+
 test('Codex starts its CLI app-server with an isolated pre-created CODEX_HOME', async () => {
   const { backend, spawned, mkdirs } = makeBackend();
   try {

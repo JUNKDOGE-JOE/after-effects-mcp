@@ -25802,6 +25802,41 @@ When you are done, remind me of two things: MCP tools load only in a new session
   var MAX_CLIPBOARD_TURN_BYTES = 512 * 1024 * 1024;
   var ATTACHMENT_MANIFEST_OPEN = '<ae_mcp_attachments version="1">';
   var ATTACHMENT_MANIFEST_CLOSE = "</ae_mcp_attachments>";
+  var MEDIA_TYPES = Object.freeze({
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    bmp: "image/bmp",
+    avif: "image/avif",
+    svg: "image/svg+xml",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+    heic: "image/heic",
+    wav: "audio/wav",
+    mp3: "audio/mpeg",
+    m4a: "audio/mp4",
+    aac: "audio/aac",
+    flac: "audio/flac",
+    ogg: "audio/ogg",
+    opus: "audio/ogg",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+    avi: "video/x-msvideo",
+    pdf: "application/pdf",
+    txt: "text/plain",
+    md: "text/plain"
+  });
+  function attachmentMediaType(name, supplied = "") {
+    const mime = String(supplied || "").split(";")[0].trim().toLowerCase();
+    if (mime && mime !== "application/octet-stream") {
+      return { "image/jpg": "image/jpeg", "audio/x-wav": "audio/wav", "audio/mp3": "audio/mpeg" }[mime] || mime;
+    }
+    const extension = String(name || "").split(".").pop().toLowerCase();
+    return MEDIA_TYPES[extension] || mime;
+  }
   function requireString(value, field, { allowEmpty = false } = {}) {
     if (typeof value !== "string" || !allowEmpty && !value) {
       throw new TypeError(field + " must be " + (allowEmpty ? "a string" : "a non-empty string"));
@@ -25823,7 +25858,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       name: requireString(value.name, "attachment.name"),
       localPath: requireString(value.localPath, "attachment.localPath"),
       size: value.size,
-      mediaType: value.mediaType === void 0 ? "" : requireString(value.mediaType, "attachment.mediaType", { allowEmpty: true }),
+      mediaType: attachmentMediaType(value.name, value.mediaType === void 0 ? "" : requireString(value.mediaType, "attachment.mediaType", { allowEmpty: true })),
       temporary: value.temporary
     };
     return Object.freeze(attachment);
@@ -26001,7 +26036,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
       pendingTurnId: null,
       pendingSnapshot: null,
       dispatchState: null,
-      sendError: null
+      sendError: null,
+      acceptedDraft: null
     };
   }
   function createAttachmentDraftState() {
@@ -26045,10 +26081,26 @@ When you are done, remind me of two things: MCP tools load only in a new session
     });
   }
   function reduceAttachmentDraft(state, action) {
-    var _a;
+    var _a, _b;
     if (!state || !action) return state;
     if (action.type === "accepted") {
-      return action.turnId === state.pendingTurnId ? initialState() : state;
+      return action.turnId === state.pendingTurnId ? { ...initialState(), acceptedDraft: { turnId: action.turnId, text: state.text, items: state.items, turn: state.pendingSnapshot } } : state;
+    }
+    if (action.type === "settled") {
+      if (action.turnId !== ((_a = state.acceptedDraft) == null ? void 0 : _a.turnId)) return state;
+      const saved = state.acceptedDraft;
+      if (!action.error || !saved.items.length) return { ...state, acceptedDraft: null };
+      const uncertain = action.dispatchState !== "not-started";
+      return {
+        ...state,
+        text: state.text || saved.text,
+        items: [...saved.items, ...state.items],
+        acceptedDraft: null,
+        sendError: action.error,
+        dispatchState: uncertain ? "uncertain" : "not-started",
+        pendingTurnId: uncertain ? saved.turnId : null,
+        pendingSnapshot: uncertain ? saved.turn : null
+      };
     }
     if (action.type === "rejected") {
       if (action.turnId !== state.pendingTurnId) return state;
@@ -26073,7 +26125,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     if (action.type === "text") {
       return {
         ...state,
-        text: String((_a = action.value) != null ? _a : ""),
+        text: String((_b = action.value) != null ? _b : ""),
         sendError: null,
         dispatchState: null
       };
@@ -32573,6 +32625,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           const context = provider.modelContexts[id];
           return [id, {
             name: id,
+            // Custom catalogs contain IDs, not capability evidence. Let the provider
+            // validate media instead of OpenCode replacing it with a text-only verdict.
+            modalities: { input: ["text", "image", "audio", "video", "pdf"], output: ["text"] },
             limit: { context, output: openCodeOutputLimit(context) }
           }];
         }))
@@ -34115,6 +34170,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           upstream: true,
           upstreamText: combined
         });
+        const mediaRejected = (activeTurn == null ? void 0 : activeTurn.attachments.length) > 0 && startedTools.size === 0 && !activeAssistantText && !Array.from(partTypes.values()).includes("tool") && /^'(?:file part media type |media type: )[^']+' functionality not supported\.$/.test(detail);
         if (isAeMcpTransportFailure(error, combined)) {
           void recoverAeMcpTransport();
           return;
@@ -34122,11 +34178,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         settleFailedTurnInteractions();
         emitAfterText({
           type: "error",
-          kind: classified.kind,
-          code: classified.code,
+          kind: mediaRejected ? "attachment" : classified.kind,
+          code: mediaRejected ? "ATTACHMENT_TRANSPORT_UNSUPPORTED" : classified.code,
           // OpenCode session errors arrive as {name, data:{message}} objects;
           // String() on that shape rendered "[object Object]" in the chat.
-          message: httpStatus ? "OpenCode upstream request failed." : classified.code === "UPSTREAM_CONNECTION_CLOSED" ? "OpenCode upstream connection was interrupted." : detail || error && error.name || "OpenCode session error",
+          message: mediaRejected ? currentLang() === "zh" ? "OpenCode \u7684\u5A92\u4F53\u8BFB\u53D6\u901A\u9053\u4E0D\u652F\u6301\u6B64\u683C\u5F0F\u3002\u8FD9\u4E0D\u662F\u6A21\u578B\u80FD\u529B\u5224\u65AD\uFF1B\u53EF\u63D0\u4F9B\u652F\u6301\u7684\u683C\u5F0F\uFF0C\u6216\u5728\u6D88\u606F\u4E2D\u7ED9\u51FA\u672C\u5730\u8DEF\u5F84\u4F9B AE \u5BFC\u5165\u3002" : "The OpenCode media reader cannot send this format. This is a channel limitation; use a supported format or provide a local path in the message for AE import." : httpStatus ? "OpenCode upstream request failed." : classified.code === "UPSTREAM_CONNECTION_CLOSED" ? "OpenCode upstream connection was interrupted." : detail || error && error.name || "OpenCode session error",
           detail: {
             ...(error == null ? void 0 : error.name) ? { errorName: error.name } : {},
             ...httpStatus ? { httpStatus } : {},
@@ -34140,7 +34196,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
               stderrTail: redactValue(processTail, activeAttachmentPaths)
             } : {}
           },
-          ...activeTurnFailureFields()
+          ...activeTurnFailureFields(),
+          ...mediaRejected ? { dispatchState: "not-started" } : {}
         });
         finishActive();
         return;
@@ -35440,7 +35497,7 @@ ${command}`
     return name === "." || name === ".." ? fallback : name;
   }
   function mediaTypeOf(file) {
-    return typeof (file == null ? void 0 : file.type) === "string" ? file.type : "";
+    return attachmentMediaType(file == null ? void 0 : file.name, file == null ? void 0 : file.type);
   }
   function writeAll(fs, descriptor, bytes) {
     const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -35483,7 +35540,7 @@ ${command}`
       if (disposed) throw attachmentError("ATTACHMENT_STORE_DISPOSED", "Attachment store is disposed");
       const safeSessionId = requireSegment(sessionId, "sessionId");
       requireSegment(pondId, "pondId");
-      const existing = sessionRecords(safeSessionId);
+      const existing = [...records.values()];
       if (existing.length >= MAX_ATTACHMENTS_PER_TURN) {
         throw attachmentError("ATTACHMENT_COUNT_LIMIT", "Attachment count exceeds the per-turn limit");
       }
@@ -35618,6 +35675,16 @@ ${command}`
       return ref;
     }
     return Object.freeze({
+      validate(attachments) {
+        for (const ref of attachments) {
+          try {
+            if (!fs.statSync(ref.localPath).isFile()) throw new Error("not a file");
+            fs.accessSync(ref.localPath, fs.constants.R_OK);
+          } catch (cause) {
+            throw attachmentError("ATTACHMENT_UNREADABLE", "Attachment file is no longer readable. Remove it and select it again.", cause);
+          }
+        }
+      },
       prepare(file, context = {}) {
         if (file == null ? void 0 : file.path) return preparePathBacked(file, context);
         return preparePathless(file, context);
@@ -35630,6 +35697,12 @@ ${command}`
       },
       releaseSession(sessionId) {
         for (const record of sessionRecords(String(sessionId || ""))) {
+          cleanupTemporary(record);
+          records.delete(record.id);
+        }
+      },
+      releaseAll() {
+        for (const record of [...records.values()]) {
           cleanupTemporary(record);
           records.delete(record.id);
         }
@@ -38070,6 +38143,7 @@ ${command}`
     const attachmentOperationsRef = import_react48.default.useRef(/* @__PURE__ */ new Map());
     const pendingTurnRef = import_react48.default.useRef(null);
     const acceptedTurnRef = import_react48.default.useRef(null);
+    const preserveAttachmentDraftRef = import_react48.default.useRef(false);
     import_react48.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
     const backendMigration = import_react48.default.useMemo(() => migrateBackendPref(window.localStorage), []);
     const [model, setModel] = import_react48.default.useState(() => loadModelPref(backendMigration.pref, DEFAULT_MODEL));
@@ -38329,14 +38403,16 @@ ${draft.baseUrl}`)) return;
       }
     }, [attachmentStore]);
     const resetAttachmentDraftSession = import_react48.default.useCallback((nextSessionId = null) => {
-      attachmentStore.releaseSession(chatSessionIdRef.current);
-      attachmentOperationsRef.current.clear();
+      const preserveDraft = preserveAttachmentDraftRef.current;
+      if (!preserveDraft) attachmentStore.releaseAll();
+      if (!preserveDraft) attachmentOperationsRef.current.clear();
       pendingTurnRef.current = null;
       acceptedTurnRef.current = null;
-      dispatchAttachmentDraft({ type: "reset" });
+      if (!preserveDraft) dispatchAttachmentDraft({ type: "reset" });
       if (nextSessionId) {
         chatSessionIdRef.current = nextSessionId;
         setChatSessionId(nextSessionId);
+        preserveAttachmentDraftRef.current = false;
       }
     }, [attachmentStore]);
     const addAttachment = import_react48.default.useCallback(async ({ pondId, file }) => {
@@ -38346,14 +38422,14 @@ ${draft.baseUrl}`)) return;
       dispatchAttachmentDraft({ type: "staging", pondId, file });
       try {
         const ref = await attachmentStore.prepare(file, { sessionId, pondId });
-        if (attachmentOperationsRef.current.get(pondId) !== operation || chatSessionIdRef.current !== sessionId) {
+        if (attachmentOperationsRef.current.get(pondId) !== operation) {
           attachmentStore.release(ref.id);
           return;
         }
         attachmentOperationsRef.current.delete(pondId);
         dispatchAttachmentDraft({ type: "ready", pondId, ref });
       } catch (error) {
-        if (attachmentOperationsRef.current.get(pondId) !== operation || chatSessionIdRef.current !== sessionId) return;
+        if (attachmentOperationsRef.current.get(pondId) !== operation) return;
         attachmentOperationsRef.current.delete(pondId);
         dispatchAttachmentDraft({
           type: "error",
@@ -38473,8 +38549,15 @@ ${draft.baseUrl}`)) return;
       if (evt.type === "thinking") setThinkingActive(!!evt.active);
       if (evt.type === "turn-end" || evt.type === "error") {
         if (pending && acceptedTurnRef.current === pending.turnId) {
-          releaseTurnAttachments(pending);
-          pendingTurnRef.current = null;
+          const failed = evt.type === "error" && pending.attachments.length > 0;
+          dispatchAttachmentDraft({
+            type: "settled",
+            turnId: pending.turnId,
+            dispatchState: evt.dispatchState,
+            ...failed ? { error: { code: evt.code, message: evt.message } } : {}
+          });
+          if (!failed) releaseTurnAttachments(pending);
+          if (!failed || evt.dispatchState === "not-started") pendingTurnRef.current = null;
           acceptedTurnRef.current = null;
         }
         setChatStreaming(false);
@@ -38878,6 +38961,7 @@ ${draft.baseUrl}`)) return;
         pendingSessionLoadRef.current = null;
       }
       if (!decision.reset) return;
+      preserveAttachmentDraftRef.current = !pendingTurnRef.current && !pendingSessionLoad;
       claudeBackend.reset();
       codexBackend.reset();
       openCodeBackend.reset();
@@ -38917,6 +39001,19 @@ ${draft.baseUrl}`)) return;
       }
       pendingTurnRef.current = turn;
       acceptedTurnRef.current = null;
+      try {
+        attachmentStore.validate(turn.attachments);
+      } catch (error) {
+        handleChatEvent({
+          type: "error",
+          kind: "attachment",
+          code: error.code,
+          message: error.message,
+          turnId: turn.turnId,
+          dispatchState: "not-started"
+        });
+        return;
+      }
       if (!activeBackend) {
         handleChatEvent({
           type: "error",

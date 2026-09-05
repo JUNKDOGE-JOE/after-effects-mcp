@@ -147,7 +147,7 @@ test('store refuses a thirty-third attachment before touching disk', async (t) =
   await assert.rejects(
     store.prepare(
       { name: 'original.txt', size: 1, type: 'text/plain', path: original },
-      { sessionId: 's1', pondId: 'overflow' },
+      { sessionId: 'after-channel-switch', pondId: 'overflow' },
     ),
     (error) => error.code === 'ATTACHMENT_COUNT_LIMIT',
   );
@@ -188,7 +188,7 @@ test('pathless staging enforces per-item and per-turn byte limits', async (t) =>
   await assert.rejects(
     store.prepare(
       fakeBlob(1, 'overflow.bin'),
-      { sessionId: 's1', pondId: 'p3' },
+      { sessionId: 'after-channel-switch', pondId: 'p3' },
     ),
     (error) => error.code === 'ATTACHMENT_TURN_TOO_LARGE',
   );
@@ -256,4 +256,23 @@ test('dispose removes every managed temporary and preserves originals', async (t
 
   assert.equal(fs.readFileSync(original, 'utf8'), 'original');
   assert.equal(fs.existsSync(temporary.localPath), false);
+});
+
+test('picker and clipboard MIME fallback survives validation and channel draft retention', async (t) => {
+  const root = makeRoot(t);
+  const original = path.join(root, 'FRAME.PNG');
+  fs.writeFileSync(original, 'sample');
+  const store = makeStore(root);
+  const local = await store.prepare({ name: 'FRAME.PNG', path: original, type: '' }, { sessionId: 'old', pondId: 'p1' });
+  const pasted = await store.prepare(namedBlob('sample', 'paste.png', ''), { sessionId: 'new', pondId: 'p2' });
+  assert.equal(local.mediaType, 'image/png');
+  assert.equal(pasted.mediaType, 'image/png');
+  store.validate([local, pasted]);
+  fs.unlinkSync(original);
+  assert.throws(() => store.validate([local]), { code: 'ATTACHMENT_UNREADABLE' });
+  store.releaseAll();
+  assert.equal(fs.existsSync(pasted.localPath), false);
+  const next = await store.prepare(namedBlob('next'), { sessionId: 'next', pondId: 'p3' });
+  store.validate([next]);
+  store.dispose();
 });

@@ -191,6 +191,9 @@ export function openCodeProviderDefinitions(providers) {
         const context = provider.modelContexts[id];
         return [id, {
           name: id,
+          // Custom catalogs contain IDs, not capability evidence. Let the provider
+          // validate media instead of OpenCode replacing it with a text-only verdict.
+          modalities: { input: ['text', 'image', 'audio', 'video', 'pdf'], output: ['text'] },
           limit: { context, output: openCodeOutputLimit(context) },
         }];
       })),
