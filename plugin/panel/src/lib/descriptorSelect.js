@@ -3,7 +3,6 @@
 import {
   codexStaticDescriptor,
   codexDescriptorFromModels,
-  mergeCodexOfficialLoginModels,
   openCodeDescriptorFromModels,
 } from './backendCapabilities.js';
 
@@ -12,15 +11,16 @@ export function selectDescriptor({
   backendPref = 'subscription',
   baseDescriptor,
   codexCachedModels = null,
+  preferredModel = '',
   openCodeProviders = [],
 }) {
   if (backendPref === 'codex' || effectiveBackend === 'codex') {
     if (codexCachedModels) {
-      return mergeCodexOfficialLoginModels(
-        codexDescriptorFromModels({ models: codexCachedModels }),
-      );
+      return codexDescriptorFromModels({ models: codexCachedModels });
     }
-    return mergeCodexOfficialLoginModels(baseDescriptor || codexStaticDescriptor());
+    const fallback = baseDescriptor || codexStaticDescriptor();
+    if (!preferredModel || fallback.models.some((m) => m.id === preferredModel)) return fallback;
+    return { ...fallback, models: [...fallback.models, { id: preferredModel, label: preferredModel, effortLevels: [] }] };
   }
   if (backendPref === 'opencode' || effectiveBackend === 'opencode') {
     const providers = {};

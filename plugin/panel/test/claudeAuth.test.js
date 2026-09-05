@@ -66,6 +66,8 @@ test('probeClaudeLogin uses claude auth status and strips provider env', async (
 
   assert.deepEqual(await resultPromise, {
     loggedIn: true,
+    cli: { path: 'C:\\npm\\claude.cmd', version: '2.1.227', source: 'path', script: '',
+      launchPath: resolvedClaude().cliPath, realPath: resolvedClaude().cliPath },
     cliOk: true,
     cliVersion: '2.1.227',
     cliPath: 'C:\\npm\\claude.cmd',
@@ -93,6 +95,8 @@ test('probeClaudeLogin reports a valid CLI that is not logged in', async () => {
 
   assert.deepEqual(await resultPromise, {
     loggedIn: false,
+    cli: { path: 'C:\\npm\\claude.cmd', version: '2.1.227', source: 'path', script: '',
+      launchPath: resolvedClaude().cliPath, realPath: resolvedClaude().cliPath },
     cliOk: true,
     cliVersion: '2.1.227',
     cliPath: 'C:\\npm\\claude.cmd',

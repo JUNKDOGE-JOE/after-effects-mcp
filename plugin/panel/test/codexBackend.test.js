@@ -349,6 +349,62 @@ test('Codex account probes retain the real model/list data envelope', async () =
   assert.deepEqual(result.models, [{ id: 'gpt-5.6-luna' }]);
 });
 
+async function probePages(h, pages) {
+  const pending = h.backend.probeAccount();
+  await flush();
+  const proc = h.spawned.at(-1).proc;
+  proc.emit({ id: parseWrites(proc).at(-1).id, result: {} });
+  await flush();
+  proc.emit({ id: parseWrites(proc).at(-1).id, result: { account: { planType: 'pro' } } });
+  for (const page of pages) {
+    await flush();
+    const request = parseWrites(proc).at(-1);
+    assert.equal(request.method, 'model/list');
+    assert.equal(request.params.includeHidden, false);
+    proc.emit({ id: request.id, ...page });
+  }
+  return { result: await pending, proc };
+}
+
+test('Codex pagination retains Astra, de-duplicates and respects hidden metadata', async () => {
+  const h = makeBackend();
+  const { result, proc } = await probePages(h, [
+    { result: { data: [{ id: 'gpt-5.6-sol' }], nextCursor: 'page2' } },
+    { result: { data: [{ id: 'gpt-6-astra' }, { id: 'gpt-5.6-sol', hidden: true }], nextCursor: null } },
+  ]);
+  assert.equal(result.catalogStatus, 'complete');
+  assert.deepEqual(result.models, [{ id: 'gpt-5.6-sol', hidden: true }, { id: 'gpt-6-astra' }]);
+  assert.equal(parseWrites(proc).at(-1).params.cursor, 'page2');
+  assert.equal(proc.killCount, 1);
+});
+
+test('Codex partial failure, malformed page, cursor cycles and page limit fail the catalog only', async () => {
+  for (const pages of [
+    [{ result: { data: [], nextCursor: 'next' } }, { error: { code: -1, message: 'offline' } }],
+    [{ result: { unexpected: [] } }],
+    [{ result: { data: [], nextCursor: 'same' } }, { result: { data: [], nextCursor: 'same' } }],
+    Array.from({ length: 10 }, (_, i) => ({ result: { data: [{ id: 'gpt-5.6-sol' }], nextCursor: `page${i}` } })),
+  ]) {
+    const { result, proc } = await probePages(makeBackend(), pages);
+    assert.equal(result.catalogStatus, 'failed');
+    assert.equal(result.models, null);
+    assert.equal(result.loggedIn, true);
+    assert.equal(proc.killCount, 1);
+  }
+});
+
+test('Codex recheck resolves the updated executable without resetting the conversation', async () => {
+  let version = '0.144.1';
+  const h = makeBackend({ resolveExecutable: async () => ({ ok: true, path: 'C:/codex.exe', version }) });
+  const first = await probePages(h, [{ result: { data: [{ id: 'gpt-5.6-sol' }] } }]);
+  assert.equal(first.result.cli.version, version);
+  version = '0.153.4';
+  const second = await probePages(h, [{ result: { data: [{ id: 'gpt-6-astra' }] } }]);
+  assert.equal(second.result.cli.version, version);
+  assert.equal(second.result.models[0].id, 'gpt-6-astra');
+  assert.equal(h.spawned.length, 2);
+});
+
 test('Codex account probes return isolated-home diagnostics when login is required', async () => {
   const { backend, spawned } = makeBackend();
   const pending = backend.probeAccount();

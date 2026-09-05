@@ -229,8 +229,11 @@ const TOOL_META = {
   },
 };
 
+const OPEN_CODE_CLI = { path: 'C:\\Tools\\opencode.exe', launchPath: 'C:\\Tools\\opencode.exe',
+  realPath: 'C:\\Tools\\opencode.exe', source: 'path', script: '', version: '1.0.0' };
 const OPEN_CODE_PROBE = {
   loggedIn: true,
+  cli: OPEN_CODE_CLI, runningCli: OPEN_CODE_CLI,
   providers: [{ id: 'opencode', modelIds: ['hy3-free'], needsApiKey: false }],
 };
 
@@ -360,6 +363,21 @@ test('OpenCode decodes both child-process streams as UTF-8', async () => {
     ['stderr', 'utf8'],
   ]);
   h.backend.reset();
+});
+
+test('OpenCode recheck uses the same architecture and config environment as startup', async () => {
+  const resolutions = [];
+  const h = makeBackend({ resolveExecutable: async (_id, options) => {
+    resolutions.push(options);
+    return { ok: true, path: options.requiredArch === 'x64' ? 'C:/runtime/opencode.exe' : 'C:/arm64/opencode.exe',
+      source: 'runtime', version: '1.2.0' };
+  } });
+  try {
+    const result = await h.backend.probeAccount();
+    assert.equal(result.cli.path, 'C:/runtime/opencode.exe');
+    assert.deepEqual(result.cli, result.runningCli);
+    assert.deepEqual(resolutions[1], resolutions[0]);
+  } finally { h.backend.reset(); }
 });
 
 test('OpenCode does not terminate a stable marker owned by another live panel in the same host generation', async () => {

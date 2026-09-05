@@ -20409,6 +20409,114 @@
   init_cep_runtime_inject();
   var import_react20 = __toESM(require_react(), 1);
 
+  // src/lib/cliUpdates.js
+  init_cep_runtime_inject();
+  var ASTRA_CLI_BASELINE = "0.153.4";
+  var PACKAGES = { codex: "@openai/codex", subscription: "@anthropic-ai/claude-code", opencode: "opencode-ai" };
+  var DOCS = {
+    codex: "https://learn.chatgpt.com/docs/cli",
+    subscription: "https://code.claude.com/docs/en/setup",
+    opencode: "https://opencode.ai/docs/cli/#upgrade"
+  };
+  function compareVersions(left, right) {
+    const parse = (value) => /^(?:v)?(\d+)\.(\d+)\.(\d+)$/.exec(String(value || "").trim());
+    const a = parse(left), b = parse(right);
+    if (!a || !b) return null;
+    for (let i = 1; i <= 3; i += 1) {
+      if (Number(a[i]) !== Number(b[i])) return Math.sign(Number(a[i]) - Number(b[i]));
+    }
+    return 0;
+  }
+  function cliIdentity(executable, fs) {
+    var _a, _b, _c;
+    if (!(executable == null ? void 0 : executable.ok)) return null;
+    const path = executable.displayPath || executable.path;
+    let realPath = ((_a = executable.argsPrefix) == null ? void 0 : _a[0]) || executable.path;
+    try {
+      realPath = ((_b = fs == null ? void 0 : fs.realpathSync) == null ? void 0 : _b.call(fs, realPath)) || realPath;
+    } catch {
+    }
+    return {
+      path,
+      version: executable.version || "",
+      source: executable.source,
+      launchPath: executable.path,
+      realPath,
+      script: ((_c = executable.argsPrefix) == null ? void 0 : _c[0]) || ""
+    };
+  }
+  function cliUpdateGuide(backend, cli, lang = "zh") {
+    const en = lang === "en";
+    const paths = [cli == null ? void 0 : cli.path, cli == null ? void 0 : cli.realPath, cli == null ? void 0 : cli.script].join("/").replace(/\\/g, "/").toLowerCase();
+    let command = "", source = "standalone";
+    let url = DOCS[backend];
+    let detail = en ? "Use the original installation source to update this executable." : "\u8BF7\u6309\u6B64\u53EF\u6267\u884C\u6587\u4EF6\u7684\u539F\u5B89\u88C5\u6765\u6E90\u66F4\u65B0\u3002";
+    if (backend === "opencode" && (cli == null ? void 0 : cli.source) === "runtime") {
+      source = "bundled";
+      url = "https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases";
+      detail = en ? "Choose a panel release whose notes include a newer OpenCode runtime. Reinstalling the same panel version does not upgrade it." : "\u8BF7\u9009\u7528\u53D1\u884C\u8BF4\u660E\u660E\u786E\u9644\u5E26\u65B0\u7248 OpenCode runtime \u7684\u9762\u677F Release\u3002\u91CD\u88C5\u540C\u4E00\u9762\u677F\u7248\u672C\u4E0D\u4F1A\u5347\u7EA7\u5B83\u3002";
+    } else if (/\/openai\/codex\/bin\//.test(paths)) {
+      source = "desktop";
+      detail = en ? "Update the Codex desktop app that owns this executable." : "\u8BF7\u66F4\u65B0\u63D0\u4F9B\u6B64\u53EF\u6267\u884C\u6587\u4EF6\u7684 Codex \u684C\u9762\u5E94\u7528\u3002";
+    } else if (/\/winget\/(packages|links)\//.test(paths)) {
+      source = "winget";
+      if (backend === "subscription") command = "winget upgrade Anthropic.ClaudeCode";
+    } else if (/\/(cellar|caskroom)\/(codex|opencode|claude-code)(?:@latest)?\//.test(paths)) {
+      source = "homebrew";
+      const name = backend === "subscription" ? paths.includes("claude-code@latest") ? "claude-code@latest" : "claude-code" : backend;
+      command = "brew upgrade " + name;
+    } else if (/\/node_modules\//.test(paths)) {
+      source = paths.includes("/pnpm/") || paths.includes("/.pnpm/") ? "pnpm" : paths.includes("/bun/") ? "bun" : "npm";
+      command = source === "npm" ? `npm install -g ${PACKAGES[backend]}@latest` : `${source} add -g ${PACKAGES[backend]}@latest`;
+    } else if (backend === "subscription" && /\/\.local\/(bin\/claude|share\/claude\/)/.test(paths)) {
+      source = "native";
+      command = "claude update";
+    } else if (backend === "opencode" && /\/\.opencode\/bin\//.test(paths)) {
+      source = "native";
+      command = "opencode upgrade";
+    }
+    return { source, command, url, detail };
+  }
+  function createCliUpdateChecker({ requestJson, now = Date.now, timeoutMs = 8e3 }) {
+    const cache = /* @__PURE__ */ new Map();
+    return async (backend, cli, { force = false } = {}) => {
+      var _a;
+      const current = (cli == null ? void 0 : cli.version) || "";
+      if (!PACKAGES[backend] || !cli) return { status: "unknown", current };
+      let entry2 = cache.get(backend);
+      if (force || !entry2 || now() - entry2.checkedAt >= 864e5) {
+        let timer;
+        try {
+          const result = await Promise.race([
+            requestJson({ url: `https://registry.npmjs.org/${PACKAGES[backend]}/latest`, timeoutMs }),
+            new Promise((_, reject) => {
+              timer = setTimeout(() => reject(new Error("timeout")), timeoutMs);
+            })
+          ]);
+          const latest = (_a = result.json) == null ? void 0 : _a.version;
+          if (!result.ok || compareVersions(latest, latest) === null) throw new Error("unknown stable version");
+          entry2 = { latest, checkedAt: now() };
+          cache.set(backend, entry2);
+        } catch {
+          return { status: "unknown", current };
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      const comparison = compareVersions(current, entry2.latest);
+      return { ...entry2, current, status: comparison === null ? "unknown" : comparison < 0 ? "update" : "current" };
+    };
+  }
+  function codexCatalogNotice(probe, lang = "zh") {
+    var _a;
+    const en = lang === "en";
+    if (!probe) return en ? "Checking model catalog\u2026" : "\u6B63\u5728\u68C0\u67E5\u6A21\u578B\u76EE\u5F55\u2026";
+    if (probe.catalogStatus !== "complete") return en ? "Model catalog check failed; saved choices are retained. Recheck to confirm availability." : "\u6A21\u578B\u76EE\u5F55\u68C0\u67E5\u5931\u8D25\uFF0C\u5DF2\u4FDD\u7559\u539F\u6709\u9009\u62E9\uFF1B\u8BF7\u91CD\u65B0\u68C0\u6D4B\u4EE5\u786E\u8BA4\u53EF\u7528\u6027\u3002";
+    if ((_a = probe.models) == null ? void 0 : _a.some((m) => m.id === "gpt-6-astra" && !m.hidden)) return "";
+    if (compareVersions(probe.cliVersion, ASTRA_CLI_BASELINE) === -1) return en ? `Astra is absent from this old CLI catalog. Update Codex to ${ASTRA_CLI_BASELINE} or later, then recheck; other available models remain usable.` : `\u5F53\u524D\u65E7 CLI \u76EE\u5F55\u6CA1\u6709 Astra\u3002\u8BF7\u66F4\u65B0 Codex \u81F3 ${ASTRA_CLI_BASELINE} \u6216\u66F4\u9AD8\u7248\u672C\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u5176\u4ED6\u53EF\u7528\u6A21\u578B\u4ECD\u53EF\u4F7F\u7528\u3002`;
+    return en ? "This account or route does not list Astra as available. Choose a listed model." : "\u5F53\u524D\u8D26\u53F7\u6216\u8DEF\u7531\u672A\u5C06 Astra \u5217\u4E3A\u53EF\u7528\u6A21\u578B\uFF0C\u8BF7\u9009\u62E9\u76EE\u5F55\u5185\u7684\u6A21\u578B\u3002";
+  }
+
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
@@ -21207,7 +21315,7 @@
   function byteLength(value) {
     return Buffer.byteLength(String(value || ""), "utf8");
   }
-  function compareVersions(actual, minimum) {
+  function compareVersions2(actual, minimum) {
     const left = String(actual || "").match(/\d+(?:\.\d+){0,3}/);
     const right = String(minimum || "").match(/\d+(?:\.\d+){0,3}/);
     if (!left || !right) return null;
@@ -21784,7 +21892,7 @@
       const versionMatch = output.match(/\d+(?:\.\d+){0,3}/);
       const version = versionMatch ? versionMatch[0] : null;
       if (options.minimumVersion) {
-        const compared = compareVersions(version, options.minimumVersion);
+        const compared = compareVersions2(version, options.minimumVersion);
         if (compared === null || compared < 0) {
           attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "version " + (version || "unknown") + " is below " + options.minimumVersion });
           return { failure: "VERSION_TOO_OLD" };
@@ -22731,19 +22839,9 @@
       defaultModelId: "gpt-5.6-sol",
       defaultEffort: "medium",
       supportsFast: (modelId) => CODEX_STATIC_FAST_MODEL_IDS.has(String(modelId || "")),
+      catalogVerified: false,
       approvalModes: APPROVAL_MODES,
       perTurnModelSwitch: true
-    };
-  }
-  function mergeCodexOfficialLoginModels(descriptor) {
-    const models = Array.isArray(descriptor == null ? void 0 : descriptor.models) ? descriptor.models : [];
-    const present = new Set(models.map((model) => model == null ? void 0 : model.id).filter(Boolean));
-    const missing = codexOfficialLogin56Models().filter((model) => !present.has(model.id));
-    const supportsFast = typeof (descriptor == null ? void 0 : descriptor.supportsFast) === "function" ? descriptor.supportsFast : () => false;
-    return {
-      ...descriptor,
-      models: missing.length ? [...models, ...missing] : models,
-      supportsFast: (modelId) => CODEX_OFFICIAL_LOGIN_56_MODEL_IDS.has(String(modelId || "")) || supportsFast(modelId)
     };
   }
   function modelListArray(modelListResult) {
@@ -22753,30 +22851,30 @@
   }
   function codexDescriptorFromModels(modelListResult) {
     var _a;
-    const rawModels = modelListArray(modelListResult).filter((model) => (model == null ? void 0 : model.hidden) !== true);
-    if (!rawModels.length) return codexStaticDescriptor();
+    const rawModels = modelListArray(modelListResult).filter((model) => (model == null ? void 0 : model.id) && model.hidden !== true);
     const fastModels = /* @__PURE__ */ new Set();
     const models = rawModels.map((model) => {
       const id = String(model.id || "");
-      if (Array.isArray(model.additionalSpeedTiers) && model.additionalSpeedTiers.includes("fast")) {
+      if (Array.isArray(model.additionalSpeedTiers) && model.additionalSpeedTiers.includes("fast") || Array.isArray(model.serviceTiers) && model.serviceTiers.some((tier) => (tier == null ? void 0 : tier.id) === "priority")) {
         fastModels.add(id);
       }
       return {
         id,
         label: model.displayName || model.display_name || id,
         effortLevels: Array.isArray(model.supportedReasoningEfforts) ? model.supportedReasoningEfforts.map((effort) => effort == null ? void 0 : effort.reasoningEffort).filter(Boolean) : [],
+        defaultEffort: model.defaultReasoningEffort,
         cost: 2,
         adaptive: false
       };
     }).filter((model) => model.id);
-    if (!models.length) return codexStaticDescriptor();
-    const defaultRaw = rawModels.find((model) => (model == null ? void 0 : model.isDefault) === true) || rawModels[0];
-    const defaultModelId = (defaultRaw == null ? void 0 : defaultRaw.id) ? String(defaultRaw.id) : models[0].id;
+    const defaultRaw = rawModels.find((model) => model.id === "gpt-6-astra") || rawModels.find((model) => model.isDefault === true) || rawModels[0];
+    const defaultModelId = (defaultRaw == null ? void 0 : defaultRaw.id) ? String(defaultRaw.id) : "";
     const defaultEffort = (defaultRaw == null ? void 0 : defaultRaw.defaultReasoningEffort) || ((_a = models.find((model) => model.id === defaultModelId)) == null ? void 0 : _a.effortLevels[0]) || "medium";
     return {
       id: "codex",
       label: "Codex",
       models,
+      catalogVerified: true,
       defaultModelId,
       defaultEffort,
       supportsFast: (modelId) => fastModels.has(String(modelId || "")),
@@ -23175,6 +23273,7 @@
     onLoginChannel,
     loginState = null,
     recheckDisabled = false,
+    cliStatus = {},
     providerManager = null,
     providerInit = { state: "checking", error: "" },
     logLevel = "info",
@@ -23245,6 +23344,7 @@
           providerInitMessage,
           providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : ""
         ] }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(CliUpdateStatus, { backend, lang, ...cliStatus, onOpenExternal: handleExternalLink }),
         providerManager,
         /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || FALLBACK_MODEL_OPTIONS }) })
       ] }),
@@ -23331,6 +23431,51 @@
           /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "ghost", size: "sm", icon: "rotate-cw", onClick: onRerunWizard, children: t.rerunWizard })
         ] })
       ] })
+    ] });
+  }
+  function CliUpdateStatus({ backend, probe, update, notice, lang = "zh", onOpenExternal }) {
+    const en = lang === "en";
+    const cli = probe == null ? void 0 : probe.cli;
+    const guide = cliUpdateGuide(backend, cli, lang);
+    const key = "ae_mcp_cli_dismiss_" + backend;
+    const identity = `${(cli == null ? void 0 : cli.path) || ""}:${(update == null ? void 0 : update.latest) || ""}`;
+    const [dismissed, setDismissed] = import_react20.default.useState("");
+    import_react20.default.useEffect(() => {
+      try {
+        setDismissed(window.localStorage.getItem(key) || "");
+      } catch {
+      }
+    }, [key]);
+    const newer = (update == null ? void 0 : update.status) === "update" && dismissed !== identity;
+    const running = probe == null ? void 0 : probe.runningCli;
+    const changed = running && (running.version !== (cli == null ? void 0 : cli.version) || running.path !== (cli == null ? void 0 : cli.path));
+    return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { role: "status", style: { font: "400 11px/1.5 var(--font-ui)", color: "var(--text-secondary)", overflowWrap: "anywhere" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { children: [
+        en ? "Selected CLI" : "\u6240\u9009 CLI",
+        ": ",
+        (cli == null ? void 0 : cli.version) || (en ? "Unknown" : "\u672A\u77E5"),
+        " \xB7 ",
+        guide.source
+      ] }),
+      (cli == null ? void 0 : cli.path) ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { style: { fontFamily: "var(--font-mono)" }, children: cli.path }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { children: (update == null ? void 0 : update.status) === "checking" ? en ? "Checking stable version\u2026" : "\u6B63\u5728\u68C0\u67E5\u7A33\u5B9A\u7248\u2026" : (update == null ? void 0 : update.status) === "unknown" || !update ? en ? "Stable version unknown; chat is unaffected." : "\u7A33\u5B9A\u7248\u672A\u77E5\uFF0C\u4E0D\u5F71\u54CD\u804A\u5929\u3002" : `${en ? "Upstream stable" : "\u4E0A\u6E38\u7A33\u5B9A\u7248"}: ${update.latest}` }),
+      changed ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { children: en ? `This session still runs ${running.version}. Start a new conversation to use the updated CLI.` : `\u5F53\u524D\u4F1A\u8BDD\u4ECD\u8FD0\u884C ${running.version}\uFF1B\u65B0\u5EFA\u5BF9\u8BDD\u540E\u4F7F\u7528\u66F4\u65B0\u7684 CLI\u3002` }) : null,
+      notice ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { children: notice }) : null,
+      newer ? /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { marginTop: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { children: en ? `Update available: ${update.current} \u2192 ${update.latest}` : `\u6709\u53EF\u7528\u66F4\u65B0\uFF1A${update.current} \u2192 ${update.latest}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { children: guide.detail }),
+        guide.command ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("code", { children: guide.command }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "secondary", size: "sm", onClick: () => onOpenExternal(guide.url), children: en ? "Update guide" : "\u66F4\u65B0\u6307\u5F15" }),
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
+            setDismissed(identity);
+            try {
+              window.localStorage.setItem(key, identity);
+            } catch {
+            }
+          }, children: en ? "Dismiss" : "\u5173\u95ED\u63D0\u9192" })
+        ] })
+      ] }) : null
     ] });
   }
 
@@ -29434,7 +29579,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     if (adapter.id === "windows-x64") return "x64";
     return void 0;
   }
-  function compareVersions2(actual, minimum) {
+  function compareVersions3(actual, minimum) {
     const left = String(actual || "").match(/\d+(?:\.\d+){0,3}/);
     const right = String(minimum || "").match(/\d+(?:\.\d+){0,3}/);
     if (!left || !right) return null;
@@ -30408,7 +30553,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           return false;
         }
         const minimumCliVersion = minimumCliVersionForModel(session.model);
-        const versionComparison = minimumCliVersion ? compareVersions2(resolved.version, minimumCliVersion) : null;
+        const versionComparison = minimumCliVersion ? compareVersions3(resolved.version, minimumCliVersion) : null;
         if (minimumCliVersion && (versionComparison === null || versionComparison < 0)) {
           const classification = classifyErrorCode({ code: "CLI_TOO_OLD" });
           emitAfterText({
@@ -30737,7 +30882,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        resolve(result);
+        resolve({ ...result, cli: cliIdentity(resolved.executable, adapter.fs) });
       }
       const timer = setTimeout(() => {
         if (proc && proc.kill) {
@@ -31983,13 +32128,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const spawnEnv = currentEnv();
       let cliInfo = { ok: false, cliPath: "", version: "" };
       try {
-        cliInfo = lastCliInfo || await resolveCli({ env: spawnEnv, platform: adapter });
-        lastCliInfo = cliInfo;
+        cliInfo = await resolveCli({ env: spawnEnv, platform: adapter });
       } catch (e) {
       }
       const diag = {
         cliPath: cliInfo.cliPath || "",
         cliVersion: cliInfo.version || "",
+        cli: cliIdentity(cliInfo.executable, adapter.fs),
+        runningCli: proc ? cliIdentity(lastCliInfo == null ? void 0 : lastCliInfo.executable, adapter.fs) : null,
         codexHome: codexHomePath(),
         platformId: adapter.id || ""
       };
@@ -32035,9 +32181,31 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }, PROBE_INITIALIZE_TIMEOUT_MS, "initialize");
         const accountResult = await boundedProbeRequest(probeRpc, "account/read", {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, "account/read");
         let models = null;
+        let catalogStatus = "failed";
         try {
-          const listed = await boundedProbeRequest(probeRpc, "model/list", {}, PROBE_MODEL_LIST_TIMEOUT_MS, "model/list");
-          models = Array.isArray(listed) ? listed : Array.isArray(listed == null ? void 0 : listed.models) ? listed.models : listed == null ? void 0 : listed.data;
+          const all = /* @__PURE__ */ new Map(), cursors = /* @__PURE__ */ new Set();
+          const deadline = Date.now() + PROBE_MODEL_LIST_TIMEOUT_MS;
+          let cursor;
+          for (let page = 0; page < 10; page += 1) {
+            const remaining = deadline - Date.now();
+            if (remaining <= 0) throw new Error("model/list deadline");
+            const listed = await boundedProbeRequest(probeRpc, "model/list", {
+              limit: 100,
+              includeHidden: false,
+              ...cursor ? { cursor } : {}
+            }, remaining, "model/list");
+            const data2 = Array.isArray(listed) ? listed : (listed == null ? void 0 : listed.models) || (listed == null ? void 0 : listed.data);
+            if (!Array.isArray(data2) || data2.some((m) => !m || typeof m.id !== "string" || !m.id)) throw new Error("Invalid model/list");
+            for (const model of data2) all.set(model.id, model);
+            cursor = listed.nextCursor;
+            if (!cursor) {
+              models = [...all.values()];
+              catalogStatus = "complete";
+              break;
+            }
+            if (typeof cursor !== "string" || cursors.has(cursor)) throw new Error("Invalid model/list cursor");
+            cursors.add(cursor);
+          }
         } catch (e) {
           models = null;
         }
@@ -32047,6 +32215,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           runtimeOk: true,
           detail: accountResult && accountResult.requiresOpenaiAuth ? "OpenAI auth required" : void 0,
           models,
+          catalogStatus,
           ...diag
         } : {
           loggedIn: true,
@@ -32054,6 +32223,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           email: account.email,
           planType: account.planType,
           models,
+          catalogStatus,
           ...diag
         };
         if (containsExactSecret(result, probeSecrets())) {
@@ -32821,6 +32991,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const currentLang = () => (typeof getLang === "function" ? getLang() : lang) || "zh";
     const currentHostGeneration = String(hostGeneration || PANEL_HOST_GENERATION);
     let proc = null;
+    let runningCli = null;
     let port = null;
     let baseUrl = "";
     let configHome = "";
@@ -33576,6 +33747,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         writeInstanceMarker(startHome, spawnedProc, startPort);
         assertCurrentStart();
         proc = spawnedProc;
+        runningCli = cliIdentity(executable, adapter.fs);
         port = startPort;
         baseUrl = startBaseUrl;
         configHome = startHome;
@@ -34268,7 +34440,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           })(),
           timeout
         ]);
-        return { loggedIn: true, providers };
+        const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
+        const selected = await adapter.resolveExecutable("opencode", {
+          env: adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: configHome }),
+          ...requiredArch ? { requiredArch } : {}
+        });
+        return { loggedIn: true, providers, cli: cliIdentity(selected, adapter.fs), runningCli };
       } catch (e) {
         if (timedOut) {
           if (!activeRun) reset();
@@ -35475,15 +35652,16 @@ ${command}`
     backendPref = "subscription",
     baseDescriptor,
     codexCachedModels = null,
+    preferredModel = "",
     openCodeProviders = []
   }) {
     if (backendPref === "codex" || effectiveBackend === "codex") {
       if (codexCachedModels) {
-        return mergeCodexOfficialLoginModels(
-          codexDescriptorFromModels({ models: codexCachedModels })
-        );
+        return codexDescriptorFromModels({ models: codexCachedModels });
       }
-      return mergeCodexOfficialLoginModels(baseDescriptor || codexStaticDescriptor());
+      const fallback = baseDescriptor || codexStaticDescriptor();
+      if (!preferredModel || fallback.models.some((m) => m.id === preferredModel)) return fallback;
+      return { ...fallback, models: [...fallback.models, { id: preferredModel, label: preferredModel, effortLevels: [] }] };
     }
     if (backendPref === "opencode" || effectiveBackend === "opencode") {
       const providers = {};
@@ -37798,7 +37976,7 @@ ${command}`
     const resolved = resolveModelPreference({
       channelValue: readPref(key, ""),
       legacyValue,
-      fallback
+      fallback: channel === "codex" ? "" : fallback
     });
     if (resolved.migrateLegacy) writePref(key, resolved.value);
     if (legacyValue) removePref(LEGACY_MODEL_PREF_KEY);
@@ -37991,7 +38169,28 @@ ${command}`
     const [openCodeProbeStale, setOpenCodeProbeStale] = import_react48.default.useState(false);
     const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = import_react48.default.useState(0);
     const openCodeProbeRunRef = import_react48.default.useRef(0);
-    const openCodeAvailableProviders = import_react48.default.useMemo(() => Array.isArray(openCodeProbe == null ? void 0 : openCodeProbe.providers) && openCodeProbe.providers.length ? openCodeProbe.providers : providers, [openCodeProbe, providers]);
+    const openCodeAvailableProviders = import_react48.default.useMemo(() => {
+      var _a;
+      const merged = new Map(providers.map((p) => [p.id, p]));
+      for (const p of (openCodeProbe == null ? void 0 : openCodeProbe.providers) || []) {
+        merged.set(p.id, { ...p, modelIds: [.../* @__PURE__ */ new Set([...((_a = merged.get(p.id)) == null ? void 0 : _a.modelIds) || [], ...p.modelIds])] });
+      }
+      return [...merged.values()];
+    }, [openCodeProbe, providers]);
+    const selectedProbe = backendPref === "codex" ? codexProbe : backendPref === "opencode" ? openCodeProbe : probe;
+    const checkCliUpdate = import_react48.default.useMemo(() => createCliUpdateChecker({ requestJson: platform.requestJson }), [platform]);
+    const [cliUpdate, setCliUpdate] = import_react48.default.useState(null);
+    const [cliRecheck, setCliRecheck] = import_react48.default.useState(0);
+    import_react48.default.useEffect(() => {
+      let alive = true;
+      setCliUpdate({ status: "checking" });
+      if (selectedProbe) checkCliUpdate(backendPref, selectedProbe.cli, { force: cliRecheck > 0 }).then((result) => {
+        if (alive) setCliUpdate(result);
+      });
+      return () => {
+        alive = false;
+      };
+    }, [backendPref, selectedProbe, checkCliUpdate, cliRecheck]);
     const [chatEntries, setChatEntries] = import_react48.default.useState([]);
     const chatEntriesRef = import_react48.default.useRef(chatEntries);
     chatEntriesRef.current = chatEntries;
@@ -38006,12 +38205,19 @@ ${command}`
     );
     const [descriptor, setDescriptor] = import_react48.default.useState(() => baseDescriptor);
     const requestedModel = sessionModel || model;
-    const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
+    const effectiveModel = reconcileModelPref(requestedModel, descriptor) || requestedModel;
+    const catalogEmpty = descriptor.catalogVerified && !descriptor.models.length;
+    const fallbackNotice = requestedModel && requestedModel !== effectiveModel && readPref(modelPreferenceKey(backendPref), "") === requestedModel ? lang === "en" ? `${requestedModel} is absent from this catalog; using ${effectiveModel}. Your saved preference is retained.` : `\u5F53\u524D\u76EE\u5F55\u4E0D\u542B ${requestedModel}\uFF0C\u6682\u7528 ${effectiveModel}\uFF1B\u539F\u6709\u504F\u597D\u5DF2\u4FDD\u7559\u3002` : "";
+    const modelNotice = [
+      backendPref === "codex" ? codexCatalogNotice(codexProbe, lang) : "",
+      fallbackNotice,
+      catalogEmpty ? lang === "en" ? "No visible models are available. Recheck in Settings." : "\u76EE\u5F55\u4E2D\u6CA1\u6709\u53EF\u89C1\u6A21\u578B\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u91CD\u65B0\u68C0\u6D4B\u3002" : ""
+    ].filter(Boolean).join(" ");
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
     const effectiveEffort = resolveEffectiveEffort({
       requested: sessionEffort,
       model: modelMeta,
-      defaultEffort: descriptor.defaultEffort
+      defaultEffort: modelMeta.defaultEffort || descriptor.defaultEffort
     });
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
     const providerManager = /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
@@ -38438,17 +38644,11 @@ ${draft.baseUrl}`)) return;
         backendPref,
         baseDescriptor,
         codexCachedModels: codexModels,
+        preferredModel: requestedModel,
         openCodeProviders: openCodeAvailableProviders
       };
       const nextDescriptor = selectDescriptor(facts);
       setDescriptor(nextDescriptor);
-      const reconciled = reconcileModelPref(model, nextDescriptor, {
-        providerFactsPending: backendPref === "codex" ? codexProbe === null || codexModels === null : backendPref === "opencode" && (providerInit.state !== "ready" || openCodeProbe === null)
-      });
-      if (reconciled !== model) {
-        setModel(reconciled);
-        writePref(modelPreferenceKey(backendPref), reconciled);
-      }
     }, [
       effective.backend,
       effective.channel,
@@ -38459,6 +38659,7 @@ ${draft.baseUrl}`)) return;
       openCodeAvailableProviders,
       openCodeProbe,
       model,
+      requestedModel,
       providerInit.state
     ]);
     const lastRealBackendRef = import_react48.default.useRef(null);
@@ -38490,7 +38691,6 @@ ${draft.baseUrl}`)) return;
     const runCodexProbe = import_react48.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
-      setCodexModels(null);
       codexBackend.probeAccount().then((result) => {
         if (!alive) return;
         if (containsExactSecret(result, ["aemcp-secret://"])) {
@@ -38504,7 +38704,6 @@ ${draft.baseUrl}`)) return;
         }
       }).catch((e) => {
         if (alive) {
-          setCodexModels(null);
           setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
         }
       });
@@ -38703,7 +38902,7 @@ ${draft.baseUrl}`)) return;
     ]);
     const sendChat = (input) => {
       var _a;
-      if (pendingTurnRef.current) return;
+      if (pendingTurnRef.current || catalogEmpty) return;
       let turn;
       try {
         turn = normalizeTurnInput(input);
@@ -39083,7 +39282,7 @@ ${draft.baseUrl}`)) return;
       { id: "settings", icon: "settings", label: t.settings }
     ];
     const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
-    const composerDisabled = paused || effective.backend === "none" || Boolean(hostConversationError);
+    const composerDisabled = paused || effective.backend === "none" || Boolean(hostConversationError) || catalogEmpty;
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
     const activeSessionMeta = sessionSnapshot.sessions.find(
       (meta) => meta.id === sessionSnapshot.activeId
@@ -39121,7 +39320,7 @@ ${draft.baseUrl}`)) return;
             sessionTitle,
             onOpenSessions: () => setSessionsOpen(true),
             composerDisabled,
-            disabledHint: hostConversationError ? t.approvalSyncError : paused ? t.pausedHint : composerDisabled ? backendDisabledHint : "",
+            disabledHint: hostConversationError ? t.approvalSyncError : paused ? t.pausedHint : catalogEmpty ? modelNotice : composerDisabled ? backendDisabledHint : fallbackNotice,
             noticeActionLabel: paused ? t.resume : t.goSettings,
             onNoticeAction: () => paused ? togglePause() : setTab("settings"),
             onSend: sendChat,
@@ -39225,6 +39424,8 @@ ${draft.baseUrl}`)) return;
             onLoginChannel,
             loginState,
             onRecheckBackend: () => {
+              if (chatStreaming || pendingTurnRef.current) return;
+              setCliRecheck((value) => value + 1);
               if (backendPref === "codex") runCodexProbe();
               else if (backendPref === "opencode") {
                 if (openCodeProbe === null && openCodeProbeStale && !chatStreaming) {
@@ -39233,7 +39434,8 @@ ${draft.baseUrl}`)) return;
                 runOpenCodeProbe();
               } else runClaudeProbe();
             },
-            recheckDisabled: backendPref === "codex" ? codexProbe === null : backendPref === "opencode" ? openCodeProbe === null && !openCodeProbeStale : probe === null,
+            cliStatus: { probe: selectedProbe, update: cliUpdate, notice: modelNotice },
+            recheckDisabled: chatStreaming || (backendPref === "codex" ? codexProbe === null : backendPref === "opencode" ? openCodeProbe === null && !openCodeProbeStale : probe === null),
             providers,
             providerManager,
             providerInit,

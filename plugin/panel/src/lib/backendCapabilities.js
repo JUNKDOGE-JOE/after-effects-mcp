@@ -2,8 +2,7 @@
 // these, with no hardcoded model ids or tier names elsewhere.
 //
 // Claude ids are the API aliases (no date suffixes); the CLI passes them
-// through unchanged. The default stays on Opus 5, which every current CLI
-// accepts.
+// through unchanged. Account access is still decided by the selected CLI.
 export const CLAUDE_PRICE_USD_PER_MTOK = {
   'claude-fable-5-1': { input: 10, output: 50 },
   'claude-opus-5': { input: 5, output: 25 },
@@ -146,23 +145,9 @@ export function codexStaticDescriptor() {
     defaultModelId: 'gpt-5.6-sol',
     defaultEffort: 'medium',
     supportsFast: (modelId) => CODEX_STATIC_FAST_MODEL_IDS.has(String(modelId || '')),
+    catalogVerified: false,
     approvalModes: APPROVAL_MODES,
     perTurnModelSwitch: true,
-  };
-}
-
-export function mergeCodexOfficialLoginModels(descriptor) {
-  const models = Array.isArray(descriptor?.models) ? descriptor.models : [];
-  const present = new Set(models.map((model) => model?.id).filter(Boolean));
-  const missing = codexOfficialLogin56Models().filter((model) => !present.has(model.id));
-  const supportsFast = typeof descriptor?.supportsFast === 'function'
-    ? descriptor.supportsFast
-    : () => false;
-  return {
-    ...descriptor,
-    models: missing.length ? [...models, ...missing] : models,
-    supportsFast: (modelId) => CODEX_OFFICIAL_LOGIN_56_MODEL_IDS.has(String(modelId || ''))
-      || supportsFast(modelId),
   };
 }
 
@@ -174,14 +159,13 @@ function modelListArray(modelListResult) {
 }
 
 export function codexDescriptorFromModels(modelListResult) {
-  const rawModels = modelListArray(modelListResult).filter((model) => model?.hidden !== true);
-  if (!rawModels.length) return codexStaticDescriptor();
+  const rawModels = modelListArray(modelListResult).filter((model) => model?.id && model.hidden !== true);
 
   const fastModels = new Set();
   const models = rawModels.map((model) => {
     const id = String(model.id || '');
-    if (Array.isArray(model.additionalSpeedTiers)
-        && model.additionalSpeedTiers.includes('fast')) {
+    if ((Array.isArray(model.additionalSpeedTiers) && model.additionalSpeedTiers.includes('fast'))
+        || (Array.isArray(model.serviceTiers) && model.serviceTiers.some((tier) => tier?.id === 'priority'))) {
       fastModels.add(id);
     }
     return {
@@ -191,14 +175,15 @@ export function codexDescriptorFromModels(modelListResult) {
         ? model.supportedReasoningEfforts.map((effort) => effort?.reasoningEffort)
           .filter(Boolean)
         : [],
+      defaultEffort: model.defaultReasoningEffort,
       cost: 2,
       adaptive: false,
     };
   }).filter((model) => model.id);
 
-  if (!models.length) return codexStaticDescriptor();
-  const defaultRaw = rawModels.find((model) => model?.isDefault === true) || rawModels[0];
-  const defaultModelId = defaultRaw?.id ? String(defaultRaw.id) : models[0].id;
+  const defaultRaw = rawModels.find((model) => model.id === 'gpt-6-astra')
+    || rawModels.find((model) => model.isDefault === true) || rawModels[0];
+  const defaultModelId = defaultRaw?.id ? String(defaultRaw.id) : '';
   const defaultEffort = defaultRaw?.defaultReasoningEffort
     || models.find((model) => model.id === defaultModelId)?.effortLevels[0]
     || 'medium';
@@ -206,6 +191,7 @@ export function codexDescriptorFromModels(modelListResult) {
     id: 'codex',
     label: 'Codex',
     models,
+    catalogVerified: true,
     defaultModelId,
     defaultEffort,
     supportsFast: (modelId) => fastModels.has(String(modelId || '')),

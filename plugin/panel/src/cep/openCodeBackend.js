@@ -1,4 +1,5 @@
 import { createSseParser } from '../lib/sse.js';
+import { cliIdentity } from '../lib/cliUpdates.js';
 import { openCodeCatalogId } from '../lib/openCodeCatalogId.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
@@ -384,6 +385,7 @@ export function createOpenCodeBackend({
   const currentLang = () => (typeof getLang === 'function' ? getLang() : lang) || 'zh';
   const currentHostGeneration = String(hostGeneration || PANEL_HOST_GENERATION);
   let proc = null;
+  let runningCli = null;
   let port = null;
   let baseUrl = '';
   let configHome = '';
@@ -1184,6 +1186,7 @@ export function createOpenCodeBackend({
       writeInstanceMarker(startHome, spawnedProc, startPort);
       assertCurrentStart();
       proc = spawnedProc;
+      runningCli = cliIdentity(executable, adapter.fs);
       port = startPort;
       baseUrl = startBaseUrl;
       configHome = startHome;
@@ -1932,7 +1935,11 @@ export function createOpenCodeBackend({
         })(),
         timeout,
       ]);
-      return { loggedIn: true, providers };
+      const requiredArch = adapter.id === 'macos-arm64' ? 'arm64' : (adapter.id === 'windows-x64' ? 'x64' : undefined);
+      const selected = await adapter.resolveExecutable('opencode', {
+        env: adapter.completeSpawnEnv(currentEnv(), { XDG_CONFIG_HOME: configHome }), ...(requiredArch ? { requiredArch } : {}),
+      });
+      return { loggedIn: true, providers, cli: cliIdentity(selected, adapter.fs), runningCli };
     } catch (e) {
       if (timedOut) {
         if (!activeRun) reset();

@@ -1,6 +1,7 @@
 import { claudeChannelEnv } from '../lib/claudeChannel.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { resolveClaudeCli } from './claudeAgentBackend.js';
+import { cliIdentity } from '../lib/cliUpdates.js';
 
 export async function probeClaudeLogin({
   platform,
@@ -34,7 +35,7 @@ export async function probeClaudeLogin({
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve(result);
+      resolve({ ...result, cli: cliIdentity(resolved.executable, adapter.fs) });
     }
 
     const timer = setTimeout(() => {
