@@ -167,6 +167,9 @@ function Entry({ entry, lang, onApprove, onAnswerQuestion }) {
           target={toolTarget(entry, t)}
           status={statusForTool(entry.state)}
           params={entry.input}
+          images={entry.images}
+          lang={lang}
+          details={entry.text}
           errorMessage={entry.state === 'error' ? entry.text : null}
         />
         {entry.state === 'awaiting-approval' ? (
@@ -315,6 +318,8 @@ export function ChatScreen({
       const layout = layoutRef.current;
       const footer = footerRef.current;
       if (!layout || !footer) return;
+      const log = logRef.current;
+      if (log) log.style.setProperty('--tool-preview-max-height', `${Math.max(24, log.clientHeight - 24)}px`);
       const availableHeight = composerAvailableHeight({
         containerHeight: layout.getBoundingClientRect().height,
         footerHeight: footer.getBoundingClientRect().height,
@@ -327,6 +332,7 @@ export function ChatScreen({
     const observer = new ResizeObserver(measureComposerBounds);
     observer.observe(layoutRef.current);
     observer.observe(footerRef.current);
+    if (logRef.current) observer.observe(logRef.current);
     return () => observer.disconnect();
   }, []);
 

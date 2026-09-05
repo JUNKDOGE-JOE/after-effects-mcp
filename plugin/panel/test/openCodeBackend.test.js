@@ -1202,6 +1202,26 @@ test('OpenCode prefixes only ae server tool names', async () => {
   );
 });
 
+test('OpenCode completed tool attachments retain their callID separately from output text', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser('preview');
+  await flush();
+  fetched.sse.push({ type: 'message.part.updated', properties: { sessionID: 'session_1', part: {
+    type: 'tool', tool: 'ae_ae_previewFrame', callID: 'oc-preview', state: {
+      status: 'completed', output: '{"frames":2}', attachments: [
+        { type: 'file', mime: 'image/png', url: 'file:///tmp/oc1.png' },
+        { type: 'file', mime: 'image/png', url: 'file:///tmp/oc2.png' },
+      ],
+    },
+  } } });
+  completeTurn(fetched);
+  await pending;
+  const result = events.find((event) => event.type === 'tool-result');
+  assert.equal(result.toolUseId, 'oc-preview');
+  assert.deepEqual(result.images.map((image) => image.src), ['file:///tmp/oc1.png', 'file:///tmp/oc2.png']);
+  assert.equal(result.text, '{"frames":2}');
+});
+
 test('OpenCode flushes redacted assistant text before built-in question events', async () => {
   const providerSecret = 'p'.repeat(64);
   assert.equal(providerSecret.length, 64);

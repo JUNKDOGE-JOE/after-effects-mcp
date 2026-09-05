@@ -548,6 +548,26 @@ test('real assistant and user wire map AE tool start and result events', async (
   });
 });
 
+test('Claude tool_result image sources retain their tool_use_id', async () => {
+  const h = makeHarness();
+  const run = h.backend.sendUser('preview');
+  await flush();
+  emitWire(h.processes[0], wire('B', 3));
+  const assistant = wire('B', 57);
+  assistant.message.content[0].name = 'mcp__ae__ae_previewFrame';
+  emitWire(h.processes[0], assistant);
+  const user = wire('B', 59);
+  user.message.content[0].content = [{ type: 'image', source: {
+    type: 'url', url: 'file:///tmp/claude.png', media_type: 'image/png',
+  } }];
+  emitWire(h.processes[0], user);
+  finishTurn(h.processes[0]);
+  await run;
+  const result = h.events.find((event) => event.type === 'tool-result');
+  assert.equal(result.toolUseId, user.message.content[0].tool_use_id);
+  assert.deepEqual(result.images, [{ src: 'file:///tmp/claude.png' }]);
+});
+
 test('Claude flushes redacted assistant text before tool_use events', async () => {
   const selected = 'C:\\' + 's'.repeat(61);
   assert.equal(selected.length, 64);

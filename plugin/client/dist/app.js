@@ -25037,6 +25037,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   // src/components/chat/ToolCallCard.jsx
   init_cep_runtime_inject();
   var import_react33 = __toESM(require_react(), 1);
+  var import_react_dom = __toESM(require_react_dom(), 1);
   var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
   function StatusGlyph({ status }) {
     if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Spinner, { size: 12 });
@@ -25083,12 +25084,108 @@ When you are done, remind me of two things: MCP tools load only in a new session
       }
     );
   }
+  function PreviewImage({ image, lang, onOpen, large = false }) {
+    const [failed, setFailed] = import_react33.default.useState(false);
+    const reason = image.unavailable || (failed || !image.src ? "load" : "");
+    const messages = lang === "en" ? {
+      load: "Preview unavailable. The file may have expired or failed to load.",
+      limit: "Preview exceeds the display limit.",
+      format: "This image format cannot be displayed."
+    } : {
+      load: "\u9884\u89C8\u4E0D\u53EF\u7528\uFF0C\u6587\u4EF6\u53EF\u80FD\u5DF2\u5931\u6548\u6216\u52A0\u8F7D\u5931\u8D25\u3002",
+      limit: "\u9884\u89C8\u8D85\u51FA\u663E\u793A\u4E0A\u9650\u3002",
+      format: "\u65E0\u6CD5\u663E\u793A\u6B64\u56FE\u7247\u683C\u5F0F\u3002"
+    };
+    const preview = /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      "img",
+      {
+        src: image.src,
+        alt: lang === "en" ? "Tool preview" : "\u5DE5\u5177\u9884\u89C8",
+        onError: () => setFailed(true),
+        style: { display: "block", width: "100%", height: large ? "calc(100vh - 112px)" : "min(240px, var(--tool-preview-max-height, 40vh))", objectFit: "contain" }
+      }
+    );
+    return reason ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { role: "status", style: { padding: 8, color: "var(--text-secondary)", fontSize: 12 }, children: messages[reason] || messages.load }) : onOpen ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      "button",
+      {
+        type: "button",
+        title: lang === "en" ? "View larger image" : "\u67E5\u770B\u5927\u56FE",
+        onClick: onOpen,
+        style: { display: "block", width: "100%", border: 0, padding: 0, background: "transparent", cursor: "zoom-in" },
+        children: preview
+      }
+    ) : preview;
+  }
+  function ToolImages({ images, lang }) {
+    const [index, setIndex] = import_react33.default.useState(0);
+    const [open, setOpen] = import_react33.default.useState(false);
+    const inline = import_react33.default.useRef(null);
+    const dialog = import_react33.default.useRef(null);
+    const close = () => {
+      var _a, _b;
+      setOpen(false);
+      (_b = (_a = inline.current) == null ? void 0 : _a.querySelector("button")) == null ? void 0 : _b.focus();
+    };
+    import_react33.default.useEffect(() => {
+      var _a, _b;
+      if (open) (_b = (_a = dialog.current) == null ? void 0 : _a.querySelector("button")) == null ? void 0 : _b.focus();
+    }, [open]);
+    const dialogKey = (event) => {
+      var _a;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
+      if (event.key !== "Tab") return;
+      const buttons = [...dialog.current.querySelectorAll("button:not(:disabled)")];
+      const next = (buttons.indexOf(document.activeElement) + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length;
+      event.preventDefault();
+      (_a = buttons[next]) == null ? void 0 : _a.focus();
+    };
+    const image = images[index];
+    const navigation = images.length > 1 ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 4 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Button, { size: "sm", disabled: index === 0, onClick: () => setIndex(index - 1), title: lang === "en" ? "Previous image" : "\u4E0A\u4E00\u5F20", children: "\u2039" }),
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { fontSize: 12 }, children: [
+        index + 1,
+        " / ",
+        images.length
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Button, { size: "sm", disabled: index === images.length - 1, onClick: () => setIndex(index + 1), title: lang === "en" ? "Next image" : "\u4E0B\u4E00\u5F20", children: "\u203A" })
+    ] }) : null;
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { ref: inline, "data-tool-images": true, style: { borderTop: "1px solid var(--border-subtle)", minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+        PreviewImage,
+        {
+          image,
+          lang,
+          onOpen: () => setOpen(true)
+        },
+        `${index}:${image.src || image.unavailable}`
+      ),
+      navigation,
+      open ? (0, import_react_dom.createPortal)(
+        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { ref: dialog, onKeyDown: dialogKey, style: { position: "fixed", inset: 0, zIndex: 100 }, children: /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(Drawer, { open: true, title: lang === "en" ? "Preview" : "\u9884\u89C8", onClose: close, closeTitle: lang === "en" ? "Close preview" : "\u5173\u95ED\u9884\u89C8", style: { maxHeight: "100%" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(PreviewImage, { image, lang, large: true }, `${index}:${image.src || image.unavailable}`),
+          navigation
+        ] }) }),
+        document.body
+      ) : null
+    ] });
+  }
   function HeaderRow({ status, verb, target, expandable, expanded, onToggle }) {
     const [hover, setHover] = import_react33.default.useState(false);
     return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
       "div",
       {
         role: expandable ? "button" : void 0,
+        tabIndex: expandable ? 0 : void 0,
+        "aria-expanded": expandable ? expanded : void 0,
+        onKeyDown: (event) => {
+          if (expandable && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            onToggle();
+          }
+        },
         onClick: expandable ? onToggle : void 0,
         onMouseEnter: () => setHover(true),
         onMouseLeave: () => setHover(false),
@@ -25141,6 +25238,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
     errorMessage: errorMessage2,
     hint,
     details,
+    images,
+    lang = "zh",
     detailsLabel = "\u8BE6\u60C5",
     onRetry,
     steps,
@@ -25176,6 +25275,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
               onToggle: () => setExpanded(!expanded)
             }
           ),
+          (images == null ? void 0 : images.length) ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(ToolImages, { images, lang }, JSON.stringify(images)) : null,
           expanded && isGroup ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { borderTop: "1px solid var(--border-subtle)", padding: "var(--space-1) 0" }, children: steps.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
             "div",
             {
@@ -27723,6 +27823,9 @@ When you are done, remind me of two things: MCP tools load only in a new session
             target: toolTarget(entry2, t),
             status: statusForTool(entry2.state),
             params: entry2.input,
+            images: entry2.images,
+            lang,
+            details: entry2.text,
             errorMessage: entry2.state === "error" ? entry2.text : null
           }
         ),
@@ -27868,6 +27971,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
         const layout = layoutRef.current;
         const footer = footerRef.current;
         if (!layout || !footer) return;
+        const log = logRef.current;
+        if (log) log.style.setProperty("--tool-preview-max-height", `${Math.max(24, log.clientHeight - 24)}px`);
         const availableHeight = composerAvailableHeight({
           containerHeight: layout.getBoundingClientRect().height,
           footerHeight: footer.getBoundingClientRect().height,
@@ -27879,6 +27984,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
       const observer = new ResizeObserver(measureComposerBounds);
       observer.observe(layoutRef.current);
       observer.observe(footerRef.current);
+      if (logRef.current) observer.observe(logRef.current);
       return () => observer.disconnect();
     }, []);
     const sendTurn = (textOverride) => {
@@ -28415,8 +28521,8 @@ When you are done, remind me of two things: MCP tools load only in a new session
     }, [port]);
     const load = import_react43.default.useCallback(async () => {
       if (!api) return;
-      const sequence = loadSequence.current + 1;
-      loadSequence.current = sequence;
+      const sequence2 = loadSequence.current + 1;
+      loadSequence.current = sequence2;
       setError("");
       try {
         if (mode === "skills") {
@@ -28426,7 +28532,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             const text = [skill.name, skill.description].join(" ").toLowerCase();
             return !needle || text.includes(needle);
           });
-          if (sequence === loadSequence.current) setItems(skills);
+          if (sequence2 === loadSequence.current) setItems(skills);
           return;
         }
         const toolPromise = query.trim() ? api.search({ query, limit: 100 }) : api.index({ limit: 100 });
@@ -28434,7 +28540,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           toolPromise,
           requestLibrary((libraryApi) => libraryApi.list())
         ]);
-        if (sequence !== loadSequence.current) return;
+        if (sequence2 !== loadSequence.current) return;
         if (toolResult.status === "rejected") throw toolResult.reason;
         const payload = toolResult.value || {};
         const management = libraryResult.status === "fulfilled" ? splitToolLibraryItems(libraryResult.value) : { candidates: [], artifacts: [] };
@@ -28450,7 +28556,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           });
         }
       } catch (cause) {
-        if (sequence === loadSequence.current) setError(cause.message || String(cause));
+        if (sequence2 === loadSequence.current) setError(cause.message || String(cause));
       }
     }, [api, mode, query, requestLibrary]);
     import_react43.default.useEffect(() => {
@@ -28469,20 +28575,20 @@ When you are done, remind me of two things: MCP tools load only in a new session
     };
     const select = async (item) => {
       const id = itemId(mode, item);
-      const sequence = selectSequence.current + 1;
-      selectSequence.current = sequence;
+      const sequence2 = selectSequence.current + 1;
+      selectSequence.current = sequence2;
       setSelectedId(id);
       setResult(null);
       setError("");
       setPane("content");
       try {
         const value = mode === "skills" ? item : (await api.inspect(item.id)).artifact;
-        if (sequence !== selectSequence.current) return;
+        if (sequence2 !== selectSequence.current) return;
         setDetail({ mode, value });
         const schema = mode === "skills" ? value.args_schema : value.argsSchema;
         setArgsText(JSON.stringify(defaultArgs(schema), null, 2));
       } catch (cause) {
-        if (sequence === selectSequence.current) setError(cause.message || String(cause));
+        if (sequence2 === selectSequence.current) setError(cause.message || String(cause));
       }
     };
     const invoke = async (action) => {
@@ -29345,6 +29451,77 @@ When you are done, remind me of two things: MCP tools load only in a new session
       }
       onMessage(message);
     });
+  }
+
+  // src/cep/toolImages.js
+  init_cep_runtime_inject();
+  var TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" };
+  var CACHE_BYTES = 64 * 1024 * 1024;
+  var RESULT_CHARS = 12 * 1024 * 1024;
+  var CACHE_AGE = 7 * 24 * 60 * 60 * 1e3;
+  var sequence = 0;
+  function toolDisplayText(value) {
+    return String(value || "").replace(/data:image\/[^;\s]+;base64,[A-Za-z0-9+/=]+/g, "[image]").replace(/("base64"\s*:\s*")[^"]*(")/g, "$1[image]$2");
+  }
+  function captureToolImages(content, adapter) {
+    const parts = Array.isArray(content) ? content : [];
+    const candidates = parts.filter((part) => part && (part.type === "image" || part.type === "file" && String(part.mime || part.mimeType || "").startsWith("image/")));
+    if (!candidates.length) return {};
+    const fs = adapter == null ? void 0 : adapter.fs;
+    const now = Date.now();
+    let remaining = RESULT_CHARS;
+    let cache;
+    let files;
+    let bytes = 0;
+    function prepareCache() {
+      if (files) return;
+      cache = adapter.paths.join([adapter.paths.configRoot, "tool-images"]);
+      fs.mkdirSync(cache, { recursive: true });
+      files = fs.readdirSync(cache).filter((name) => /^preview-[a-z0-9-]+\.(png|jpg|webp|gif)$/.test(name)).map((name) => {
+        const path = adapter.paths.join([cache, name]);
+        const stat = fs.statSync(path);
+        return { path, size: stat.size, time: stat.mtimeMs };
+      }).sort((a, b) => a.time - b.time);
+      bytes = files.reduce((total, file) => total + file.size, 0);
+    }
+    const images = candidates.slice(0, 32).map((part) => {
+      const source = part.source || part;
+      const url = part.url || source.url || "";
+      const match = /^data:(image\/[a-z]+);base64,([A-Za-z0-9+/=]+)$/.exec(url);
+      const mimeType = source.media_type || part.mimeType || part.mime || (match == null ? void 0 : match[1]);
+      const data2 = source.data || (match == null ? void 0 : match[2]);
+      if (!TYPES[mimeType]) return { unavailable: "format" };
+      if (!data2 && /^file:\/\//.test(url) && url.length < 4096) return { src: url };
+      if (typeof data2 !== "string" || !data2.length || data2.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data2)) return { unavailable: "load" };
+      if (data2.length > 4.5 * 1024 * 1024 || data2.length > remaining) return { unavailable: "limit" };
+      remaining -= data2.length;
+      let path;
+      try {
+        prepareCache();
+        const size = Math.floor(data2.length * 3 / 4);
+        while (files.length && (bytes + size > CACHE_BYTES || files.length >= 256 || files[0].time < now - CACHE_AGE)) {
+          const file = files[0];
+          fs.unlinkSync(file.path);
+          bytes -= file.size;
+          files.shift();
+        }
+        path = adapter.paths.join([cache, `preview-${now.toString(36)}-${Math.random().toString(36).slice(2)}-${++sequence}.${TYPES[mimeType]}`]);
+        fs.writeFileSync(path, data2, { encoding: "base64", flag: "wx" });
+        bytes += size;
+        files.push({ path, size, time: now });
+        return { src: attachmentFileUrl(path, adapter.id) };
+      } catch {
+        if (path) {
+          try {
+            fs.unlinkSync(path);
+          } catch {
+          }
+        }
+        return { unavailable: "load" };
+      }
+    });
+    if (candidates.length > 32) images.push({ unavailable: "limit" });
+    return { images };
   }
 
   // ../shared/tool-approval.mjs
@@ -30322,7 +30499,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           type: "tool-result",
           toolUseId,
           ok: block.is_error !== true,
-          text: toolResultText(block.content),
+          text: toolDisplayText(toolResultText(block.content)),
+          ...captureToolImages(block.content, adapter),
           durationMs: Math.max(0, now() - tool.startedAt)
         });
       }
@@ -31606,6 +31784,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return true;
     }
     function handleNotification(message) {
+      var _a;
       const params = message.params || {};
       if (message.method === "turn/started") {
         currentTurnId = params.turn && params.turn.id || params.turnId || null;
@@ -31653,7 +31832,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           toolUseId: String(item.id || ""),
           name: mcpToolName(item),
           ok: !item.error && item.status === "completed",
-          text: toolResultText2(item.result),
+          text: toolDisplayText(toolResultText2(item.result)),
+          ...captureToolImages((_a = item.result) == null ? void 0 : _a.content, adapter),
           durationMs: item.durationMs
         });
         return;
@@ -34114,7 +34294,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           toolUseId,
           name,
           ok: status === "completed",
-          text: outputText,
+          text: toolDisplayText(outputText),
+          ...captureToolImages(state.attachments || state.content, adapter),
           durationMs: ms
         });
         return;
@@ -35465,6 +35646,7 @@ ${command}`
             state: evt.ok ? "ok" : "error",
             ok: !!evt.ok,
             text: evt.text || "",
+            ...evt.images ? { images: evt.images } : {},
             durationMs: evt.durationMs
           });
         }
@@ -35473,6 +35655,7 @@ ${command}`
           state: evt.ok ? "ok" : "error",
           ok: !!evt.ok,
           text: evt.text || "",
+          ...evt.images || entry2.images ? { images: evt.images || [] } : {},
           durationMs: evt.durationMs
         }));
       case "tool-denied":
@@ -36954,7 +37137,7 @@ ${command}`
     const listeners = /* @__PURE__ */ new Set();
     const disposeController = new AbortController();
     let classificationTail = Promise.resolve();
-    let sequence = 0;
+    let sequence2 = 0;
     let disposed = false;
     function snapshot() {
       return entries.length ? entries[0].record : null;
@@ -37019,11 +37202,11 @@ ${command}`
     function enqueue(request, context, plan, policy) {
       var _a;
       if (disposed || ((_a = context == null ? void 0 : context.signal) == null ? void 0 : _a.aborted)) return Promise.resolve(cancelResult());
-      sequence += 1;
+      sequence2 += 1;
       const contextView = { ...context };
       delete contextView.signal;
       const record = freezeVisible({
-        id: `elicitation-${sequence}`,
+        id: `elicitation-${sequence2}`,
         request: cloneVisible(request) || {},
         context: cloneVisible(contextView) || {},
         plan,
@@ -37807,14 +37990,14 @@ ${command}`
   function stableEntries(id, entries) {
     const source = clone5(Array.isArray(entries) ? entries : []);
     const used = /* @__PURE__ */ new Set();
-    let sequence = 0;
+    let sequence2 = 0;
     const matcher = new RegExp(`^${String(id).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:(\\d+)$`);
     for (const entry2 of source) {
       const sid = typeof entry2.sid === "string" ? entry2.sid : "";
       const match = sid.match(matcher);
       if (sid && !used.has(sid)) {
         used.add(sid);
-        if (match) sequence = Math.max(sequence, Number(match[1]) || 0);
+        if (match) sequence2 = Math.max(sequence2, Number(match[1]) || 0);
       } else {
         delete entry2.sid;
       }
@@ -37822,9 +38005,9 @@ ${command}`
     for (const entry2 of source) {
       if (entry2.sid) continue;
       do {
-        sequence += 1;
-      } while (used.has(`${id}:${sequence}`));
-      entry2.sid = `${id}:${sequence}`;
+        sequence2 += 1;
+      } while (used.has(`${id}:${sequence2}`));
+      entry2.sid = `${id}:${sequence2}`;
       used.add(entry2.sid);
     }
     return source;
