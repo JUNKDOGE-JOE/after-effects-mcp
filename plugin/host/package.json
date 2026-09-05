@@ -1,6 +1,6 @@
 {
   "name": "ae-mcp-host",
-  "version": "0.10.6",
+  "version": "0.10.7",
   "private": true,
   "main": "server.js",
   "scripts": {

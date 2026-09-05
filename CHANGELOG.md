@@ -12,6 +12,10 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [未发布]
 
+### [0.10.7] — 2026-09-05
+
+- 工具面板将长脚本、参数和结果限制在可滚动文字区，常用操作按钮保持可见；覆盖中英文与窄面板。
+
 - 面板启动时异步检查 GitHub 稳定 Release，成功结果缓存 24 小时；新版横幅可按版本关闭，“设置 → 关于”可手动检查及打开对应 Release。断网、超时、限流和无法比较的版本显示未知；不下载、安装或重启。
 - 聊天工具卡片直接显示 Claude、Codex 返回的预览图片，支持查看大图、逐张切换与折叠参数/结果。会话只保存图片引用；本地图片缓存最多 64 MiB / 256 张，生成预览时清理 7 天前的缓存，失效或超限时明确提示。OpenCode 的 preview 调用参数问题尚未解决，本版暂不支持 OpenCode 预览；这不影响已验证的 OpenCode 图片附件输入。
 - 修复 OpenCode 自定义模型因缺少输入模态元数据而误报不支持附件的问题；补全文件 MIME 回退，并区分通道格式限制与模型能力。切换通道保留未发送附件，失败后恢复草稿；结果不确定时保留防重发保护。Codex CLI 在接受回合前明确拒绝音频格式时，提示通道限制并保留可修改草稿；OpenCode 本地媒体拒绝不再附带从日志误判的 HTTP 状态。
@@ -389,6 +393,10 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ## English
 
 ### [Unreleased]
+
+### [0.10.7] — 2026-09-05
+
+- Tool panels keep long scripts, arguments and results in bounded scrolling text areas while preserving visible action buttons, including narrow layouts in both languages.
 
 - The panel asynchronously checks stable GitHub releases on startup and caches successful results for 24 hours. Dismiss a version's fixed banner, or manually check and open its release under Settings → About. Offline, timeout, rate-limit and unrecognized versions remain unknown; nothing is downloaded, installed or restarted.
 - Chat tool cards display preview images returned by Claude and Codex, with a larger image view, image navigation, and collapsed parameters/results. Transcripts store references only; the local cache is capped at 64 MiB / 256 images and removes images older than seven days when capturing previews. Expired or oversized images show an explicit notice. OpenCode preview remains unsupported in this release while its call-argument issue is unresolved; verified OpenCode image attachment input remains supported.
