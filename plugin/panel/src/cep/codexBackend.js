@@ -1,4 +1,5 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
+import { cliIdentity } from '../lib/cliUpdates.js';
 import {
   containsExactSecret,
   createDeltaRedactor,
@@ -1141,12 +1142,13 @@ export function createCodexBackend({
     const spawnEnv = currentEnv();
     let cliInfo = { ok: false, cliPath: '', version: '' };
     try {
-      cliInfo = lastCliInfo || await resolveCli({ env: spawnEnv, platform: adapter });
-      lastCliInfo = cliInfo;
+      cliInfo = await resolveCli({ env: spawnEnv, platform: adapter });
     } catch (e) { /* diagnostics only, never blocks the probe */ }
     const diag = {
       cliPath: cliInfo.cliPath || '',
       cliVersion: cliInfo.version || '',
+      cli: cliIdentity(cliInfo.executable, adapter.fs),
+      runningCli: proc ? cliIdentity(lastCliInfo?.executable, adapter.fs) : null,
       codexHome: codexHomePath(),
       platformId: adapter.id || '',
     };
@@ -1188,11 +1190,25 @@ export function createCodexBackend({
       }, PROBE_INITIALIZE_TIMEOUT_MS, 'initialize');
       const accountResult = await boundedProbeRequest(probeRpc, 'account/read', {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
       let models = null;
+      let catalogStatus = 'failed';
       try {
-        const listed = await boundedProbeRequest(probeRpc, 'model/list', {}, PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
-        models = Array.isArray(listed)
-          ? listed
-          : (Array.isArray(listed?.models) ? listed.models : listed?.data);
+        const all = new Map(), cursors = new Set();
+        const deadline = Date.now() + PROBE_MODEL_LIST_TIMEOUT_MS;
+        let cursor;
+        for (let page = 0; page < 10; page += 1) {
+          const remaining = deadline - Date.now();
+          if (remaining <= 0) throw new Error('model/list deadline');
+          const listed = await boundedProbeRequest(probeRpc, 'model/list', {
+            limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}),
+          }, remaining, 'model/list');
+          const data = Array.isArray(listed) ? listed : listed?.models || listed?.data;
+          if (!Array.isArray(data) || data.some((m) => !m || typeof m.id !== 'string' || !m.id)) throw new Error('Invalid model/list');
+          for (const model of data) all.set(model.id, model);
+          cursor = listed.nextCursor;
+          if (!cursor) { models = [...all.values()]; catalogStatus = 'complete'; break; }
+          if (typeof cursor !== 'string' || cursors.has(cursor)) throw new Error('Invalid model/list cursor');
+          cursors.add(cursor);
+        }
       } catch (e) {
         // Non-fatal: a stuck/slow model/list (e.g. a relay whose upstream
         // stream disconnects) must not fail the whole probe.
@@ -1204,6 +1220,7 @@ export function createCodexBackend({
         runtimeOk: true,
         detail: accountResult && accountResult.requiresOpenaiAuth ? 'OpenAI auth required' : undefined,
         models,
+        catalogStatus,
         ...diag,
       } : {
         loggedIn: true,
@@ -1211,6 +1228,7 @@ export function createCodexBackend({
         email: account.email,
         planType: account.planType,
         models,
+        catalogStatus,
         ...diag,
       };
       if (containsExactSecret(result, probeSecrets())) {

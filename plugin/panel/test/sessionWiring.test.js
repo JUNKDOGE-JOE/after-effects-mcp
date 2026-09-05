@@ -57,9 +57,11 @@ test('OpenCode pending probes become retryable and stale rechecks reset idle run
   assert.match(APP, /openCodeProbe === null && !openCodeProbeStale/);
 });
 
-test('model preferences are channel-scoped and Codex waits for live model facts', () => {
+test('model preferences are channel-scoped and catalog fallbacks do not overwrite them', () => {
   assert.doesNotMatch(APP, /['"]ae_mcp_model['"]/);
-  assert.match(APP, /providerFactsPending:[\s\S]*backendPref === 'codex'[\s\S]*codexProbe === null[\s\S]*codexModels === null/);
+  assert.match(APP, /fallback: channel === 'codex' \? '' : fallback/);
+  assert.match(APP, /reconcileModelPref\(requestedModel, descriptor\)/);
+  assert.doesNotMatch(APP, /writePref\(modelPreferenceKey\(backendPref\), reconciled\)/);
 });
 
 test('model chips persist the selected model as the current channel default', () => {

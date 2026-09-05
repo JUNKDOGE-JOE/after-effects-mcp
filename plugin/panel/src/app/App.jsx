@@ -25,6 +25,7 @@ import { firstErrorDetailLine, serializeErrorDetail } from '../lib/errorDetail.j
 import { createMcpClient } from '../cep/mcpClient';
 import { createToolsApi } from '../cep/toolsApi';
 import { probeClaudeLogin } from '../cep/claudeAuth';
+import { createCliUpdateChecker, codexCatalogNotice } from '../lib/cliUpdates.js';
 import { startCodexLogin } from '../cep/codexHeadlessLogin.js';
 import { createClaudeAgentBackend } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
@@ -159,7 +160,7 @@ function loadModelPref(channel, fallback) {
   const resolved = resolveModelPreference({
     channelValue: readPref(key, ''),
     legacyValue,
-    fallback,
+    fallback: channel === 'codex' ? '' : fallback,
   });
   if (resolved.migrateLegacy) writePref(key, resolved.value);
   if (legacyValue) removePref(LEGACY_MODEL_PREF_KEY);
@@ -366,11 +367,25 @@ function Shell({ cs }) {
   const [openCodeProbeStale, setOpenCodeProbeStale] = React.useState(false);
   const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = React.useState(0);
   const openCodeProbeRunRef = React.useRef(0);
-  const openCodeAvailableProviders = React.useMemo(() => (
-    Array.isArray(openCodeProbe?.providers) && openCodeProbe.providers.length
-      ? openCodeProbe.providers
-      : providers
-  ), [openCodeProbe, providers]);
+  const openCodeAvailableProviders = React.useMemo(() => {
+    const merged = new Map(providers.map((p) => [p.id, p]));
+    for (const p of openCodeProbe?.providers || []) {
+      merged.set(p.id, { ...p, modelIds: [...new Set([...(merged.get(p.id)?.modelIds || []), ...p.modelIds])] });
+    }
+    return [...merged.values()];
+  }, [openCodeProbe, providers]);
+  const selectedProbe = backendPref === 'codex' ? codexProbe : backendPref === 'opencode' ? openCodeProbe : probe;
+  const checkCliUpdate = React.useMemo(() => createCliUpdateChecker({ requestJson: platform.requestJson }), [platform]);
+  const [cliUpdate, setCliUpdate] = React.useState(null);
+  const [cliRecheck, setCliRecheck] = React.useState(0);
+  React.useEffect(() => {
+    let alive = true;
+    setCliUpdate({ status: 'checking' });
+    if (selectedProbe) checkCliUpdate(backendPref, selectedProbe.cli, { force: cliRecheck > 0 }).then((result) => {
+      if (alive) setCliUpdate(result);
+    });
+    return () => { alive = false; };
+  }, [backendPref, selectedProbe, checkCliUpdate, cliRecheck]);
   const [chatEntries, setChatEntries] = React.useState([]);
   const chatEntriesRef = React.useRef(chatEntries);
   chatEntriesRef.current = chatEntries;
@@ -385,9 +400,14 @@ function Shell({ cs }) {
   );
   const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
   const requestedModel = sessionModel || model;
-  const effectiveModel = descriptor.models.some((m) => m.id === requestedModel)
-    ? requestedModel
-    : (descriptor.defaultModelId || (descriptor.models[0] && descriptor.models[0].id) || requestedModel);
+  const effectiveModel = reconcileModelPref(requestedModel, descriptor) || requestedModel;
+  const catalogEmpty = descriptor.catalogVerified && !descriptor.models.length;
+  const fallbackNotice = requestedModel && requestedModel !== effectiveModel
+    && readPref(modelPreferenceKey(backendPref), '') === requestedModel
+    ? (lang === 'en' ? `${requestedModel} is absent from this catalog; using ${effectiveModel}. Your saved preference is retained.`
+      : `当前目录不含 ${requestedModel}，暂用 ${effectiveModel}；原有偏好已保留。`) : '';
+  const modelNotice = [backendPref === 'codex' ? codexCatalogNotice(codexProbe, lang) : '', fallbackNotice,
+    catalogEmpty ? (lang === 'en' ? 'No visible models are available. Recheck in Settings.' : '目录中没有可见模型，请在设置中重新检测。') : ''].filter(Boolean).join(' ');
   const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
   // Reconcile against the SELECTED model, not just the backend: a session
   // effort chosen for one model must not survive a switch to a model with a
@@ -396,7 +416,7 @@ function Shell({ cs }) {
   const effectiveEffort = resolveEffectiveEffort({
     requested: sessionEffort,
     model: modelMeta,
-    defaultEffort: descriptor.defaultEffort,
+    defaultEffort: modelMeta.defaultEffort || descriptor.defaultEffort,
   });
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
   const providerManager = (
@@ -820,25 +840,11 @@ function Shell({ cs }) {
       backendPref,
       baseDescriptor,
       codexCachedModels: codexModels,
+      preferredModel: requestedModel,
       openCodeProviders: openCodeAvailableProviders,
     };
     const nextDescriptor = selectDescriptor(facts);
     setDescriptor(nextDescriptor);
-    // A persisted model id can outlive its backend or model catalog. Reset it
-    // when the current model isn't in the new descriptor's model list — but
-    // never while the OpenCode provider registry is still loading: the static
-    // fallback descriptor would clobber a valid provider-model pref at boot
-    // (live-seen: pref reset to the first relay model on every restart).
-    const reconciled = reconcileModelPref(model, nextDescriptor, {
-      providerFactsPending: backendPref === 'codex'
-        ? codexProbe === null || codexModels === null
-        : backendPref === 'opencode'
-          && (providerInit.state !== 'ready' || openCodeProbe === null),
-    });
-    if (reconciled !== model) {
-      setModel(reconciled);
-      writePref(modelPreferenceKey(backendPref), reconciled);
-    }
   }, [
     effective.backend,
     effective.channel,
@@ -849,6 +855,7 @@ function Shell({ cs }) {
     openCodeAvailableProviders,
     openCodeProbe,
     model,
+    requestedModel,
     providerInit.state,
   ]);
   const lastRealBackendRef = React.useRef(null);
@@ -881,7 +888,6 @@ function Shell({ cs }) {
   const runCodexProbe = React.useCallback(() => {
     let alive = true;
     setCodexProbe(null);
-    setCodexModels(null);
     codexBackend.probeAccount().then((result) => {
       if (!alive) return;
       if (containsExactSecret(result, ['aemcp-secret://'])) {
@@ -895,7 +901,6 @@ function Shell({ cs }) {
       }
     }).catch((e) => {
       if (alive) {
-        setCodexModels(null);
         setCodexProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
       }
     });
@@ -1117,7 +1122,7 @@ function Shell({ cs }) {
   ]);
 
   const sendChat = (input) => {
-    if (pendingTurnRef.current) return;
+    if (pendingTurnRef.current || catalogEmpty) return;
     let turn;
     try {
       turn = normalizeTurnInput(input);
@@ -1530,7 +1535,7 @@ function Shell({ cs }) {
     || (effective.reason && effective.reason.endsWith('-probing')
       ? (lang === 'zh' ? '正在检测凭据通道…' : 'Checking credential channels…')
       : '');
-  const composerDisabled = paused || effective.backend === 'none' || Boolean(hostConversationError);
+  const composerDisabled = paused || effective.backend === 'none' || Boolean(hostConversationError) || catalogEmpty;
   const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
   const activeSessionMeta = sessionSnapshot.sessions.find(
     (meta) => meta.id === sessionSnapshot.activeId,
@@ -1568,7 +1573,7 @@ function Shell({ cs }) {
             composerDisabled={composerDisabled}
             disabledHint={hostConversationError
               ? t.approvalSyncError
-              : paused ? t.pausedHint : composerDisabled ? backendDisabledHint : ''}
+              : paused ? t.pausedHint : catalogEmpty ? modelNotice : composerDisabled ? backendDisabledHint : fallbackNotice}
             noticeActionLabel={paused ? t.resume : t.goSettings}
             onNoticeAction={() => (paused ? togglePause() : setTab('settings'))}
             onSend={sendChat}
@@ -1669,6 +1674,8 @@ function Shell({ cs }) {
             onLoginChannel={onLoginChannel}
             loginState={loginState}
             onRecheckBackend={() => {
+              if (chatStreaming || pendingTurnRef.current) return;
+              setCliRecheck((value) => value + 1);
               if (backendPref === 'codex') runCodexProbe();
               else if (backendPref === 'opencode') {
                 if (openCodeProbe === null && openCodeProbeStale && !chatStreaming) {
@@ -1678,9 +1685,10 @@ function Shell({ cs }) {
               }
               else runClaudeProbe();
             }}
-            recheckDisabled={backendPref === 'codex'
+            cliStatus={{ probe: selectedProbe, update: cliUpdate, notice: modelNotice }}
+            recheckDisabled={chatStreaming || (backendPref === 'codex'
               ? codexProbe === null : backendPref === 'opencode'
-                ? openCodeProbe === null && !openCodeProbeStale : probe === null}
+                ? openCodeProbe === null && !openCodeProbeStale : probe === null)}
             providers={providers}
             providerManager={providerManager}
             providerInit={providerInit}

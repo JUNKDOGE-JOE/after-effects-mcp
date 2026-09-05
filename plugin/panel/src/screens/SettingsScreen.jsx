@@ -1,4 +1,5 @@
 import React from 'react';
+import { cliUpdateGuide } from '../lib/cliUpdates.js';
 import pkg from '../../package.json';
 import { Badge } from '../components/core/Badge';
 import { Button } from '../components/core/Button';
@@ -316,6 +317,7 @@ export function SettingsScreen({
   onLoginChannel,
   loginState = null,
   recheckDisabled = false,
+  cliStatus = {},
   providerManager = null,
   providerInit = { state: 'checking', error: '' },
   logLevel = 'info',
@@ -389,6 +391,7 @@ export function SettingsScreen({
             {providerInitMessage}{providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : ''}
           </div>
         ) : null}
+        <CliUpdateStatus backend={backend} lang={lang} {...cliStatus} onOpenExternal={handleExternalLink} />
         {providerManager}
         <Field label={t.modelDefault}>
           <Select value={model} onChange={onModelChange} options={modelOptions || FALLBACK_MODEL_OPTIONS} />
@@ -493,6 +496,45 @@ export function SettingsScreen({
           <Button variant="ghost" size="sm" icon="rotate-cw" onClick={onRerunWizard}>{t.rerunWizard}</Button>
         </div>
       </Section>
+    </div>
+  );
+}
+
+export function CliUpdateStatus({ backend, probe, update, notice, lang = 'zh', onOpenExternal }) {
+  const en = lang === 'en';
+  const cli = probe?.cli;
+  const guide = cliUpdateGuide(backend, cli, lang);
+  const key = 'ae_mcp_cli_dismiss_' + backend;
+  const identity = `${cli?.path || ''}:${update?.latest || ''}`;
+  const [dismissed, setDismissed] = React.useState('');
+  React.useEffect(() => {
+    try { setDismissed(window.localStorage.getItem(key) || ''); } catch {}
+  }, [key]);
+  const newer = update?.status === 'update' && dismissed !== identity;
+  const running = probe?.runningCli;
+  const changed = running && (running.version !== cli?.version || running.path !== cli?.path);
+  return (
+    <div role="status" style={{ font: '400 11px/1.5 var(--font-ui)', color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
+      <div>{en ? 'Selected CLI' : '所选 CLI'}: {cli?.version || (en ? 'Unknown' : '未知')} · {guide.source}</div>
+      {cli?.path ? <div style={{ fontFamily: 'var(--font-mono)' }}>{cli.path}</div> : null}
+      <div>{update?.status === 'checking' ? (en ? 'Checking stable version…' : '正在检查稳定版…')
+        : update?.status === 'unknown' || !update ? (en ? 'Stable version unknown; chat is unaffected.' : '稳定版未知，不影响聊天。')
+          : `${en ? 'Upstream stable' : '上游稳定版'}: ${update.latest}`}</div>
+      {changed ? <div>{en ? `This session still runs ${running.version}. Start a new conversation to use the updated CLI.`
+        : `当前会话仍运行 ${running.version}；新建对话后使用更新的 CLI。`}</div> : null}
+      {notice ? <div>{notice}</div> : null}
+      {newer ? <div style={{ marginTop: 6 }}>
+        <div>{en ? `Update available: ${update.current} → ${update.latest}` : `有可用更新：${update.current} → ${update.latest}`}</div>
+        <div>{guide.detail}</div>
+        {guide.command ? <code>{guide.command}</code> : null}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+          <Button variant="secondary" size="sm" onClick={() => onOpenExternal(guide.url)}>{en ? 'Update guide' : '更新指引'}</Button>
+          <Button variant="ghost" size="sm" onClick={() => {
+            setDismissed(identity);
+            try { window.localStorage.setItem(key, identity); } catch {}
+          }}>{en ? 'Dismiss' : '关闭提醒'}</Button>
+        </div>
+      </div> : null}
     </div>
   );
 }

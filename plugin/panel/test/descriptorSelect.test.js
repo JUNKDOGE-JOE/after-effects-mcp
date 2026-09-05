@@ -20,7 +20,29 @@ test('Codex uses its CLI model inventory when it is available', () => {
     codexCachedModels: [{ id: 'gpt-live', isDefault: true }],
   });
   assert.equal(descriptor.defaultModelId, 'gpt-live');
-  assert.ok(descriptor.models.some((model) => model.id === 'gpt-5.6-terra'));
+  assert.deepEqual(descriptor.models.map((m) => m.id), ['gpt-live']);
+});
+
+test('saved Codex choice survives missing facts and falls back only on a complete catalog', () => {
+  const input = { backendPref: 'codex', preferredModel: 'gpt-6-astra', baseDescriptor: codexStaticDescriptor() };
+  const unverified = selectDescriptor(input);
+  assert.equal(reconcileModelPref(input.preferredModel, unverified), 'gpt-6-astra');
+  assert.equal(unverified.supportsFast(input.preferredModel), false);
+  const complete = selectDescriptor({ ...input, codexCachedModels: [{ id: 'gpt-5.6-sol' }] });
+  assert.equal(reconcileModelPref(input.preferredModel, complete), 'gpt-5.6-sol');
+  const upgraded = selectDescriptor({ ...input, codexCachedModels: [{ id: 'gpt-5.6-sol' }, { id: 'gpt-6-astra' }] });
+  assert.equal(reconcileModelPref('', upgraded), 'gpt-6-astra');
+  assert.equal(reconcileModelPref('gpt-5.6-sol', upgraded), 'gpt-5.6-sol');
+});
+
+test('an empty Codex preference uses the offline Codex default then visible Astra', () => {
+  const pref = resolveModelPreference({ channelValue: null, legacyValue: null, fallback: '' });
+  const input = { backendPref: 'codex', preferredModel: pref.value, baseDescriptor: codexStaticDescriptor() };
+  const offline = selectDescriptor(input);
+  assert.equal(reconcileModelPref(pref.value, offline), 'gpt-5.6-sol');
+  assert.equal(offline.models.some((m) => m.id.startsWith('claude-')), false);
+  const live = selectDescriptor({ ...input, codexCachedModels: [{ id: 'gpt-6-astra' }] });
+  assert.equal(reconcileModelPref(pref.value, live), 'gpt-6-astra');
 });
 
 test('OpenCode derives models from the Provider Manager registry', () => {
