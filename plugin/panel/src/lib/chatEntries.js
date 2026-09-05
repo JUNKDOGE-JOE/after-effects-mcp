@@ -79,6 +79,7 @@ export function reduceEvent(entries, evt) {
           state: evt.ok ? 'ok' : 'error',
           ok: !!evt.ok,
           text: evt.text || '',
+          ...(evt.images ? { images: evt.images } : {}),
           durationMs: evt.durationMs,
         });
       }
@@ -87,6 +88,7 @@ export function reduceEvent(entries, evt) {
         state: evt.ok ? 'ok' : 'error',
         ok: !!evt.ok,
         text: evt.text || '',
+        ...(evt.images || entry.images ? { images: evt.images || [] } : {}),
         durationMs: evt.durationMs,
       }));
 
