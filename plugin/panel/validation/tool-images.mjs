@@ -20,6 +20,10 @@ const fixture = await build({
     import { StatusBar } from './src/components/shell/StatusBar.jsx';
     import { TabBar } from './src/components/shell/TabBar.jsx';
     const root = createRoot(document.getElementById('root'));
+    window.keyInterests=[];
+    window.cep_node={process:{platform:'win32'}};
+    window.__adobe_cep__={registerKeyEventsInterest:value=>window.keyInterests.push(value)};
+    window.clearPreview=()=>root.render(null);
     const canvas = document.createElement('canvas'); canvas.width=1600; canvas.height=900;
     const ctx=canvas.getContext('2d');
     window.images=['#c54d37','#276f60'].map((color,i)=>{ctx.fillStyle=color;ctx.fillRect(0,0,1600,900);
@@ -86,16 +90,21 @@ try {
     await page.getByTitle(lang==='zh'?'查看大图':'View larger image',{exact:true}).click();
     const dialog=page.getByRole('dialog');
     await dialog.waitFor();
+    const interest=JSON.stringify([{keyCode:27,ctrlKey:false,altKey:false,shiftKey:false}]);
+    assert.deepEqual(await page.evaluate(()=>window.keyInterests),[interest]);
     const large=await dialog.locator('img').boundingBox();
     assert.ok(large.width>=250 && large.height>=180,label+' readable enlarged preview');
     await dialog.getByTitle(lang==='zh'?'上一张':'Previous image',{exact:true}).click();
     assert.equal(await dialog.locator('img').getAttribute('src'),first);
+    assert.deepEqual(await page.evaluate(()=>window.keyInterests),[interest]);
     await page.screenshot({path:path.join(output,label+'-large.png')});
     await dialog.getByTitle(lang==='zh'?'关闭预览':'Close preview',{exact:true}).press('Escape');
     assert.equal(await page.getByRole('dialog').count(),0);
+    assert.deepEqual(await page.evaluate(()=>window.keyInterests),[interest,'']);
     assert.ok(await page.getByTitle(lang==='zh'?'查看大图':'View larger image',{exact:true}).evaluate(el=>el===document.activeElement));
     await page.getByTitle(lang==='zh'?'查看大图':'View larger image',{exact:true}).click();
     await page.getByTitle(lang==='zh'?'关闭预览':'Close preview',{exact:true}).click();
+    assert.deepEqual(await page.evaluate(()=>window.keyInterests),[interest,'',interest,'']);
     assert.deepEqual(await geometry(label+' close large'),before);
     await page.locator('textarea').focus();
     assert.ok(await page.locator('textarea').evaluate(el=>el===document.activeElement));
@@ -110,6 +119,11 @@ try {
     assert.equal(await page.getByRole('status').count(),0);
     assert.equal(await page.locator('[data-tool-images] img').getAttribute('src'),first);
     await geometry(label+' restored');
+    await page.getByTitle(lang==='zh'?'查看大图':'View larger image',{exact:true}).click();
+    await page.getByRole('dialog').waitFor();
+    await page.evaluate(()=>window.clearPreview());
+    await page.waitForFunction(()=>!document.querySelector('[data-tool-images]'));
+    assert.deepEqual(await page.evaluate(()=>window.keyInterests),[interest,'',interest,'',interest,'']);
   }
   await fs.writeFile(path.join(output,'summary.json'),JSON.stringify({validationProfile:'offline',cases:ledger},null,2));
   console.log(JSON.stringify({passed:ledger.length}));

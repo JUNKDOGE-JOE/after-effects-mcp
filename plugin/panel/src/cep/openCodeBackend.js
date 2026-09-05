@@ -408,6 +408,10 @@ export function createOpenCodeBackend({
   let assistantDeltaRedactor = createDeltaRedactor([], () => {});
   let stderrRedactor = createDeltaRedactor([], () => {});
   let activeTurn = null;
+  let activeUserMessageId = null;
+  let lastMessageRequest = null;
+  let rejectedMediaTurn = null;
+  let copiedMessageIds = new Set();
   let activeTurnAccepted = false;
   let messageDispatched = false;
   let turnStarted = false;
@@ -446,6 +450,8 @@ export function createOpenCodeBackend({
     adoptedSessionId = null;
     sessionWasAdopted = false;
     sessionPromise = null;
+    rejectedMediaTurn = null;
+    copiedMessageIds.clear();
     sessionAllowedTools.clear();
     return Boolean(invalidated);
   }
@@ -1352,6 +1358,7 @@ export function createOpenCodeBackend({
       if (liveGeneration !== generation) throw cancelledStartError();
       sessionId = String((result && (result.id || result.sessionID || result.sessionId)) || '');
       if (!sessionId) throw taggedError(new Error('OpenCode did not return a session id.'), 'fallbackCode', 'SESSION_START_FAILED');
+      copiedMessageIds.clear();
       adoptedSessionId = sessionId;
       sessionWasAdopted = false;
       emit({ type: 'session-ref', ref: { kind: 'opencode-session', id: sessionId } });
@@ -1476,7 +1483,17 @@ export function createOpenCodeBackend({
     if (!type) return;
     const p = (evt && evt.properties) || {};
     if (p.sessionID && (!sessionId || p.sessionID !== sessionId)) return;
+    if (type.startsWith('message.') && copiedMessageIds.has(p.info?.id || p.part?.messageID || p.messageID)) return;
+    if (rejectedMediaTurn && !messageDispatched) return;
     touchStallWatchdog();
+
+    if (type === 'message.updated') {
+      const info = p.info;
+      if (activeTurn && messageDispatched && info?.role === 'user' && info.sessionID === sessionId) {
+        activeUserMessageId = info.id;
+      }
+      return;
+    }
 
     if (type === 'session.status') {
       const st = (p.status && p.status.type) || '';
@@ -1590,10 +1607,14 @@ export function createOpenCodeBackend({
         void recoverAeMcpTransport();
         return;
       }
-      // A provider failure does not invalidate OpenCode's local conversation.
-      // Keep the session so a user retry preserves context; only settle
-      // interactions that belonged to the failed turn. Local 404/process/SSE
-      // failures still invalidate the session through their dedicated paths.
+      // OpenCode persists rejected file parts before model dispatch. Isolate
+      // that message before a user retry; ordinary provider errors keep context.
+      if (mediaRejected) {
+        rejectedMediaTurn = {
+          sessionId, messageId: activeUserMessageId, request: lastMessageRequest,
+          mediaType: detail.match(/(?:file part media type |media type: )([^']+)/)?.[1],
+        };
+      }
       settleFailedTurnInteractions();
       emitAfterText({
         type: 'error',
@@ -1658,20 +1679,98 @@ export function createOpenCodeBackend({
     ];
   }
 
+  async function recoverRejectedMedia(rejected, turn) {
+    const ownerGeneration = generation;
+    const assertOwner = () => {
+      if (generation !== ownerGeneration || activeTurn !== turn || sessionId !== rejected.sessionId) {
+        throw cancelledStartError();
+      }
+    };
+    const controller = new AbortController();
+    messageAbortController = controller;
+    const timer = setTimeoutImpl(() => controller.abort(), 10000);
+    const interrupted = new Promise((_, reject) => {
+      controller.signal.addEventListener('abort', () => reject(cancelledStartError()), { once: true });
+    });
+    const historyPath = '/session/' + encodeURIComponent(rejected.sessionId);
+    const comparable = (messages) => {
+      const positions = new Map(messages.map((message, index) => [message.info.id, index]));
+      return JSON.stringify(messages.map((message) => ({
+        role: message.info.role,
+        parts: message.parts.map(({ id, sessionID, messageID, ...part }) => (
+          part.type === 'compaction' && positions.has(part.tail_start_id)
+            ? { ...part, tail_start_id: { messageIndex: positions.get(part.tail_start_id) } }
+            : part
+        )),
+      })));
+    };
+    try {
+      await Promise.race([rejected.request, interrupted]);
+      assertOwner();
+      const statuses = await requestJson('/session/status', { signal: controller.signal });
+      if (statuses?.[rejected.sessionId]?.type === 'busy') throw new Error('Rejected turn is still busy');
+      const messages = await requestJson(historyPath + '/message', { signal: controller.signal });
+      assertOwner();
+      const boundary = Array.isArray(messages) ? messages.findIndex((message) => (
+        message.info?.id === rejected.messageId && message.info.role === 'user'
+        && message.info.sessionID === rejected.sessionId
+        && message.parts?.some((part) => part.type === 'file' && part.mime === rejected.mediaType)
+      )) : -1;
+      if (boundary < 0) throw new Error('Rejected user message could not be verified');
+      const unsafeSuffix = messages.slice(boundary + 1).some((message) => (
+        message.info?.role !== 'assistant' || message.info.parentID !== rejected.messageId
+        || !Array.isArray(message.parts) || message.parts.some((part) => (
+          ['tool', 'patch', 'file'].includes(part.type)
+          || (['text', 'reasoning'].includes(part.type) && String(part.text || '').trim())
+        ))
+      ));
+      if (unsafeSuffix) throw new Error('Rejected turn has subsequent activity');
+      const prefix = comparable(messages.slice(0, boundary));
+      // Fork excludes the named message; an absent ID would copy all history.
+      const fork = await postJson(historyPath + '/fork', { messageID: rejected.messageId }, controller.signal);
+      assertOwner();
+      if (!fork?.id || fork.id === rejected.sessionId) throw new Error('Invalid recovery session');
+      const restored = await requestJson('/session/' + encodeURIComponent(fork.id) + '/message', { signal: controller.signal });
+      assertOwner();
+      if (!Array.isArray(restored) || comparable(restored) !== prefix) throw new Error('Recovery context differs');
+      copiedMessageIds = new Set(restored.map((message) => message.info.id));
+      sessionId = fork.id;
+      adoptedSessionId = fork.id;
+      sessionWasAdopted = false;
+      rejectedMediaTurn = null;
+      emit({ type: 'session-ref', ref: { kind: 'opencode-session', id: sessionId } });
+      return sessionId;
+    } finally {
+      clearTimeoutImpl(timer);
+      if (messageAbortController === controller) messageAbortController = null;
+    }
+  }
+
   async function prepareTurnSession() {
     if (!proc || !baseUrl || sseClosed) emitTurnProgress('spawn');
     else if (!sessionId) emitTurnProgress('session');
-    return ensureSession();
+    const id = await ensureSession();
+    if (!rejectedMediaTurn) return id;
+    if (rejectedMediaTurn.sessionId !== id) {
+      rejectedMediaTurn = null;
+      return id;
+    }
+    return recoverRejectedMedia(rejectedMediaTurn, activeTurn);
   }
 
   async function dispatchTurnMessage(id, turn) {
-    const messageBody = { parts: openCodeParts(turn) };
+    const model = parseModel(getModel ? getModel() : DEFAULT_MODEL_ID);
+    const messageBody = {
+      parts: openCodeParts(turn),
+      model: { providerID: model.providerID, modelID: model.id },
+    };
     try {
       messageDispatched = true;
       armStallWatchdog();
       const controller = new AbortController();
       messageAbortController = controller;
       const messageRequest = postJson('/session/' + encodeURIComponent(id) + '/message', messageBody, controller.signal);
+      lastMessageRequest = messageRequest.catch(() => {});
       emitTurnProgress('dispatch');
       await messageRequest;
     } catch (error) {
@@ -1687,6 +1786,7 @@ export function createOpenCodeBackend({
         messageBody,
         controller.signal,
       );
+      lastMessageRequest = replacementRequest.catch(() => {});
       emitTurnProgress('dispatch');
       await replacementRequest;
     }
@@ -1711,6 +1811,7 @@ export function createOpenCodeBackend({
     }
     activeAssistantText = '';
     activeTurn = turn;
+    activeUserMessageId = null;
     activeTurnAccepted = false;
     messageDispatched = false;
     aeMcpRecoveryAttempts = 0;
@@ -1723,6 +1824,7 @@ export function createOpenCodeBackend({
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });
+    const turnRun = activeRun;
     try {
       const id = await prepareTurnSession();
       const userText = turn.text;
@@ -1739,7 +1841,18 @@ export function createOpenCodeBackend({
       }
       await dispatchTurnMessage(id, turn);
     } catch (e) {
-      if (stopRequested || !activeRun) return;
+      if (stopRequested || activeTurn !== turn) return;
+      if (rejectedMediaTurn && !messageDispatched) {
+        emitAfterText({
+          type: 'error', kind: 'attachment', code: 'ATTACHMENT_RETRY_BLOCKED',
+          message: currentLang() === 'zh'
+            ? '无法确认失败附件之前的对话已恢复，本次消息未发送。原有历史和草稿已保留，请新建会话后重试。'
+            : 'The conversation before the rejected attachment could not be restored. This message was not sent. History and draft are retained; start a new conversation to retry.',
+          ...activeTurnFailureFields(), dispatchState: 'not-started',
+        });
+        finishActive();
+        return;
+      }
       if (aeMcpRecoveryStarted) {
         if (aeMcpRecoveryPromise) await aeMcpRecoveryPromise;
         return activeRun;
@@ -1783,7 +1896,7 @@ export function createOpenCodeBackend({
       });
       finishActive();
     }
-    return activeRun;
+    return turnRun;
   }
 
   async function approve(toolUseId, decision) {
@@ -1878,6 +1991,10 @@ export function createOpenCodeBackend({
       finishActive();
     }
     generation += 1;
+    rejectedMediaTurn = null;
+    copiedMessageIds.clear();
+    activeUserMessageId = null;
+    lastMessageRequest = null;
     const stoppedProc = proc;
     const stoppedHome = configHome;
     stopping = true;
@@ -1977,6 +2094,7 @@ export function createOpenCodeBackend({
 
   function adoptSessionRef(ref) {
     settlePendingQuestions();
+    copiedMessageIds.clear();
     partTypes.clear();
     sessionId = null;
     adoptedSessionId = ref && ref.kind === 'opencode-session' && ref.id

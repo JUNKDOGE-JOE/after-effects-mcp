@@ -14,6 +14,9 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [0.10.7] — 2026-09-05
 
+- 修复 Windows CEP 文件 URL 路径识别，确保自动选择包内 OpenCode；预览大图打开时接收 Escape，关闭后释放按键。
+- OpenCode 明确拒绝附件格式后，修改草稿重试会保留失败消息之前的对话，排除已拒绝附件，并继续使用所选模型；无法核实恢复时停止发送，保留原历史和草稿。
+
 - 工具面板将长脚本、参数和结果限制在可滚动文字区，常用操作按钮保持可见；覆盖中英文与窄面板。
 
 - 面板启动时异步检查 GitHub 稳定 Release，成功结果缓存 24 小时；新版横幅可按版本关闭，“设置 → 关于”可手动检查及打开对应 Release。断网、超时、限流和无法比较的版本显示未知；不下载、安装或重启。
@@ -395,6 +398,9 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ### [Unreleased]
 
 ### [0.10.7] — 2026-09-05
+
+- Normalize Windows CEP file URLs so the bundled OpenCode is discovered automatically. Enlarged previews receive Escape while open and release the key when closed.
+- After an explicit OpenCode media-format rejection, a user-edited retry preserves the preceding conversation, excludes the rejected attachments, and uses the selected model. Unverified recovery stops the send and retains history and draft.
 
 - Tool panels keep long scripts, arguments and results in bounded scrolling text areas while preserving visible action buttons, including narrow layouts in both languages.
 

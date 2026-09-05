@@ -4,6 +4,7 @@ import { Icon } from '../core/Icon';
 import { Spinner } from '../core/Spinner';
 import { Button } from '../core/Button';
 import { Drawer } from '../shell/Drawer';
+import { registerPreviewEscape } from '../../cep/platform/previewKeyboard.js';
 
 function StatusGlyph({ status }) {
   if (status === 'running') return <Spinner size={12} />;
@@ -80,7 +81,10 @@ function ToolImages({ images, lang }) {
   const dialog = React.useRef(null);
   const close = () => { setOpen(false); inline.current?.querySelector('button')?.focus(); };
   React.useEffect(() => {
-    if (open) dialog.current?.querySelector('button')?.focus();
+    if (!open) return undefined;
+    const release = registerPreviewEscape();
+    dialog.current?.querySelector('button')?.focus();
+    return release;
   }, [open]);
   const dialogKey = (event) => {
     if (event.key === 'Escape') { event.preventDefault(); close(); }

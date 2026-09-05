@@ -22463,7 +22463,7 @@
     var _a, _b, _c;
     try {
       const root = (_c = (_b = (_a = globalThis.window) == null ? void 0 : _a.__adobe_cep__) == null ? void 0 : _b.getSystemPath) == null ? void 0 : _c.call(_b, "extension");
-      if (typeof root === "string" && root.trim()) return root;
+      if (typeof root === "string" && root.trim()) return normalizeCepSystemPath(root);
     } catch {
     }
     try {
@@ -25038,6 +25038,37 @@ When you are done, remind me of two things: MCP tools load only in a new session
   init_cep_runtime_inject();
   var import_react33 = __toESM(require_react(), 1);
   var import_react_dom = __toESM(require_react_dom(), 1);
+
+  // src/cep/platform/previewKeyboard.js
+  init_cep_runtime_inject();
+  function registerPreviewEscape(page = globalThis.window) {
+    var _a, _b, _c, _d;
+    const platform = ((_b = (_a = page == null ? void 0 : page.cep_node) == null ? void 0 : _a.process) == null ? void 0 : _b.platform) || ((_c = globalThis.process) == null ? void 0 : _c.platform);
+    const cep = page == null ? void 0 : page.__adobe_cep__;
+    if (platform !== "win32" || typeof (cep == null ? void 0 : cep.registerKeyEventsInterest) !== "function") return void 0;
+    try {
+      cep.registerKeyEventsInterest(JSON.stringify([
+        { keyCode: 27, ctrlKey: false, altKey: false, shiftKey: false }
+      ]));
+    } catch {
+      return void 0;
+    }
+    let active = true;
+    const release = () => {
+      var _a2;
+      if (!active) return;
+      active = false;
+      (_a2 = page.removeEventListener) == null ? void 0 : _a2.call(page, "beforeunload", release);
+      try {
+        cep.registerKeyEventsInterest("");
+      } catch {
+      }
+    };
+    (_d = page.addEventListener) == null ? void 0 : _d.call(page, "beforeunload", release);
+    return release;
+  }
+
+  // src/components/chat/ToolCallCard.jsx
   var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
   function StatusGlyph({ status }) {
     if (status === "running") return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Spinner, { size: 12 });
@@ -25128,7 +25159,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
     };
     import_react33.default.useEffect(() => {
       var _a, _b;
-      if (open) (_b = (_a = dialog.current) == null ? void 0 : _a.querySelector("button")) == null ? void 0 : _b.focus();
+      if (!open) return void 0;
+      const release = registerPreviewEscape();
+      (_b = (_a = dialog.current) == null ? void 0 : _a.querySelector("button")) == null ? void 0 : _b.focus();
+      return release;
     }, [open]);
     const dialogKey = (event) => {
       var _a;
@@ -33373,6 +33407,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let stderrRedactor = createDeltaRedactor([], () => {
     });
     let activeTurn = null;
+    let activeUserMessageId = null;
+    let lastMessageRequest = null;
+    let rejectedMediaTurn = null;
+    let copiedMessageIds = /* @__PURE__ */ new Set();
     let activeTurnAccepted = false;
     let messageDispatched = false;
     let turnStarted = false;
@@ -33410,6 +33448,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       adoptedSessionId = null;
       sessionWasAdopted = false;
       sessionPromise = null;
+      rejectedMediaTurn = null;
+      copiedMessageIds.clear();
       sessionAllowedTools.clear();
       return Boolean(invalidated);
     }
@@ -34264,6 +34304,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (liveGeneration !== generation) throw cancelledStartError2();
         sessionId = String(result && (result.id || result.sessionID || result.sessionId) || "");
         if (!sessionId) throw taggedError2(new Error("OpenCode did not return a session id."), "fallbackCode", "SESSION_START_FAILED");
+        copiedMessageIds.clear();
         adoptedSessionId = sessionId;
         sessionWasAdopted = false;
         emit({ type: "session-ref", ref: { kind: "opencode-session", id: sessionId } });
@@ -34365,12 +34406,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       emitAfterText({ type: "tool-start", toolUseId, name, input: state.input || {} });
     }
     function handleOpenCodeEvent(evt) {
-      var _a;
+      var _a, _b, _c, _d;
       const type = eventType(evt);
       if (!type) return;
       const p = evt && evt.properties || {};
       if (p.sessionID && (!sessionId || p.sessionID !== sessionId)) return;
+      if (type.startsWith("message.") && copiedMessageIds.has(((_a = p.info) == null ? void 0 : _a.id) || ((_b = p.part) == null ? void 0 : _b.messageID) || p.messageID)) return;
+      if (rejectedMediaTurn && !messageDispatched) return;
       touchStallWatchdog();
+      if (type === "message.updated") {
+        const info = p.info;
+        if (activeTurn && messageDispatched && (info == null ? void 0 : info.role) === "user" && info.sessionID === sessionId) {
+          activeUserMessageId = info.id;
+        }
+        return;
+      }
       if (type === "session.status") {
         const st = p.status && p.status.type || "";
         if (st === "busy") {
@@ -34467,7 +34517,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         const causeChain = boundedCauseChain(error);
         const processTail = trimStderrTail(stderrTail);
         const combined = [detail, ...causeChain, processTail].filter(Boolean).join("\n");
-        const httpStatus = extractHttpStatus(error == null ? void 0 : error.statusCode) || extractHttpStatus((_a = error == null ? void 0 : error.data) == null ? void 0 : _a.statusCode) || extractHttpStatus(combined);
+        const httpStatus = extractHttpStatus(error == null ? void 0 : error.statusCode) || extractHttpStatus((_c = error == null ? void 0 : error.data) == null ? void 0 : _c.statusCode) || extractHttpStatus(combined);
         const classified = classifyErrorCode({
           error: { message: combined },
           httpStatus,
@@ -34478,6 +34528,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         if (isAeMcpTransportFailure(error, combined)) {
           void recoverAeMcpTransport();
           return;
+        }
+        if (mediaRejected) {
+          rejectedMediaTurn = {
+            sessionId,
+            messageId: activeUserMessageId,
+            request: lastMessageRequest,
+            mediaType: (_d = detail.match(/(?:file part media type |media type: )([^']+)/)) == null ? void 0 : _d[1]
+          };
         }
         settleFailedTurnInteractions();
         emitAfterText({
@@ -34530,19 +34588,89 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }))
       ];
     }
+    async function recoverRejectedMedia(rejected, turn) {
+      var _a;
+      const ownerGeneration = generation;
+      const assertOwner = () => {
+        if (generation !== ownerGeneration || activeTurn !== turn || sessionId !== rejected.sessionId) {
+          throw cancelledStartError2();
+        }
+      };
+      const controller = new AbortController();
+      messageAbortController = controller;
+      const timer = setTimeoutImpl(() => controller.abort(), 1e4);
+      const interrupted = new Promise((_, reject) => {
+        controller.signal.addEventListener("abort", () => reject(cancelledStartError2()), { once: true });
+      });
+      const historyPath = "/session/" + encodeURIComponent(rejected.sessionId);
+      const comparable = (messages) => {
+        const positions = new Map(messages.map((message, index) => [message.info.id, index]));
+        return JSON.stringify(messages.map((message) => ({
+          role: message.info.role,
+          parts: message.parts.map(({ id, sessionID, messageID, ...part }) => part.type === "compaction" && positions.has(part.tail_start_id) ? { ...part, tail_start_id: { messageIndex: positions.get(part.tail_start_id) } } : part)
+        })));
+      };
+      try {
+        await Promise.race([rejected.request, interrupted]);
+        assertOwner();
+        const statuses = await requestJson("/session/status", { signal: controller.signal });
+        if (((_a = statuses == null ? void 0 : statuses[rejected.sessionId]) == null ? void 0 : _a.type) === "busy") throw new Error("Rejected turn is still busy");
+        const messages = await requestJson(historyPath + "/message", { signal: controller.signal });
+        assertOwner();
+        const boundary = Array.isArray(messages) ? messages.findIndex((message) => {
+          var _a2, _b;
+          return ((_a2 = message.info) == null ? void 0 : _a2.id) === rejected.messageId && message.info.role === "user" && message.info.sessionID === rejected.sessionId && ((_b = message.parts) == null ? void 0 : _b.some((part) => part.type === "file" && part.mime === rejected.mediaType));
+        }) : -1;
+        if (boundary < 0) throw new Error("Rejected user message could not be verified");
+        const unsafeSuffix = messages.slice(boundary + 1).some((message) => {
+          var _a2;
+          return ((_a2 = message.info) == null ? void 0 : _a2.role) !== "assistant" || message.info.parentID !== rejected.messageId || !Array.isArray(message.parts) || message.parts.some((part) => ["tool", "patch", "file"].includes(part.type) || ["text", "reasoning"].includes(part.type) && String(part.text || "").trim());
+        });
+        if (unsafeSuffix) throw new Error("Rejected turn has subsequent activity");
+        const prefix = comparable(messages.slice(0, boundary));
+        const fork = await postJson(historyPath + "/fork", { messageID: rejected.messageId }, controller.signal);
+        assertOwner();
+        if (!(fork == null ? void 0 : fork.id) || fork.id === rejected.sessionId) throw new Error("Invalid recovery session");
+        const restored = await requestJson("/session/" + encodeURIComponent(fork.id) + "/message", { signal: controller.signal });
+        assertOwner();
+        if (!Array.isArray(restored) || comparable(restored) !== prefix) throw new Error("Recovery context differs");
+        copiedMessageIds = new Set(restored.map((message) => message.info.id));
+        sessionId = fork.id;
+        adoptedSessionId = fork.id;
+        sessionWasAdopted = false;
+        rejectedMediaTurn = null;
+        emit({ type: "session-ref", ref: { kind: "opencode-session", id: sessionId } });
+        return sessionId;
+      } finally {
+        clearTimeoutImpl(timer);
+        if (messageAbortController === controller) messageAbortController = null;
+      }
+    }
     async function prepareTurnSession() {
       if (!proc || !baseUrl || sseClosed) emitTurnProgress("spawn");
       else if (!sessionId) emitTurnProgress("session");
-      return ensureSession();
+      const id = await ensureSession();
+      if (!rejectedMediaTurn) return id;
+      if (rejectedMediaTurn.sessionId !== id) {
+        rejectedMediaTurn = null;
+        return id;
+      }
+      return recoverRejectedMedia(rejectedMediaTurn, activeTurn);
     }
     async function dispatchTurnMessage(id, turn) {
-      const messageBody = { parts: openCodeParts(turn) };
+      const model = parseModel(getModel ? getModel() : DEFAULT_MODEL_ID);
+      const messageBody = {
+        parts: openCodeParts(turn),
+        model: { providerID: model.providerID, modelID: model.id }
+      };
       try {
         messageDispatched = true;
         armStallWatchdog();
         const controller = new AbortController();
         messageAbortController = controller;
         const messageRequest = postJson("/session/" + encodeURIComponent(id) + "/message", messageBody, controller.signal);
+        lastMessageRequest = messageRequest.catch(() => {
+        });
         emitTurnProgress("dispatch");
         await messageRequest;
       } catch (error) {
@@ -34558,6 +34686,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           messageBody,
           controller.signal
         );
+        lastMessageRequest = replacementRequest.catch(() => {
+        });
         emitTurnProgress("dispatch");
         await replacementRequest;
       }
@@ -34581,6 +34711,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       activeAssistantText = "";
       activeTurn = turn;
+      activeUserMessageId = null;
       activeTurnAccepted = false;
       messageDispatched = false;
       aeMcpRecoveryAttempts = 0;
@@ -34593,6 +34724,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
       });
+      const turnRun = activeRun;
       try {
         const id = await prepareTurnSession();
         const userText = turn.text;
@@ -34603,7 +34735,19 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         }
         await dispatchTurnMessage(id, turn);
       } catch (e) {
-        if (stopRequested || !activeRun) return;
+        if (stopRequested || activeTurn !== turn) return;
+        if (rejectedMediaTurn && !messageDispatched) {
+          emitAfterText({
+            type: "error",
+            kind: "attachment",
+            code: "ATTACHMENT_RETRY_BLOCKED",
+            message: currentLang() === "zh" ? "\u65E0\u6CD5\u786E\u8BA4\u5931\u8D25\u9644\u4EF6\u4E4B\u524D\u7684\u5BF9\u8BDD\u5DF2\u6062\u590D\uFF0C\u672C\u6B21\u6D88\u606F\u672A\u53D1\u9001\u3002\u539F\u6709\u5386\u53F2\u548C\u8349\u7A3F\u5DF2\u4FDD\u7559\uFF0C\u8BF7\u65B0\u5EFA\u4F1A\u8BDD\u540E\u91CD\u8BD5\u3002" : "The conversation before the rejected attachment could not be restored. This message was not sent. History and draft are retained; start a new conversation to retry.",
+            ...activeTurnFailureFields(),
+            dispatchState: "not-started"
+          });
+          finishActive();
+          return;
+        }
         if (aeMcpRecoveryStarted) {
           if (aeMcpRecoveryPromise) await aeMcpRecoveryPromise;
           return activeRun;
@@ -34646,7 +34790,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         });
         finishActive();
       }
-      return activeRun;
+      return turnRun;
     }
     async function approve(toolUseId, decision) {
       const id = String(toolUseId);
@@ -34733,6 +34877,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         finishActive();
       }
       generation += 1;
+      rejectedMediaTurn = null;
+      copiedMessageIds.clear();
+      activeUserMessageId = null;
+      lastMessageRequest = null;
       const stoppedProc = proc;
       const stoppedHome = configHome;
       stopping = true;
@@ -34830,6 +34978,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function adoptSessionRef(ref) {
       settlePendingQuestions();
+      copiedMessageIds.clear();
       partTypes.clear();
       sessionId = null;
       adoptedSessionId = ref && ref.kind === "opencode-session" && ref.id ? String(ref.id) : null;

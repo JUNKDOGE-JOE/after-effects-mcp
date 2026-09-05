@@ -1,5 +1,6 @@
 import { createMacosAdapter } from './macos.js';
 import { createWindowsAdapter } from './windows.js';
+import { normalizeCepSystemPath } from './paths.js';
 
 export class PlatformCapabilityError extends Error {
   constructor(code, message) {
@@ -24,7 +25,7 @@ function windowsEnvValue(environment, name) {
 function extensionRootFromPage() {
   try {
     const root = globalThis.window?.__adobe_cep__?.getSystemPath?.('extension');
-    if (typeof root === 'string' && root.trim()) return root;
+    if (typeof root === 'string' && root.trim()) return normalizeCepSystemPath(root);
   } catch {
     // CEP hosts may expose the page before their system-path bridge is ready.
   }
