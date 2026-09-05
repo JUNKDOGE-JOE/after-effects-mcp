@@ -26,6 +26,9 @@ import { createMcpClient } from '../cep/mcpClient';
 import { createToolsApi } from '../cep/toolsApi';
 import { probeClaudeLogin } from '../cep/claudeAuth';
 import { createCliUpdateChecker, codexCatalogNotice } from '../lib/cliUpdates.js';
+import { createPanelUpdateChecker, PANEL_UPDATE_DISMISSED, showPanelUpdate } from '../lib/panelUpdates.js';
+import { PanelUpdateBanner } from '../components/shell/PanelUpdate';
+import { openExternal } from '../lib/externalLinks.js';
 import { startCodexLogin } from '../cep/codexHeadlessLogin.js';
 import { createClaudeAgentBackend } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
@@ -378,6 +381,20 @@ function Shell({ cs }) {
   const checkCliUpdate = React.useMemo(() => createCliUpdateChecker({ requestJson: platform.requestJson }), [platform]);
   const [cliUpdate, setCliUpdate] = React.useState(null);
   const [cliRecheck, setCliRecheck] = React.useState(0);
+  const checkPanelUpdate = React.useMemo(() => createPanelUpdateChecker({ requestJson: platform.requestJson, readPref, writePref }), [platform]);
+  const [panelUpdate, setPanelUpdate] = React.useState({ status: 'checking' });
+  const [panelRecheck, setPanelRecheck] = React.useState(0);
+  const [dismissedRelease, setDismissedRelease] = React.useState(() => readPref(PANEL_UPDATE_DISMISSED, ''));
+  React.useEffect(() => {
+    let alive = true;
+    setPanelUpdate({ status: 'checking' });
+    checkPanelUpdate(pkgVersion, { force: panelRecheck > 0 }).then((result) => { if (alive) setPanelUpdate(result); });
+    return () => { alive = false; };
+  }, [checkPanelUpdate, panelRecheck]);
+  const openPanelRelease = () => openExternal(panelUpdate.url, { onFailure: () => {
+    setTab('settings');
+    setPanelUpdate((value) => ({ ...value, openFailed: true }));
+  } });
   React.useEffect(() => {
     let alive = true;
     setCliUpdate({ status: 'checking' });
@@ -1558,6 +1575,11 @@ function Shell({ cs }) {
         sessionsTitle={t.sessions}
         settingsTitle={t.settings}
       />
+      {showPanelUpdate(panelUpdate, dismissedRelease) ? <PanelUpdateBanner update={panelUpdate} lang={lang}
+        onOpen={openPanelRelease} onDismiss={() => {
+          writePref(PANEL_UPDATE_DISMISSED, panelUpdate.latest);
+          setDismissedRelease(panelUpdate.latest);
+        }} /> : null}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {tab === 'chat' ? (
           <ChatScreen
@@ -1686,6 +1708,9 @@ function Shell({ cs }) {
               else runClaudeProbe();
             }}
             cliStatus={{ probe: selectedProbe, update: cliUpdate, notice: modelNotice }}
+            panelUpdate={panelUpdate}
+            onCheckPanelUpdate={() => setPanelRecheck((value) => value + 1)}
+            onOpenPanelRelease={openPanelRelease}
             recheckDisabled={chatStreaming || (backendPref === 'codex'
               ? codexProbe === null : backendPref === 'opencode'
                 ? openCodeProbe === null && !openCodeProbeStale : probe === null)}

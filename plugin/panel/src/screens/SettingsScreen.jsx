@@ -1,5 +1,6 @@
 import React from 'react';
 import { cliUpdateGuide } from '../lib/cliUpdates.js';
+import { PanelUpdateSettings } from '../components/shell/PanelUpdate';
 import pkg from '../../package.json';
 import { Badge } from '../components/core/Badge';
 import { Button } from '../components/core/Button';
@@ -318,6 +319,9 @@ export function SettingsScreen({
   loginState = null,
   recheckDisabled = false,
   cliStatus = {},
+  panelUpdate,
+  onCheckPanelUpdate,
+  onOpenPanelRelease,
   providerManager = null,
   providerInit = { state: 'checking', error: '' },
   logLevel = 'info',
@@ -488,6 +492,7 @@ export function SettingsScreen({
 
       <Section id="about" title={t.about} expanded={sections.about} onToggle={onToggleSection}>
         <VersionRow label={t.verPanel} value={`v${pkg.version}`} />
+        <PanelUpdateSettings update={panelUpdate} lang={lang} onCheck={onCheckPanelUpdate} onOpen={onOpenPanelRelease} />
         <VersionRow label={t.verHost} value={hostVersion} badge={hostVersion === '-' ? <Badge status="neutral">{t.pending}</Badge> : null} />
         <div style={{ display: 'flex', gap: 6 }}>
           <Button variant="ghost" size="sm" icon="book-open" onClick={() => handleExternalLink(docsUrlForLocale(lang))}>{t.docs}</Button>

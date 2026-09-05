@@ -1,3 +1,5 @@
+import { compareVersions, createVersionChecker } from './versionUpdates.js';
+export { compareVersions } from './versionUpdates.js';
 export const ASTRA_CLI_BASELINE = '0.153.4';
 const PACKAGES = { codex: '@openai/codex', subscription: '@anthropic-ai/claude-code', opencode: 'opencode-ai' };
 const DOCS = {
@@ -5,16 +7,6 @@ const DOCS = {
   subscription: 'https://code.claude.com/docs/en/setup',
   opencode: 'https://opencode.ai/docs/cli/#upgrade',
 };
-
-export function compareVersions(left, right) {
-  const parse = (value) => /^(?:v)?(\d+)\.(\d+)\.(\d+)$/.exec(String(value || '').trim());
-  const a = parse(left), b = parse(right);
-  if (!a || !b) return null;
-  for (let i = 1; i <= 3; i += 1) {
-    if (Number(a[i]) !== Number(b[i])) return Math.sign(Number(a[i]) - Number(b[i]));
-  }
-  return 0;
-}
 
 export function cliIdentity(executable, fs) {
   if (!executable?.ok) return null;
@@ -58,28 +50,15 @@ export function cliUpdateGuide(backend, cli, lang = 'zh') {
 }
 
 export function createCliUpdateChecker({ requestJson, now = Date.now, timeoutMs = 8000 }) {
-  const cache = new Map();
-  return async (backend, cli, { force = false } = {}) => {
+  const checkers = new Map();
+  return async (backend, cli, options = {}) => {
     const current = cli?.version || '';
     if (!PACKAGES[backend] || !cli) return { status: 'unknown', current };
-    let entry = cache.get(backend);
-    if (force || !entry || now() - entry.checkedAt >= 86400000) {
-      let timer;
-      try {
-        const result = await Promise.race([
-          requestJson({ url: `https://registry.npmjs.org/${PACKAGES[backend]}/latest`, timeoutMs }),
-          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), timeoutMs); }),
-        ]);
-        const latest = result.json?.version;
-        if (!result.ok || compareVersions(latest, latest) === null) throw new Error('unknown stable version');
-        entry = { latest, checkedAt: now() };
-        cache.set(backend, entry);
-      } catch {
-        return { status: 'unknown', current };
-      } finally { clearTimeout(timer); }
+    if (!checkers.has(backend)) {
+      checkers.set(backend, createVersionChecker({ requestJson, now, timeoutMs,
+        url: `https://registry.npmjs.org/${PACKAGES[backend]}/latest`, parseRelease: (json) => ({ latest: json?.version }) }));
     }
-    const comparison = compareVersions(current, entry.latest);
-    return { ...entry, current, status: comparison === null ? 'unknown' : comparison < 0 ? 'update' : 'current' };
+    return checkers.get(backend)(current, options);
   };
 }
 

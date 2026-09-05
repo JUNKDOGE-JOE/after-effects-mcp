@@ -1210,6 +1210,34 @@ body {
   display: flex;
   flex-direction: column;
 }
+.panel-update-banner {
+  height: 24px;
+  flex: none;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  background: var(--info-bg);
+  border-bottom: 1px solid var(--border-default);
+  font: var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui);
+}
+.panel-update-banner > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-update-banner > button {
+  flex: none;
+}
+.panel-update-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
 .ae-attachment-pond {
   flex: none;
   min-width: 0;
