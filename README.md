@@ -206,7 +206,7 @@ with the project's development and maintenance.
 <details open>
 <summary>Scan to support via WeChat Pay or Alipay</summary>
 
-<p>Scan with the corresponding app. Click an image to view the full-size QR code.</p>
+<p>Scan with the corresponding app.</p>
 <table>
   <tr><th>WeChat Pay</th><th>Alipay</th></tr>
   <tr>
