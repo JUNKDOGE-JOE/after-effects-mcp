@@ -182,7 +182,7 @@ Windows ZXP 暂存复制面板、宿主、JSX、shared、图标、宿主生成�
 
 **[通过 PayPal 赞助](https://paypal.me/junkdoge)**
 
-<details>
+<details open>
 <summary>扫码支持：微信支付 / 支付宝</summary>
 
 <p>使用对应的 App 扫码，点击图片可查看原尺寸收款码。</p>

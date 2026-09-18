@@ -203,7 +203,7 @@ with the project's development and maintenance.
 
 **[Support via PayPal](https://paypal.me/junkdoge)**
 
-<details>
+<details open>
 <summary>Scan to support via WeChat Pay or Alipay</summary>
 
 <p>Scan with the corresponding app. Click an image to view the full-size QR code.</p>
@@ -221,7 +221,7 @@ with the project's development and maintenance.
 
 | Sponsor | About | Contribution | Note |
 | --- | --- | --- | --- |
-| [**biheye-g**](https://github.com/biheye-g) | Bilibili creator **匕禾页** | CNY 18 | First sponsor |
+| [**biheye-g**](https://github.com/biheye-g) | Bilibili content creator **匕禾页** | CNY 18 | First sponsor |
 
 ## License
 
