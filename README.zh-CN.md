@@ -174,6 +174,34 @@ Windows ZXP 暂存复制面板、宿主、JSX、shared、图标、宿主生成�
 [Tool Library](docs/TOOL_LIBRARY.md)、[架构方向](docs/ARCHITECTURE_DIRECTION.md)、
 [开发流程](docs/WORKFLOW.md)和[发布文档](docs/RELEASE.md)。
 
+## 赞助者 Sponsors
+
+感谢每一位支持 ae-mcp 开发与维护的赞助者！
+
+自愿赞助，金额随意。你的支持将帮助项目持续开发与维护。
+
+**[通过 PayPal 赞助](https://paypal.me/junkdoge)**
+
+<details>
+<summary>扫码支持：微信支付 / 支付宝</summary>
+
+<p>使用对应的 App 扫码，点击图片可查看原尺寸收款码。</p>
+<table>
+  <tr><th>微信支付</th><th>支付宝</th></tr>
+  <tr>
+    <td><a href="docs/assets/sponsorship/wechat-pay.jpg"><img src="docs/assets/sponsorship/wechat-pay.jpg" alt="微信支付赞助收款码" width="240" /></a></td>
+    <td><a href="docs/assets/sponsorship/alipay.jpg"><img src="docs/assets/sponsorship/alipay.jpg" alt="支付宝赞助收款码" width="240" /></a></td>
+  </tr>
+</table>
+
+</details>
+
+### 赞助鸣谢
+
+| 赞助者 | 简介 | 赞助金额 | 备注 |
+| --- | --- | --- | --- |
+| [**biheye-g**](https://github.com/biheye-g) | B 站 UP 主 **匕禾页** | 18 元 | 首位赞助者 |
+
 ## 许可证
 
 ae-mcp 使用 MIT License，见 [LICENSE](LICENSE)。Adobe 的 `CSInterface.js`

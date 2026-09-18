@@ -194,6 +194,35 @@ See [Install](docs/INSTALL.md), [Reference](docs/REFERENCE.md),
 [Workflow](docs/WORKFLOW.md), and [Release](docs/RELEASE.md) for maintained
 operational and developer details.
 
+## Sponsors
+
+Thank you to everyone who supports the development and maintenance of ae-mcp!
+
+Sponsorship is voluntary, and any amount is appreciated. Your support helps
+with the project's development and maintenance.
+
+**[Support via PayPal](https://paypal.me/junkdoge)**
+
+<details>
+<summary>Scan to support via WeChat Pay or Alipay</summary>
+
+<p>Scan with the corresponding app. Click an image to view the full-size QR code.</p>
+<table>
+  <tr><th>WeChat Pay</th><th>Alipay</th></tr>
+  <tr>
+    <td><a href="docs/assets/sponsorship/wechat-pay.jpg"><img src="docs/assets/sponsorship/wechat-pay.jpg" alt="WeChat Pay sponsorship QR code" width="240" /></a></td>
+    <td><a href="docs/assets/sponsorship/alipay.jpg"><img src="docs/assets/sponsorship/alipay.jpg" alt="Alipay sponsorship QR code" width="240" /></a></td>
+  </tr>
+</table>
+
+</details>
+
+### Sponsor acknowledgements
+
+| Sponsor | About | Contribution | Note |
+| --- | --- | --- | --- |
+| [**biheye-g**](https://github.com/biheye-g) | Bilibili creator **匕禾页** | CNY 18 | First sponsor |
+
 ## License
 
 ae-mcp is released under the MIT License; see [LICENSE](LICENSE). Adobe's
