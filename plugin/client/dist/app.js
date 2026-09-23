@@ -20613,7 +20613,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.10.7",
+    version: "0.10.8",
     private: true,
     type: "module",
     scripts: {
@@ -29353,7 +29353,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
   // src/cep/mcpClient.js
   init_cep_runtime_inject();
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.10.7";
+  var PANEL_VERSION = "0.10.8";
   function defaultFetch() {
     if (globalThis.window && globalThis.window.fetch) {
       return globalThis.window.fetch.bind(globalThis.window);
