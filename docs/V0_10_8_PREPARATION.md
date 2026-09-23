@@ -1,6 +1,6 @@
 # v0.10.8 修复准备
 
-状态：本地源码与组件验证完成，待真实 AE CEP 验收。不是
+状态：本地源码、组件与真实 AE 后台链路诊断已完成，界面事件及部分模型验收待完成。不是
 `development-verified` 或 `release-accepted`。
 
 基线：`9033566`（当前 `origin/main`）；分支：`codex/v0.10.8-panel-fixes`。
@@ -71,9 +71,41 @@ low/medium/high/xhigh/max。
    推理档位、请求和响应；通过公开 `ae_status` 验证真实 AE 工具链。
 6. 全部通过后再更新 Issue 状态、冻结 0.10.8 候选和执行适用的发布验收。
 
-当前未检测到 AE 进程；本次未安装扩展、启动 AE 或修改客户端配置。
+用户已手动替换面板 bundle 并启动 AE 2026。已安装 bundle 与 `e6a9b58` 构建的
+SHA-256 一致；只做此变更文件的身份核对，未重新扫描完整安装。
 `.aep` 生命周期：创建、保留 canonical、保留 evidence snapshot、归档、未分类
 均为 0；移动或释放空间为 0。
+
+## 真实 AE 后台诊断结果
+
+用户要求不占用鼠标后，全部测试通过公开 MCP 与生产后端模块调用已安装 CLI，
+无鼠标、键盘或窗口焦点操作，也未修改生产工程或用户客户端配置。
+这是后台开发诊断，`validationProfile=development`、`candidateRun=false`、
+`candidateEvidence=false`，不替代正式 HDEV/T5/T6 或完整 CEP 界面验收。
+
+| 检查 | 结果 | 证据与限制 |
+| --- | --- | --- |
+| HTTP → 真实 AE | PASS | 公开 `ae_status` 正常；`ae_read` 前后均为 0 个工程条目 |
+| 已安装 stdio shim → 真实 AE | PASS | 系统 Node 启动已安装 `host/stdio-shim.js`，公开 `ae_status` 返回 `ok=true` |
+| 无路径 PNG 暂存 | PASS | 生产 attachmentStore 写入 5239 字节，读回与输入一致，MIME 为 image/png；完成后临时副本已清理 |
+| GPT-6 Astra / Codex 0.153.4 | PASS | 正确读出图片中的 AE MCP TEST 7319、蓝色方块及橙色圆形；`ae_status`、`ae_read` 均成功 |
+| GPT-6 Sol / Codex 0.155.0 | PASS | 同一图片识别正确；两项公开 AE 只读调用均成功 |
+| GPT-6 Luna / Codex 0.155.0 | INDETERMINATE | 附件已收到，形状颜色识别正确，AE 两项调用成功；文字把 7319 读成 319，精确识别子项 FAIL，不能宣称附件理解全通过 |
+| Opus 5.5 / Claude Code 2.1.257 | BLOCKED | 生产后端派发前返回 CLI_TOO_OLD，要求至少 2.1.280；未升级 CLI |
+| 测试会话清理 | PASS with recovery | 三个测试会话的现有 thread/delete 路径返回未成功；随后确认记录存在，仅将这三个测试会话通过 thread/archive 可恢复归档 |
+
+三个 Codex 模型共完成 6 次公开只读工具调用，均收到成功 tool-result。
+Sol/Luna 使用本机已有 0.155.0 显式诊断路径，未更改面板默认解析到的 0.153.4。
+AE 保持由用户打开的空工程；没有创建、保存、渲染或修改项目。
+
+尚未验证：真实 CEP 的资源管理器 Ctrl+C/Ctrl+V、截图粘贴事件、鼠标滚轮与滚动条；
+#390 在两个真实客户端中按四种已有安装状态执行配置；Opus 5.5 的成功请求。
+不把后台附件暂存与模型传递测试当作操作系统剪贴板事件验收。
+
+本地结构化证据文件：`background-results.json`、`stdio-public-status.json`、
+`project-after.json`、`test-session-recovery.json`，位于系统临时目录的本次
+`ae-mcp-0108-hardware-*` 目录；含测试会话标识的原始日志不进入仓库。
+诊断过程中发现的会话删除问题保留为后续调查项，本批不扩大产品改动。
 
 ## 可选优化，尚未实施
 
