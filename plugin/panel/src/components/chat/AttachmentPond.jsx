@@ -64,7 +64,7 @@ export const AttachmentPond = React.forwardRef(function AttachmentPond({
         ref={pondRef}
         files={pondFiles}
         allowMultiple
-        allowPaste
+        allowPaste={false}
         allowBrowse={!disabled}
         allowDrop={!disabled}
         allowReorder={false}

@@ -20613,7 +20613,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.10.7",
+    version: "0.10.8",
     private: true,
     type: "module",
     scripts: {
@@ -22768,11 +22768,19 @@
   init_cep_runtime_inject();
   var CLAUDE_PRICE_USD_PER_MTOK = {
     "claude-fable-5-1": { input: 10, output: 50 },
+    "claude-opus-5-5": { input: 4, output: 20 },
     "claude-opus-5": { input: 5, output: 25 },
     "claude-sonnet-5": { input: 2, output: 10 },
     "claude-haiku-4-5": { input: 1, output: 5 }
   };
   var CLAUDE_MODELS = [
+    {
+      id: "claude-opus-5-5",
+      label: "Opus 5.5",
+      minCliVersion: "2.1.280",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      adaptive: true
+    },
     {
       id: "claude-fable-5-1",
       label: "Fable 5.1",
@@ -22833,8 +22841,8 @@
   function costTier(modelId) {
     const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
     if (!price) return 2;
-    const index = TIER_ORDER.indexOf(price.input);
-    return index === -1 ? 2 : index + 1;
+    const index = TIER_ORDER.findIndex((ceiling) => price.input <= ceiling);
+    return index === -1 ? TIER_ORDER.length : index + 1;
   }
   function withCost(models) {
     return models.map((model) => ({ ...model, cost: costTier(model.id) }));
@@ -22844,7 +22852,7 @@
       id: "claude-sub",
       label: "\u8BA2\u9605",
       models: withCost(CLAUDE_MODELS),
-      defaultModelId: "claude-opus-5",
+      defaultModelId: "claude-opus-5-5",
       defaultEffort: "high",
       supportsFast: () => false,
       approvalModes: APPROVAL_MODES,
@@ -22885,6 +22893,27 @@
   }
   var CODEX_STATIC_EXTRA_MODELS = [
     {
+      id: "gpt-6-astra",
+      label: "GPT-6 Astra",
+      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+      cost: 4,
+      adaptive: false
+    },
+    {
+      id: "gpt-6-sol",
+      label: "GPT-6 Sol",
+      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+      cost: 2,
+      adaptive: false
+    },
+    {
+      id: "gpt-6-luna",
+      label: "GPT-6 Luna",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      cost: 1,
+      adaptive: false
+    },
+    {
       id: "gpt-5.5",
       label: "GPT-5.5",
       effortLevels: ["low", "medium", "high", "xhigh"],
@@ -22915,6 +22944,9 @@
   ];
   var CODEX_STATIC_FAST_MODEL_IDS = /* @__PURE__ */ new Set([
     ...CODEX_OFFICIAL_LOGIN_56_MODEL_IDS,
+    "gpt-6-astra",
+    "gpt-6-sol",
+    "gpt-6-luna",
     "gpt-5.5",
     "gpt-5.4"
   ]);
@@ -22929,7 +22961,7 @@
           effortLevels: [...model.effortLevels]
         }))
       ],
-      defaultModelId: "gpt-5.6-sol",
+      defaultModelId: "gpt-6-astra",
       defaultEffort: "medium",
       supportsFast: (modelId) => CODEX_STATIC_FAST_MODEL_IDS.has(String(modelId || "")),
       catalogVerified: false,
@@ -23112,6 +23144,8 @@
       mins: (n) => `${n} \u5206\u949F\u524D`,
       hours: (n) => `${n} \u5C0F\u65F6\u524D`,
       language: "\u754C\u9762\u8BED\u8A00",
+      clipboardAttachments: "\u526A\u8D34\u677F\u9644\u4EF6\u7C98\u8D34",
+      clipboardAttachmentsHint: "\u5141\u8BB8 Ctrl+V \u6DFB\u52A0\u56FE\u7247\u548C\u6587\u4EF6\u3002\u4E0E\u5176\u5B83\u526A\u8D34\u677F\u63D2\u4EF6\u51B2\u7A81\u65F6\u53EF\u5173\u95ED\uFF1B\u6587\u5B57\u7C98\u8D34\u3001\u62D6\u653E\u548C\u6DFB\u52A0\u6587\u4EF6\u4E0D\u53D7\u5F71\u54CD\u3002",
       logLevel: "\u65E5\u5FD7\u7EA7\u522B",
       exportLog: "\u5BFC\u51FA\u65E5\u5FD7",
       mcp: "MCP \u914D\u7F6E",
@@ -23163,6 +23197,8 @@
       mins: (n) => `${n} min ago`,
       hours: (n) => `${n} h ago`,
       language: "Language",
+      clipboardAttachments: "Paste attachments from clipboard",
+      clipboardAttachmentsHint: "Use Ctrl+V to attach images and files. Turn off if another clipboard plug-in conflicts; text paste, drag and drop, and Add files remain available.",
       logLevel: "Log level",
       exportLog: "Export log",
       mcp: "MCP config",
@@ -23340,6 +23376,8 @@
   function SettingsScreen({
     lang = "zh",
     onLangChange,
+    clipboardAttachments = true,
+    onClipboardAttachmentsChange,
     port = 11488,
     onApplyPort,
     mcpConfig,
@@ -23503,6 +23541,7 @@
         ))
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(Section, { id: "gen", title: t.gen, expanded: sections.gen, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.clipboardAttachments, caption: t.clipboardAttachmentsHint, layout: "row", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Switch, { title: t.clipboardAttachments, checked: clipboardAttachments, onChange: onClipboardAttachmentsChange }) }),
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Select, { value: logLevel, onChange: onLogLevel, style: { flex: 1 }, options: [
@@ -23910,20 +23949,28 @@
   // src/lib/externalClientPrompt.js
   init_cep_runtime_inject();
   var PROMPTS = {
-    zh: ({ url, shimPath }) => `\u5E2E\u6211\u628A After Effects \u63A5\u8FDB\u6765\u3002ae-mcp \u9762\u677F\u5DF2\u7ECF\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\u8FD0\u884C\uFF0CMCP \u670D\u52A1\u5730\u5740\u662F ${url}\u3002
+    zh: ({ url, shimPath }) => `\u8BF7\u4E3A\u6B63\u5728\u63A5\u6536\u5E76\u6267\u884C\u6B64\u63D0\u793A\u8BCD\u7684\u5F53\u524D\u5BA2\u6237\u7AEF\u914D\u7F6E ae-mcp\u3002\u5F53\u524D\u5BA2\u6237\u7AEF\u5C31\u662F\u76EE\u6807\uFF0C\u4E0D\u8981\u9ED8\u8BA4\u9009\u62E9 Claude Code\uFF0C\u4E5F\u4E0D\u8981\u914D\u7F6E\u5176\u5B83\u5BA2\u6237\u7AEF\u3002ae-mcp \u9762\u677F\u5DF2\u7ECF\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\u8FD0\u884C\uFF0CMCP \u670D\u52A1\u5730\u5740\u662F ${url}\u3002
 
-\u8BF7\u6309\u4F60\u81EA\u5DF1\u652F\u6301\u7684\u63A5\u5165\u65B9\u5F0F\u4E8C\u9009\u4E00\uFF1A
-- \u652F\u6301 Streamable HTTP MCP server \u7684\u5BA2\u6237\u7AEF\uFF08Claude Code\u3001Cursor \u7B49\uFF09\uFF1A\u628A\u4E0A\u9762\u8FD9\u4E2A\u5730\u5740\u52A0\u6210\u540D\u4E3A ae \u7684\u670D\u52A1\u5668\uFF1B\u5982\u679C\u4F60\u7684\u5BA2\u6237\u7AEF\u6709\u4F5C\u7528\u57DF\u6982\u5FF5\uFF0C\u6CE8\u518C\u5230\u7528\u6237\u7EA7\uFF1B\u4E0D\u8981\u6539\u52A8\u6211\u5DF2\u6709\u7684\u5176\u5B83 MCP \u6761\u76EE\uFF1B\u6539\u5B8C\u628A\u6700\u7EC8\u914D\u7F6E\u56DE\u663E\u7ED9\u6211\u3002
-- \u53EA\u652F\u6301 stdio \u7684\u5BA2\u6237\u7AEF\uFF08Claude Desktop \u7B49\uFF09\uFF1A\u7528\u7CFB\u7EDF Node\uFF0818 \u4EE5\u4E0A\uFF09\u6267\u884C ${shimPath}\uFF0C\u5E76\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_HTTP_URL=${url}\u3002
+\u64CD\u4F5C\u524D\u5148\u53EA\u8BFB\u68C0\u67E5\u672C\u673A ae-mcp \u6269\u5C55\u3001\u5BF9\u5E94\u5E73\u53F0\u539F\u751F\u63D2\u4EF6\u7684\u6587\u4EF6\u548C\u7248\u672C\uFF0C\u4EE5\u53CA\u5F53\u524D\u5BA2\u6237\u7AEF\u5DF2\u6709\u7684 MCP \u6CE8\u518C\u53CA\u5B9E\u9645\u8FDE\u63A5\u72B6\u6001\uFF1B\u4E0D\u8981\u4EC5\u51ED\u6587\u4EF6\u6216\u914D\u7F6E\u6761\u76EE\u5B58\u5728\u5C31\u8BA4\u5B9A\u53EF\u7528\u3002\u5BF9\u7167\u5B98\u65B9\u6700\u65B0\u7A33\u5B9A\u53D1\u5E03\u7684\u672C\u5E73\u53F0\u53EF\u7528\u8D44\u4EA7\uFF1A\u5BA2\u6237\u7AEF\u5DF2\u6B63\u786E\u6CE8\u518C\u5C31\u4FDD\u7559\u914D\u7F6E\uFF0C\u53EA\u8865\u88C5\u7F3A\u5931\u6216\u635F\u574F\u7684\u6587\u4EF6\uFF1B\u6587\u4EF6\u5B8C\u6574\u4E14\u7248\u672C\u9002\u7528\u5C31\u53EA\u8865\u914D\u7F3A\u5931\u6216\u9519\u8BEF\u7684\u5BA2\u6237\u7AEF\u6CE8\u518C\uFF1B\u4E24\u8005\u90FD\u5DF2\u5C31\u7EEA\u4E14\u4E3A\u6700\u65B0\u7248\u5C31\u76F4\u63A5\u9A8C\u8BC1\uFF0C\u4E0D\u91CD\u590D\u5B89\u88C5\u3002\u53D1\u73B0\u53EF\u7528\u65B0\u7248\u65F6\u5347\u7EA7\u5DF2\u6709\u7EC4\u4EF6\uFF0C\u4FDD\u7559\u7528\u6237\u8BBE\u7F6E\u53CA\u5176\u5B83 MCP \u914D\u7F6E\uFF0C\u4E0D\u964D\u7EA7\uFF1B\u65E0\u6CD5\u786E\u8BA4\u7248\u672C\u6216\u7F3A\u5C11\u672C\u5E73\u53F0\u8D44\u4EA7\u65F6\u8BF4\u660E\u60C5\u51B5\uFF0C\u4E0D\u76F2\u76EE\u8986\u76D6\u3002
 
-\u5B8C\u6210\u540E\u63D0\u9192\u6211\u4E24\u4EF6\u4E8B\uFF1AMCP \u5DE5\u5177\u53EA\u5728\u65B0\u4F1A\u8BDD\u91CC\u52A0\u8F7D\uFF0C\u8981\u65B0\u5F00\u4E00\u4E2A\u4F1A\u8BDD\u518D\u8C03\u7528 ae_status \u9A8C\u8BC1\uFF1Bae-mcp \u9762\u677F\u5FC5\u987B\u4FDD\u6301\u6253\u5F00\uFF0C\u5173\u6389\u6216\u91CD\u8F7D\u9762\u677F\u4E4B\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002`,
-    en: ({ url, shimPath }) => `Connect After Effects for me. The ae-mcp panel is already running on this machine and serves MCP at ${url}.
+\u5148\u786E\u5B9A\u5F53\u524D\u5BA2\u6237\u7AEF\u5B9E\u9645\u652F\u6301\u7684\u914D\u7F6E\u65B9\u5F0F\u4E0E\u4F4D\u7F6E\uFF1B\u53EA\u6709\u786E\u5B9E\u65E0\u6CD5\u8BC6\u522B\u76EE\u6807\u5BA2\u6237\u7AEF\u65F6\u624D\u8BE2\u95EE\u6211\uFF0C\u4E0D\u8981\u9759\u9ED8\u56DE\u9000\u5230 Claude Code\u3002\u9700\u8981\u914D\u7F6E\u65F6\u6309\u5F53\u524D\u5BA2\u6237\u7AEF\u80FD\u529B\u4E8C\u9009\u4E00\uFF1A
+- \u652F\u6301 Streamable HTTP\uFF1A\u628A\u4E0A\u9762\u8FD9\u4E2A\u5730\u5740\u52A0\u6210\u540D\u4E3A ae \u7684\u670D\u52A1\u5668\u3002
+- \u53EA\u652F\u6301 stdio\uFF1A\u7528\u7CFB\u7EDF Node\uFF0818 \u4EE5\u4E0A\uFF09\u6267\u884C ${shimPath}\uFF0C\u5E76\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_HTTP_URL=${url}\uFF1B\u6309\u5F53\u524D\u5BA2\u6237\u7AEF\u683C\u5F0F\u5206\u522B\u586B\u5199 command\u3001args \u548C env\uFF0C\u8DEF\u5F84\u4F5C\u4E3A\u72EC\u7ACB\u53C2\u6570\u3002
 
-Use whichever form your client supports:
-- Clients that accept a Streamable HTTP MCP server (Claude Code, Cursor, and similar): add that URL as a server named ae; register it at user scope if your client has scopes; leave my other MCP entries untouched; print the final configuration back to me.
-- stdio-only clients (Claude Desktop and similar): run ${shimPath} with system Node 18 or newer and set the environment variable AE_MCP_HTTP_URL=${url}.
+\u4FDD\u7559\u5DF2\u6709\u7684\u5176\u5B83 MCP \u914D\u7F6E\uFF1B\u652F\u6301\u4F5C\u7528\u57DF\u65F6\u4F18\u5148\u7528\u6237\u7EA7\u3002\u65E0\u6CD5\u81EA\u52A8\u4FEE\u6539\u65F6\uFF0C\u7ED9\u51FA\u5F53\u524D\u5BA2\u6237\u7AEF\u51C6\u786E\u7684\u624B\u52A8\u6B65\u9AA4\uFF0C\u4E0D\u8981\u6539\u4E3A\u914D\u7F6E\u53E6\u4E00\u4E2A\u5BA2\u6237\u7AEF\u3002\u53EA\u56DE\u663E ae \u6761\u76EE\u7684\u914D\u7F6E\uFF0C\u4E0D\u8981\u8F93\u51FA\u5176\u5B83\u914D\u7F6E\u4E2D\u7684\u5BC6\u94A5\u3002
 
-When you are done, remind me of two things: MCP tools load only in a new session, so start a fresh session and call ae_status to verify; and the ae-mcp panel must stay open \u2014 clients need to reconnect after it closes or reloads.`
+\u914D\u7F6E\u540E\u6309\u5F53\u524D\u5BA2\u6237\u7AEF\u8981\u6C42\u5237\u65B0\u3001\u91CD\u8FDE\u6216\u65B0\u5EFA\u4F1A\u8BDD\uFF0C\u518D\u8C03\u7528 ae_status \u9A8C\u8BC1\uFF1B\u5982\u679C\u9700\u8981\u6211\u64CD\u4F5C\uFF0C\u8BF4\u660E\u5177\u4F53\u6B65\u9AA4\u53CA\u9A8C\u8BC1\u5C1A\u672A\u5B8C\u6210\u3002ae-mcp \u9762\u677F\u5FC5\u987B\u4FDD\u6301\u6253\u5F00\uFF0C\u5173\u6389\u6216\u91CD\u8F7D\u9762\u677F\u4E4B\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002`,
+    en: ({ url, shimPath }) => `Configure ae-mcp for the current client receiving and executing this prompt. This current client is the target: do not default to Claude Code or configure another client. The ae-mcp panel is already running on this machine and serves MCP at ${url}.
+
+Before making changes, inspect the local ae-mcp extension and platform-native plug-in files and versions, plus this client's existing MCP registration and actual connection, read-only. Existence alone does not prove readiness. Compare with the latest official stable release assets available for this platform: keep a correct client registration and install only missing or damaged files; when files are complete and their versions suitable, only add or repair client registration; when both are ready and current, verify without reinstalling. Upgrade existing components when a newer version is available, preserving user settings and other MCP configuration; do not downgrade. If versions cannot be established or platform assets are unavailable, explain rather than blindly overwrite.
+
+First identify this client's supported configuration method and location. Ask me only if the target client truly cannot be identified; never silently fall back to Claude Code. When configuration is needed, choose by this client's capabilities:
+- Streamable HTTP: add that URL as a server named ae.
+- stdio only: run ${shimPath} with system Node 18 or newer and set AE_MCP_HTTP_URL=${url}; use this client's command, args, and env format, with the path as a separate argument.
+
+Preserve all other MCP configuration; prefer user scope when supported. If automatic editing is unavailable, give precise manual steps for this client rather than configuring another client. Show only the ae entry, without secrets from other configuration.
+
+Refresh, reconnect, or start a new session as this client requires, then call ae_status to verify. If I must act first, explain the exact steps and that verification is still pending. The ae-mcp panel must stay open; clients need to reconnect after it closes or reloads.`
   };
   function externalClientSetupPrompt({
     lang = "zh",
@@ -25041,31 +25088,68 @@ When you are done, remind me of two things: MCP tools load only in a new session
 
   // src/cep/platform/previewKeyboard.js
   init_cep_runtime_inject();
-  function registerPreviewEscape(page = globalThis.window) {
+  var registrations = /* @__PURE__ */ new WeakMap();
+  function registerPanelKeys(keys, page) {
     var _a, _b, _c, _d;
     const platform = ((_b = (_a = page == null ? void 0 : page.cep_node) == null ? void 0 : _a.process) == null ? void 0 : _b.platform) || ((_c = globalThis.process) == null ? void 0 : _c.platform);
     const cep = page == null ? void 0 : page.__adobe_cep__;
     if (platform !== "win32" || typeof (cep == null ? void 0 : cep.registerKeyEventsInterest) !== "function") return void 0;
+    let state = registrations.get(page);
+    if (!state) {
+      const owners = /* @__PURE__ */ new Map();
+      const sync = () => {
+        const unique = /* @__PURE__ */ new Map();
+        for (const group of owners.values()) {
+          for (const key of group) unique.set(JSON.stringify(key), key);
+        }
+        cep.registerKeyEventsInterest(unique.size ? JSON.stringify([...unique.values()]) : "");
+      };
+      const detach = () => {
+        var _a2;
+        (_a2 = page.removeEventListener) == null ? void 0 : _a2.call(page, "beforeunload", unload);
+        registrations.delete(page);
+      };
+      const unload = () => {
+        owners.clear();
+        detach();
+        try {
+          sync();
+        } catch {
+        }
+      };
+      state = { owners, sync, detach, unload };
+    }
+    const owner = Symbol();
+    state.owners.set(owner, keys);
     try {
-      cep.registerKeyEventsInterest(JSON.stringify([
-        { keyCode: 27, ctrlKey: false, altKey: false, shiftKey: false }
-      ]));
+      state.sync();
     } catch {
+      state.owners.delete(owner);
       return void 0;
     }
-    let active = true;
-    const release = () => {
-      var _a2;
-      if (!active) return;
-      active = false;
-      (_a2 = page.removeEventListener) == null ? void 0 : _a2.call(page, "beforeunload", release);
+    if (!registrations.has(page)) {
+      registrations.set(page, state);
+      (_d = page.addEventListener) == null ? void 0 : _d.call(page, "beforeunload", state.unload);
+    }
+    return () => {
+      if (!state.owners.delete(owner)) return;
+      if (!state.owners.size) state.detach();
       try {
-        cep.registerKeyEventsInterest("");
+        state.sync();
       } catch {
       }
     };
-    (_d = page.addEventListener) == null ? void 0 : _d.call(page, "beforeunload", release);
-    return release;
+  }
+  function registerPreviewEscape(page = globalThis.window) {
+    return registerPanelKeys([
+      { keyCode: 27, ctrlKey: false, altKey: false, shiftKey: false }
+    ], page);
+  }
+  function registerComposerClipboard(page = globalThis.window) {
+    return registerPanelKeys([
+      { keyCode: 67, ctrlKey: true, altKey: false, shiftKey: false },
+      { keyCode: 86, ctrlKey: true, altKey: false, shiftKey: false }
+    ], page);
   }
 
   // src/components/chat/ToolCallCard.jsx
@@ -26224,7 +26308,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           ref: pondRef,
           files: pondFiles,
           allowMultiple: true,
-          allowPaste: true,
+          allowPaste: false,
           allowBrowse: !disabled,
           allowDrop: !disabled,
           allowReorder: false,
@@ -26551,6 +26635,29 @@ When you are done, remind me of two things: MCP tools load only in a new session
     };
   }
 
+  // src/lib/composerPaste.js
+  init_cep_runtime_inject();
+  function clipboardFiles(data2) {
+    const files = Array.from((data2 == null ? void 0 : data2.files) || []);
+    if (files.length) return files;
+    return Array.from((data2 == null ? void 0 : data2.items) || []).filter((item) => item.kind === "file").map((item) => item.getAsFile()).filter(Boolean);
+  }
+  function handleComposerPaste(event, { enabled = true, canAttach, addFiles }) {
+    if (!enabled) return false;
+    const files = clipboardFiles(event.clipboardData);
+    if (!files.length) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    if (canAttach) addFiles(files);
+    return true;
+  }
+  function containClipboardKey(event) {
+    const key = String(event.key || "").toLowerCase();
+    const clipboardChord = event.ctrlKey && !event.shiftKey && (key === "c" || key === "v");
+    if (event.altKey || event.metaKey || !clipboardChord) return;
+    event.stopPropagation();
+  }
+
   // src/components/chat/Composer.jsx
   var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
   function ComposerResizeHandle({
@@ -26695,10 +26802,15 @@ When you are done, remind me of two things: MCP tools load only in a new session
     onAddFile,
     onRemoveAttachment,
     onRetryAttachment,
-    attachmentLabels
+    attachmentLabels,
+    clipboardAttachments = true
   }) {
     const [focus, setFocus] = import_react38.default.useState(false);
     const attachmentPondRef = import_react38.default.useRef(null);
+    import_react38.default.useLayoutEffect(() => {
+      if (clipboardAttachments) return registerComposerClipboard();
+      return void 0;
+    }, [clipboardAttachments]);
     const readyAttachmentCount = readyAttachments(attachmentDraft).length;
     const attachmentsBusy = draftIsBusy(attachmentDraft) || attachmentDraft.items.some((item) => item.status === "error");
     const canSend = !disabled && !streaming && !attachmentsBusy && (value.trim().length > 0 || readyAttachmentCount > 0);
@@ -26773,6 +26885,18 @@ When you are done, remind me of two things: MCP tools load only in a new session
             onDragEnterCapture: handleFileDrag,
             onDragOverCapture: handleFileDrag,
             onDropCapture: handleFileDrop,
+            onKeyDownCapture: clipboardAttachments ? containClipboardKey : void 0,
+            onKeyUpCapture: clipboardAttachments ? containClipboardKey : void 0,
+            onPasteCapture: (event) => {
+              handleComposerPaste(event, {
+                enabled: clipboardAttachments,
+                canAttach: !disabled && !streaming && !attachmentDraft.pendingTurnId,
+                addFiles: (files) => {
+                  var _a;
+                  return (_a = attachmentPondRef.current) == null ? void 0 : _a.addFiles(files);
+                }
+              });
+            },
             children: [
               /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
                 AttachmentPond,
@@ -26909,6 +27033,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           alignItems: "center",
           gap: "var(--space-2)",
           width: "100%",
+          flexShrink: 0,
           minHeight: "var(--hit-min)",
           padding: "2px var(--space-2)",
           background: hover && !disabled ? "var(--bg-hover)" : "transparent",
@@ -26935,6 +27060,10 @@ When you are done, remind me of two things: MCP tools load only in a new session
         role: "menu",
         style: {
           minWidth,
+          boxSizing: "border-box",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
           padding: "var(--space-1)",
           background: "var(--bg-overlay)",
           border: "1px solid var(--border-default)",
@@ -26948,6 +27077,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
             {
               style: {
                 display: "flex",
+                flexShrink: 0,
                 alignItems: "center",
                 justifyContent: "space-between",
                 gap: "var(--space-2)",
@@ -26961,14 +27091,15 @@ When you are done, remind me of two things: MCP tools load only in a new session
               ]
             }
           ) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
-            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(MenuRow, { item, onClose }, i)
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { display: "flex", flexDirection: "column", minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }, children: items.map(
+            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { style: { height: 1, flexShrink: 0, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(MenuRow, { item, onClose }, i)
           ) }),
           footer ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
             "div",
             {
               style: {
                 padding: "6px var(--space-2) 4px",
+                flexShrink: 0,
                 borderTop: "1px solid var(--border-subtle)",
                 marginTop: "var(--space-1)",
                 font: "400 var(--text-caption)/var(--leading-tight) var(--font-ui)",
@@ -26980,6 +27111,30 @@ When you are done, remind me of two things: MCP tools load only in a new session
         ]
       }
     );
+  }
+
+  // src/lib/composerMenu.js
+  init_cep_runtime_inject();
+  function composerMenuLayout(rect, viewport, align = "left") {
+    const margin = 8;
+    const gap = 4;
+    const width = Math.max(0, viewport.width - margin * 2);
+    const minWidth = Math.min(184, width);
+    const above = Math.max(0, rect.top - gap - margin);
+    const below = Math.max(0, viewport.height - rect.bottom - gap - margin);
+    const opensUp = above >= below;
+    const left = Math.max(margin, Math.min(
+      align === "right" ? rect.right - minWidth : rect.left,
+      viewport.width - margin - minWidth
+    ));
+    return {
+      position: "fixed",
+      left,
+      ...opensUp ? { bottom: viewport.height - rect.top + gap } : { top: rect.bottom + gap },
+      minWidth,
+      maxWidth: Math.max(0, viewport.width - margin - left),
+      maxHeight: Math.min(viewport.height * 0.6, opensUp ? above : below)
+    };
   }
 
   // src/components/chat/ComposerChip.jsx
@@ -27000,7 +27155,26 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const [hover, setHover] = import_react40.default.useState(false);
     const [open, setOpen] = import_react40.default.useState(false);
     const rootRef = import_react40.default.useRef(null);
+    const [menuLayout, setMenuLayout] = import_react40.default.useState(null);
     const isMenu = Array.isArray(items) && items.length > 0;
+    import_react40.default.useLayoutEffect(() => {
+      if (!open) return void 0;
+      const update = () => setMenuLayout(composerMenuLayout(
+        rootRef.current.getBoundingClientRect(),
+        { width: window.innerWidth, height: window.innerHeight },
+        menuAlign
+      ));
+      update();
+      window.addEventListener("resize", update);
+      window.addEventListener("scroll", update, true);
+      const observer = typeof ResizeObserver === "function" ? new ResizeObserver(update) : null;
+      observer == null ? void 0 : observer.observe(document.documentElement);
+      return () => {
+        window.removeEventListener("resize", update);
+        window.removeEventListener("scroll", update, true);
+        observer == null ? void 0 : observer.disconnect();
+      };
+    }, [open, menuAlign]);
     import_react40.default.useEffect(() => {
       if (!open) return void 0;
       const onDoc = (e) => {
@@ -27058,17 +27232,25 @@ When you are done, remind me of two things: MCP tools load only in a new session
           ]
         }
       ),
-      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+      isMenu && open && menuLayout ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
         "div",
         {
           style: {
-            position: "absolute",
-            bottom: "calc(100% + 4px)",
-            [menuAlign === "right" ? "right" : "left"]: 0,
+            ...menuLayout,
             zIndex: 30,
             animation: "ds-fade-up var(--dur-base) var(--ease-out)"
           },
-          children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
+          children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+            Menu,
+            {
+              header: menuHeader,
+              items,
+              footer: menuFooter,
+              onClose: () => setOpen(false),
+              minWidth: menuLayout.minWidth,
+              style: { maxHeight: menuLayout.maxHeight, maxWidth: menuLayout.maxWidth }
+            }
+          )
         }
       ) : null
     ] });
@@ -27984,6 +28166,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     onChipFast,
     onChipApproval,
     attachmentDraft = createAttachmentDraftState(),
+    clipboardAttachments = true,
     dispatchAttachmentDraft,
     createTurnId,
     onAddFile,
@@ -28093,7 +28276,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
     const sendError = attachmentDraft.sendError;
     const attachmentLabels = {
       add: t.attachmentAdd,
-      drop: t.attachmentDrop,
+      drop: clipboardAttachments ? t.attachmentDrop : lang === "en" ? "Drop files" : "\u62D6\u653E\u6587\u4EF6",
       staging: t.attachmentStaging,
       ready: t.attachmentReady,
       retry: t.attachmentRetry,
@@ -28185,6 +28368,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
           onHeightChange: (height) => dispatchComposerSize({ type: "request", height }),
           onHeightReset: () => dispatchComposerSize({ type: "reset" }),
           attachmentDraft,
+          clipboardAttachments,
           onAddFile,
           onRemoveAttachment,
           onRetryAttachment,
@@ -29169,7 +29353,7 @@ When you are done, remind me of two things: MCP tools load only in a new session
   // src/cep/mcpClient.js
   init_cep_runtime_inject();
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.10.7";
+  var PANEL_VERSION = "0.10.8";
   function defaultFetch() {
     if (globalThis.window && globalThis.window.fetch) {
       return globalThis.window.fetch.bind(globalThis.window);
@@ -38538,6 +38722,9 @@ ${command}`
     langRef.current = lang;
     const t = T[lang];
     const [tab, setTab] = import_react49.default.useState("chat");
+    const [clipboardAttachments, setClipboardAttachments] = import_react49.default.useState(
+      () => readPref("ae_mcp_clipboard_attachments", "1") !== "0"
+    );
     const [status, setStatus] = import_react49.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
     const statusRef = import_react49.default.useRef(status);
     statusRef.current = status;
@@ -39940,6 +40127,7 @@ ${draft.baseUrl}`)) return;
               writePref("ae_mcp_perm_mode", m);
             },
             attachmentDraft,
+            clipboardAttachments,
             dispatchAttachmentDraft,
             createTurnId: randomProviderCredentialId,
             onAddFile: addAttachment,
@@ -39971,6 +40159,11 @@ ${draft.baseUrl}`)) return;
           {
             lang,
             onLangChange: setLang,
+            clipboardAttachments,
+            onClipboardAttachmentsChange: (enabled) => {
+              setClipboardAttachments(enabled);
+              writePref("ae_mcp_clipboard_attachments", enabled ? "1" : "0");
+            },
             port: status.port,
             onApplyPort: applyPort,
             mcpConfig: mcpConfigStr,

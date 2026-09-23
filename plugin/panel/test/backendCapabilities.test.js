@@ -15,7 +15,7 @@ import {
 test('Claude subscription descriptor exposes the curated models and approval modes', () => {
   const descriptor = claudeSubDescriptor();
   assert.equal(descriptor.id, 'claude-sub');
-  assert.equal(descriptor.defaultModelId, 'claude-opus-5');
+  assert.equal(descriptor.defaultModelId, 'claude-opus-5-5');
   assert.equal(descriptor.models.length, CLAUDE_MODELS.length);
   assert.equal(descriptor.approvalModes, APPROVAL_MODES);
   assert.equal(descriptor.supportsFast('claude-opus-5'), false);
@@ -23,7 +23,7 @@ test('Claude subscription descriptor exposes the curated models and approval mod
 
 test('Claude ids are current API aliases and the default is selectable', () => {
   const ids = CLAUDE_MODELS.map((model) => model.id);
-  assert.deepEqual(ids, ['claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5']);
+  assert.deepEqual(ids, ['claude-opus-5-5', 'claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5']);
   for (const id of ids) {
     assert.doesNotMatch(id, /-\d{8}$/, id + ' must be an alias, not a dated snapshot');
     assert.ok(CLAUDE_PRICE_USD_PER_MTOK[id], id + ' needs a price entry for its cost tier');
@@ -31,9 +31,10 @@ test('Claude ids are current API aliases and the default is selectable', () => {
   assert.ok(ids.includes(claudeSubDescriptor().defaultModelId));
 });
 
-test('only Fable 5.1 declares its minimum Claude CLI version', () => {
+test('Fable 5.1 and Opus 5.5 declare their minimum Claude CLI versions', () => {
   assert.equal(CLAUDE_MODELS.find((model) => model.id === 'claude-fable-5-1').minCliVersion, '2.1.251');
-  for (const model of CLAUDE_MODELS.filter((model) => model.id !== 'claude-fable-5-1')) {
+  assert.equal(CLAUDE_MODELS.find((model) => model.id === 'claude-opus-5-5').minCliVersion, '2.1.280');
+  for (const model of CLAUDE_MODELS.filter((model) => !['claude-fable-5-1', 'claude-opus-5-5'].includes(model.id))) {
     assert.equal(Object.hasOwn(model, 'minCliVersion'), false, model.id);
   }
 });
@@ -42,19 +43,23 @@ test('cost tiers derive from the Claude price map', () => {
   assert.equal(costTier('claude-haiku-4-5'), 1);
   assert.equal(costTier('claude-sonnet-5'), 2);
   assert.equal(costTier('claude-opus-5'), 3);
+  assert.equal(costTier('claude-opus-5-5'), 3);
   assert.equal(costTier('claude-fable-5-1'), 4);
   assert.equal(costTier('unknown'), 2);
 });
 
 test('Codex static fallback mirrors the official login inventory', () => {
   const descriptor = codexStaticDescriptor();
-  assert.equal(descriptor.defaultModelId, 'gpt-5.6-sol');
+  assert.equal(descriptor.defaultModelId, 'gpt-6-astra');
   assert.ok(descriptor.models.some((model) => model.id === descriptor.defaultModelId));
   assert.deepEqual(
     descriptor.models.map((model) => model.id),
-    ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark'],
+    ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark'],
   );
   assert.equal(descriptor.supportsFast('gpt-5.6-sol'), true);
+  assert.equal(descriptor.supportsFast('gpt-6-astra'), true);
+  assert.equal(descriptor.supportsFast('gpt-6-sol'), true);
+  assert.equal(descriptor.supportsFast('gpt-6-luna'), true);
   assert.equal(descriptor.supportsFast('gpt-5.5'), true);
   assert.equal(descriptor.supportsFast('gpt-5.4-mini'), false);
   assert.equal(descriptor.supportsFast('gpt-5.3-codex-spark'), false);
@@ -114,6 +119,23 @@ test('Astra is preferred only when visible, with reasoning and Fast from the CLI
   assert.equal(hidden.defaultModelId, '');
   assert.equal(hidden.catalogVerified, true);
   assert.deepEqual(codexDescriptorFromModels([]).models, []);
+});
+
+test('Sol and Luna use live capabilities without resurrecting missing or hidden models', () => {
+  const sol = { id: 'gpt-6-sol', displayName: 'GPT-6 Sol', isDefault: true,
+    defaultReasoningEffort: 'medium', additionalSpeedTiers: ['fast'],
+    supportedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].map((reasoningEffort) => ({ reasoningEffort })) };
+  const luna = { ...sol, id: 'gpt-6-luna', displayName: 'GPT-6 Luna', isDefault: false,
+    supportedReasoningEfforts: sol.supportedReasoningEfforts.slice(0, -1), additionalSpeedTiers: [] };
+  const descriptor = codexDescriptorFromModels([sol, luna]);
+  assert.equal(descriptor.defaultModelId, sol.id);
+  assert.deepEqual(descriptor.models.map((model) => model.label), ['GPT-6 Sol', 'GPT-6 Luna']);
+  assert.equal(descriptor.models[0].effortLevels.includes('ultra'), true);
+  assert.equal(descriptor.models[1].effortLevels.includes('ultra'), false);
+  assert.equal(descriptor.supportsFast(sol.id), true);
+  assert.equal(descriptor.supportsFast(luna.id), false);
+  assert.deepEqual(codexDescriptorFromModels([sol, { ...luna, hidden: true }]).models.map((model) => model.id), [sol.id]);
+  assert.deepEqual(codexDescriptorFromModels([{ id: 'gpt-6-astra' }]).models.map((model) => model.id), ['gpt-6-astra']);
 });
 
 test('OpenCode descriptor qualifies third-party models with their provider id', () => {

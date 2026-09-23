@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon } from '../core/Icon';
 import { Menu } from '../core/Menu';
+import { composerMenuLayout } from '../../lib/composerMenu';
 
 /* Compact option chip for the composer footer row: model, thinking depth,
    fast mode, approval mode. Two behaviors:
@@ -24,7 +25,27 @@ export function ComposerChip({
   const [hover, setHover] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const rootRef = React.useRef(null);
+  const [menuLayout, setMenuLayout] = React.useState(null);
   const isMenu = Array.isArray(items) && items.length > 0;
+
+  React.useLayoutEffect(() => {
+    if (!open) return undefined;
+    const update = () => setMenuLayout(composerMenuLayout(
+      rootRef.current.getBoundingClientRect(),
+      { width: window.innerWidth, height: window.innerHeight },
+      menuAlign,
+    ));
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(update) : null;
+    observer?.observe(document.documentElement);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+      observer?.disconnect();
+    };
+  }, [open, menuAlign]);
 
   React.useEffect(() => {
     if (!open) return undefined;
@@ -81,17 +102,16 @@ export function ComposerChip({
         {!isMenu && onToggle && active ? <Icon name="check" size={10} strokeWidth={2.5} /> : null}
         {isMenu ? <Icon name="chevron-down" size={10} strokeWidth={2} style={{ opacity: 0.7 }} /> : null}
       </button>
-      {isMenu && open ? (
+      {isMenu && open && menuLayout ? (
         <div
           style={{
-            position: 'absolute',
-            bottom: 'calc(100% + 4px)',
-            [menuAlign === 'right' ? 'right' : 'left']: 0,
+            ...menuLayout,
             zIndex: 30,
             animation: 'ds-fade-up var(--dur-base) var(--ease-out)',
           }}
         >
-          <Menu header={menuHeader} items={items} footer={menuFooter} onClose={() => setOpen(false)} />
+          <Menu header={menuHeader} items={items} footer={menuFooter} onClose={() => setOpen(false)}
+            minWidth={menuLayout.minWidth} style={{ maxHeight: menuLayout.maxHeight, maxWidth: menuLayout.maxWidth }} />
         </div>
       ) : null}
     </div>

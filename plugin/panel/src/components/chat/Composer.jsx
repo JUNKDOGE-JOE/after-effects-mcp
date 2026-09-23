@@ -15,6 +15,8 @@ import {
   createComposerDragSession,
 } from '../../lib/composerResize';
 import { createPanelFileDropGuard } from '../../lib/panelFileDrop';
+import { handleComposerPaste, containClipboardKey } from '../../lib/composerPaste';
+import { registerComposerClipboard } from '../../cep/platform/previewKeyboard';
 
 function ComposerResizeHandle({
   height,
@@ -162,9 +164,14 @@ export function Composer({
   onRemoveAttachment,
   onRetryAttachment,
   attachmentLabels,
+  clipboardAttachments = true,
 }) {
   const [focus, setFocus] = React.useState(false);
   const attachmentPondRef = React.useRef(null);
+  React.useLayoutEffect(() => {
+    if (clipboardAttachments) return registerComposerClipboard();
+    return undefined;
+  }, [clipboardAttachments]);
   const readyAttachmentCount = readyAttachments(attachmentDraft).length;
   const attachmentsBusy = draftIsBusy(attachmentDraft)
     || attachmentDraft.items.some((item) => item.status === 'error');
@@ -240,6 +247,15 @@ export function Composer({
           onDragEnterCapture={handleFileDrag}
           onDragOverCapture={handleFileDrag}
           onDropCapture={handleFileDrop}
+          onKeyDownCapture={clipboardAttachments ? containClipboardKey : undefined}
+          onKeyUpCapture={clipboardAttachments ? containClipboardKey : undefined}
+          onPasteCapture={(event) => {
+            handleComposerPaste(event, {
+              enabled: clipboardAttachments,
+              canAttach: !disabled && !streaming && !attachmentDraft.pendingTurnId,
+              addFiles: (files) => attachmentPondRef.current?.addFiles(files),
+            });
+          }}
         >
           <AttachmentPond
             ref={attachmentPondRef}

@@ -6,14 +6,31 @@ English | [简体中文](README.zh-CN.md)
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp/badge" alt="ae-mcp MCP server" />
 </a>
 
-**One-line setup prompt — paste this into Claude Code or another AI agent:**
+**Setup prompt — paste this into the MCP client you want to use:**
 
 ```text
-Install the ae-mcp ZXP and the native plug-in for my platform from the latest
-release, open Window > Extensions > ae-mcp in After Effects, then connect
-Claude Code with `claude mcp add --transport http ae http://127.0.0.1:11488/mcp`;
-for a stdio-only client, configure `npx -y ae-mcp-jkdg`. Keep the panel open and
-start a new client session before testing `ae_status`.
+Install and configure ae-mcp for the current client receiving and executing
+this prompt. Do not default to Claude Code or configure another client.
+Before changing anything, inspect the local ae-mcp extension and native plug-in
+files and versions, plus this client's existing MCP registration and actual
+connection, read-only. Existence alone does not prove readiness. Compare with
+the latest official stable release assets available for my platform:
+- Client registration already correct: keep it; install only missing or damaged files.
+- Files complete and versions suitable: only add or repair client registration.
+- Both ready and current: verify without reinstalling.
+- Newer version available: upgrade existing components, preserving user settings
+  and other MCP configuration; do not downgrade. If versions cannot be established
+  or platform assets are unavailable, explain rather than blindly overwrite.
+Use the release ZXP and platform-native plug-in for needed file installation or
+upgrade, then open Window > Extensions > ae-mcp in After Effects.
+Identify this client's configuration method and location, preserving all other
+MCP entries. Use http://127.0.0.1:11488/mcp if it supports Streamable HTTP;
+for stdio only, configure `npx -y ae-mcp-jkdg` using this client's format.
+If automatic editing is unavailable, give precise manual steps for this client.
+Ask which client only if the target truly cannot be identified; never silently
+fall back to Claude Code. Keep the AE panel open, refresh/reconnect or start a
+new session as this client requires, then call ae_status to verify. If user
+action is required first, state that verification is still pending.
 ```
 
 ae-mcp connects an After Effects CEP panel to AI clients through a local MCP

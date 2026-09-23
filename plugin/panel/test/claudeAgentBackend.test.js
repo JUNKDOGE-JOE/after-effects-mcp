@@ -103,7 +103,7 @@ function createFs() {
   };
 }
 
-function resolvedClaude(version = '2.1.257') {
+function resolvedClaude(version = '2.1.280') {
   const executable = {
     ok: true,
     id: 'claude',
@@ -504,6 +504,7 @@ test('Claude blocks a model when the resolved CLI is below its declared minimum'
 
 test('Claude spawns Fable on a supported CLI and Opus on an older supported CLI', async () => {
   for (const state of [
+    { model: 'claude-opus-5-5', version: '2.1.280' },
     { model: 'claude-fable-5-1', version: '2.1.257' },
     { model: 'claude-opus-5', version: '2.1.227' },
   ]) {
@@ -517,6 +518,18 @@ test('Claude spawns Fable on a supported CLI and Opus on an older supported CLI'
     finishTurn(h.processes[0]);
     await run;
   }
+});
+
+test('Opus 5.5 rejects the preceding CLI version before dispatch', async () => {
+  const h = makeHarness({
+    state: { model: 'claude-opus-5-5' },
+    resolveClaude: async () => resolvedClaude('2.1.279'),
+  });
+  await h.backend.sendUser('should not spawn');
+  assert.equal(h.spawns.length, 0);
+  const error = h.events.find((event) => event.type === 'error');
+  assert.equal(error.code, 'CLI_TOO_OLD');
+  assert.match(error.message, /2\.1\.280/);
 });
 
 test('real assistant and user wire map AE tool start and result events', async () => {

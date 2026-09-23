@@ -66,6 +66,8 @@ const S = {
     mins: (n) => `${n} 分钟前`,
     hours: (n) => `${n} 小时前`,
     language: '界面语言',
+    clipboardAttachments: '剪贴板附件粘贴',
+    clipboardAttachmentsHint: '允许 Ctrl+V 添加图片和文件。与其它剪贴板插件冲突时可关闭；文字粘贴、拖放和添加文件不受影响。',
     logLevel: '日志级别',
     exportLog: '导出日志',
     mcp: 'MCP 配置',
@@ -118,6 +120,8 @@ const S = {
     mins: (n) => `${n} min ago`,
     hours: (n) => `${n} h ago`,
     language: 'Language',
+    clipboardAttachments: 'Paste attachments from clipboard',
+    clipboardAttachmentsHint: 'Use Ctrl+V to attach images and files. Turn off if another clipboard plug-in conflicts; text paste, drag and drop, and Add files remain available.',
     logLevel: 'Log level',
     exportLog: 'Export log',
     mcp: 'MCP config',
@@ -292,6 +296,8 @@ function formatLastSeen(ts, t) {
 export function SettingsScreen({
   lang = 'zh',
   onLangChange,
+  clipboardAttachments = true,
+  onClipboardAttachmentsChange,
   port = 11488,
   onApplyPort,
   mcpConfig,
@@ -469,6 +475,9 @@ export function SettingsScreen({
       </Section>
 
       <Section id="gen" title={t.gen} expanded={sections.gen} onToggle={onToggleSection}>
+        <Field label={t.clipboardAttachments} caption={t.clipboardAttachmentsHint} layout="row">
+          <Switch title={t.clipboardAttachments} checked={clipboardAttachments} onChange={onClipboardAttachmentsChange} />
+        </Field>
         <Field label={t.language}>
           <Segmented full value={lang} onChange={onLangChange} options={[{ value: 'zh', label: '中文' }, { value: 'en', label: 'English' }]} />
         </Field>

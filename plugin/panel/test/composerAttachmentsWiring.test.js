@@ -6,11 +6,11 @@ function source(relative) {
   return readFileSync(new URL(relative, import.meta.url), 'utf8');
 }
 
-test('AttachmentPond configures local unrestricted picker, paste, and preview', () => {
+test('AttachmentPond configures local picker and preview with composer-owned paste', () => {
   const pond = source('../src/components/chat/AttachmentPond.jsx');
   assert.match(pond, /registerPlugin\(FilePondPluginImagePreview\)/);
   assert.match(pond, /\ballowMultiple\b/);
-  assert.match(pond, /\ballowPaste\b/);
+  assert.match(pond, /\ballowPaste=\{false\}/);
   assert.match(pond, /\ballowBrowse=\{!disabled\}/);
   assert.match(pond, /\ballowDrop=\{!disabled\}/);
   assert.match(pond, /\binstantUpload=\{false\}/);
@@ -29,18 +29,18 @@ test('Composer delegates one complete file drop to FilePond and leaves text drop
   assert.match(composer, /if \(!files\.length\) return/);
   assert.match(composer, /event\.preventDefault\(\)/);
   assert.match(composer, /event\.stopPropagation\(\)/);
-  // Two delegation points since #208: the composer-box capture handler and
-  // the full-panel window guard. Box drops stop propagating before reaching
-  // the window guard, so exactly one fires per drop (panelFileDrop.test.js
-  // covers the exclusivity).
-  assert.equal(
-    (composer.match(/attachmentPondRef\.current\?\.addFiles\(files\)/g) || []).length,
-    2,
-  );
+  assert.match(composer, /attachmentPondRef\.current\?\.addFiles\(files\)/);
+  assert.match(composer, /onPasteCapture=\{\(event\) => \{\s*handleComposerPaste\(event/);
+  assert.match(composer, /canAttach: !disabled && !streaming && !attachmentDraft\.pendingTurnId/);
   assert.match(composer, /onDragEnterCapture=\{handleFileDrag\}/);
   assert.match(composer, /onDragOverCapture=\{handleFileDrag\}/);
   assert.match(composer, /onDropCapture=\{handleFileDrop\}/);
   assert.match(composer, /createPanelFileDropGuard\(/);
+  assert.match(composer, /if \(clipboardAttachments\) return registerComposerClipboard\(\)/);
+  assert.match(composer, /enabled: clipboardAttachments/);
+  assert.match(composer, /onKeyDownCapture=\{clipboardAttachments \? containClipboardKey : undefined\}/);
+  assert.match(composer, /onKeyUpCapture=\{clipboardAttachments \? containClipboardKey : undefined\}/);
+  assert.doesNotMatch(composer, /Alt\+Shift\+V|execCommand/);
 });
 
 test('Composer enables attachment-only sends without changing keyboard resize behavior', () => {
@@ -51,6 +51,17 @@ test('Composer enables attachment-only sends without changing keyboard resize be
   assert.match(composer, /function ComposerResizeHandle/);
   assert.match(composer, /composerKeyboardRequest/);
   assert.doesNotMatch(composer, /FileReader|readAs|parseAttachment|extractText|videoFrame/i);
+});
+
+test('clipboard setting persists independently of the draft and reaches the composer', () => {
+  const app = source('../src/app/App.jsx');
+  const chat = source('../src/screens/ChatScreen.jsx');
+  const settings = source('../src/screens/SettingsScreen.jsx');
+  assert.match(app, /readPref\('ae_mcp_clipboard_attachments', '1'\) !== '0'/);
+  assert.match(app, /writePref\('ae_mcp_clipboard_attachments', enabled \? '1' : '0'\)/);
+  assert.equal((app.match(/clipboardAttachments=\{clipboardAttachments\}/g) || []).length, 2);
+  assert.match(chat, /clipboardAttachments=\{clipboardAttachments\}/);
+  assert.match(settings, /checked=\{clipboardAttachments\} onChange=\{onClipboardAttachmentsChange\}/);
 });
 
 test('AttachmentPond keeps staging failures actionable without hiding other items', () => {

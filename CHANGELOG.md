@@ -12,6 +12,14 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [未发布]
 
+### [0.10.8] — 2026-09-23
+
+- 聊天输入区支持复制文件和截图后粘贴为附件，避免一次粘贴重复添加；设置 → 通用新增“剪贴板附件粘贴”开关，遇到 TMC Clipboard 等插件抢占 Ctrl+V 时可关闭，保留文字粘贴、拖放和文件选择。
+- 模型列表最高占面板可视高度的 60%，并受可用空间约束；列表内部支持滚动，首末模型均可访问。
+- 中英文安装提示词以当前接收提示词的客户端为配置目标；先检查本机文件、版本和 MCP 注册，只补缺失项，有新版时升级，保留已有设置。
+- Claude 通道加入 Opus 5.5 并设为默认；Codex 加入 GPT-6 Sol/Luna，默认优先 GPT-6 Astra。保留已有模型偏好，以实时目录确认 Codex 可用性；Opus 5.5 要求 Claude Code 2.1.280 或更高版本。
+- Windows 粘贴、设置开关及模型列表由维护者实机确认。安装提示词按内容覆盖验收；Opus 5.5 成功调用尚未实测。TMC Clipboard 可抢先处理 Ctrl+V，面板开关不控制第三方插件。
+
 ### [0.10.7] — 2026-09-05
 
 - 切回 OpenCode 时等待会话重置完成后再自动探测，避免启动被自身重置取消而要求手动重新检测。
@@ -397,6 +405,14 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ## English
 
 ### [Unreleased]
+
+### [0.10.8] — 2026-09-23
+
+- Paste copied files and screenshots into the chat composer without duplicate attachments. A General settings switch disables clipboard attachments when another plug-in such as TMC Clipboard captures Ctrl+V; text paste, drag and drop, and file selection remain available.
+- Model menus use up to 60% of the panel viewport height, constrained by available space, with internal scrolling and access to every model.
+- English and Chinese setup prompts target the client receiving the prompt. They inspect existing files, versions, and MCP registration before filling gaps or upgrading, preserving existing settings.
+- Add and default Claude to Opus 5.5; add GPT-6 Sol/Luna to Codex while preferring GPT-6 Astra by default. Saved choices remain intact and the live Codex catalog determines availability. Opus 5.5 requires Claude Code 2.1.280 or newer.
+- The maintainer verified Windows paste, its settings switch, and the model menu in AE. Setup prompts were accepted by content review; a successful Opus 5.5 request remains untested. The panel switch does not control third-party clipboard plug-ins.
 
 ### [0.10.7] — 2026-09-05
 

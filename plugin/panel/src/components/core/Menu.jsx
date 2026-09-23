@@ -46,6 +46,7 @@ function MenuRow({ item, onClose }) {
         alignItems: 'center',
         gap: 'var(--space-2)',
         width: '100%',
+        flexShrink: 0,
         minHeight: 'var(--hit-min)',
         padding: '2px var(--space-2)',
         background: hover && !disabled ? 'var(--bg-hover)' : 'transparent',
@@ -73,6 +74,10 @@ export function Menu({ header, items = [], footer, onClose, minWidth = 184, styl
       role="menu"
       style={{
         minWidth,
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
         padding: 'var(--space-1)',
         background: 'var(--bg-overlay)',
         border: '1px solid var(--border-default)',
@@ -85,6 +90,7 @@ export function Menu({ header, items = [], footer, onClose, minWidth = 184, styl
         <div
           style={{
             display: 'flex',
+            flexShrink: 0,
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 'var(--space-2)',
@@ -103,10 +109,10 @@ export function Menu({ header, items = [], footer, onClose, minWidth = 184, styl
           ) : null}
         </div>
       ) : null}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {items.map((item, i) =>
           item.divider ? (
-            <div key={i} style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }}></div>
+            <div key={i} style={{ height: 1, flexShrink: 0, background: 'var(--border-subtle)', margin: '4px 0' }}></div>
           ) : (
             <MenuRow key={i} item={item} onClose={onClose} />
           )
@@ -116,6 +122,7 @@ export function Menu({ header, items = [], footer, onClose, minWidth = 184, styl
         <div
           style={{
             padding: '6px var(--space-2) 4px',
+            flexShrink: 0,
             borderTop: '1px solid var(--border-subtle)',
             marginTop: 'var(--space-1)',
             font: '400 var(--text-caption)/var(--leading-tight) var(--font-ui)',

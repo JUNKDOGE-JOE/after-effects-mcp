@@ -131,6 +131,20 @@ async function startTurn(
   return { pending, proc, thread, turn };
 }
 
+test('GPT-6 Sol and Luna send their selected model and effort to Codex', async () => {
+  for (const [model, effort] of [['gpt-6-sol', 'ultra'], ['gpt-6-luna', 'max']]) {
+    const h = makeBackend({ state: { model, effort } });
+    try {
+      const { thread, turn } = await startTurn(h.backend, h.spawned);
+      assert.equal(thread.params.model, model);
+      assert.equal(turn.params.model, model);
+      assert.equal(turn.params.effort, effort);
+    } finally {
+      h.backend.reset();
+    }
+  }
+});
+
 test('Codex completed MCP image results retain their call id and omit data from display text', async () => {
   const h = makeBackend();
   try {

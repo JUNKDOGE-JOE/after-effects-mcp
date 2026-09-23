@@ -27,7 +27,7 @@ test('saved Codex choice survives missing facts and falls back only on a complet
   const input = { backendPref: 'codex', preferredModel: 'gpt-6-astra', baseDescriptor: codexStaticDescriptor() };
   const unverified = selectDescriptor(input);
   assert.equal(reconcileModelPref(input.preferredModel, unverified), 'gpt-6-astra');
-  assert.equal(unverified.supportsFast(input.preferredModel), false);
+  assert.equal(unverified.supportsFast(input.preferredModel), true);
   const complete = selectDescriptor({ ...input, codexCachedModels: [{ id: 'gpt-5.6-sol' }] });
   assert.equal(reconcileModelPref(input.preferredModel, complete), 'gpt-5.6-sol');
   const upgraded = selectDescriptor({ ...input, codexCachedModels: [{ id: 'gpt-5.6-sol' }, { id: 'gpt-6-astra' }] });
@@ -39,7 +39,7 @@ test('an empty Codex preference uses the offline Codex default then visible Astr
   const pref = resolveModelPreference({ channelValue: null, legacyValue: null, fallback: '' });
   const input = { backendPref: 'codex', preferredModel: pref.value, baseDescriptor: codexStaticDescriptor() };
   const offline = selectDescriptor(input);
-  assert.equal(reconcileModelPref(pref.value, offline), 'gpt-5.6-sol');
+  assert.equal(reconcileModelPref(pref.value, offline), 'gpt-6-astra');
   assert.equal(offline.models.some((m) => m.id.startsWith('claude-')), false);
   const live = selectDescriptor({ ...input, codexCachedModels: [{ id: 'gpt-6-astra' }] });
   assert.equal(reconcileModelPref(pref.value, live), 'gpt-6-astra');
