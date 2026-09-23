@@ -54,6 +54,12 @@ test('both prompt entry points target the receiving client without a client-spec
       assert.match(prompt, /Streamable HTTP/);
       assert.match(prompt, /stdio/);
       assert.match(prompt, /ae_status/);
+      assert.match(prompt, lang === 'zh' ? /只读检查/ : /read-only/);
+      assert.match(prompt, lang === 'zh' ? /文件完整且版本适用/ : /files are complete|Files complete/);
+      assert.match(prompt, lang === 'zh' ? /客户端已正确注册/ : /correct client registration|Client registration already correct/);
+      assert.match(prompt, lang === 'zh' ? /不重复安装/ : /without reinstalling/);
+      assert.match(prompt, lang === 'zh' ? /升级已有组件/ : /[Uu]pgrade existing components/);
+      assert.match(prompt, lang === 'zh' ? /不降级/ : /do not downgrade/);
       assert.doesNotMatch(prompt, /claude mcp add|\.claude|\.cursor|\.codex/);
     }
   }

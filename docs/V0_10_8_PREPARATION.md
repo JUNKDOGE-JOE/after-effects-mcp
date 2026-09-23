@@ -4,9 +4,10 @@
 `development-verified` 或 `release-accepted`。
 
 基线：`9033566`（当前 `origin/main`）；分支：`codex/v0.10.8-panel-fixes`。
-本次只处理 [#388](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/388)、
+本次处理 [#388](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/388)、
 [#389](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/389)、
-[#390](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/390)。
+[#390](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/390)，以及用户补充的
+Opus 5.5、GPT-6 Sol/Luna 模型支持。用户已批准扩大到 17–19 个文件。
 版本号仍为 0.10.7；版本更新、候选打包和发布留到验收边界。
 
 ## 改动与已有证据
@@ -14,8 +15,12 @@
 | Issue | 实现 | 已验证 | 未验证 |
 | --- | --- | --- | --- |
 | #388 | Composer 捕获文件粘贴，复用 FilePond 和附件存储；关闭 FilePond 全局粘贴，避免重复；保留文字粘贴 | 定向测试；浏览器真实组件中普通文字粘贴不生成附件，无路径 PNG 粘贴一次只生成一个附件 | Windows 资源管理器复制文件在 CEP 中的数据格式；真实存储、模型发送与内容识别 |
-| #389 | 菜单根据上下可用空间定位，最高 320px；内部滚动，保留全部模型 | 浏览器 360×300 下 100 项菜单约 249px，滚轮可到达并选择第 100 项、首项可选择；360×680 下最高 320px；3 项时约 107px | AE CEP 不同面板尺寸、滚动条拖动和选中状态 |
-| #390 | README 中英文和面板复制提示词明确以接收提示词的客户端为目标；按能力选择 HTTP/stdio；保留其它配置；不能自动配置时提供本客户端手动步骤 | 双语入口契约测试；保留动态端口与已安装 shim 路径 | Claude Code 和非 Claude Code 客户端各自配置自身、刷新及 `ae_status` 读回 |
+| #389 | 菜单最高为 AE 面板可视高度的 60%，同时受展开方向实际空余空间约束；内部滚动，保留全部模型 | 浏览器面板高度 300、680、1080 时，100 项菜单分别为 180、408、648px；矮面板滚轮可到达并选择第 100 项；3 项时约 107px | AE CEP 不同面板尺寸、滚动条拖动和选中状态 |
+| #390 | README 中英文和面板复制提示词以当前客户端为目标；操作前只读检查文件、版本、注册与连接；只补缺失或损坏项，有可用新版则升级，已就绪则直接验证；保留用户设置及其它配置 | 双语入口契约测试覆盖检查、只装文件、只配客户端、不重复安装、升级及不降级；保留动态端口与 shim 路径 | 两种客户端中验证四类已有安装状态、配置范围、刷新及 `ae_status` 读回 |
+| 模型支持 | Claude 增加 `claude-opus-5-5` 和 CLI 2.1.280 最低版本检查；Codex 补充 Sol/Luna 离线条目，实时目录仍完整替换离线条目 | Claude 模型/推理档位传参、旧 CLI 拒绝；Codex Sol/Luna 传参、隐藏项和能力差异测试；已安装 Codex 0.155.0 的实时目录返回两个模型 | 真实面板中三种模型的请求、响应和 AE 工具调用 |
+
+菜单比例按面板的 CSS 可视高度计算，而不是整块显示器的物理像素；停靠面板缩放
+和系统 DPI 缩放均使用其实际可用区域。模型不足时按内容高度显示。
 
 FilePond 4.32.12 的粘贴监听器会忽略其根节点之外的可编辑控件。
 Composer 的 textarea 位于 FilePond 根节点外，因此仅开启 `allowPaste`
@@ -25,11 +30,28 @@ Composer 的 textarea 位于 FilePond 根节点外，因此仅开启 `allowPaste
 浏览器检查使用生产组件与临时页面，附件就绪状态由测试页面提供，不能视为真实
 附件存储或 provider 接收证据。测试页面未调用 AI 服务，也未修改 AE 工程。
 
-- 定向测试：47/47 通过。
-- 面板全量测试：660 项，659 通过，1 项跳过，无失败。
+- 首轮附件等定向测试：47/47 通过；本轮模型、比例高度和提示词定向测试：91/91 通过。
+- 本轮面板全量测试：664 项，663 通过，1 项跳过，无失败。
 - 面板构建、bundle 一致性和 `git diff --check` 通过。
 - 一轮本地 diff 检查；未运行独立评审、远程 CI、HDEV、T5 或 T6。
 - 无新增 provider、原生能力、安装基础设施或发布工作流。
+
+## 模型版本与来源
+
+本机面板解析器选中 Codex 0.153.4，其实时目录没有 Sol/Luna；对照本机已安装的
+Codex 0.155.0，使用同一面板探测流程和隔离环境，目录包含 `gpt-6-sol` 和
+`gpt-6-luna`。Sol 提供 low/medium/high/xhigh/max/ultra，Luna 到 max，
+两者均报告 Fast。成功返回的实时目录仍优先，不能用离线条目伪装账号可用性。
+
+本机 Claude Code 为 2.1.257，低于 Opus 5.5 要求的 2.1.280；现有版本检查会在
+派发前提示更新。未自动升级或切换 CLI，未发送真实模型请求，未改变已有默认模型。
+Opus 5.5 价格档位采用官方输入 $4/MTok、输出 $20/MTok，推理档位为
+low/medium/high/xhigh/max。
+
+官方依据：[Claude Code 模型配置](https://code.claude.com/docs/en/model-config)、
+[Opus 5.5 发布说明](https://www.anthropic.com/claude-opus-5-5)、
+[GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol)、
+[GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)。
 
 ## 真实验收计划
 
@@ -38,9 +60,12 @@ Composer 的 textarea 位于 FilePond 根节点外，因此仅开启 `allowPaste
    限制、失败后草稿保留、选择文件和拖放不回归；向支持相应输入的模型发送测试附件，
    要求返回附件中的已知内容。
 3. #389：用大量模型在不同面板高度检查滚轮、滚动条、首末项选择和选中标识。
-4. #390：分别在 Claude Code 与非 Claude Code 客户端执行提示词，核对只变更目标
-   客户端的 ae 条目、其它配置保留；按该客户端要求刷新后调用公开 `ae_status`。
-5. 全部通过后再更新 Issue 状态、冻结 0.10.8 候选和执行适用的发布验收。
+4. #390：分别在 Claude Code 与非 Claude Code 客户端覆盖“已有注册缺文件、已有
+   文件缺注册、两者均为最新版、已有旧版”四种情形；核对只处理必要部分、其它配置
+   保留；按该客户端要求刷新后调用公开 `ae_status`。
+5. 使用支持目标模型的 CLI 版本，分别验证 Opus 5.5、GPT-6 Sol/Luna 的模型选择、
+   推理档位、请求和响应；通过公开 `ae_status` 验证真实 AE 工具链。
+6. 全部通过后再更新 Issue 状态、冻结 0.10.8 候选和执行适用的发布验收。
 
 当前未检测到 AE 进程；本次未安装扩展、启动 AE 或修改客户端配置。
 `.aep` 生命周期：创建、保留 canonical、保留 evidence snapshot、归档、未分类
@@ -53,7 +78,7 @@ Composer 的 textarea 位于 FilePond 根节点外，因此仅开启 `allowPaste
 
 ## 改动清单
 
-共 15 个文件：实现 7、测试 4、文档 3、生成 bundle 1。
+共 19 个文件：实现 8、测试 7、文档 3、生成 bundle 1。
 工作流/基础设施、配置/schema/fixture、机械版本更新均为 0。
 临时浏览器检查页面与测试日志位于系统临时目录，不进入源码或发布包。
 所有变更只保存在本地修复分支；未推送、合并或发布。

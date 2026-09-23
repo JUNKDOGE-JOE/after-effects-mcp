@@ -5,12 +5,18 @@
 // through unchanged. Account access is still decided by the selected CLI.
 export const CLAUDE_PRICE_USD_PER_MTOK = {
   'claude-fable-5-1': { input: 10, output: 50 },
+  'claude-opus-5-5': { input: 4, output: 20 },
   'claude-opus-5': { input: 5, output: 25 },
   'claude-sonnet-5': { input: 2, output: 10 },
   'claude-haiku-4-5': { input: 1, output: 5 },
 };
 
 export const CLAUDE_MODELS = [
+  {
+    id: 'claude-opus-5-5', label: 'Opus 5.5',
+    minCliVersion: '2.1.280',
+    effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'], adaptive: true,
+  },
   {
     id: 'claude-fable-5-1', label: 'Fable 5.1',
     minCliVersion: '2.1.251',
@@ -55,8 +61,8 @@ const TIER_ORDER = [1, 2, 5, 10];
 export function costTier(modelId) {
   const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
   if (!price) return 2;
-  const index = TIER_ORDER.indexOf(price.input);
-  return index === -1 ? 2 : index + 1;
+  const index = TIER_ORDER.findIndex((ceiling) => price.input <= ceiling);
+  return index === -1 ? TIER_ORDER.length : index + 1;
 }
 
 function withCost(models) {
@@ -104,10 +110,19 @@ function codexOfficialLogin56Models() {
   }));
 }
 
-// Offline fallback used until model/list answers. Mirrors the inventory
-// codex-cli 0.144.1 reports for an official login (checked 2026-09-02); live
-// model/list data always replaces it.
+// Offline choices are unverified until model/list replaces them. GPT-6
+// Sol/Luna effort and speed options match the Codex 0.155.0 catalog.
 const CODEX_STATIC_EXTRA_MODELS = [
+  {
+    id: 'gpt-6-sol', label: 'GPT-6 Sol',
+    effortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    cost: 2, adaptive: false,
+  },
+  {
+    id: 'gpt-6-luna', label: 'GPT-6 Luna',
+    effortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+    cost: 1, adaptive: false,
+  },
   {
     id: 'gpt-5.5', label: 'GPT-5.5',
     effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false,
@@ -127,6 +142,8 @@ const CODEX_STATIC_EXTRA_MODELS = [
 ];
 const CODEX_STATIC_FAST_MODEL_IDS = new Set([
   ...CODEX_OFFICIAL_LOGIN_56_MODEL_IDS,
+  'gpt-6-sol',
+  'gpt-6-luna',
   'gpt-5.5',
   'gpt-5.4',
 ]);

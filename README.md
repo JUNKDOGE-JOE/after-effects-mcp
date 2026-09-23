@@ -11,8 +11,18 @@ English | [简体中文](README.zh-CN.md)
 ```text
 Install and configure ae-mcp for the current client receiving and executing
 this prompt. Do not default to Claude Code or configure another client.
-Install the ZXP and native plug-in for my platform from the latest ae-mcp
-release, then open Window > Extensions > ae-mcp in After Effects.
+Before changing anything, inspect the local ae-mcp extension and native plug-in
+files and versions, plus this client's existing MCP registration and actual
+connection, read-only. Existence alone does not prove readiness. Compare with
+the latest official stable release assets available for my platform:
+- Client registration already correct: keep it; install only missing or damaged files.
+- Files complete and versions suitable: only add or repair client registration.
+- Both ready and current: verify without reinstalling.
+- Newer version available: upgrade existing components, preserving user settings
+  and other MCP configuration; do not downgrade. If versions cannot be established
+  or platform assets are unavailable, explain rather than blindly overwrite.
+Use the release ZXP and platform-native plug-in for needed file installation or
+upgrade, then open Window > Extensions > ae-mcp in After Effects.
 Identify this client's configuration method and location, preserving all other
 MCP entries. Use http://127.0.0.1:11488/mcp if it supports Streamable HTTP;
 for stdio only, configure `npx -y ae-mcp-jkdg` using this client's format.

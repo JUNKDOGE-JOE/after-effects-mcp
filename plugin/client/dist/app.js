@@ -22768,11 +22768,19 @@
   init_cep_runtime_inject();
   var CLAUDE_PRICE_USD_PER_MTOK = {
     "claude-fable-5-1": { input: 10, output: 50 },
+    "claude-opus-5-5": { input: 4, output: 20 },
     "claude-opus-5": { input: 5, output: 25 },
     "claude-sonnet-5": { input: 2, output: 10 },
     "claude-haiku-4-5": { input: 1, output: 5 }
   };
   var CLAUDE_MODELS = [
+    {
+      id: "claude-opus-5-5",
+      label: "Opus 5.5",
+      minCliVersion: "2.1.280",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      adaptive: true
+    },
     {
       id: "claude-fable-5-1",
       label: "Fable 5.1",
@@ -22833,8 +22841,8 @@
   function costTier(modelId) {
     const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
     if (!price) return 2;
-    const index = TIER_ORDER.indexOf(price.input);
-    return index === -1 ? 2 : index + 1;
+    const index = TIER_ORDER.findIndex((ceiling) => price.input <= ceiling);
+    return index === -1 ? TIER_ORDER.length : index + 1;
   }
   function withCost(models) {
     return models.map((model) => ({ ...model, cost: costTier(model.id) }));
@@ -22885,6 +22893,20 @@
   }
   var CODEX_STATIC_EXTRA_MODELS = [
     {
+      id: "gpt-6-sol",
+      label: "GPT-6 Sol",
+      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+      cost: 2,
+      adaptive: false
+    },
+    {
+      id: "gpt-6-luna",
+      label: "GPT-6 Luna",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      cost: 1,
+      adaptive: false
+    },
+    {
       id: "gpt-5.5",
       label: "GPT-5.5",
       effortLevels: ["low", "medium", "high", "xhigh"],
@@ -22915,6 +22937,8 @@
   ];
   var CODEX_STATIC_FAST_MODEL_IDS = /* @__PURE__ */ new Set([
     ...CODEX_OFFICIAL_LOGIN_56_MODEL_IDS,
+    "gpt-6-sol",
+    "gpt-6-luna",
     "gpt-5.5",
     "gpt-5.4"
   ]);
@@ -23912,7 +23936,9 @@
   var PROMPTS = {
     zh: ({ url, shimPath }) => `\u8BF7\u4E3A\u6B63\u5728\u63A5\u6536\u5E76\u6267\u884C\u6B64\u63D0\u793A\u8BCD\u7684\u5F53\u524D\u5BA2\u6237\u7AEF\u914D\u7F6E ae-mcp\u3002\u5F53\u524D\u5BA2\u6237\u7AEF\u5C31\u662F\u76EE\u6807\uFF0C\u4E0D\u8981\u9ED8\u8BA4\u9009\u62E9 Claude Code\uFF0C\u4E5F\u4E0D\u8981\u914D\u7F6E\u5176\u5B83\u5BA2\u6237\u7AEF\u3002ae-mcp \u9762\u677F\u5DF2\u7ECF\u5728\u8FD9\u53F0\u673A\u5668\u4E0A\u8FD0\u884C\uFF0CMCP \u670D\u52A1\u5730\u5740\u662F ${url}\u3002
 
-\u5148\u786E\u5B9A\u5F53\u524D\u5BA2\u6237\u7AEF\u5B9E\u9645\u652F\u6301\u7684\u914D\u7F6E\u65B9\u5F0F\u4E0E\u4F4D\u7F6E\uFF1B\u53EA\u6709\u786E\u5B9E\u65E0\u6CD5\u8BC6\u522B\u76EE\u6807\u5BA2\u6237\u7AEF\u65F6\u624D\u8BE2\u95EE\u6211\uFF0C\u4E0D\u8981\u9759\u9ED8\u56DE\u9000\u5230 Claude Code\u3002\u6309\u5F53\u524D\u5BA2\u6237\u7AEF\u80FD\u529B\u4E8C\u9009\u4E00\uFF1A
+\u64CD\u4F5C\u524D\u5148\u53EA\u8BFB\u68C0\u67E5\u672C\u673A ae-mcp \u6269\u5C55\u3001\u5BF9\u5E94\u5E73\u53F0\u539F\u751F\u63D2\u4EF6\u7684\u6587\u4EF6\u548C\u7248\u672C\uFF0C\u4EE5\u53CA\u5F53\u524D\u5BA2\u6237\u7AEF\u5DF2\u6709\u7684 MCP \u6CE8\u518C\u53CA\u5B9E\u9645\u8FDE\u63A5\u72B6\u6001\uFF1B\u4E0D\u8981\u4EC5\u51ED\u6587\u4EF6\u6216\u914D\u7F6E\u6761\u76EE\u5B58\u5728\u5C31\u8BA4\u5B9A\u53EF\u7528\u3002\u5BF9\u7167\u5B98\u65B9\u6700\u65B0\u7A33\u5B9A\u53D1\u5E03\u7684\u672C\u5E73\u53F0\u53EF\u7528\u8D44\u4EA7\uFF1A\u5BA2\u6237\u7AEF\u5DF2\u6B63\u786E\u6CE8\u518C\u5C31\u4FDD\u7559\u914D\u7F6E\uFF0C\u53EA\u8865\u88C5\u7F3A\u5931\u6216\u635F\u574F\u7684\u6587\u4EF6\uFF1B\u6587\u4EF6\u5B8C\u6574\u4E14\u7248\u672C\u9002\u7528\u5C31\u53EA\u8865\u914D\u7F3A\u5931\u6216\u9519\u8BEF\u7684\u5BA2\u6237\u7AEF\u6CE8\u518C\uFF1B\u4E24\u8005\u90FD\u5DF2\u5C31\u7EEA\u4E14\u4E3A\u6700\u65B0\u7248\u5C31\u76F4\u63A5\u9A8C\u8BC1\uFF0C\u4E0D\u91CD\u590D\u5B89\u88C5\u3002\u53D1\u73B0\u53EF\u7528\u65B0\u7248\u65F6\u5347\u7EA7\u5DF2\u6709\u7EC4\u4EF6\uFF0C\u4FDD\u7559\u7528\u6237\u8BBE\u7F6E\u53CA\u5176\u5B83 MCP \u914D\u7F6E\uFF0C\u4E0D\u964D\u7EA7\uFF1B\u65E0\u6CD5\u786E\u8BA4\u7248\u672C\u6216\u7F3A\u5C11\u672C\u5E73\u53F0\u8D44\u4EA7\u65F6\u8BF4\u660E\u60C5\u51B5\uFF0C\u4E0D\u76F2\u76EE\u8986\u76D6\u3002
+
+\u5148\u786E\u5B9A\u5F53\u524D\u5BA2\u6237\u7AEF\u5B9E\u9645\u652F\u6301\u7684\u914D\u7F6E\u65B9\u5F0F\u4E0E\u4F4D\u7F6E\uFF1B\u53EA\u6709\u786E\u5B9E\u65E0\u6CD5\u8BC6\u522B\u76EE\u6807\u5BA2\u6237\u7AEF\u65F6\u624D\u8BE2\u95EE\u6211\uFF0C\u4E0D\u8981\u9759\u9ED8\u56DE\u9000\u5230 Claude Code\u3002\u9700\u8981\u914D\u7F6E\u65F6\u6309\u5F53\u524D\u5BA2\u6237\u7AEF\u80FD\u529B\u4E8C\u9009\u4E00\uFF1A
 - \u652F\u6301 Streamable HTTP\uFF1A\u628A\u4E0A\u9762\u8FD9\u4E2A\u5730\u5740\u52A0\u6210\u540D\u4E3A ae \u7684\u670D\u52A1\u5668\u3002
 - \u53EA\u652F\u6301 stdio\uFF1A\u7528\u7CFB\u7EDF Node\uFF0818 \u4EE5\u4E0A\uFF09\u6267\u884C ${shimPath}\uFF0C\u5E76\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_HTTP_URL=${url}\uFF1B\u6309\u5F53\u524D\u5BA2\u6237\u7AEF\u683C\u5F0F\u5206\u522B\u586B\u5199 command\u3001args \u548C env\uFF0C\u8DEF\u5F84\u4F5C\u4E3A\u72EC\u7ACB\u53C2\u6570\u3002
 
@@ -23921,7 +23947,9 @@
 \u914D\u7F6E\u540E\u6309\u5F53\u524D\u5BA2\u6237\u7AEF\u8981\u6C42\u5237\u65B0\u3001\u91CD\u8FDE\u6216\u65B0\u5EFA\u4F1A\u8BDD\uFF0C\u518D\u8C03\u7528 ae_status \u9A8C\u8BC1\uFF1B\u5982\u679C\u9700\u8981\u6211\u64CD\u4F5C\uFF0C\u8BF4\u660E\u5177\u4F53\u6B65\u9AA4\u53CA\u9A8C\u8BC1\u5C1A\u672A\u5B8C\u6210\u3002ae-mcp \u9762\u677F\u5FC5\u987B\u4FDD\u6301\u6253\u5F00\uFF0C\u5173\u6389\u6216\u91CD\u8F7D\u9762\u677F\u4E4B\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002`,
     en: ({ url, shimPath }) => `Configure ae-mcp for the current client receiving and executing this prompt. This current client is the target: do not default to Claude Code or configure another client. The ae-mcp panel is already running on this machine and serves MCP at ${url}.
 
-First identify this client's supported configuration method and location. Ask me only if the target client truly cannot be identified; never silently fall back to Claude Code. Choose by this client's capabilities:
+Before making changes, inspect the local ae-mcp extension and platform-native plug-in files and versions, plus this client's existing MCP registration and actual connection, read-only. Existence alone does not prove readiness. Compare with the latest official stable release assets available for this platform: keep a correct client registration and install only missing or damaged files; when files are complete and their versions suitable, only add or repair client registration; when both are ready and current, verify without reinstalling. Upgrade existing components when a newer version is available, preserving user settings and other MCP configuration; do not downgrade. If versions cannot be established or platform assets are unavailable, explain rather than blindly overwrite.
+
+First identify this client's supported configuration method and location. Ask me only if the target client truly cannot be identified; never silently fall back to Claude Code. When configuration is needed, choose by this client's capabilities:
 - Streamable HTTP: add that URL as a server named ae.
 - stdio only: run ${shimPath} with system Node 18 or newer and set AE_MCP_HTTP_URL=${url}; use this client's command, args, and env format, with the path as a separate argument.
 
@@ -27036,7 +27064,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
       ...opensUp ? { bottom: viewport.height - rect.top + gap } : { top: rect.bottom + gap },
       minWidth,
       maxWidth: Math.max(0, viewport.width - margin - left),
-      maxHeight: Math.min(320, opensUp ? above : below)
+      maxHeight: Math.min(viewport.height * 0.6, opensUp ? above : below)
     };
   }
 

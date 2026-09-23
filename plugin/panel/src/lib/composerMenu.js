@@ -18,6 +18,6 @@ export function composerMenuLayout(rect, viewport, align = 'left') {
       : { top: rect.bottom + gap }),
     minWidth,
     maxWidth: Math.max(0, viewport.width - margin - left),
-    maxHeight: Math.min(320, opensUp ? above : below),
+    maxHeight: Math.min(viewport.height * 0.6, opensUp ? above : below),
   };
 }
