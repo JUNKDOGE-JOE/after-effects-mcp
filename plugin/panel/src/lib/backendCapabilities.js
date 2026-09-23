@@ -74,7 +74,7 @@ export function claudeSubDescriptor() {
     id: 'claude-sub',
     label: '订阅',
     models: withCost(CLAUDE_MODELS),
-    defaultModelId: 'claude-opus-5',
+    defaultModelId: 'claude-opus-5-5',
     defaultEffort: 'high',
     supportsFast: () => false,
     approvalModes: APPROVAL_MODES,
@@ -114,6 +114,11 @@ function codexOfficialLogin56Models() {
 // Sol/Luna effort and speed options match the Codex 0.155.0 catalog.
 const CODEX_STATIC_EXTRA_MODELS = [
   {
+    id: 'gpt-6-astra', label: 'GPT-6 Astra',
+    effortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    cost: 4, adaptive: false,
+  },
+  {
     id: 'gpt-6-sol', label: 'GPT-6 Sol',
     effortLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
     cost: 2, adaptive: false,
@@ -142,6 +147,7 @@ const CODEX_STATIC_EXTRA_MODELS = [
 ];
 const CODEX_STATIC_FAST_MODEL_IDS = new Set([
   ...CODEX_OFFICIAL_LOGIN_56_MODEL_IDS,
+  'gpt-6-astra',
   'gpt-6-sol',
   'gpt-6-luna',
   'gpt-5.5',
@@ -159,7 +165,7 @@ export function codexStaticDescriptor() {
         effortLevels: [...model.effortLevels],
       })),
     ],
-    defaultModelId: 'gpt-5.6-sol',
+    defaultModelId: 'gpt-6-astra',
     defaultEffort: 'medium',
     supportsFast: (modelId) => CODEX_STATIC_FAST_MODEL_IDS.has(String(modelId || '')),
     catalogVerified: false,

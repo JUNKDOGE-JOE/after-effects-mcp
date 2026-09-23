@@ -22852,7 +22852,7 @@
       id: "claude-sub",
       label: "\u8BA2\u9605",
       models: withCost(CLAUDE_MODELS),
-      defaultModelId: "claude-opus-5",
+      defaultModelId: "claude-opus-5-5",
       defaultEffort: "high",
       supportsFast: () => false,
       approvalModes: APPROVAL_MODES,
@@ -22892,6 +22892,13 @@
     }));
   }
   var CODEX_STATIC_EXTRA_MODELS = [
+    {
+      id: "gpt-6-astra",
+      label: "GPT-6 Astra",
+      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+      cost: 4,
+      adaptive: false
+    },
     {
       id: "gpt-6-sol",
       label: "GPT-6 Sol",
@@ -22937,6 +22944,7 @@
   ];
   var CODEX_STATIC_FAST_MODEL_IDS = /* @__PURE__ */ new Set([
     ...CODEX_OFFICIAL_LOGIN_56_MODEL_IDS,
+    "gpt-6-astra",
     "gpt-6-sol",
     "gpt-6-luna",
     "gpt-5.5",
@@ -22953,7 +22961,7 @@
           effortLevels: [...model.effortLevels]
         }))
       ],
-      defaultModelId: "gpt-5.6-sol",
+      defaultModelId: "gpt-6-astra",
       defaultEffort: "medium",
       supportsFast: (modelId) => CODEX_STATIC_FAST_MODEL_IDS.has(String(modelId || "")),
       catalogVerified: false,

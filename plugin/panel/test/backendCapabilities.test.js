@@ -15,7 +15,7 @@ import {
 test('Claude subscription descriptor exposes the curated models and approval modes', () => {
   const descriptor = claudeSubDescriptor();
   assert.equal(descriptor.id, 'claude-sub');
-  assert.equal(descriptor.defaultModelId, 'claude-opus-5');
+  assert.equal(descriptor.defaultModelId, 'claude-opus-5-5');
   assert.equal(descriptor.models.length, CLAUDE_MODELS.length);
   assert.equal(descriptor.approvalModes, APPROVAL_MODES);
   assert.equal(descriptor.supportsFast('claude-opus-5'), false);
@@ -50,13 +50,14 @@ test('cost tiers derive from the Claude price map', () => {
 
 test('Codex static fallback mirrors the official login inventory', () => {
   const descriptor = codexStaticDescriptor();
-  assert.equal(descriptor.defaultModelId, 'gpt-5.6-sol');
+  assert.equal(descriptor.defaultModelId, 'gpt-6-astra');
   assert.ok(descriptor.models.some((model) => model.id === descriptor.defaultModelId));
   assert.deepEqual(
     descriptor.models.map((model) => model.id),
-    ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark'],
+    ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark'],
   );
   assert.equal(descriptor.supportsFast('gpt-5.6-sol'), true);
+  assert.equal(descriptor.supportsFast('gpt-6-astra'), true);
   assert.equal(descriptor.supportsFast('gpt-6-sol'), true);
   assert.equal(descriptor.supportsFast('gpt-6-luna'), true);
   assert.equal(descriptor.supportsFast('gpt-5.5'), true);

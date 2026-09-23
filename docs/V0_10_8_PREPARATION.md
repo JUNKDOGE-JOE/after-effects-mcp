@@ -7,7 +7,7 @@
 本次处理 [#388](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/388)、
 [#389](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/389)、
 [#390](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/390)，以及用户补充的
-Opus 5.5、GPT-6 Sol/Luna 模型支持。用户已批准扩大到 17–19 个文件。
+Opus 5.5、GPT-6 Sol/Luna 模型支持及最新旗舰默认值。用户已批准扩大到 20 个文件。
 版本号仍为 0.10.7；版本更新、候选打包和发布留到验收边界。
 
 ## 改动与已有证据
@@ -31,6 +31,7 @@ Composer 的 textarea 位于 FilePond 根节点外，因此仅开启 `allowPaste
 附件存储或 provider 接收证据。测试页面未调用 AI 服务，也未修改 AE 工程。
 
 - 首轮附件等定向测试：47/47 通过；本轮模型、比例高度和提示词定向测试：91/91 通过。
+- 默认模型调整后：86 项相关测试通过，面板重新构建及 bundle 一致性检查通过。
 - 本轮面板全量测试：664 项，663 通过，1 项跳过，无失败。
 - 面板构建、bundle 一致性和 `git diff --check` 通过。
 - 一轮本地 diff 检查；未运行独立评审、远程 CI、HDEV、T5 或 T6。
@@ -44,7 +45,10 @@ Codex 0.155.0，使用同一面板探测流程和隔离环境，目录包含 `gp
 两者均报告 Fast。成功返回的实时目录仍优先，不能用离线条目伪装账号可用性。
 
 本机 Claude Code 为 2.1.257，低于 Opus 5.5 要求的 2.1.280；现有版本检查会在
-派发前提示更新。未自动升级或切换 CLI，未发送真实模型请求，未改变已有默认模型。
+派发前提示更新。未自动升级或切换 CLI，未发送真实模型请求。
+按用户补充要求，Claude 默认改为 Opus 5.5；Codex 的离线和实时默认均优先
+GPT-6 Astra。实时目录没有 Astra 时仍遵循该目录的可用模型，已保存的用户模型
+选择继续保留，不强制迁移。
 Opus 5.5 价格档位采用官方输入 $4/MTok、输出 $20/MTok，推理档位为
 low/medium/high/xhigh/max。
 
@@ -78,7 +82,7 @@ low/medium/high/xhigh/max。
 
 ## 改动清单
 
-共 19 个文件：实现 8、测试 7、文档 3、生成 bundle 1。
+共 20 个文件：实现 8、测试 8、文档 3、生成 bundle 1。
 工作流/基础设施、配置/schema/fixture、机械版本更新均为 0。
 临时浏览器检查页面与测试日志位于系统临时目录，不进入源码或发布包。
 所有变更只保存在本地修复分支；未推送、合并或发布。
