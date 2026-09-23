@@ -54,7 +54,22 @@ test('clipboard keys stay in the composer without cancelling native copy or past
     containClipboardKey({ ...chord, stopPropagation: () => stopped++, preventDefault: () => assert.fail('native clipboard action cancelled') });
     assert.equal(stopped, 1);
   }
-  for (const chord of [{ key: 'v' }, { key: 'Enter' }, { key: 'Escape' }, { key: 'v', ctrlKey: true, altKey: true }, { key: 'v', ctrlKey: true, shiftKey: true }]) {
+  for (const chord of [{ key: 'v' }, { key: 'Enter' }, { key: 'Escape' }, { key: 'v', altKey: true }, { key: 'v', ctrlKey: true, altKey: true }, { key: 'v', ctrlKey: true, shiftKey: true }]) {
     containClipboardKey({ ...chord, stopPropagation: () => assert.fail('unrelated key intercepted') });
   }
+});
+
+test('Alt+Shift+V invokes ordinary paste once and accepts a handled file paste', () => {
+  const doc = new EventTarget();
+  let commands = 0;
+  doc.execCommand = (command) => { assert.equal(command, 'paste'); commands++; doc.dispatchEvent(new Event('paste')); return false; };
+  const event = { key: 'V', altKey: true, shiftKey: true, type: 'keydown', target: { ownerDocument: doc }, stopPropagation() {}, preventDefault() {} };
+  assert.equal(containClipboardKey(event), true);
+  containClipboardKey({ ...event, type: 'keyup' });
+  containClipboardKey({ ...event, repeat: true });
+  assert.equal(commands, 1);
+  doc.execCommand = () => false;
+  assert.equal(containClipboardKey(event), false);
+  doc.execCommand = () => { throw new Error('paste denied'); };
+  assert.equal(containClipboardKey(event), false);
 });

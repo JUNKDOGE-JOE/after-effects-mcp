@@ -25142,6 +25142,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
     return registerPanelKeys([
       { keyCode: 67, ctrlKey: true, altKey: false, shiftKey: false },
       { keyCode: 86, ctrlKey: true, altKey: false, shiftKey: false },
+      { keyCode: 86, ctrlKey: false, altKey: true, shiftKey: true },
       { keyCode: 45, ctrlKey: false, altKey: false, shiftKey: true }
     ], page);
   }
@@ -26645,10 +26646,31 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
     return true;
   }
   function containClipboardKey(event) {
+    var _a;
     const key = String(event.key || "").toLowerCase();
     const clipboardChord = event.ctrlKey && !event.shiftKey && (key === "c" || key === "v");
     const alternatePaste = event.shiftKey && !event.ctrlKey && key === "insert";
-    if (event.altKey || event.metaKey || !(clipboardChord || alternatePaste)) return;
+    const panelPaste = event.altKey && event.shiftKey && !event.ctrlKey && key === "v";
+    if (event.metaKey || event.altKey && !panelPaste || !(clipboardChord || alternatePaste || panelPaste)) return;
+    if (panelPaste) {
+      event.stopPropagation();
+      event.preventDefault();
+      if (event.type !== "keydown" || event.repeat) return;
+      const doc = (_a = event.target) == null ? void 0 : _a.ownerDocument;
+      if (!(doc == null ? void 0 : doc.execCommand)) return false;
+      let received = false;
+      const markPaste = () => {
+        received = true;
+      };
+      doc.addEventListener("paste", markPaste, true);
+      try {
+        return doc.execCommand("paste") || received;
+      } catch {
+        return received;
+      } finally {
+        doc.removeEventListener("paste", markPaste, true);
+      }
+    }
     event.stopPropagation();
   }
 
@@ -26799,6 +26821,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
     attachmentLabels
   }) {
     const [focus, setFocus] = import_react38.default.useState(false);
+    const [pasteUnavailable, setPasteUnavailable] = import_react38.default.useState(false);
     const attachmentPondRef = import_react38.default.useRef(null);
     import_react38.default.useLayoutEffect(() => registerComposerClipboard(), []);
     const readyAttachmentCount = readyAttachments(attachmentDraft).length;
@@ -26875,16 +26898,23 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
             onDragEnterCapture: handleFileDrag,
             onDragOverCapture: handleFileDrag,
             onDropCapture: handleFileDrop,
-            onKeyDownCapture: containClipboardKey,
+            onKeyDownCapture: (event) => {
+              const pasted = containClipboardKey(event);
+              if (typeof pasted === "boolean") setPasteUnavailable(!pasted);
+            },
             onKeyUpCapture: containClipboardKey,
-            onPasteCapture: (event) => handleComposerPaste(event, {
-              canAttach: !disabled && !streaming && !attachmentDraft.pendingTurnId,
-              addFiles: (files) => {
-                var _a;
-                return (_a = attachmentPondRef.current) == null ? void 0 : _a.addFiles(files);
-              }
-            }),
+            onPasteCapture: (event) => {
+              setPasteUnavailable(false);
+              handleComposerPaste(event, {
+                canAttach: !disabled && !streaming && !attachmentDraft.pendingTurnId,
+                addFiles: (files) => {
+                  var _a;
+                  return (_a = attachmentPondRef.current) == null ? void 0 : _a.addFiles(files);
+                }
+              });
+            },
             children: [
+              pasteUnavailable ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { role: "alert", children: "\u65E0\u6CD5\u7C98\u8D34\uFF0C\u8BF7\u4F7F\u7528\u201C\u6DFB\u52A0\u6587\u4EF6\u201D\u6216\u62D6\u653E\u3002 Paste unavailable; use Add files or drag and drop." }) : null,
               /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
                 AttachmentPond,
                 {
@@ -26904,6 +26934,8 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
                     rows: 1,
                     value,
                     placeholder,
+                    title: "\u7C98\u8D34\u9644\u4EF6\uFF1AAlt+Shift+V / Paste attachments: Alt+Shift+V",
+                    "aria-keyshortcuts": "Alt+Shift+V",
                     disabled,
                     onChange: (e) => onChange && onChange(e.target.value),
                     onFocus: () => setFocus(true),

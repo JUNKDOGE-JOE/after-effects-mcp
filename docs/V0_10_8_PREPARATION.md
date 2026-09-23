@@ -156,6 +156,16 @@ Ctrl+V 兼容性仍为 FAIL，Shift+Insert 替代入口实测 PASS；不宣称�
 导入已撤销且没有保存工程；AE 无标题工程的改动标记没有强行清除。
 本地结构化记录：本次临时证据目录下 `paste-routing-live.json`。
 
+### 无 Insert 键时的备用粘贴
+
+按用户要求采用 **Alt+Shift+V**，只在聊天输入区触发普通 DOM paste，文件与文字
+复用现有粘贴链路；不注册 Ctrl+Shift+V。输入框 title 和 aria-keyshortcuts 已更新。
+本机 AE 26.5 默认和自定义键位表均无 Alt+Shift+V 绑定；Alt+V 对应视图菜单，
+Ctrl+Alt+V 已用于 PasteAlt/ApplyInterpretation，因此未选择这两组。
+按键长按和 keyup 不重复粘贴；宿主拒绝 DOM paste 时显示添加文件/拖放提示。
+26 项相关测试、构建和 bundle 一致性通过；Alt+Shift+V 的真实 CEP 行为及第三方
+全局键盘钩子兼容性仍待替换后验证，不将键位表无占用等同于全部环境无冲突。
+
 ## 改动清单
 
 共 22 个文件：实现 9、测试 9、文档 3、生成 bundle 1。

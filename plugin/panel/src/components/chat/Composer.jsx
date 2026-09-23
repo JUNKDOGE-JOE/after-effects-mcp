@@ -166,6 +166,7 @@ export function Composer({
   attachmentLabels,
 }) {
   const [focus, setFocus] = React.useState(false);
+  const [pasteUnavailable, setPasteUnavailable] = React.useState(false);
   const attachmentPondRef = React.useRef(null);
   React.useLayoutEffect(() => registerComposerClipboard(), []);
   const readyAttachmentCount = readyAttachments(attachmentDraft).length;
@@ -243,13 +244,20 @@ export function Composer({
           onDragEnterCapture={handleFileDrag}
           onDragOverCapture={handleFileDrag}
           onDropCapture={handleFileDrop}
-          onKeyDownCapture={containClipboardKey}
+          onKeyDownCapture={(event) => {
+            const pasted = containClipboardKey(event);
+            if (typeof pasted === 'boolean') setPasteUnavailable(!pasted);
+          }}
           onKeyUpCapture={containClipboardKey}
-          onPasteCapture={(event) => handleComposerPaste(event, {
-            canAttach: !disabled && !streaming && !attachmentDraft.pendingTurnId,
-            addFiles: (files) => attachmentPondRef.current?.addFiles(files),
-          })}
+          onPasteCapture={(event) => {
+            setPasteUnavailable(false);
+            handleComposerPaste(event, {
+              canAttach: !disabled && !streaming && !attachmentDraft.pendingTurnId,
+              addFiles: (files) => attachmentPondRef.current?.addFiles(files),
+            });
+          }}
         >
+          {pasteUnavailable ? <div role="alert">无法粘贴，请使用“添加文件”或拖放。 Paste unavailable; use Add files or drag and drop.</div> : null}
           <AttachmentPond
             ref={attachmentPondRef}
             items={attachmentDraft.items}
@@ -264,6 +272,8 @@ export function Composer({
               rows={1}
               value={value}
               placeholder={placeholder}
+              title="粘贴附件：Alt+Shift+V / Paste attachments: Alt+Shift+V"
+              aria-keyshortcuts="Alt+Shift+V"
               disabled={disabled}
               onChange={(e) => onChange && onChange(e.target.value)}
               onFocus={() => setFocus(true)}
