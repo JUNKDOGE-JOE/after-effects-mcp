@@ -53,6 +53,17 @@ test('Composer enables attachment-only sends without changing keyboard resize be
   assert.doesNotMatch(composer, /FileReader|readAs|parseAttachment|extractText|videoFrame/i);
 });
 
+test('clipboard setting persists independently of the draft and reaches the composer', () => {
+  const app = source('../src/app/App.jsx');
+  const chat = source('../src/screens/ChatScreen.jsx');
+  const settings = source('../src/screens/SettingsScreen.jsx');
+  assert.match(app, /readPref\('ae_mcp_clipboard_attachments', '1'\) !== '0'/);
+  assert.match(app, /writePref\('ae_mcp_clipboard_attachments', enabled \? '1' : '0'\)/);
+  assert.equal((app.match(/clipboardAttachments=\{clipboardAttachments\}/g) || []).length, 2);
+  assert.match(chat, /clipboardAttachments=\{clipboardAttachments\}/);
+  assert.match(settings, /checked=\{clipboardAttachments\} onChange=\{onClipboardAttachmentsChange\}/);
+});
+
 test('AttachmentPond keeps staging failures actionable without hiding other items', () => {
   const pond = source('../src/components/chat/AttachmentPond.jsx');
   assert.match(pond, /item\.status === 'error'/);

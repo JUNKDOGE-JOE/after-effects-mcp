@@ -202,6 +202,9 @@ function Shell({ cs }) {
   langRef.current = lang;
   const t = T[lang];
   const [tab, setTab] = React.useState('chat');
+  const [clipboardAttachments, setClipboardAttachments] = React.useState(
+    () => readPref('ae_mcp_clipboard_attachments', '1') !== '0',
+  );
   const [status, setStatus] = React.useState({ state: 'starting', port: DEFAULT_PORT, error: null });
   const statusRef = React.useRef(status);
   statusRef.current = status;
@@ -1640,6 +1643,7 @@ function Shell({ cs }) {
             onChipFast={(v) => setSessionFast(Boolean(v))}
             onChipApproval={(m) => { setPermissionMode(m); writePref('ae_mcp_perm_mode', m); }}
             attachmentDraft={attachmentDraft}
+            clipboardAttachments={clipboardAttachments}
             dispatchAttachmentDraft={dispatchAttachmentDraft}
             createTurnId={randomProviderCredentialId}
             onAddFile={addAttachment}
@@ -1669,6 +1673,11 @@ function Shell({ cs }) {
             key={tokenEpoch}
             lang={lang}
             onLangChange={setLang}
+            clipboardAttachments={clipboardAttachments}
+            onClipboardAttachmentsChange={(enabled) => {
+              setClipboardAttachments(enabled);
+              writePref('ae_mcp_clipboard_attachments', enabled ? '1' : '0');
+            }}
             port={status.port}
             onApplyPort={applyPort}
             mcpConfig={mcpConfigStr}

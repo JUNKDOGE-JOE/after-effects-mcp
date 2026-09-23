@@ -246,6 +246,7 @@ export function ChatScreen({
   onChipFast,
   onChipApproval,
   attachmentDraft = createAttachmentDraftState(),
+  clipboardAttachments = true,
   dispatchAttachmentDraft,
   createTurnId,
   onAddFile,
@@ -358,7 +359,7 @@ export function ChatScreen({
   const sendError = attachmentDraft.sendError;
   const attachmentLabels = {
     add: t.attachmentAdd,
-    drop: t.attachmentDrop,
+    drop: clipboardAttachments ? t.attachmentDrop : (lang === 'en' ? 'Drop files' : '拖放文件'),
     staging: t.attachmentStaging,
     ready: t.attachmentReady,
     retry: t.attachmentRetry,
@@ -468,6 +469,7 @@ export function ChatScreen({
           onHeightChange={(height) => dispatchComposerSize({ type: 'request', height })}
           onHeightReset={() => dispatchComposerSize({ type: 'reset' })}
           attachmentDraft={attachmentDraft}
+          clipboardAttachments={clipboardAttachments}
           onAddFile={onAddFile}
           onRemoveAttachment={onRemoveAttachment}
           onRetryAttachment={onRetryAttachment}

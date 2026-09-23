@@ -23144,6 +23144,8 @@
       mins: (n) => `${n} \u5206\u949F\u524D`,
       hours: (n) => `${n} \u5C0F\u65F6\u524D`,
       language: "\u754C\u9762\u8BED\u8A00",
+      clipboardAttachments: "\u526A\u8D34\u677F\u9644\u4EF6\u7C98\u8D34",
+      clipboardAttachmentsHint: "\u5141\u8BB8 Ctrl+V \u6DFB\u52A0\u56FE\u7247\u548C\u6587\u4EF6\u3002\u4E0E\u5176\u5B83\u526A\u8D34\u677F\u63D2\u4EF6\u51B2\u7A81\u65F6\u53EF\u5173\u95ED\uFF1B\u6587\u5B57\u7C98\u8D34\u3001\u62D6\u653E\u548C\u6DFB\u52A0\u6587\u4EF6\u4E0D\u53D7\u5F71\u54CD\u3002",
       logLevel: "\u65E5\u5FD7\u7EA7\u522B",
       exportLog: "\u5BFC\u51FA\u65E5\u5FD7",
       mcp: "MCP \u914D\u7F6E",
@@ -23195,6 +23197,8 @@
       mins: (n) => `${n} min ago`,
       hours: (n) => `${n} h ago`,
       language: "Language",
+      clipboardAttachments: "Paste attachments from clipboard",
+      clipboardAttachmentsHint: "Use Ctrl+V to attach images and files. Turn off if another clipboard plug-in conflicts; text paste, drag and drop, and Add files remain available.",
       logLevel: "Log level",
       exportLog: "Export log",
       mcp: "MCP config",
@@ -23372,6 +23376,8 @@
   function SettingsScreen({
     lang = "zh",
     onLangChange,
+    clipboardAttachments = true,
+    onClipboardAttachmentsChange,
     port = 11488,
     onApplyPort,
     mcpConfig,
@@ -23535,6 +23541,7 @@
         ))
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(Section, { id: "gen", title: t.gen, expanded: sections.gen, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.clipboardAttachments, caption: t.clipboardAttachmentsHint, layout: "row", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Switch, { title: t.clipboardAttachments, checked: clipboardAttachments, onChange: onClipboardAttachmentsChange }) }),
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.language, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Segmented, { full: true, value: lang, onChange: onLangChange, options: [{ value: "zh", label: "\u4E2D\u6587" }, { value: "en", label: "English" }] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.logLevel, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Select, { value: logLevel, onChange: onLogLevel, style: { flex: 1 }, options: [
@@ -28159,6 +28166,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
     onChipFast,
     onChipApproval,
     attachmentDraft = createAttachmentDraftState(),
+    clipboardAttachments = true,
     dispatchAttachmentDraft,
     createTurnId,
     onAddFile,
@@ -28268,7 +28276,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
     const sendError = attachmentDraft.sendError;
     const attachmentLabels = {
       add: t.attachmentAdd,
-      drop: t.attachmentDrop,
+      drop: clipboardAttachments ? t.attachmentDrop : lang === "en" ? "Drop files" : "\u62D6\u653E\u6587\u4EF6",
       staging: t.attachmentStaging,
       ready: t.attachmentReady,
       retry: t.attachmentRetry,
@@ -28360,6 +28368,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
           onHeightChange: (height) => dispatchComposerSize({ type: "request", height }),
           onHeightReset: () => dispatchComposerSize({ type: "reset" }),
           attachmentDraft,
+          clipboardAttachments,
           onAddFile,
           onRemoveAttachment,
           onRetryAttachment,
@@ -38713,6 +38722,9 @@ ${command}`
     langRef.current = lang;
     const t = T[lang];
     const [tab, setTab] = import_react49.default.useState("chat");
+    const [clipboardAttachments, setClipboardAttachments] = import_react49.default.useState(
+      () => readPref("ae_mcp_clipboard_attachments", "1") !== "0"
+    );
     const [status, setStatus] = import_react49.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
     const statusRef = import_react49.default.useRef(status);
     statusRef.current = status;
@@ -40115,6 +40127,7 @@ ${draft.baseUrl}`)) return;
               writePref("ae_mcp_perm_mode", m);
             },
             attachmentDraft,
+            clipboardAttachments,
             dispatchAttachmentDraft,
             createTurnId: randomProviderCredentialId,
             onAddFile: addAttachment,
@@ -40146,6 +40159,11 @@ ${draft.baseUrl}`)) return;
           {
             lang,
             onLangChange: setLang,
+            clipboardAttachments,
+            onClipboardAttachmentsChange: (enabled) => {
+              setClipboardAttachments(enabled);
+              writePref("ae_mcp_clipboard_attachments", enabled ? "1" : "0");
+            },
             port: status.port,
             onApplyPort: applyPort,
             mcpConfig: mcpConfigStr,

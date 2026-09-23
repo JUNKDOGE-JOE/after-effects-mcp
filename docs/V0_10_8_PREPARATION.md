@@ -8,7 +8,7 @@
 [#389](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/389)、
 [#390](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/390)，以及用户补充的
 Opus 5.5、GPT-6 Sol/Luna 模型支持及最新旗舰默认值。用户另批准粘贴宿主路由修复，
-范围上限为 22 个文件、约 650–750 行手写新增内容。
+用户确认 Ctrl+V 成功后批准继续设置开关；范围为 25 个文件、约 750 行手写新增内容。
 版本号仍为 0.10.7；版本更新、候选打包和发布留到验收边界。
 
 ## 改动与已有证据
@@ -156,19 +156,15 @@ Ctrl+V 兼容性仍为 FAIL，Shift+Insert 替代入口实测 PASS；不宣称�
 导入已撤销且没有保存工程；AE 无标题工程的改动标记没有强行清除。
 本地结构化记录：本次临时证据目录下 `paste-routing-live.json`。
 
-### 已撤回：无 Insert 键时的备用粘贴
+### 剪贴板附件粘贴开关
 
-按用户要求采用 **Alt+Shift+V**，只在聊天输入区触发普通 DOM paste，文件与文字
-复用现有粘贴链路；不注册 Ctrl+Shift+V。输入框 title 和 aria-keyshortcuts 已更新。
-本机 AE 26.5 默认和自定义键位表均无 Alt+Shift+V 绑定；Alt+V 对应视图菜单，
-Ctrl+Alt+V 已用于 PasteAlt/ApplyInterpretation，因此未选择这两组。
-按键长按和 keyup 不重复粘贴；宿主拒绝 DOM paste 时显示添加文件/拖放提示。
-26 项相关测试、构建和 bundle 一致性通过；Alt+Shift+V 的真实 CEP 行为及第三方
-全局键盘钩子兼容性仍待替换后验证，不将键位表无占用等同于全部环境无冲突。
-
-用户随后要求取消备用热键，并临时禁用 TMC 对照。已撤掉 Alt+Shift+V 和
-Shift+Insert 的额外注册，仅保留标准 Ctrl+C/Ctrl+V；开关底层支持关闭附件粘贴、
-释放相应注册并保留文字粘贴。设置页和偏好联动尚待 25 文件范围确认，未宣称完成。
+设置 → 通用新增中英文“剪贴板附件粘贴”开关，默认开启，偏好使用
+`ae_mcp_clipboard_attachments` 保存。关闭后不添加剪贴板附件、不注册或拦截
+Ctrl+C/Ctrl+V，保留文字粘贴、添加文件和拖放；已有草稿和附件不被清空。
+取消 Alt+Shift+V 等备用热键。关闭时附件区文案改为“拖放文件”。
+43 项定向测试通过；面板全量 673 项，672 通过、1 跳过，构建和 bundle 一致性通过。
+后台浏览器组件验证开关可切换，关闭时模拟 CEP 注册为空、开启时恢复 Ctrl+C/V，
+草稿保留。真实 AE 的开关版本尚待安装验证，不把模拟注册当成 CEP 实机证据。
 
 ### TMC 临时停用对照
 
@@ -179,10 +175,12 @@ TMCClipboard.aex 移出 Adobe 扫描目录，重启同一正式 AE 2026 做测�
 测试后关闭空工程，将 TMCClipboard.aex 恢复到原路径，前后 SHA-256 一致。
 没有修改其它 TMC 插件，没有创建或保存 .aep。本地证据为
 ctrl-v-without-tmc.json、tmc-disable-result.json、tmc-restore-result.json。
+用户随后要求恢复成功环境亲测，重新临时停用 TMC 后交回 AE；用户回复
+“ok，去做开关吧”，确认该环境下的标准 Ctrl+V 通过。
 
 ## 改动清单
 
-共 22 个文件：实现 9、测试 9、文档 3、生成 bundle 1。
+共 25 个文件：实现 12、测试 9、文档 3、生成 bundle 1。
 工作流/基础设施、配置/schema/fixture、机械版本更新均为 0。
 临时浏览器检查页面与测试日志位于系统临时目录，不进入源码或发布包。
 所有变更只保存在本地修复分支；未推送、合并或发布。
