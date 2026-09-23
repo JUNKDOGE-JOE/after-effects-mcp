@@ -15,6 +15,7 @@ import {
   createComposerDragSession,
 } from '../../lib/composerResize';
 import { createPanelFileDropGuard } from '../../lib/panelFileDrop';
+import { handleComposerPaste } from '../../lib/composerPaste';
 
 function ComposerResizeHandle({
   height,
@@ -240,6 +241,10 @@ export function Composer({
           onDragEnterCapture={handleFileDrag}
           onDragOverCapture={handleFileDrag}
           onDropCapture={handleFileDrop}
+          onPasteCapture={(event) => handleComposerPaste(event, {
+            canAttach: !disabled && !streaming && !attachmentDraft.pendingTurnId,
+            addFiles: (files) => attachmentPondRef.current?.addFiles(files),
+          })}
         >
           <AttachmentPond
             ref={attachmentPondRef}

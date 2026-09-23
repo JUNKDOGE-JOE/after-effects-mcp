@@ -6,11 +6,11 @@ function source(relative) {
   return readFileSync(new URL(relative, import.meta.url), 'utf8');
 }
 
-test('AttachmentPond configures local unrestricted picker, paste, and preview', () => {
+test('AttachmentPond configures local picker and preview with composer-owned paste', () => {
   const pond = source('../src/components/chat/AttachmentPond.jsx');
   assert.match(pond, /registerPlugin\(FilePondPluginImagePreview\)/);
   assert.match(pond, /\ballowMultiple\b/);
-  assert.match(pond, /\ballowPaste\b/);
+  assert.match(pond, /\ballowPaste=\{false\}/);
   assert.match(pond, /\ballowBrowse=\{!disabled\}/);
   assert.match(pond, /\ballowDrop=\{!disabled\}/);
   assert.match(pond, /\binstantUpload=\{false\}/);
@@ -29,14 +29,9 @@ test('Composer delegates one complete file drop to FilePond and leaves text drop
   assert.match(composer, /if \(!files\.length\) return/);
   assert.match(composer, /event\.preventDefault\(\)/);
   assert.match(composer, /event\.stopPropagation\(\)/);
-  // Two delegation points since #208: the composer-box capture handler and
-  // the full-panel window guard. Box drops stop propagating before reaching
-  // the window guard, so exactly one fires per drop (panelFileDrop.test.js
-  // covers the exclusivity).
-  assert.equal(
-    (composer.match(/attachmentPondRef\.current\?\.addFiles\(files\)/g) || []).length,
-    2,
-  );
+  assert.match(composer, /attachmentPondRef\.current\?\.addFiles\(files\)/);
+  assert.match(composer, /onPasteCapture=\{\(event\) => handleComposerPaste\(event/);
+  assert.match(composer, /canAttach: !disabled && !streaming && !attachmentDraft\.pendingTurnId/);
   assert.match(composer, /onDragEnterCapture=\{handleFileDrag\}/);
   assert.match(composer, /onDragOverCapture=\{handleFileDrag\}/);
   assert.match(composer, /onDropCapture=\{handleFileDrop\}/);

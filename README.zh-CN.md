@@ -6,13 +6,19 @@
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp/badge" alt="ae-mcp MCP server" />
 </a>
 
-**一行安装提示词——复制给 Claude Code 或其它 AI agent：**
+**安装提示词——复制给你准备使用的 MCP 客户端：**
 
 ```text
-请从最新发布页安装 ae-mcp 的 ZXP 和对应平台的原生插件，在 After Effects 中
-打开 Window > Extensions > ae-mcp，然后用 `claude mcp add --transport http ae http://127.0.0.1:11488/mcp`
-接入 Claude Code；仅支持 stdio 的客户端配置 `npx -y ae-mcp-jkdg`。保持面板打开，
-并在测试 `ae_status` 前新建客户端会话。
+请为正在接收并执行此提示词的当前客户端安装、配置 ae-mcp。
+不要默认选择 Claude Code，也不要配置其它客户端。
+从 ae-mcp 最新发布页安装 ZXP 和对应平台的原生插件，在 After Effects 中
+打开 Window > Extensions > ae-mcp。先确定当前客户端的配置方式与位置，
+保留已有的其它 MCP 条目。支持 Streamable HTTP 时接入
+http://127.0.0.1:11488/mcp；仅支持 stdio 时按当前客户端格式配置
+`npx -y ae-mcp-jkdg`。无法自动修改时给出当前客户端准确的手动步骤。
+只有确实无法识别目标客户端时才询问，不要静默回退到 Claude Code。
+保持 AE 面板打开，按当前客户端要求刷新、重连或新建会话，再调用 ae_status
+验证；需要我先操作时，说明验证尚未完成。
 ```
 
 ae-mcp 通过本机 MCP 把 After Effects CEP 面板连接到 AI 客户端。面板在

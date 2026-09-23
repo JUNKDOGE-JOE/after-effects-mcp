@@ -1,18 +1,22 @@
 const PROMPTS = {
-  zh: ({ url, shimPath }) => `帮我把 After Effects 接进来。ae-mcp 面板已经在这台机器上运行，MCP 服务地址是 ${url}。
+  zh: ({ url, shimPath }) => `请为正在接收并执行此提示词的当前客户端配置 ae-mcp。当前客户端就是目标，不要默认选择 Claude Code，也不要配置其它客户端。ae-mcp 面板已经在这台机器上运行，MCP 服务地址是 ${url}。
 
-请按你自己支持的接入方式二选一：
-- 支持 Streamable HTTP MCP server 的客户端（Claude Code、Cursor 等）：把上面这个地址加成名为 ae 的服务器；如果你的客户端有作用域概念，注册到用户级；不要改动我已有的其它 MCP 条目；改完把最终配置回显给我。
-- 只支持 stdio 的客户端（Claude Desktop 等）：用系统 Node（18 以上）执行 ${shimPath}，并设置环境变量 AE_MCP_HTTP_URL=${url}。
+先确定当前客户端实际支持的配置方式与位置；只有确实无法识别目标客户端时才询问我，不要静默回退到 Claude Code。按当前客户端能力二选一：
+- 支持 Streamable HTTP：把上面这个地址加成名为 ae 的服务器。
+- 只支持 stdio：用系统 Node（18 以上）执行 ${shimPath}，并设置环境变量 AE_MCP_HTTP_URL=${url}；按当前客户端格式分别填写 command、args 和 env，路径作为独立参数。
 
-完成后提醒我两件事：MCP 工具只在新会话里加载，要新开一个会话再调用 ae_status 验证；ae-mcp 面板必须保持打开，关掉或重载面板之后客户端需要重连。`,
-  en: ({ url, shimPath }) => `Connect After Effects for me. The ae-mcp panel is already running on this machine and serves MCP at ${url}.
+保留已有的其它 MCP 配置；支持作用域时优先用户级。无法自动修改时，给出当前客户端准确的手动步骤，不要改为配置另一个客户端。只回显 ae 条目的配置，不要输出其它配置中的密钥。
 
-Use whichever form your client supports:
-- Clients that accept a Streamable HTTP MCP server (Claude Code, Cursor, and similar): add that URL as a server named ae; register it at user scope if your client has scopes; leave my other MCP entries untouched; print the final configuration back to me.
-- stdio-only clients (Claude Desktop and similar): run ${shimPath} with system Node 18 or newer and set the environment variable AE_MCP_HTTP_URL=${url}.
+配置后按当前客户端要求刷新、重连或新建会话，再调用 ae_status 验证；如果需要我操作，说明具体步骤及验证尚未完成。ae-mcp 面板必须保持打开，关掉或重载面板之后客户端需要重连。`,
+  en: ({ url, shimPath }) => `Configure ae-mcp for the current client receiving and executing this prompt. This current client is the target: do not default to Claude Code or configure another client. The ae-mcp panel is already running on this machine and serves MCP at ${url}.
 
-When you are done, remind me of two things: MCP tools load only in a new session, so start a fresh session and call ae_status to verify; and the ae-mcp panel must stay open — clients need to reconnect after it closes or reloads.`,
+First identify this client's supported configuration method and location. Ask me only if the target client truly cannot be identified; never silently fall back to Claude Code. Choose by this client's capabilities:
+- Streamable HTTP: add that URL as a server named ae.
+- stdio only: run ${shimPath} with system Node 18 or newer and set AE_MCP_HTTP_URL=${url}; use this client's command, args, and env format, with the path as a separate argument.
+
+Preserve all other MCP configuration; prefer user scope when supported. If automatic editing is unavailable, give precise manual steps for this client rather than configuring another client. Show only the ae entry, without secrets from other configuration.
+
+Refresh, reconnect, or start a new session as this client requires, then call ae_status to verify. If I must act first, explain the exact steps and that verification is still pending. The ae-mcp panel must stay open; clients need to reconnect after it closes or reloads.`,
 };
 
 export function externalClientSetupPrompt({
