@@ -164,11 +164,14 @@ export function Composer({
   onRemoveAttachment,
   onRetryAttachment,
   attachmentLabels,
+  clipboardAttachments = true,
 }) {
   const [focus, setFocus] = React.useState(false);
-  const [pasteUnavailable, setPasteUnavailable] = React.useState(false);
   const attachmentPondRef = React.useRef(null);
-  React.useLayoutEffect(() => registerComposerClipboard(), []);
+  React.useLayoutEffect(() => {
+    if (clipboardAttachments) return registerComposerClipboard();
+    return undefined;
+  }, [clipboardAttachments]);
   const readyAttachmentCount = readyAttachments(attachmentDraft).length;
   const attachmentsBusy = draftIsBusy(attachmentDraft)
     || attachmentDraft.items.some((item) => item.status === 'error');
@@ -244,20 +247,16 @@ export function Composer({
           onDragEnterCapture={handleFileDrag}
           onDragOverCapture={handleFileDrag}
           onDropCapture={handleFileDrop}
-          onKeyDownCapture={(event) => {
-            const pasted = containClipboardKey(event);
-            if (typeof pasted === 'boolean') setPasteUnavailable(!pasted);
-          }}
-          onKeyUpCapture={containClipboardKey}
+          onKeyDownCapture={clipboardAttachments ? containClipboardKey : undefined}
+          onKeyUpCapture={clipboardAttachments ? containClipboardKey : undefined}
           onPasteCapture={(event) => {
-            setPasteUnavailable(false);
             handleComposerPaste(event, {
+              enabled: clipboardAttachments,
               canAttach: !disabled && !streaming && !attachmentDraft.pendingTurnId,
               addFiles: (files) => attachmentPondRef.current?.addFiles(files),
             });
           }}
         >
-          {pasteUnavailable ? <div role="alert">无法粘贴，请使用“添加文件”或拖放。 Paste unavailable; use Add files or drag and drop.</div> : null}
           <AttachmentPond
             ref={attachmentPondRef}
             items={attachmentDraft.items}
@@ -272,8 +271,6 @@ export function Composer({
               rows={1}
               value={value}
               placeholder={placeholder}
-              title="粘贴附件：Alt+Shift+V / Paste attachments: Alt+Shift+V"
-              aria-keyshortcuts="Alt+Shift+V"
               disabled={disabled}
               onChange={(e) => onChange && onChange(e.target.value)}
               onFocus={() => setFocus(true)}

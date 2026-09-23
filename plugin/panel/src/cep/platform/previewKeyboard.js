@@ -55,7 +55,5 @@ export function registerComposerClipboard(page = globalThis.window) {
   return registerPanelKeys([
     { keyCode: 67, ctrlKey: true, altKey: false, shiftKey: false },
     { keyCode: 86, ctrlKey: true, altKey: false, shiftKey: false },
-    { keyCode: 86, ctrlKey: false, altKey: true, shiftKey: true },
-    { keyCode: 45, ctrlKey: false, altKey: false, shiftKey: true },
   ], page);
 }

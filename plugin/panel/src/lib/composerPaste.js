@@ -7,7 +7,8 @@ export function clipboardFiles(data) {
     .filter(Boolean);
 }
 
-export function handleComposerPaste(event, { canAttach, addFiles }) {
+export function handleComposerPaste(event, { enabled = true, canAttach, addFiles }) {
+  if (!enabled) return false;
   const files = clipboardFiles(event.clipboardData);
   if (!files.length) return false;
   event.preventDefault();
@@ -19,27 +20,7 @@ export function handleComposerPaste(event, { canAttach, addFiles }) {
 export function containClipboardKey(event) {
   const key = String(event.key || '').toLowerCase();
   const clipboardChord = event.ctrlKey && !event.shiftKey && (key === 'c' || key === 'v');
-  const alternatePaste = event.shiftKey && !event.ctrlKey && key === 'insert';
-  const panelPaste = event.altKey && event.shiftKey && !event.ctrlKey && key === 'v';
-  if (event.metaKey || (event.altKey && !panelPaste) || !(clipboardChord || alternatePaste || panelPaste)) return;
-  if (panelPaste) {
-    event.stopPropagation();
-    event.preventDefault();
-    if (event.type !== 'keydown' || event.repeat) return;
-    const doc = event.target?.ownerDocument;
-    if (!doc?.execCommand) return false;
-    let received = false;
-    const markPaste = () => { received = true; };
-    doc.addEventListener('paste', markPaste, true);
-    try {
-      // Use CEP's ordinary paste action so clipboardData retains images and files.
-      return doc.execCommand('paste') || received;
-    } catch {
-      return received;
-    } finally {
-      doc.removeEventListener('paste', markPaste, true);
-    }
-  }
+  if (event.altKey || event.metaKey || !clipboardChord) return;
   // The browser's default action produces paste/clipboardData; cancelling it would lose the files.
   event.stopPropagation();
 }

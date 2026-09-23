@@ -43,8 +43,6 @@ test('composer reserves native clipboard chords without reserving bare V or AE c
   assert.deepEqual(JSON.parse(calls[0]), [
     { keyCode: 67, ctrlKey: true, altKey: false, shiftKey: false },
     { keyCode: 86, ctrlKey: true, altKey: false, shiftKey: false },
-    { keyCode: 86, ctrlKey: false, altKey: true, shiftKey: true },
-    { keyCode: 45, ctrlKey: false, altKey: false, shiftKey: true },
   ]);
   release();
   assert.equal(calls.at(-1), '');
@@ -55,9 +53,9 @@ test('closing a preview retains paste ownership and composer cleanup retains pre
     const { page, calls } = fixture();
     const clipboard = registerComposerClipboard(page);
     const preview = registerPreviewEscape(page);
-    assert.equal(JSON.parse(calls.at(-1)).length, 5);
+    assert.equal(JSON.parse(calls.at(-1)).length, 3);
     (previewFirst ? preview : clipboard)();
-    assert.deepEqual(JSON.parse(calls.at(-1)).map(k => k.keyCode), previewFirst ? [67, 86, 86, 45] : [27]);
+    assert.deepEqual(JSON.parse(calls.at(-1)).map(k => k.keyCode), previewFirst ? [67, 86] : [27]);
     (previewFirst ? clipboard : preview)();
     assert.equal(calls.at(-1), '');
   }
@@ -67,9 +65,9 @@ test('two clipboard owners deduplicate keys and one unmount does not release the
   const { page, calls } = fixture();
   const first = registerComposerClipboard(page);
   const second = registerComposerClipboard(page);
-  assert.equal(JSON.parse(calls.at(-1)).length, 4);
+  assert.equal(JSON.parse(calls.at(-1)).length, 2);
   first(); first();
-  assert.equal(JSON.parse(calls.at(-1)).length, 4);
+  assert.equal(JSON.parse(calls.at(-1)).length, 2);
   second();
   assert.equal(calls.at(-1), '');
 });
@@ -84,7 +82,7 @@ test('unload releases the combined registration once; a later mount starts clean
   assert.equal(calls.length, count);
   assert.equal(calls.at(-1), '');
   const next = registerComposerClipboard(page);
-  assert.deepEqual(JSON.parse(calls.at(-1)).map(k => k.keyCode), [67, 86, 86, 45]);
+  assert.deepEqual(JSON.parse(calls.at(-1)).map(k => k.keyCode), [67, 86]);
   next();
 });
 

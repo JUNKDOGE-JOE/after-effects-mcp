@@ -30,17 +30,17 @@ test('Composer delegates one complete file drop to FilePond and leaves text drop
   assert.match(composer, /event\.preventDefault\(\)/);
   assert.match(composer, /event\.stopPropagation\(\)/);
   assert.match(composer, /attachmentPondRef\.current\?\.addFiles\(files\)/);
-  assert.match(composer, /onPasteCapture=\{\(event\) => \{\s*setPasteUnavailable\(false\);\s*handleComposerPaste\(event/);
+  assert.match(composer, /onPasteCapture=\{\(event\) => \{\s*handleComposerPaste\(event/);
   assert.match(composer, /canAttach: !disabled && !streaming && !attachmentDraft\.pendingTurnId/);
   assert.match(composer, /onDragEnterCapture=\{handleFileDrag\}/);
   assert.match(composer, /onDragOverCapture=\{handleFileDrag\}/);
   assert.match(composer, /onDropCapture=\{handleFileDrop\}/);
   assert.match(composer, /createPanelFileDropGuard\(/);
-  assert.match(composer, /useLayoutEffect\(\(\) => registerComposerClipboard\(\), \[\]\)/);
-  assert.match(composer, /const pasted = containClipboardKey\(event\)/);
-  assert.match(composer, /setPasteUnavailable\(!pasted\)/);
-  assert.match(composer, /aria-keyshortcuts="Alt\+Shift\+V"/);
-  assert.match(composer, /onKeyUpCapture=\{containClipboardKey\}/);
+  assert.match(composer, /if \(clipboardAttachments\) return registerComposerClipboard\(\)/);
+  assert.match(composer, /enabled: clipboardAttachments/);
+  assert.match(composer, /onKeyDownCapture=\{clipboardAttachments \? containClipboardKey : undefined\}/);
+  assert.match(composer, /onKeyUpCapture=\{clipboardAttachments \? containClipboardKey : undefined\}/);
+  assert.doesNotMatch(composer, /Alt\+Shift\+V|execCommand/);
 });
 
 test('Composer enables attachment-only sends without changing keyboard resize behavior', () => {

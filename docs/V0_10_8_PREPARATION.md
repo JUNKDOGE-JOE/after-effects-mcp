@@ -156,7 +156,7 @@ Ctrl+V 兼容性仍为 FAIL，Shift+Insert 替代入口实测 PASS；不宣称�
 导入已撤销且没有保存工程；AE 无标题工程的改动标记没有强行清除。
 本地结构化记录：本次临时证据目录下 `paste-routing-live.json`。
 
-### 无 Insert 键时的备用粘贴
+### 已撤回：无 Insert 键时的备用粘贴
 
 按用户要求采用 **Alt+Shift+V**，只在聊天输入区触发普通 DOM paste，文件与文字
 复用现有粘贴链路；不注册 Ctrl+Shift+V。输入框 title 和 aria-keyshortcuts 已更新。
@@ -165,6 +165,20 @@ Ctrl+Alt+V 已用于 PasteAlt/ApplyInterpretation，因此未选择这两组。
 按键长按和 keyup 不重复粘贴；宿主拒绝 DOM paste 时显示添加文件/拖放提示。
 26 项相关测试、构建和 bundle 一致性通过；Alt+Shift+V 的真实 CEP 行为及第三方
 全局键盘钩子兼容性仍待替换后验证，不将键位表无占用等同于全部环境无冲突。
+
+用户随后要求取消备用热键，并临时禁用 TMC 对照。已撤掉 Alt+Shift+V 和
+Shift+Insert 的额外注册，仅保留标准 Ctrl+C/Ctrl+V；开关底层支持关闭附件粘贴、
+释放相应注册并保留文字粘贴。设置页和偏好联动尚待 25 文件范围确认，未宣称完成。
+
+### TMC 临时停用对照
+
+用户明确要求不保存关闭当前含 QQ 图片的无标题工程。AE 退出后，仅把
+TMCClipboard.aex 移出 Adobe 扫描目录，重启同一正式 AE 2026 做测试：
+资源管理器复制 PNG → 点击聊天输入框 → Ctrl+V，附件显示“已就绪”；
+公开 ae_read 确认工程条目数前后均为 0，测试 PASS。
+测试后关闭空工程，将 TMCClipboard.aex 恢复到原路径，前后 SHA-256 一致。
+没有修改其它 TMC 插件，没有创建或保存 .aep。本地证据为
+ctrl-v-without-tmc.json、tmc-disable-result.json、tmc-restore-result.json。
 
 ## 改动清单
 
