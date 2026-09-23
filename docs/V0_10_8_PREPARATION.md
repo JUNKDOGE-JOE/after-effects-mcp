@@ -138,6 +138,24 @@ Ctrl+V → 确认附件栏恰好新增 1 项且 AE 项目列表无新增。再�
 以及打开/关闭工具图片预览后再次粘贴。若仍失败，保留“按键没到面板”与“按键到了但
 clipboardData 没文件”这两个诊断分支，不把文件导入项目当作附件添加成功。
 
+### 最新实机定位：TMC Clipboard 冲突
+
+用户重新授权 GUI 后，在真实 AE 2026 上对 `fa3b74a` 完成受控对照；安装 bundle
+与构建文件 SHA-256 一致，初始工程条目数为 0。
+
+| 操作 | 实测 |
+| --- | --- |
+| 资源管理器复制测试 PNG，点击聊天 textarea，Ctrl+V 一次 | 附件未增加，AE 工程变为 1 项；撤销菜单明确显示 `Paste from Clipboard (TMC)` |
+| 通过 AE 菜单撤销该测试操作 | 公开 `ae_read` 确认工程恢复 0 项 |
+| 保持同一剪贴板，再聚焦同一 textarea，Shift+Insert 一次 | 附件出现 `attachment-image.png` 和“已就绪”，公开 `ae_read` 确认工程仍为 0 项 |
+
+本机存在 `MediaCore/TMC/TMCClipboard.aex`，与撤销动作名称相符。
+结论：面板接收文件的链路可用；本机 Ctrl+V 被 TMC Clipboard 操作抢先处理。
+Ctrl+V 兼容性仍为 FAIL，Shift+Insert 替代入口实测 PASS；不宣称整个 #388 已通过。
+未禁用、移动或修改 TMC，也未改变其快捷键。测试附件保留在草稿中供用户查看。
+导入已撤销且没有保存工程；AE 无标题工程的改动标记没有强行清除。
+本地结构化记录：本次临时证据目录下 `paste-routing-live.json`。
+
 ## 改动清单
 
 共 22 个文件：实现 9、测试 9、文档 3、生成 bundle 1。
