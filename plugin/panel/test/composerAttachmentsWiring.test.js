@@ -36,6 +36,9 @@ test('Composer delegates one complete file drop to FilePond and leaves text drop
   assert.match(composer, /onDragOverCapture=\{handleFileDrag\}/);
   assert.match(composer, /onDropCapture=\{handleFileDrop\}/);
   assert.match(composer, /createPanelFileDropGuard\(/);
+  assert.match(composer, /useLayoutEffect\(\(\) => registerComposerClipboard\(\), \[\]\)/);
+  assert.match(composer, /onKeyDownCapture=\{containClipboardKey\}/);
+  assert.match(composer, /onKeyUpCapture=\{containClipboardKey\}/);
 });
 
 test('Composer enables attachment-only sends without changing keyboard resize behavior', () => {

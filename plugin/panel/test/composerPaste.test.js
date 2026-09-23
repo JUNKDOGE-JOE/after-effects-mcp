@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clipboardFiles, handleComposerPaste } from '../src/lib/composerPaste.js';
+import { clipboardFiles, handleComposerPaste, containClipboardKey } from '../src/lib/composerPaste.js';
 
 test('files and items describing the same paste are consumed once', () => {
   const file = { name: 'local.png', path: 'C:/media/local.png' };
@@ -46,4 +46,15 @@ test('busy composer consumes file paste without attaching or leaking to another 
     preventDefault: () => cancelled++, stopPropagation: () => cancelled++,
   }, { canAttach: false, addFiles: () => assert.fail('busy draft changed') });
   assert.equal(cancelled, 2);
+});
+
+test('clipboard keys stay in the composer without cancelling native copy or paste', () => {
+  for (const chord of [{ key: 'v', ctrlKey: true }, { key: 'C', ctrlKey: true }, { key: 'Insert', shiftKey: true }]) {
+    let stopped = 0;
+    containClipboardKey({ ...chord, stopPropagation: () => stopped++, preventDefault: () => assert.fail('native clipboard action cancelled') });
+    assert.equal(stopped, 1);
+  }
+  for (const chord of [{ key: 'v' }, { key: 'Enter' }, { key: 'Escape' }, { key: 'v', ctrlKey: true, altKey: true }, { key: 'v', ctrlKey: true, shiftKey: true }]) {
+    containClipboardKey({ ...chord, stopPropagation: () => assert.fail('unrelated key intercepted') });
+  }
 });

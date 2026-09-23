@@ -7,7 +7,8 @@
 本次处理 [#388](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/388)、
 [#389](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/389)、
 [#390](https://github.com/JUNKDOGE-JOE/after-effects-mcp/issues/390)，以及用户补充的
-Opus 5.5、GPT-6 Sol/Luna 模型支持及最新旗舰默认值。用户已批准扩大到 20 个文件。
+Opus 5.5、GPT-6 Sol/Luna 模型支持及最新旗舰默认值。用户另批准粘贴宿主路由修复，
+范围上限为 22 个文件、约 650–750 行手写新增内容。
 版本号仍为 0.10.7；版本更新、候选打包和发布留到验收边界。
 
 ## 改动与已有证据
@@ -112,9 +113,34 @@ AE 保持由用户打开的空工程；没有创建、保存、渲染或修改�
 模型列表重新打开时让当前选中模型自动进入可见区域。它能减少长列表重复定位，
 预计仅涉及菜单滚动定位；不增加搜索、收藏、分组或模型目录机制。
 
+## #388 实机反馈与宿主快捷键修复候选
+
+用户手测报告：Ctrl+V 不能添加附件，或文件进入 AE 项目面板而不是附件栏；
+截图为 AE“源文件标题有误”错误 `86::1`。此项记为真实 CEP 用户验收 FAIL，
+此前浏览器组件测试及后台附件暂存通过不能覆盖这条缺陷。
+
+源码未向 CEP 注册聊天区的剪贴板快捷键。Adobe 的
+[CEP 12 文档](https://github.com/Adobe-CEP/CEP-Resources/blob/master/CEP_12.x/Documentation/CEP%2012%20HTML%20Extension%20Cookbook.md#register-an-interest-in-specific-key-events)
+说明，非文本控件聚焦时按键可能转发给宿主，需提前注册 key interest。
+用户反馈与此机制一致，但当前未抓取其现场焦点/键盘事件，不把机制推断当作复测成功。
+
+- Composer 挂载时注册 Windows Ctrl+C、Ctrl+V 和 Shift+Insert，卸载时释放。
+- 聊天区的对应 keydown/keyup 只停止冒泡，不 preventDefault，以保留浏览器原生
+  copy/paste 和 clipboardData。
+- 与已有图片预览 Esc 共用按消费者合并的注册列表；关闭预览不会清掉粘贴键，
+  聊天区卸载也不会清掉仍在使用的预览 Esc；卸载整个页面时统一释放。
+- 不注册全局系统快捷键，不增加原生插件，不通过 AE 导入命令接收文件。
+- 定向测试 41/41；面板全量 671 项，670 通过、1 跳过、0 失败；构建和 bundle
+  一致性检查通过。仅重建工作目录的 app.js，未替换正在运行的安装或操作界面。
+
+复测顺序：替换并重新加载新面板 → 点击文字输入框 → 资源管理器复制单个 PNG →
+Ctrl+V → 确认附件栏恰好新增 1 项且 AE 项目列表无新增。再测无路径截图、普通文字，
+以及打开/关闭工具图片预览后再次粘贴。若仍失败，保留“按键没到面板”与“按键到了但
+clipboardData 没文件”这两个诊断分支，不把文件导入项目当作附件添加成功。
+
 ## 改动清单
 
-共 20 个文件：实现 8、测试 8、文档 3、生成 bundle 1。
+共 22 个文件：实现 9、测试 9、文档 3、生成 bundle 1。
 工作流/基础设施、配置/schema/fixture、机械版本更新均为 0。
 临时浏览器检查页面与测试日志位于系统临时目录，不进入源码或发布包。
 所有变更只保存在本地修复分支；未推送、合并或发布。

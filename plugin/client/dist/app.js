@@ -25081,31 +25081,69 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
 
   // src/cep/platform/previewKeyboard.js
   init_cep_runtime_inject();
-  function registerPreviewEscape(page = globalThis.window) {
+  var registrations = /* @__PURE__ */ new WeakMap();
+  function registerPanelKeys(keys, page) {
     var _a, _b, _c, _d;
     const platform = ((_b = (_a = page == null ? void 0 : page.cep_node) == null ? void 0 : _a.process) == null ? void 0 : _b.platform) || ((_c = globalThis.process) == null ? void 0 : _c.platform);
     const cep = page == null ? void 0 : page.__adobe_cep__;
     if (platform !== "win32" || typeof (cep == null ? void 0 : cep.registerKeyEventsInterest) !== "function") return void 0;
+    let state = registrations.get(page);
+    if (!state) {
+      const owners = /* @__PURE__ */ new Map();
+      const sync = () => {
+        const unique = /* @__PURE__ */ new Map();
+        for (const group of owners.values()) {
+          for (const key of group) unique.set(JSON.stringify(key), key);
+        }
+        cep.registerKeyEventsInterest(unique.size ? JSON.stringify([...unique.values()]) : "");
+      };
+      const detach = () => {
+        var _a2;
+        (_a2 = page.removeEventListener) == null ? void 0 : _a2.call(page, "beforeunload", unload);
+        registrations.delete(page);
+      };
+      const unload = () => {
+        owners.clear();
+        detach();
+        try {
+          sync();
+        } catch {
+        }
+      };
+      state = { owners, sync, detach, unload };
+    }
+    const owner = Symbol();
+    state.owners.set(owner, keys);
     try {
-      cep.registerKeyEventsInterest(JSON.stringify([
-        { keyCode: 27, ctrlKey: false, altKey: false, shiftKey: false }
-      ]));
+      state.sync();
     } catch {
+      state.owners.delete(owner);
       return void 0;
     }
-    let active = true;
-    const release = () => {
-      var _a2;
-      if (!active) return;
-      active = false;
-      (_a2 = page.removeEventListener) == null ? void 0 : _a2.call(page, "beforeunload", release);
+    if (!registrations.has(page)) {
+      registrations.set(page, state);
+      (_d = page.addEventListener) == null ? void 0 : _d.call(page, "beforeunload", state.unload);
+    }
+    return () => {
+      if (!state.owners.delete(owner)) return;
+      if (!state.owners.size) state.detach();
       try {
-        cep.registerKeyEventsInterest("");
+        state.sync();
       } catch {
       }
     };
-    (_d = page.addEventListener) == null ? void 0 : _d.call(page, "beforeunload", release);
-    return release;
+  }
+  function registerPreviewEscape(page = globalThis.window) {
+    return registerPanelKeys([
+      { keyCode: 27, ctrlKey: false, altKey: false, shiftKey: false }
+    ], page);
+  }
+  function registerComposerClipboard(page = globalThis.window) {
+    return registerPanelKeys([
+      { keyCode: 67, ctrlKey: true, altKey: false, shiftKey: false },
+      { keyCode: 86, ctrlKey: true, altKey: false, shiftKey: false },
+      { keyCode: 45, ctrlKey: false, altKey: false, shiftKey: true }
+    ], page);
   }
 
   // src/components/chat/ToolCallCard.jsx
@@ -26606,6 +26644,13 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
     if (canAttach) addFiles(files);
     return true;
   }
+  function containClipboardKey(event) {
+    const key = String(event.key || "").toLowerCase();
+    const clipboardChord = event.ctrlKey && !event.shiftKey && (key === "c" || key === "v");
+    const alternatePaste = event.shiftKey && !event.ctrlKey && key === "insert";
+    if (event.altKey || event.metaKey || !(clipboardChord || alternatePaste)) return;
+    event.stopPropagation();
+  }
 
   // src/components/chat/Composer.jsx
   var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
@@ -26755,6 +26800,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
   }) {
     const [focus, setFocus] = import_react38.default.useState(false);
     const attachmentPondRef = import_react38.default.useRef(null);
+    import_react38.default.useLayoutEffect(() => registerComposerClipboard(), []);
     const readyAttachmentCount = readyAttachments(attachmentDraft).length;
     const attachmentsBusy = draftIsBusy(attachmentDraft) || attachmentDraft.items.some((item) => item.status === "error");
     const canSend = !disabled && !streaming && !attachmentsBusy && (value.trim().length > 0 || readyAttachmentCount > 0);
@@ -26829,6 +26875,8 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
             onDragEnterCapture: handleFileDrag,
             onDragOverCapture: handleFileDrag,
             onDropCapture: handleFileDrop,
+            onKeyDownCapture: containClipboardKey,
+            onKeyUpCapture: containClipboardKey,
             onPasteCapture: (event) => handleComposerPaste(event, {
               canAttach: !disabled && !streaming && !attachmentDraft.pendingTurnId,
               addFiles: (files) => {

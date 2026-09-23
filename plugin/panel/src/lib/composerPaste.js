@@ -15,3 +15,12 @@ export function handleComposerPaste(event, { canAttach, addFiles }) {
   if (canAttach) addFiles(files);
   return true;
 }
+
+export function containClipboardKey(event) {
+  const key = String(event.key || '').toLowerCase();
+  const clipboardChord = event.ctrlKey && !event.shiftKey && (key === 'c' || key === 'v');
+  const alternatePaste = event.shiftKey && !event.ctrlKey && key === 'insert';
+  if (event.altKey || event.metaKey || !(clipboardChord || alternatePaste)) return;
+  // The browser's default action produces paste/clipboardData; cancelling it would lose the files.
+  event.stopPropagation();
+}
