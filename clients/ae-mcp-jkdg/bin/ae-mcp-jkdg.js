@@ -78,7 +78,7 @@ if (parsed && parsed.action === 'help') {
 } else if (parsed && parsed.action === 'version') {
     process.stdout.write(packageJson.version + '\n');
 } else if (parsed) {
-    const targetUrl = parsed.targetUrl || process.env.AE_MCP_HTTP_URL || shim.DEFAULT_URL;
-    probeHealth(targetUrl, process.stderr);
+    const targetUrl = parsed.targetUrl || process.env.AE_MCP_HTTP_URL;
+    if (targetUrl) probeHealth(targetUrl, process.stderr);
     shim.run(process.stdin, process.stdout, process.stderr, targetUrl);
 }

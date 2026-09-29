@@ -272,6 +272,7 @@ export function createCodexBackend({
   getFast,
   getPermissionMode,
   getMcpSpec,
+  getWorkContext,
   getToolMeta,
   getServerInstructions = () => '',
   resolveCli = resolveCodexCli,
@@ -862,7 +863,7 @@ export function createCodexBackend({
     }
     const spawnEnv = currentEnv();
     const params = {
-      cwd: defaultCwd(spawnEnv, adapter),
+      cwd: getWorkContext ? getWorkContext().workDir : defaultCwd(spawnEnv, adapter),
       model: getModel(),
       approvalPolicy: APPROVAL_POLICY,
       approvalsReviewer: 'user',

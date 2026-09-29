@@ -125,6 +125,25 @@ function formatRequestFailure(error, targetUrl) {
 }
 
 function run(input, output, errorOutput, targetUrl) {
+    if (!targetUrl && !process.env.AE_MCP_HTTP_URL) {
+        let gatewayPath = null;
+        const fs = require('fs');
+        const path = require('path');
+        const roots = [__dirname];
+        if (process.env.AE_MCP_EXTENSION_ROOT) roots.push(path.join(process.env.AE_MCP_EXTENSION_ROOT, 'host'));
+        if (process.platform === 'win32') {
+            if (process.env.APPDATA) roots.push(path.join(process.env.APPDATA, 'Adobe/CEP/extensions/com.aemcp.panel/host'));
+            if (process.env['CommonProgramFiles(x86)']) roots.push(path.join(process.env['CommonProgramFiles(x86)'], 'Adobe/CEP/extensions/com.aemcp.panel/host'));
+        } else if (process.platform === 'darwin') {
+            roots.push(path.join(require('os').homedir(), 'Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel/host'));
+            roots.push('/Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel/host');
+        }
+        for (const root of roots) {
+            const candidate = path.join(root, 'multi-instance-stdio.js');
+            if (fs.existsSync(candidate)) { gatewayPath = candidate; break; }
+        }
+        if (gatewayPath) return require(gatewayPath).run(input, output, errorOutput);
+    }
     const source = input || process.stdin;
     const destination = output || process.stdout;
     const errors = errorOutput || process.stderr;
@@ -134,7 +153,8 @@ function run(input, output, errorOutput, targetUrl) {
         protocolVersion: null,
     };
     let buffer = '';
-    let queue = Promise.resolve();
+    let barrier = Promise.resolve();
+    const pending = new Set();
 
     function handleLine(line) {
         if (!line.trim()) return Promise.resolve();
@@ -163,23 +183,35 @@ function run(input, output, errorOutput, targetUrl) {
         });
     }
 
+    function enqueue(line) {
+        let method;
+        try { method = JSON.parse(line).method; } catch (_) {}
+        const task = barrier.then(() => handleLine(line));
+        if (method === 'initialize' || method === 'notifications/initialized') barrier = task;
+        pending.add(task);
+        task.finally(() => pending.delete(task));
+    }
     source.setEncoding('utf8');
+    const completion = new Promise((resolve, reject) => {
+    source.on('error', reject);
     source.on('data', function (chunk) {
         buffer += chunk;
         const lines = buffer.split(/\r?\n/);
         buffer = lines.pop();
         lines.forEach(function (line) {
-            queue = queue.then(function () { return handleLine(line); });
+            enqueue(line);
         });
     });
     source.on('end', function () {
-        if (buffer.trim()) queue = queue.then(function () { return handleLine(buffer); });
+        if (buffer.trim()) enqueue(buffer);
+        Promise.all(Array.from(pending)).then(resolve, reject);
     });
-    return queue;
+    });
+    return completion;
 }
+
+module.exports = { DEFAULT_URL, createSseDecoder, requestMcp, run };
 
 if (require.main === module) {
     run().catch(function () { process.exitCode = 1; });
 }
-
-module.exports = { DEFAULT_URL, createSseDecoder, requestMcp, run };

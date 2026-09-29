@@ -72,3 +72,42 @@ test('createCheckpoint and autoCheckpoint share the same successful persistence 
     assert.equal(writes.length, 2);
     fs.rmSync(root, { recursive: true, force: true });
 });
+
+
+test('workspace checkpoint saves and copies the named source before registering an external file', async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-workspace-checkpoint-'));
+    t.after(() => { assert.equal(path.dirname(root), os.tmpdir()); fs.rmSync(root, { recursive: true, force: true }); });
+    const { CheckpointStore } = require('./checkpoint-store');
+    const store = new CheckpointStore({ root: path.join(root, 'index') });
+    const project = path.join(root, 'Main.aep');
+    fs.writeFileSync(project, 'unsaved-before');
+    const context = { contextId: 'ctx', workDir: root, session: { clientName: 'test' } };
+    const deps = { getCheckpointStore: () => store, executeJsx: async (input) => {
+        if (input.code.indexOf('app.project.save();') < 0) return reply({ ok: true, path: project });
+        assert.equal(/^\s*app\.project\.save\(File/m.test(input.code), false);
+        const destination = JSON.parse(/var dstPath = (.+);/.exec(input.code)[1]);
+        fs.writeFileSync(project, 'saved-current');
+        fs.copyFileSync(project, destination);
+        return reply({ ok: true, sourceProjectPath: project, sizeBytes: 13 });
+    } };
+    const result = await createCheckpoint({ label: 'before' }, context, deps);
+    assert.equal(result.ok, true);
+    assert.equal(result.projectPath, project);
+    assert.equal(result.placementSource, 'session-workdir');
+    assert.equal(fs.readFileSync(result.path, 'utf8'), 'saved-current');
+    assert.equal(store.lookupAep(project, result.id), result.path);
+    assert.equal(store.readMeta(project, result.id).checkpointPath, result.path);
+    const failedDeps = { ...deps,
+        executeJsx: async (input) => input.code.indexOf('app.project.save();') < 0
+            ? reply({ ok: true, path: project }) : reply({ ok: false, error: 'save failed' }),
+    };
+    const failed = await createCheckpoint({ label: 'failed' }, context, failedDeps);
+    assert.equal(failed.ok, false);
+    assert.equal(store.list(project).length, 1);
+    const automaticFailure = await autoCheckpoint({ checkpoint_label: 'failed' }, context, failedDeps);
+    assert.equal(automaticFailure.requiresAuthorization, true);
+    assert.equal(automaticFailure.contextId, context.contextId);
+    assert.equal(typeof automaticFailure.failureId, 'string');
+    assert.equal(automaticFailure.checkpoint.ok, false);
+    await assert.rejects(createCheckpoint({ projectPath: project }, { ...context, workDir: undefined }, deps), /workDir/);
+});

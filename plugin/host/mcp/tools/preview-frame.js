@@ -36,7 +36,7 @@ const compareSelectorSchema = {
 
 const definition = {
     name: 'ae_previewFrame',
-    description: 'Read real composition pixels after a write, use compare to prove only the intended region changed, or use range with grid to inspect an animation interval. 16-bit source PNGs are returned as 8-bit. Inline images share a 12 MiB base64-character budget with a 4.5 MiB per-image limit; oversized images are reduced or represented by a thumbnail while path retains the full-resolution 8-bit PNG. Transparent pixels retain the composition background RGB even though After Effects does not composite that background into exported alpha.',
+    description: 'Read real composition pixels after a write, use compare to prove only the intended region changed, or use range with grid to inspect an animation interval. AE saveFrameToPng may omit Guide Layers even when they are visible in the viewer; prepare the desired layer state before capture. This tool leaves Guide and layer visibility settings unchanged. 16-bit source PNGs are returned as 8-bit. Inline images share a 12 MiB base64-character budget with a 4.5 MiB per-image limit; oversized images are reduced or represented by a thumbnail while path retains the full-resolution 8-bit PNG. Transparent pixels retain the composition background RGB even though After Effects does not composite that background into exported alpha.',
     inputSchema: {
         type: 'object', properties: {
             comp_id: { type: 'string', minLength: 1, description: 'AE comp id. Omit for the active comp.' },

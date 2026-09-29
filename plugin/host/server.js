@@ -13,6 +13,10 @@ const mountMcp = require('./mcp');
 const { createClientBlocklist } = require('./mcp/client-blocklist');
 const { ToolLibrary } = require('./mcp/tool-library');
 const { createStatePaths } = require('./state-paths');
+const { createInstanceService, changesProject } = require('./instance-service');
+const { createReadJobs } = require('./mcp/read-jobs');
+const { createReadonlyWorker } = require('./mcp/readonly-worker');
+const { guardProjectCode } = require('./mcp/workspaces');
 const PKG_VERSION = require('./package.json').version;
 
 let app = null;
@@ -20,6 +24,103 @@ let httpServer = null;
 let currentPort = null;
 let runtimeDependencies = null;
 let activeStatePaths = null;
+let instanceOptions = null;
+let instanceService = null;
+let readJobs = null;
+
+function configureInstance(options) {
+    if (!options || options.role === 'worker') throw new Error('A readonly worker cannot start a primary MCP host.');
+    instanceOptions = Object.assign({}, instanceOptions || {}, options);
+    if (instanceService) instanceService.configure(options);
+}
+
+function getInstanceInfo() {
+    return instanceService ? instanceService.getInfo() : Object.assign({}, instanceOptions || {});
+}
+
+function markIntentionalDisconnect(reason) {
+    if (instanceService) instanceService.markClosed(reason || 'panel-closed').catch(error => hostLog.record({ level: 'error', source: 'instance-close', message: error.message }));
+}
+
+async function createWorkerForJob(options) {
+    const service = instanceService;
+    if (!service || !service.accepting()) throw new Error('The owning panel is closed.');
+    let reservation;
+    const deadline = Date.now() + 30000;
+    while (!reservation) {
+        if (!service.accepting()) throw new Error('The owning panel is closed.');
+        try {
+            reservation = await service.registry.reserve({ role: 'worker', ownerInstanceId: service.instanceId,
+                projectPath: options.checkpointPath, workspaceId: options.context.workspaceId });
+        } catch (error) {
+            if (error.code !== 'INSTANCE_BUDGET' || Date.now() >= deadline) throw error;
+            await new Promise(resolve => setTimeout(resolve, 250));
+        }
+    }
+    let launched = null;
+    try {
+        const worker = await createReadonlyWorker({ checkpointPath: options.checkpointPath,
+            workDir: options.context.workDir, instanceId: reservation.instanceId,
+            onStarted: options.onStarted,
+            ownerClosedPath: service.ownerClosedPath,
+            startWorker: async request => {
+                launched = await service.launcher.startWorker(Object.assign({}, request, {
+                    instanceId: reservation.instanceId,
+                    registration: ticket => service.registry.update(reservation.instanceId, { pid: ticket.pid }),
+                }));
+                launched.process.once('exit', () => service.registry.unregister(reservation.instanceId, 'worker-exited').catch(() => {}));
+                return launched;
+            },
+            stopWorker: record => service.launcher.stopOwnedWorker(record),
+        });
+        await service.registry.register({ instanceId: reservation.instanceId, role: 'worker',
+            ownerInstanceId: service.instanceId, pid: worker.pid, projectPath: options.checkpointPath });
+        const close = worker.close;
+        worker.close = async function () {
+            await service.registry.update(reservation.instanceId, { state: 'closing' }).catch(() => {});
+            return close();
+        };
+        return worker;
+    } catch (error) {
+        launched = launched || error.launchedInstance || null;
+        if (!launched) await service.registry.unregister(reservation.instanceId, 'worker-not-started').catch(() => {});
+        else {
+            const process = launched.process || launched.child;
+            const exited = launched.exited || process && (process.exitCode !== null && process.exitCode !== undefined
+                || process.signalCode !== null && process.signalCode !== undefined);
+            const release = () => service.registry.unregister(reservation.instanceId, 'worker-exited').catch(() => {});
+            if (exited) await release();
+            else {
+                if (process) process.once('exit', release);
+                await service.registry.update(reservation.instanceId, { state: 'unknown', reason: 'worker-start-failed' }).catch(() => {});
+            }
+        }
+        throw error;
+    }
+}
+
+function getReadJobs() {
+    if (!instanceService) throw new Error('This host has no project instance binding.');
+    if (!readJobs) {
+        readJobs = createReadJobs({ getCheckpointStore: () => module.exports.mcp.getCheckpointStore(),
+            createWorker: createWorkerForJob, maxWorkers: 2 });
+        instanceService.setJobs(readJobs);
+    }
+    return readJobs;
+}
+
+async function runBoundHttp(req, write, operation) {
+    if (!instanceService) return operation();
+    if (!instanceService.accepting()) throw Object.assign(new Error('The owning panel is disconnected.'), { code: 'OWNER_CLOSED' });
+    let contextId = req.get('x-ae-mcp-context');
+    if (!contextId && !write && req.get('x-ae-mcp-client') === INTERNAL_CLIENT) {
+        const bound = await instanceService.contextFor({}, { session: { id: INTERNAL_CLIENT, clientName: INTERNAL_CLIENT } }, false);
+        contextId = bound.contextId;
+    }
+    if (!contextId) throw Object.assign(new Error('Bind with ae_workspace and supply x-ae-mcp-context.'), { code: 'WORKSPACE_REQUIRED' });
+    if (!instanceService.accepting()) throw Object.assign(new Error('The owning panel is disconnected.'), { code: 'OWNER_CLOSED' });
+    return instanceService.workspaces.run(contextId, write, operation);
+}
 // The shared secret /exec requires. Populated in start() so the file is read
 // (and generated if missing) exactly once per host lifetime.
 let execToken = null;
@@ -157,6 +258,7 @@ function makeNativeAegpClient() {
         version: PKG_VERSION,
         component: 'core-broker',
         runtime: nativeAegpRuntime,
+        expectedHostPid: getInstanceInfo().aePid || null,
         requestTimeoutMs: NATIVE_EXEC_TIMEOUT_MS,
     });
     if (!nativeAegpClient
@@ -935,7 +1037,12 @@ function buildApp() {
         updateActivity: function (id, patch) { return activity.update(id, patch); },
         statePaths: statePathsForHost(),
         toolLibrary,
+        instances: instanceService ? instanceService.instances : undefined,
+        workspace: instanceService ? instanceService.workspace : undefined,
+        routeTool: instanceService ? instanceService.routeTool : undefined,
+        getReadJobs,
     });
+    if (instanceService) instanceService.setApprovalDeps({ approvals: module.exports.mcp.approvals });
 
     a.get('/health', (req, res) => {
         // Presence of CSInterface (set up by the panel at startup) is the
@@ -1205,7 +1312,8 @@ function buildApp() {
         const startedAt = Date.now();
         try {
             const client = await connectedNativeClient(body.deadlineUnixMs);
-            const result = await client.invoke(body);
+            const result = await runBoundHttp(req, body.capabilityId !== 'ae.native.exec'
+                || changesProject('ae_nativeExec', body.arguments || {}), () => client.invoke(body));
             activity.record({
                 client: clientLabel,
                 tool: 'native-invoke',
@@ -1248,6 +1356,11 @@ function buildApp() {
         }
         const startedAt = Date.now();
         try {
+            if (instanceService) {
+                const contextId = req.get('x-ae-mcp-context');
+                const binding = instanceService.workspaces.getContext(contextId);
+                if (binding.access !== 'write' || !instanceService.accepting()) throw Object.assign(new Error('Only the active writer may cancel native work.'), { code: 'WORKSPACE_READONLY' });
+            }
             const client = await connectedNativeClient(body.deadlineUnixMs);
             const result = await client.cancel(body);
             activity.record({
@@ -1298,8 +1411,13 @@ function buildApp() {
         const client = req.get('x-ae-mcp-client') || 'http-direct';
         // checkpointLabel remains accepted but deliberately unused until the
         // Phase 1 checkpoint store arrives.
-        const output = await executeJsx({
-            code,
+        try {
+        const diagnosticRead = client === INTERNAL_CLIENT && [
+            '"pong"',
+            'app.project && app.project.file ? app.project.file.name : (app.project ? "unsaved" : "none")',
+        ].includes(code);
+        const output = await runBoundHttp(req, !diagnosticRead, bound => executeJsx({
+            code: guardProjectCode(code, bound),
             undoGroup,
             checkpointLabel,
             timeoutMs,
@@ -1307,8 +1425,11 @@ function buildApp() {
             client,
             tool: 'exec-http',
             transport: 'http',
-        });
+        }));
         res.status(output.status).json(output.payload);
+        } catch (error) {
+            res.status(409).json({ ok: false, code: error.code || 'WORKSPACE_ERROR', error: error.message });
+        }
     });
 
     return a;
@@ -1329,14 +1450,36 @@ function start(port, callback) {
     } catch (e) {
         return callback(new Error('failed to initialize auth token: ' + e.message));
     }
+    if (instanceOptions) instanceService = createInstanceService(Object.assign({}, instanceOptions, {
+        statePaths: statePathsForHost(), executeJsx,
+    }));
     app = buildApp();
-    httpServer = app.listen(port, '127.0.0.1', (err) => {
-        if (err) return callback(err);
-        currentPort = port;
-        callback(null);
-    });
+    let completed = false;
+    let triedFallback = false;
+    const complete = (error) => {
+        if (completed) return;
+        completed = true;
+        callback(error || null, Object.assign({ port: currentPort }, getInstanceInfo()));
+    };
+    const listening = async () => {
+        currentPort = httpServer.address().port;
+        try {
+            if (instanceService) await instanceService.publish('http://127.0.0.1:' + currentPort + '/mcp');
+            complete(null);
+        } catch (error) {
+            const failed = httpServer;
+            httpServer = null;
+            currentPort = null;
+            failed.close();
+            complete(error);
+        }
+    };
+    httpServer = app.listen(port, '127.0.0.1', listening);
     httpServer.on('error', (err) => {
-        if (callback) callback(err);
+        if (instanceOptions && err.code === 'EADDRINUSE' && !triedFallback) {
+            triedFallback = true;
+            httpServer.listen(0, '127.0.0.1');
+        } else complete(err);
     });
     httpServer.on('connection', function (socket) {
         trackedSockets.add(socket);
@@ -1345,6 +1488,9 @@ function start(port, callback) {
 }
 
 function stop(callback) {
+    if (instanceService) instanceService.markClosed('panel-stopped').catch(error => hostLog.record({ level: 'error', source: 'instance-close', message: error.message }));
+    instanceService = null;
+    readJobs = null;
     let finished = false;
     let fallbackTimer = null;
     const finish = function () {
@@ -1408,6 +1554,9 @@ module.exports = {
     activity,
     hostLog,
     getConnectionInfo,
+    configureInstance,
+    getInstanceInfo,
+    markIntentionalDisconnect,
     getClients,
     getMcpSessions,
     setClientBlocked,

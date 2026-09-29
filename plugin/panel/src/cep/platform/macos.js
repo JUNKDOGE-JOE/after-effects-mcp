@@ -21,6 +21,29 @@ export function createMacosAdapter(deps) {
     fs: deps.fs,
     requestJson: createHttpJsonRequester(deps),
     ...boundary,
+    async resolveAeHostPid({ cepPid = deps.pid, timeoutMs = 4000 } = {}) {
+      if (!Number.isSafeInteger(cepPid) || cepPid <= 1 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return null;
+      const now = deps.now || Date.now;
+      const deadline = now() + Math.min(10000, timeoutMs);
+      const visited = new Set();
+      let current = cepPid;
+      try {
+        for (let depth = 0; depth < 12 && current > 1 && now() < deadline; depth += 1) {
+          if (visited.has(current)) return null;
+          visited.add(current);
+          const reply = await boundary.run({ executable: fixed('ps', '/bin/ps'),
+            args: ['-p', String(current), '-ww', '-o', 'pid=,ppid=,comm='],
+            timeoutMs: Math.min(1000, deadline - now()), maxOutputBytes: 4096 });
+          if (reply.exitCode !== 0 || reply.timedOut || reply.aborted) return null;
+          const match = String(reply.stdout).trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);
+          if (!match || Number(match[1]) !== current) return null;
+          if (/\/(?:Adobe )?After Effects[^/]*\.app\/Contents\/MacOS\/After Effects$/.test(match[3])
+              && !/\/(?:Adobe )?After Effects[^/]*beta[^/]*\//i.test(match[3])) return current;
+          current = Number(match[2]);
+        }
+      } catch {}
+      return null;
+    },
     async processAlive({ pid } = {}) {
       const processId = Number(pid);
       if (!Number.isInteger(processId) || processId <= 0) return false;

@@ -62,6 +62,8 @@ export function createSessionController({
   const cancelTimeout = clearTimeoutImpl || deps.clearTimeout || clearTimeout;
   const listeners = new Set();
   let index = emptyIndex();
+  let persistedIndex = emptyIndex();
+  let indexRetryCount = 0;
   let activeId = null;
   let activeMeta = null;
   let latestEntries = [];
@@ -113,18 +115,48 @@ export function createSessionController({
 
   function saveIndex() {
     try {
-      store.saveIndex({
+      const next = {
         ...index,
         sessions: index.sessions.map((meta) => {
           const value = clone(meta);
           delete value.touched;
           return value;
         }),
-      });
+      };
+      if (typeof store.mutateIndex === 'function') {
+        const previous = new Map(persistedIndex.sessions.map((meta) => [meta.id, meta]));
+        const proposed = new Map(next.sessions.map((meta) => [meta.id, meta]));
+        index = validIndex(store.mutateIndex((latest) => {
+          const merged = new Map(latest.sessions.map((meta) => [meta.id, meta]));
+          for (const id of previous.keys()) if (!proposed.has(id)) merged.delete(id);
+          for (const [id, value] of proposed) {
+            const before = previous.get(id);
+            if (before && !merged.has(id)) continue;
+            const patch = {};
+            for (const key of Object.keys(value)) {
+              if (!before || JSON.stringify(before[key]) !== JSON.stringify(value[key])) patch[key] = value[key];
+            }
+            if (Object.keys(patch).length) merged.set(id, { ...merged.get(id), ...patch });
+          }
+          return {
+            ...latest, sessions: [...merged.values()],
+            activeId: next.activeId !== persistedIndex.activeId ? next.activeId : latest.activeId,
+          };
+        }));
+        if (activeMeta) {
+          const saved = index.sessions.find((meta) => meta.id === activeMeta.id);
+          if (saved) activeMeta = { ...clone(saved), touched: activeMeta.touched };
+        }
+      } else store.saveIndex(next);
+      persistedIndex = clone(index);
+      indexRetryCount = 0;
       dirty = false;
     } catch (error) {
       dirty = true;
       report('Session index save failed', error);
+      if (error.code === 'SESSION_STORE_BUSY' && indexRetryCount++ < 3) {
+        scheduleTimeout(saveIndex, 100);
+      }
     }
   }
 
@@ -152,6 +184,7 @@ export function createSessionController({
 
   function persistActive() {
     if (!activeMeta || !activeId) return false;
+    if (!activeMeta.workDir && deps.currentWorkDir) activeMeta.workDir = deps.currentWorkDir() || null;
     const currentRef = backendRef(
       typeof deps.getBackendRef === 'function' ? deps.getBackendRef() : null,
     );
@@ -212,6 +245,7 @@ export function createSessionController({
       backend: deps.currentBackend(),
       channel: deps.currentChannel(),
       model: deps.currentModel() || null,
+      ...(deps.defaultWorkDir ? { workDir: deps.defaultWorkDir() || null } : {}),
       backendRef: null,
       archived: false,
       entryCount: 0,
@@ -239,7 +273,7 @@ export function createSessionController({
     saveIndex();
     if (typeof deps.setEntries === 'function') deps.setEntries([]);
     if (typeof deps.rotateHostConversation === 'function') {
-      await Promise.resolve(deps.rotateHostConversation(activeId));
+      await Promise.resolve(deps.rotateHostConversation(activeId, { workDir: activeMeta.workDir }));
     }
     publish();
     return activeId;
@@ -252,6 +286,7 @@ export function createSessionController({
       report('Session index load failed', error);
       index = emptyIndex();
     }
+    persistedIndex = clone(index);
     const meta = index.sessions.find((candidate) => candidate.id === index.activeId);
     if (!meta || meta.archived || meta.backend !== deps.currentBackend()) {
       activeId = null;
@@ -271,7 +306,7 @@ export function createSessionController({
       await Promise.resolve(deps.adoptBackendRef(activeMeta.backend, backendRef(activeMeta.backendRef)));
     }
     if (typeof deps.rotateHostConversation === 'function') {
-      await Promise.resolve(deps.rotateHostConversation(activeId));
+      await Promise.resolve(deps.rotateHostConversation(activeId, { workDir: activeMeta.workDir }));
     }
     publish();
     return snapshot();
@@ -298,7 +333,7 @@ export function createSessionController({
       await Promise.resolve(deps.adoptBackendRef(target.backend, backendRef(target.backendRef)));
     }
     if (typeof deps.rotateHostConversation === 'function') {
-      await Promise.resolve(deps.rotateHostConversation(target.id));
+      await Promise.resolve(deps.rotateHostConversation(target.id, { workDir: target.workDir }));
     }
     activeId = target.id;
     activeMeta = { ...clone(target), touched: true };

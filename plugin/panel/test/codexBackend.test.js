@@ -100,6 +100,7 @@ function makeBackend(overrides = {}) {
       name: 'ae',
     })),
     getToolMeta: overrides.getToolMeta || (async () => ({ allowedTools: [], annotations: {} })),
+    getWorkContext: overrides.getWorkContext,
     resolveCli: overrides.resolveCli,
     getLang: overrides.getLang,
     rpcTimeoutMs: overrides.rpcTimeoutMs,
@@ -143,6 +144,15 @@ test('GPT-6 Sol and Luna send their selected model and effort to Codex', async (
       h.backend.reset();
     }
   }
+});
+
+test('Codex binds its thread cwd without moving the shared authentication home', async () => {
+  const h = makeBackend({ getWorkContext: () => ({ instanceId: 'main-a', workDir: 'E:\\Project A' }) });
+  try {
+    const { thread } = await startTurn(h.backend, h.spawned);
+    assert.equal(thread.params.cwd, 'E:\\Project A');
+    assert.equal(h.spawned[0].options.env.CODEX_HOME, 'C:\\Users\\test\\.ae-mcp\\codex-home');
+  } finally { h.backend.reset(); }
 });
 
 test('Codex completed MCP image results retain their call id and omit data from display text', async () => {

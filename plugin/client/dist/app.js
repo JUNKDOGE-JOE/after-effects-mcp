@@ -22160,6 +22160,32 @@
       fs: deps.fs,
       requestJson: createHttpJsonRequester(deps),
       ...boundary,
+      async resolveAeHostPid({ cepPid = deps.pid, timeoutMs = 4e3 } = {}) {
+        if (!Number.isSafeInteger(cepPid) || cepPid <= 1 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return null;
+        const now = deps.now || Date.now;
+        const deadline = now() + Math.min(1e4, timeoutMs);
+        const visited = /* @__PURE__ */ new Set();
+        let current = cepPid;
+        try {
+          for (let depth = 0; depth < 12 && current > 1 && now() < deadline; depth += 1) {
+            if (visited.has(current)) return null;
+            visited.add(current);
+            const reply = await boundary.run({
+              executable: fixed("ps", "/bin/ps"),
+              args: ["-p", String(current), "-ww", "-o", "pid=,ppid=,comm="],
+              timeoutMs: Math.min(1e3, deadline - now()),
+              maxOutputBytes: 4096
+            });
+            if (reply.exitCode !== 0 || reply.timedOut || reply.aborted) return null;
+            const match = String(reply.stdout).trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);
+            if (!match || Number(match[1]) !== current) return null;
+            if (/\/(?:Adobe )?After Effects[^/]*\.app\/Contents\/MacOS\/After Effects$/.test(match[3]) && !/\/(?:Adobe )?After Effects[^/]*beta[^/]*\//i.test(match[3])) return current;
+            current = Number(match[2]);
+          }
+        } catch {
+        }
+        return null;
+      },
       async processAlive({ pid } = {}) {
         const processId = Number(pid);
         if (!Number.isInteger(processId) || processId <= 0) return false;
@@ -22351,6 +22377,41 @@
       fs: deps.fs,
       requestJson: createHttpJsonRequester(deps),
       ...boundary,
+      async resolveAeHostPid({ cepPid = deps.pid, timeoutMs = 4e3 } = {}) {
+        if (!Number.isSafeInteger(cepPid) || cepPid <= 1 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return null;
+        const script = [
+          "$aeProbePid=" + cepPid,
+          "$aeProbeRows=@(for($aeProbeDepth=0;$aeProbeDepth -lt 12 -and $aeProbePid -gt 1;$aeProbeDepth++){",
+          '$aeProbeItem=Get-CimInstance Win32_Process -Filter ("ProcessId = " + $aeProbePid)',
+          "if(-not $aeProbeItem){break}",
+          "[pscustomobject]@{pid=[int]$aeProbeItem.ProcessId;ppid=[int]$aeProbeItem.ParentProcessId;executablePath=$aeProbeItem.ExecutablePath}",
+          "$aeProbePid=[int]$aeProbeItem.ParentProcessId",
+          "})",
+          "ConvertTo-Json -InputObject $aeProbeRows -Compress"
+        ].join("\n");
+        try {
+          const reply = await boundary.run({
+            executable: powershell,
+            args: ["-NoProfile", "-NonInteractive", "-Command", script],
+            timeoutMs: Math.min(1e4, timeoutMs),
+            maxOutputBytes: 16384
+          });
+          if (reply.exitCode !== 0 || reply.timedOut || reply.aborted) return null;
+          const rows = JSON.parse(reply.stdout);
+          if (!Array.isArray(rows) || rows.length > 12) return null;
+          let expected = cepPid;
+          const visited = /* @__PURE__ */ new Set();
+          for (const row of rows) {
+            if (row.pid !== expected || visited.has(row.pid) || !Number.isSafeInteger(row.ppid)) return null;
+            visited.add(row.pid);
+            const executable = String(row.executablePath || "");
+            if (/[\\/]AfterFX\.exe$/i.test(executable) && !/(?:^|[\\/])(?:Adobe )?After Effects[^\\/]*beta[^\\/]*(?:[\\/]|$)/i.test(executable)) return row.pid;
+            expected = row.ppid;
+          }
+        } catch {
+        }
+        return null;
+      },
       async processAlive({ pid } = {}) {
         const processId = Number(pid);
         if (!Number.isInteger(processId) || processId <= 0) return false;
@@ -23128,6 +23189,8 @@
       save: "\u4FDD\u5B58",
       modelDefault: "\u9ED8\u8BA4\u6A21\u578B\uFF08\u6253\u5F00\u9762\u677F\u65F6\u4F7F\u7528\uFF09",
       port: "\u7AEF\u53E3",
+      workDir: "\u5DE5\u4F5C\u76EE\u5F55",
+      workDirHint: "\u65B0\u4F1A\u8BDD\u7684\u751F\u6210\u6587\u4EF6\u548C\u68C0\u67E5\u70B9\u76EE\u5F55\u3002\u5DF2\u6709\u4F1A\u8BDD\u4FDD\u6301\u539F\u76EE\u5F55\u3002",
       portHint: "\u9ED8\u8BA4 11488",
       apply: "\u5E94\u7528",
       token: "\u8BBF\u95EE Token",
@@ -23181,6 +23244,8 @@
       save: "Save",
       modelDefault: "Default model (used when the panel opens)",
       port: "Port",
+      workDir: "Work directory",
+      workDirHint: "Location for new chats. Existing chats keep their work directory.",
       portHint: "Default 11488",
       apply: "Apply",
       token: "Access token",
@@ -23380,6 +23445,9 @@
     onClipboardAttachmentsChange,
     port = 11488,
     onApplyPort,
+    workDir = "",
+    workDirError = "",
+    onApplyWorkDir,
     mcpConfig,
     extensionRoot = "<extension root>",
     mcpReady = true,
@@ -23419,6 +23487,7 @@
     const providerInitMessage = t.providerInitializationFailed;
     const [externalLinkError, setExternalLinkError] = import_react21.default.useState("");
     const [draftPort, setDraftPort] = import_react21.default.useState(String(port));
+    const [draftWorkDir, setDraftWorkDir] = import_react21.default.useState(workDir);
     const [tokenRaw, setTokenRaw] = import_react21.default.useState("");
     const [copied, setCopied] = import_react21.default.useState("");
     const [sections, setSections] = import_react21.default.useState(() => loadSectionState(window.localStorage));
@@ -23428,6 +23497,7 @@
       return next;
     });
     import_react21.default.useEffect(() => setDraftPort(String(port)), [port]);
+    import_react21.default.useEffect(() => setDraftWorkDir(workDir), [workDir]);
     import_react21.default.useEffect(() => setTokenRaw(readTokenValue()), []);
     const copy = (label, text) => {
       copyText(text).then(() => {
@@ -23483,6 +23553,10 @@
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || FALLBACK_MODEL_OPTIONS }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(Section, { id: "conn", title: t.conn, expanded: sections.conn, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.workDir, caption: workDirError || t.workDirHint, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Input, { mono: true, value: draftWorkDir, onChange: setDraftWorkDir, style: { flex: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { variant: "secondary", onClick: () => onApplyWorkDir == null ? void 0 : onApplyWorkDir(draftWorkDir), children: t.apply })
+        ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
@@ -30344,6 +30418,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     platform,
     resolveClaude = resolveClaudeCli,
     getMcpSpec: getMcpSpec2,
+    getWorkContext,
     getToolMeta,
     getModel,
     getPermissionMode,
@@ -31137,7 +31212,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             spawnedProc = spawnProcess(executable, args, {
               stdio: "pipe",
               windowsHide: true,
-              env: spawnEnv
+              env: spawnEnv,
+              ...getWorkContext ? { cwd: getWorkContext().workDir } : {}
             });
           } catch (error) {
             const failure2 = error instanceof Error ? error : new Error((error == null ? void 0 : error.message) || String(error || "Claude CLI spawn failed"));
@@ -31890,6 +31966,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getFast,
     getPermissionMode,
     getMcpSpec: getMcpSpec2,
+    getWorkContext,
     getToolMeta,
     getServerInstructions = () => "",
     resolveCli = resolveCodexCli,
@@ -32435,7 +32512,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       const spawnEnv = currentEnv();
       const params = {
-        cwd: defaultCwd(spawnEnv, adapter),
+        cwd: getWorkContext ? getWorkContext().workDir : defaultCwd(spawnEnv, adapter),
         model: getModel(),
         approvalPolicy: APPROVAL_POLICY,
         approvalsReviewer: "user",
@@ -33531,6 +33608,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getModel,
     getPermissionMode,
     getMcpSpec: getMcpSpec2,
+    getWorkContext,
     getToolMeta,
     getProviders = () => [],
     getSensitiveValues = () => [],
@@ -33559,7 +33637,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       throw new RangeError("OpenCode stall timeout must be greater than its warning timeout");
     }
     const openCodeRoot = adapter.paths.join([adapter.paths.configRoot, "opencode"]);
-    const workspaceDir = adapter.paths.join([openCodeRoot, "workspace"]);
+    let workspaceDir = adapter.paths.join([openCodeRoot, "workspace"]);
     const totalProbeTimeoutMs = Number(probeTimeoutMs);
     if (!Number.isFinite(totalProbeTimeoutMs) || totalProbeTimeoutMs <= readyTimeoutMs) {
       throw new TypeError("probeTimeoutMs must be greater than readyTimeoutMs");
@@ -33763,6 +33841,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return adapter.completeSpawnEnv(env || {});
     }
     function stableConfigHome(mcpSpec) {
+      if (getWorkContext) {
+        const context = getWorkContext();
+        if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(context.instanceId || "")) {
+          throw new Error("An explicit AE instance identity is required");
+        }
+        workspaceDir = context.workDir;
+        return adapter.paths.join([openCodeRoot, "home-" + context.instanceId]);
+      }
       let hostPort = "default";
       try {
         hostPort = new URL(String((mcpSpec == null ? void 0 : mcpSpec.url) || "")).port || "default";
@@ -37071,6 +37157,27 @@ ${command}`
   function nativeAegpRuntime(platformId) {
     return platformId === "macos-arm64" ? { platform: "darwin", arch: "arm64" } : { platform: "win32", arch: "x64" };
   }
+  function resolveHostInstance({ env = {}, readTicket, createId, extensionRoot, paths }) {
+    const ticketPath = env.AE_MCP_LAUNCH_TICKET;
+    let ticket = null;
+    if (ticketPath) {
+      ticket = readTicket(ticketPath);
+      if ((ticket == null ? void 0 : ticket.version) !== 1 || ticket.instanceId !== env.AE_MCP_INSTANCE_ID || !paths.same(ticket.workDir, env.AE_MCP_WORK_DIR) || ticket.role !== env.AE_MCP_INSTANCE_ROLE || !Number.isSafeInteger(ticket.pid) || ticket.pid <= 1) {
+        throw new Error("AE launch ticket does not match this panel environment");
+      }
+    }
+    const workDir = (ticket == null ? void 0 : ticket.workDir) || env.AE_MCP_WORK_DIR || null;
+    if (workDir && !paths.isAbsolute(workDir)) throw new Error("Instance workDir must be absolute");
+    return {
+      instanceId: (ticket == null ? void 0 : ticket.instanceId) || env.AE_MCP_INSTANCE_ID || createId(),
+      role: (ticket == null ? void 0 : ticket.role) || env.AE_MCP_INSTANCE_ROLE || "primary",
+      workDir,
+      aePid: (ticket == null ? void 0 : ticket.pid) || null,
+      projectPath: (ticket == null ? void 0 : ticket.projectPath) || null,
+      extensionRoot,
+      bootstrapStatusPath: (ticket == null ? void 0 : ticket.bootstrapStatusPath) || null
+    };
+  }
   function createHostController({
     cs: cs2,
     onStatus,
@@ -37078,19 +37185,33 @@ ${command}`
     platform,
     requireImpl,
     addBeforeUnload,
-    extensionRoot
+    extensionRoot,
+    environment,
+    createInstanceId
   }) {
     const adapter = platform || createPlatformAdapter();
     let host = null;
     let beforeUnloadInstalled = false;
     let lifecycleGeneration = 0;
+    let instance = null;
+    function writeBootstrapStatus(state) {
+      if (!(instance == null ? void 0 : instance.bootstrapStatusPath)) return;
+      try {
+        adapter.fs.writeFileSync(instance.bootstrapStatusPath, JSON.stringify({
+          instanceId: instance.instanceId,
+          state
+        }), "utf8");
+      } catch {
+      }
+    }
     function disposeLifecycle(hostInstance) {
       try {
         if (hostInstance && typeof hostInstance.stop === "function") hostInstance.stop();
       } catch {
       }
     }
-    function start(port) {
+    async function start(port) {
+      var _a;
       const generation = lifecycleGeneration += 1;
       onStatus("starting", port);
       const priorHost = host;
@@ -37099,6 +37220,21 @@ ${command}`
       try {
         const cepRequire3 = requireImpl || getCepRequire2();
         const extRoot = normalizeCepPath(extensionRoot || cs2.getSystemPath("extension"), adapter);
+        if (!instance) {
+          const env = environment || cepRequire3("process").env || {};
+          instance = resolveHostInstance({
+            env,
+            readTicket: (file) => JSON.parse(String(adapter.fs.readFileSync(file, "utf8"))),
+            createId: createInstanceId || (() => cepRequire3("crypto").randomBytes(16).toString("hex")),
+            extensionRoot: extRoot,
+            paths: adapter.paths
+          });
+        }
+        if (instance.role === "worker") {
+          onStatus("disabled", null, "Read workers do not start the panel host");
+          return;
+        }
+        writeBootstrapStatus("panel-loading");
         const hostPath = adapter.paths.join([extRoot, "host", "server.js"]);
         onLog("host: " + hostPath);
         const runtimeDependencies = loadBundledHostDependencies({
@@ -37115,21 +37251,38 @@ ${command}`
           nextHost.setNativeAegpRuntime(nativeAegpRuntime(adapter.id));
         }
         nextHost.setCSInterface(cs2);
+        if (typeof nextHost.configureInstance === "function") nextHost.configureInstance(instance);
         host = nextHost;
         if (!beforeUnloadInstalled) {
           const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener("beforeunload", handler));
           installBeforeUnload(() => {
+            var _a2;
             lifecycleGeneration += 1;
             const closingHost = host;
             host = null;
+            writeBootstrapStatus("intentional-disconnect");
+            (_a2 = closingHost == null ? void 0 : closingHost.markIntentionalDisconnect) == null ? void 0 : _a2.call(closingHost, "panel-closed");
             disposeLifecycle(closingHost);
           });
           beforeUnloadInstalled = true;
         }
-        nextHost.start(port, (err) => {
+        if (!instance.aePid && typeof adapter.resolveAeHostPid === "function") {
+          instance.aePid = await adapter.resolveAeHostPid({ cepPid: adapter.pid, timeoutMs: 4e3 });
+          if (generation !== lifecycleGeneration || host !== nextHost) return;
+          instance.nativeUnavailable = instance.aePid ? null : {
+            code: "AE_HOST_PID_UNVERIFIED",
+            message: "The CEP process ancestry did not identify a formal After Effects host"
+          };
+          (_a = nextHost.configureInstance) == null ? void 0 : _a.call(nextHost, instance);
+        }
+        nextHost.start(port, (err, info) => {
+          var _a2;
           if (generation !== lifecycleGeneration || host !== nextHost) return;
           if (err) onStatus("error", port, err.message);
-          else onStatus("ok", port);
+          else {
+            writeBootstrapStatus("host-started");
+            onStatus("ok", (_a2 = info == null ? void 0 : info.port) != null ? _a2 : port);
+          }
         });
       } catch (e) {
         const failedHost = host;
@@ -37143,14 +37296,15 @@ ${command}`
         const generation = lifecycleGeneration;
         const restartingHost = host;
         onStatus("starting", port);
-        restartingHost.restart(port, (err) => {
+        restartingHost.restart(port, (err, info) => {
+          var _a;
           if (generation !== lifecycleGeneration || host !== restartingHost) return;
           if (err) onStatus("error", port, err.message);
-          else onStatus("ok", port);
+          else onStatus("ok", (_a = info == null ? void 0 : info.port) != null ? _a : port);
         });
       }
     }
-    return { start, restart, getHost: () => host };
+    return { start, restart, getHost: () => host, getInstance: () => instance };
   }
 
   // src/lib/logExport.js
@@ -37792,7 +37946,7 @@ ${command}`
     error.code = "CEP_HOST_CONVERSATION_REBIND_FAILED";
     return error;
   }
-  function createHostConversation({ getHost } = {}) {
+  function createHostConversation({ getHost, getWorkContext } = {}) {
     let current = null;
     let currentApi = null;
     function bindCurrent(conversations) {
@@ -37805,7 +37959,7 @@ ${command}`
       currentApi = conversations;
       return current;
     }
-    function ensureConversation({ label, approvalTier, expertGuidance } = {}) {
+    function ensureConversation({ label, approvalTier, expertGuidance, workDir } = {}) {
       const conversations = conversationApi(getHost);
       if (!conversations) {
         if (current) throw rebindError(current.id);
@@ -37817,8 +37971,11 @@ ${command}`
       if (typeof conversations.create !== "function") return null;
       current = null;
       currentApi = conversations;
+      const supplied = getWorkContext == null ? void 0 : getWorkContext();
+      const workContext = workDir === void 0 ? supplied : { ...supplied, workDir };
       current = conversations.create({
         label,
+        ...workContext ? { workDir: workContext.workDir, instanceId: workContext.instanceId } : {},
         policy: {
           approvalTier,
           expertGuidance: expertGuidance !== false
@@ -38035,6 +38192,8 @@ ${command}`
     const cancelTimeout = clearTimeoutImpl || deps.clearTimeout || clearTimeout;
     const listeners = /* @__PURE__ */ new Set();
     let index = emptyIndex();
+    let persistedIndex = emptyIndex();
+    let indexRetryCount = 0;
     let activeId = null;
     let activeMeta = null;
     let latestEntries = [];
@@ -38086,18 +38245,49 @@ ${command}`
     }
     function saveIndex() {
       try {
-        store.saveIndex({
+        const next = {
           ...index,
           sessions: index.sessions.map((meta) => {
             const value = clone4(meta);
             delete value.touched;
             return value;
           })
-        });
+        };
+        if (typeof store.mutateIndex === "function") {
+          const previous = new Map(persistedIndex.sessions.map((meta) => [meta.id, meta]));
+          const proposed = new Map(next.sessions.map((meta) => [meta.id, meta]));
+          index = validIndex(store.mutateIndex((latest) => {
+            const merged = new Map(latest.sessions.map((meta) => [meta.id, meta]));
+            for (const id of previous.keys()) if (!proposed.has(id)) merged.delete(id);
+            for (const [id, value] of proposed) {
+              const before = previous.get(id);
+              if (before && !merged.has(id)) continue;
+              const patch = {};
+              for (const key of Object.keys(value)) {
+                if (!before || JSON.stringify(before[key]) !== JSON.stringify(value[key])) patch[key] = value[key];
+              }
+              if (Object.keys(patch).length) merged.set(id, { ...merged.get(id), ...patch });
+            }
+            return {
+              ...latest,
+              sessions: [...merged.values()],
+              activeId: next.activeId !== persistedIndex.activeId ? next.activeId : latest.activeId
+            };
+          }));
+          if (activeMeta) {
+            const saved = index.sessions.find((meta) => meta.id === activeMeta.id);
+            if (saved) activeMeta = { ...clone4(saved), touched: activeMeta.touched };
+          }
+        } else store.saveIndex(next);
+        persistedIndex = clone4(index);
+        indexRetryCount = 0;
         dirty = false;
       } catch (error) {
         dirty = true;
         report("Session index save failed", error);
+        if (error.code === "SESSION_STORE_BUSY" && indexRetryCount++ < 3) {
+          scheduleTimeout(saveIndex, 100);
+        }
       }
     }
     function materialized() {
@@ -38117,6 +38307,7 @@ ${command}`
     }
     function persistActive() {
       if (!activeMeta || !activeId) return false;
+      if (!activeMeta.workDir && deps.currentWorkDir) activeMeta.workDir = deps.currentWorkDir() || null;
       const currentRef = backendRef(
         typeof deps.getBackendRef === "function" ? deps.getBackendRef() : null
       );
@@ -38173,6 +38364,7 @@ ${command}`
         backend: deps.currentBackend(),
         channel: deps.currentChannel(),
         model: deps.currentModel() || null,
+        ...deps.defaultWorkDir ? { workDir: deps.defaultWorkDir() || null } : {},
         backendRef: null,
         archived: false,
         entryCount: 0,
@@ -38198,7 +38390,7 @@ ${command}`
       saveIndex();
       if (typeof deps.setEntries === "function") deps.setEntries([]);
       if (typeof deps.rotateHostConversation === "function") {
-        await Promise.resolve(deps.rotateHostConversation(activeId));
+        await Promise.resolve(deps.rotateHostConversation(activeId, { workDir: activeMeta.workDir }));
       }
       publish();
       return activeId;
@@ -38212,6 +38404,7 @@ ${command}`
         report("Session index load failed", error);
         index = emptyIndex();
       }
+      persistedIndex = clone4(index);
       const meta = index.sessions.find((candidate) => candidate.id === index.activeId);
       if (!meta || meta.archived || meta.backend !== deps.currentBackend()) {
         activeId = null;
@@ -38233,7 +38426,7 @@ ${command}`
         await Promise.resolve(deps.adoptBackendRef(activeMeta.backend, backendRef(activeMeta.backendRef)));
       }
       if (typeof deps.rotateHostConversation === "function") {
-        await Promise.resolve(deps.rotateHostConversation(activeId));
+        await Promise.resolve(deps.rotateHostConversation(activeId, { workDir: activeMeta.workDir }));
       }
       publish();
       return snapshot();
@@ -38261,7 +38454,7 @@ ${command}`
         await Promise.resolve(deps.adoptBackendRef(target.backend, backendRef(target.backendRef)));
       }
       if (typeof deps.rotateHostConversation === "function") {
-        await Promise.resolve(deps.rotateHostConversation(target.id));
+        await Promise.resolve(deps.rotateHostConversation(target.id, { workDir: target.workDir }));
       }
       activeId = target.id;
       activeMeta = { ...clone4(target), touched: true };
@@ -38454,6 +38647,8 @@ ${command}`
     }
     const sessionsRoot = adapter.paths.join([adapter.paths.configRoot, "sessions"]);
     const indexFile = adapter.paths.join([sessionsRoot, "index.json"]);
+    const lockFile = indexFile + ".lock";
+    const writerId = Math.random().toString(36).slice(2);
     let nonce = 0;
     function report(message, error) {
       if (typeof log !== "function") return;
@@ -38476,7 +38671,7 @@ ${command}`
       }
     }
     function writeAtomic2(file, value) {
-      const temp = `${file}.${Date.now()}-${nonce += 1}.tmp`;
+      const temp = `${file}.${writerId}-${Date.now()}-${nonce += 1}.tmp`;
       try {
         fs.mkdirSync(sessionsRoot, { recursive: true });
         fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}
@@ -38523,6 +38718,25 @@ ${command}`
       writeAtomic2(indexFile, value);
       return clone5(value);
     }
+    function mutateIndex(update) {
+      fs.mkdirSync(sessionsRoot, { recursive: true });
+      try {
+        fs.writeFileSync(lockFile, writerId, { flag: "wx", mode: 384 });
+      } catch (error) {
+        if (error.code === "EEXIST") {
+          const busy = new Error("Another panel is updating the session index");
+          busy.code = "SESSION_STORE_BUSY";
+          throw busy;
+        }
+        throw sessionStoreError(error);
+      }
+      try {
+        const latest = loadIndex();
+        return saveIndex(update(latest) || latest);
+      } finally {
+        fs.unlinkSync(lockFile);
+      }
+    }
     function loadTranscript(id) {
       let value;
       try {
@@ -38565,6 +38779,7 @@ ${command}`
     return {
       loadIndex,
       saveIndex,
+      mutateIndex,
       loadTranscript,
       saveTranscript,
       deleteTranscript
@@ -38717,6 +38932,7 @@ ${command}`
     return containsExactSecret(models, ["aemcp-secret://", ...values]);
   }
   function Shell({ cs: cs2 }) {
+    var _a;
     const { lang, setLang } = useLang();
     const langRef = import_react49.default.useRef(lang);
     langRef.current = lang;
@@ -38726,6 +38942,8 @@ ${command}`
       () => readPref("ae_mcp_clipboard_attachments", "1") !== "0"
     );
     const [status, setStatus] = import_react49.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [workDir, setWorkDir] = import_react49.default.useState("");
+    const [workDirError, setWorkDirError] = import_react49.default.useState("");
     const statusRef = import_react49.default.useRef(status);
     statusRef.current = status;
     const [paused, setPaused] = import_react49.default.useState(false);
@@ -38734,11 +38952,17 @@ ${command}`
     const panelLogRef = import_react49.default.useRef(null);
     const ctrl = import_react49.default.useRef(null);
     const getHost = import_react49.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const hostConversation = import_react49.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
+    const hostConversation = import_react49.default.useMemo(() => createHostConversation({
+      getHost,
+      getWorkContext: () => {
+        var _a2, _b;
+        return (_b = (_a2 = getHost()) == null ? void 0 : _a2.getInstanceInfo) == null ? void 0 : _b.call(_a2);
+      }
+    }), [getHost]);
     const hostApprovalBridge = import_react49.default.useMemo(() => createHostApprovalBridge(), []);
     const [hostConversationError, setHostConversationError] = import_react49.default.useState("");
     const runHostConversationSync = import_react49.default.useCallback((operation) => {
-      var _a;
+      var _a2;
       try {
         const value = operation();
         setHostConversationError("");
@@ -38746,7 +38970,7 @@ ${command}`
       } catch (error) {
         const message = (error == null ? void 0 : error.message) || String(error);
         setHostConversationError(message);
-        (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, `Host conversation sync failed: ${message}`);
+        (_a2 = panelLogRef.current) == null ? void 0 : _a2.call(panelLogRef, `Host conversation sync failed: ${message}`);
         return null;
       }
     }, []);
@@ -38763,11 +38987,21 @@ ${command}`
     const [confirmChatNavigation, setConfirmChatNavigation] = import_react49.default.useState(null);
     const [tokenEpoch, setTokenEpoch] = import_react49.default.useState(0);
     const platform = import_react49.default.useMemo(() => createPlatformAdapter(), []);
+    const getWorkContext = import_react49.default.useCallback(() => {
+      var _a2, _b;
+      const hostInfo = (_b = (_a2 = getHost()) == null ? void 0 : _a2.getInstanceInfo) == null ? void 0 : _b.call(_a2);
+      const conversation = hostConversation.currentConversation();
+      const info = (conversation == null ? void 0 : conversation.workDir) ? { ...hostInfo, workDir: conversation.workDir, instanceId: conversation.instanceId || (hostInfo == null ? void 0 : hostInfo.instanceId) } : hostInfo;
+      if (!(info == null ? void 0 : info.workDir) || !platform.paths.isAbsolute(info.workDir) || info.role === "worker") {
+        throw new Error("Choose an explicit work directory in Settings before starting a chat");
+      }
+      return info;
+    }, [getHost, hostConversation, platform]);
     const sessionStore = import_react49.default.useMemo(() => createSessionStore({
       platform,
       log: (message) => {
-        var _a;
-        return (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, message);
+        var _a2;
+        return (_a2 = panelLogRef.current) == null ? void 0 : _a2.call(panelLogRef, message);
       }
     }), [platform]);
     const attachmentStore = import_react49.default.useMemo(() => createAttachmentStore({
@@ -38886,10 +39120,10 @@ ${command}`
     const [openCodeProbeAttempt, setOpenCodeProbeAttempt] = import_react49.default.useState(0);
     const openCodeProbeRunRef = import_react49.default.useRef(0);
     const openCodeAvailableProviders = import_react49.default.useMemo(() => {
-      var _a;
+      var _a2;
       const merged = new Map(providers.map((p) => [p.id, p]));
       for (const p of (openCodeProbe == null ? void 0 : openCodeProbe.providers) || []) {
-        merged.set(p.id, { ...p, modelIds: [.../* @__PURE__ */ new Set([...((_a = merged.get(p.id)) == null ? void 0 : _a.modelIds) || [], ...p.modelIds])] });
+        merged.set(p.id, { ...p, modelIds: [.../* @__PURE__ */ new Set([...((_a2 = merged.get(p.id)) == null ? void 0 : _a2.modelIds) || [], ...p.modelIds])] });
       }
       return [...merged.values()];
     }, [openCodeProbe, providers]);
@@ -38966,12 +39200,12 @@ ${command}`
           adapter: platform
         }),
         onUpsert: async (event, draft) => {
-          var _a;
+          var _a2;
           const formElement = event.currentTarget;
           const form = new FormData(event.currentTarget);
           const apiKey = String(form.get("modelAuthSecret") || "");
           form.delete("modelAuthSecret");
-          (_a = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a.call(formElement);
+          (_a2 = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a2.call(formElement);
           try {
             if (String(draft.baseUrl || "").startsWith("http:") && draft.allowInsecureHttp === true) {
               if (!window.confirm(`Allow provider requests over insecure HTTP?
@@ -39110,15 +39344,15 @@ ${draft.baseUrl}`)) return;
       addAttachment({ pondId: item.pondId, file: item.file });
     }, [addAttachment]);
     const commitChatEntries = import_react49.default.useCallback((updater, event) => {
-      var _a;
+      var _a2;
       const current = chatEntriesRef.current;
       const next = typeof updater === "function" ? updater(current) : updater;
       chatEntriesRef.current = Array.isArray(next) ? next : current;
       setChatEntries(chatEntriesRef.current);
-      (_a = sessionControllerRef.current) == null ? void 0 : _a.recordEntries(chatEntriesRef.current, event);
+      (_a2 = sessionControllerRef.current) == null ? void 0 : _a2.recordEntries(chatEntriesRef.current, event);
     }, []);
     const handleChatEvent = import_react49.default.useCallback((evt) => {
-      var _a;
+      var _a2;
       const pending = pendingTurnRef.current;
       setTurnStage((current) => reduceTurnStage(current, evt, {
         pendingTurnId: pending == null ? void 0 : pending.turnId
@@ -39142,7 +39376,7 @@ ${draft.baseUrl}`)) return;
         }));
       }
       if (evt.type === "session-ref") {
-        (_a = sessionControllerRef.current) == null ? void 0 : _a.recordBackendRef(evt.ref);
+        (_a2 = sessionControllerRef.current) == null ? void 0 : _a2.recordBackendRef(evt.ref);
         return;
       }
       if (evt.type === "error") {
@@ -39230,6 +39464,7 @@ ${draft.baseUrl}`)) return;
     const claudeBackend = import_react49.default.useMemo(() => createClaudeAgentBackend({
       platform,
       getMcpSpec: getMcpSpec2,
+      getWorkContext,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -39240,6 +39475,7 @@ ${draft.baseUrl}`)) return;
       onEvent: handleChatEvent
     }), [
       getMcpSpec2,
+      getWorkContext,
       mcp,
       handleChatEvent,
       platform
@@ -39247,6 +39483,7 @@ ${draft.baseUrl}`)) return;
     const codexBackend = import_react49.default.useMemo(() => createCodexBackend({
       platform,
       getMcpSpec: getMcpSpec2,
+      getWorkContext,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
@@ -39256,10 +39493,11 @@ ${draft.baseUrl}`)) return;
       getLang: () => langRef.current,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
+    }), [extRoot, getMcpSpec2, getWorkContext, mcp, handleChatEvent, platform]);
     const openCodeBackend = import_react49.default.useMemo(() => createOpenCodeBackend({
       platform,
       getMcpSpec: getMcpSpec2,
+      getWorkContext,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
@@ -39268,7 +39506,7 @@ ${draft.baseUrl}`)) return;
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       getLang: () => langRef.current,
       onEvent: handleChatEvent
-    }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
+    }), [extRoot, getMcpSpec2, getWorkContext, mcp, handleChatEvent, platform]);
     runtimeRef.current = {
       model: effectiveModel,
       permissionMode,
@@ -39303,31 +39541,32 @@ ${draft.baseUrl}`)) return;
       uuid: randomProviderCredentialId,
       deps: {
         stopActiveTurn: () => {
-          var _a, _b;
-          return (_b = (_a = activeBackendInstanceRef.current) == null ? void 0 : _a.stop) == null ? void 0 : _b.call(_a);
+          var _a2, _b;
+          return (_b = (_a2 = activeBackendInstanceRef.current) == null ? void 0 : _a2.stop) == null ? void 0 : _b.call(_a2);
         },
         resetActiveBackend: () => {
-          var _a, _b;
-          return (_b = (_a = activeBackendInstanceRef.current) == null ? void 0 : _a.reset) == null ? void 0 : _b.call(_a);
+          var _a2, _b;
+          return (_b = (_a2 = activeBackendInstanceRef.current) == null ? void 0 : _a2.reset) == null ? void 0 : _b.call(_a2);
         },
         cancelPendingUi: () => elicitationCoordinator.cancelAll(),
-        rotateHostConversation: (sessionId) => {
+        rotateHostConversation: (sessionId, context = {}) => {
           resetAttachmentDraftSession(sessionId);
           hostConversation.closeConversation();
           if (statusRef.current.state === "ok") {
             hostConversation.ensureConversation({
               label: sessionId,
-              approvalTier: permissionModeRef.current
+              approvalTier: permissionModeRef.current,
+              workDir: context.workDir || void 0
             });
           }
         },
         adoptBackendRef: (backend, ref) => {
-          var _a, _b;
-          (_b = (_a = backendInstancesRef.current[backend]) == null ? void 0 : _a.adoptSessionRef) == null ? void 0 : _b.call(_a, ref);
+          var _a2, _b;
+          (_b = (_a2 = backendInstancesRef.current[backend]) == null ? void 0 : _a2.adoptSessionRef) == null ? void 0 : _b.call(_a2, ref);
         },
         getBackendRef: () => {
-          var _a, _b;
-          return ((_b = (_a = activeBackendInstanceRef.current) == null ? void 0 : _a.getSessionRef) == null ? void 0 : _b.call(_a)) || null;
+          var _a2, _b;
+          return ((_b = (_a2 = activeBackendInstanceRef.current) == null ? void 0 : _a2.getSessionRef) == null ? void 0 : _b.call(_a2)) || null;
         },
         setEntries: (entries) => {
           chatEntriesRef.current = entries;
@@ -39346,11 +39585,19 @@ ${draft.baseUrl}`)) return;
           });
         },
         currentBackend: () => effectiveBackendRef.current,
+        defaultWorkDir: () => {
+          var _a2, _b;
+          return (_b = (_a2 = getHost()) == null ? void 0 : _a2.getInstanceInfo) == null ? void 0 : _b.call(_a2).workDir;
+        },
+        currentWorkDir: () => {
+          var _a2, _b, _c;
+          return ((_a2 = hostConversation.currentConversation()) == null ? void 0 : _a2.workDir) || ((_c = (_b = getHost()) == null ? void 0 : _b.getInstanceInfo) == null ? void 0 : _c.call(_b).workDir);
+        },
         currentModel: () => runtimeRef.current.model,
         currentChannel: () => effectiveChannelRef.current,
         log: (message) => {
-          var _a;
-          return (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, message);
+          var _a2;
+          return (_a2 = panelLogRef.current) == null ? void 0 : _a2.call(panelLogRef, message);
         }
       }
     }), [
@@ -39366,8 +39613,8 @@ ${draft.baseUrl}`)) return;
       if (status.state !== "ok" || effective.backend === "none" || sessionBootStartedRef.current) return;
       sessionBootStartedRef.current = true;
       sessionController.boot().catch((error) => {
-        var _a;
-        return (_a = panelLogRef.current) == null ? void 0 : _a.call(
+        var _a2;
+        return (_a2 = panelLogRef.current) == null ? void 0 : _a2.call(
           panelLogRef,
           "Session restore failed: " + ((error == null ? void 0 : error.message) || String(error))
         );
@@ -39508,7 +39755,7 @@ ${draft.baseUrl}`)) return;
         codexBackend.reset();
         runCodexProbe();
       }).catch((error) => {
-        var _a;
+        var _a2;
         if (codexLoginRef.current !== login) return;
         codexLoginRef.current = null;
         setLoginState({
@@ -39516,7 +39763,7 @@ ${draft.baseUrl}`)) return;
           status: "fallback",
           detail: langRef.current === "en" ? "Automatic sign-in stopped safely. Retry or use the copy-command fallback below." : "\u81EA\u52A8\u767B\u5F55\u5DF2\u5B89\u5168\u505C\u6B62\u3002\u8BF7\u91CD\u8BD5\uFF0C\u6216\u4F7F\u7528\u4E0B\u65B9\u7684\u590D\u5236\u547D\u4EE4\u5907\u7528\u64CD\u4F5C\u3002"
         });
-        (_a = panelLogRef.current) == null ? void 0 : _a.call(panelLogRef, `Codex login failed: ${(error == null ? void 0 : error.message) || String(error)}`);
+        (_a2 = panelLogRef.current) == null ? void 0 : _a2.call(panelLogRef, `Codex login failed: ${(error == null ? void 0 : error.message) || String(error)}`);
       });
     }, [codexBackend, codexProbe == null ? void 0 : codexProbe.codexHome, platform, runCodexProbe]);
     import_react49.default.useEffect(() => {
@@ -39641,8 +39888,9 @@ ${draft.baseUrl}`)) return;
       sessionController
     ]);
     import_react49.default.useEffect(() => {
+      var _a2;
       if (backendPref !== "opencode") return void 0;
-      if (status.state !== "ok" || providerInit.state !== "ready") return void 0;
+      if (status.state !== "ok" || providerInit.state !== "ready" || !workDir && !((_a2 = hostConversation.currentConversation()) == null ? void 0 : _a2.workDir)) return void 0;
       let alive = true;
       let disposeProbe;
       Promise.resolve(backendResetPromiseRef.current).then(() => {
@@ -39654,9 +39902,9 @@ ${draft.baseUrl}`)) return;
         alive = false;
         disposeProbe == null ? void 0 : disposeProbe();
       };
-    }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
+    }, [backendPref, status.state, providerInit.state, workDir, sessionSnapshot.activeId, hostConversation, runOpenCodeProbe]);
     const sendChat = (input) => {
-      var _a;
+      var _a2;
       if (pendingTurnRef.current || catalogEmpty) return;
       let turn;
       try {
@@ -39690,7 +39938,7 @@ ${draft.baseUrl}`)) return;
           type: "error",
           kind: "backend",
           code: "BACKEND_UNAVAILABLE",
-          message: ((_a = effective.fixHint) == null ? void 0 : _a.en) || "Configure an available chat backend first.",
+          message: ((_a2 = effective.fixHint) == null ? void 0 : _a2.en) || "Configure an available chat backend first.",
           turnId: turn.turnId,
           dispatchState: "not-started"
         });
@@ -39700,8 +39948,8 @@ ${draft.baseUrl}`)) return;
         setTurnStage("connect");
         const result = activeBackend.sendUser(turn);
         Promise.resolve(result).catch((error) => {
-          var _a2;
-          if (((_a2 = pendingTurnRef.current) == null ? void 0 : _a2.turnId) !== turn.turnId) return;
+          var _a3;
+          if (((_a3 = pendingTurnRef.current) == null ? void 0 : _a3.turnId) !== turn.turnId) return;
           handleChatEvent({
             type: "error",
             kind: (error == null ? void 0 : error.kind) || "backend",
@@ -39786,20 +40034,20 @@ ${draft.baseUrl}`)) return;
       else await switchChatSessionNow(request.id);
     }, [activeBackend, chatStreaming, confirmChatNavigation, newChatSession, switchChatSessionNow]);
     const deleteChatSession = import_react49.default.useCallback(async (id) => {
-      var _a;
+      var _a2;
       const target = sessionController.snapshot().sessions.find((meta) => meta.id === id);
       try {
         const ref = await sessionController.remove(id);
         if (!target || !ref) return;
         const backend = backendInstancesRef.current[target.backend];
-        const result = await ((_a = backend == null ? void 0 : backend.deleteSessionRef) == null ? void 0 : _a.call(backend, ref));
+        const result = await ((_a2 = backend == null ? void 0 : backend.deleteSessionRef) == null ? void 0 : _a2.call(backend, ref));
         pushLog(`Session backend delete (${target.backend}): ${JSON.stringify(result || { ok: false })}`);
       } catch (error) {
         pushLog("Session delete failed: " + ((error == null ? void 0 : error.message) || String(error)));
       }
     }, [pushLog, sessionController]);
     const exportLogs = import_react49.default.useCallback(async () => {
-      var _a;
+      var _a2;
       try {
         const exactSecrets = [];
         const attachmentSecrets = attachmentPathSecrets({
@@ -39832,7 +40080,7 @@ ${draft.baseUrl}`)) return;
         const hostLog = host && host.hostLog;
         const hostLogStats = hostLog && typeof hostLog.stats === "function" ? safeValue(() => hostLog.stats(), {}) || {} : {};
         const logsDir = hostLogStats.dir || platform.paths.logsRoot;
-        const processApi = ((_a = window.cep_node) == null ? void 0 : _a.process) || globalThis.process || {};
+        const processApi = ((_a2 = window.cep_node) == null ? void 0 : _a2.process) || globalThis.process || {};
         let aeApp = {};
         try {
           const env = cs2.getHostEnvironment ? cs2.getHostEnvironment() || {} : {};
@@ -39921,8 +40169,10 @@ ${draft.baseUrl}`)) return;
         platform,
         extensionRoot: extRoot,
         onStatus: (state, p, error) => {
+          var _a2, _b, _c;
           setStatus({ state, port: p, error: error || null });
           if (state === "ok") {
+            setWorkDir(((_c = (_b = (_a2 = ctrl.current) == null ? void 0 : _a2.getHost()) == null ? void 0 : _b.getInstanceInfo) == null ? void 0 : _c.call(_b).workDir) || "");
             savePort(window.localStorage, p);
             pushLog("Host ready on 127.0.0.1:" + p);
           }
@@ -40050,7 +40300,8 @@ ${draft.baseUrl}`)) return;
       { id: "settings", icon: "settings", label: t.settings }
     ];
     const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
-    const composerDisabled = paused || effective.backend === "none" || Boolean(hostConversationError) || catalogEmpty;
+    const chatWorkDir = ((_a = hostConversation.currentConversation()) == null ? void 0 : _a.workDir) || workDir;
+    const composerDisabled = !chatWorkDir || status.state !== "ok" || paused || effective.backend === "none" || Boolean(hostConversationError) || catalogEmpty;
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
     const activeSessionMeta = sessionSnapshot.sessions.find(
       (meta) => meta.id === sessionSnapshot.activeId
@@ -40100,7 +40351,7 @@ ${draft.baseUrl}`)) return;
             sessionTitle,
             onOpenSessions: () => setSessionsOpen(true),
             composerDisabled,
-            disabledHint: hostConversationError ? t.approvalSyncError : paused ? t.pausedHint : catalogEmpty ? modelNotice : composerDisabled ? backendDisabledHint : fallbackNotice,
+            disabledHint: !chatWorkDir ? lang === "zh" ? "\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\u3002" : "Choose a work directory in Settings first." : hostConversationError ? t.approvalSyncError : paused ? t.pausedHint : catalogEmpty ? modelNotice : composerDisabled ? backendDisabledHint : fallbackNotice,
             noticeActionLabel: paused ? t.resume : t.goSettings,
             onNoticeAction: () => paused ? togglePause() : setTab("settings"),
             onSend: sendChat,
@@ -40166,6 +40417,24 @@ ${draft.baseUrl}`)) return;
             },
             port: status.port,
             onApplyPort: applyPort,
+            workDir,
+            workDirError,
+            onApplyWorkDir: (value) => {
+              try {
+                const directory = String(value || "").trim();
+                if (chatStreaming) throw new Error(lang === "zh" ? "\u8BF7\u5148\u7ED3\u675F\u5F53\u524D\u4EFB\u52A1\u3002" : "Finish the current task first.");
+                if (!platform.paths.isAbsolute(directory) || !platform.fs.statSync(directory).isDirectory()) {
+                  throw new Error(lang === "zh" ? "\u8BF7\u8F93\u5165\u5DF2\u5B58\u5728\u7684\u7EDD\u5BF9\u76EE\u5F55\u3002" : "Enter an existing absolute directory.");
+                }
+                getHost().configureInstance({ workDir: directory });
+                if (!workDir) hostConversation.closeConversation();
+                setWorkDir(directory);
+                setWorkDirError("");
+                setHostConversationError("");
+              } catch (error) {
+                setWorkDirError(error.message || String(error));
+              }
+            },
             mcpConfig: mcpConfigStr,
             mcpReady: externalMcpReady,
             logs,
@@ -40342,6 +40611,14 @@ ${draft.baseUrl}`)) return;
     ] });
   }
   function App({ cs: cs2 }) {
+    const readWorker = import_react49.default.useMemo(() => {
+      try {
+        return createPlatformAdapter().completeSpawnEnv().AE_MCP_INSTANCE_ROLE === "worker";
+      } catch {
+        return false;
+      }
+    }, []);
+    if (readWorker) return null;
     return /* @__PURE__ */ (0, import_jsx_runtime45.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime45.jsx)(Shell, { cs: cs2 }) });
   }
 

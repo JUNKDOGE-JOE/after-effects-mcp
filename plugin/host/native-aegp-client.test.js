@@ -577,6 +577,30 @@ test('client factory accepts windows x64 and still rejects unsupported runtimes'
     }), /supports macOS arm64 and Windows x64 only/u);
 });
 
+test('native discovery only connects to the verified AE host when several instances exist', async () => {
+    const opened = [];
+    const client = createNativeAegpClient({
+        runtime: { platform: 'win32', arch: 'x64' }, expectedHostPid: 4242,
+        discoverEndpoints: () => [{ pid: 8000, socketPath: 'other-ae' }, { pid: 4242, socketPath: 'owner-ae' }],
+        netImpl: { createConnection: ({ path: socketPath }) => { opened.push(socketPath); throw new Error('probe complete'); } },
+    });
+    await assert.rejects(client.connect(), { code: 'NATIVE_UNAVAILABLE' });
+    assert.deepEqual(opened, ['owner-ae']);
+    client.close();
+});
+
+test('native calls with an unknown or absent owner PID never select an unrelated sole endpoint', async () => {
+    for (const expectedHostPid of [null, 9999]) {
+        const client = createNativeAegpClient({
+            runtime: { platform: 'win32', arch: 'x64' }, expectedHostPid,
+            discoverEndpoints: () => [{ pid: 4242, socketPath: 'other-ae' }],
+            netImpl: { createConnection: () => { assert.fail('unrelated AE must not be opened'); } },
+        });
+        await assert.rejects(client.connect(), { code: 'NATIVE_UNAVAILABLE' });
+        client.close();
+    }
+});
+
 test('invoke validation accepts every generated primitive id including camelCase ops', () => {
     // Regression for the OP_PATTERN lowercase-segment bug that rejected
     // composition.selectedLayers.list, composition.frameRate.set,

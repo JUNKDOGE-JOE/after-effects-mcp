@@ -206,6 +206,8 @@ function Shell({ cs }) {
     () => readPref('ae_mcp_clipboard_attachments', '1') !== '0',
   );
   const [status, setStatus] = React.useState({ state: 'starting', port: DEFAULT_PORT, error: null });
+  const [workDir, setWorkDir] = React.useState('');
+  const [workDirError, setWorkDirError] = React.useState('');
   const statusRef = React.useRef(status);
   statusRef.current = status;
   const [paused, setPaused] = React.useState(false);
@@ -214,7 +216,9 @@ function Shell({ cs }) {
   const panelLogRef = React.useRef(null);
   const ctrl = React.useRef(null);
   const getHost = React.useCallback(() => (ctrl.current ? ctrl.current.getHost() : null), []);
-  const hostConversation = React.useMemo(() => createHostConversation({ getHost }), [getHost]);
+  const hostConversation = React.useMemo(() => createHostConversation({
+    getHost, getWorkContext: () => getHost()?.getInstanceInfo?.(),
+  }), [getHost]);
   const hostApprovalBridge = React.useMemo(() => createHostApprovalBridge(), []);
   const [hostConversationError, setHostConversationError] = React.useState('');
   const runHostConversationSync = React.useCallback((operation) => {
@@ -253,6 +257,17 @@ function Shell({ cs }) {
   // Embedded chat: provider references, model/permission prefs, entry feed.
   // Resolved provider values exist only inside a request/probe/spawn call.
   const platform = React.useMemo(() => createPlatformAdapter(), []);
+  const getWorkContext = React.useCallback(() => {
+    const hostInfo = getHost()?.getInstanceInfo?.();
+    const conversation = hostConversation.currentConversation();
+    const info = conversation?.workDir
+      ? { ...hostInfo, workDir: conversation.workDir, instanceId: conversation.instanceId || hostInfo?.instanceId }
+      : hostInfo;
+    if (!info?.workDir || !platform.paths.isAbsolute(info.workDir) || info.role === 'worker') {
+      throw new Error('Choose an explicit work directory in Settings before starting a chat');
+    }
+    return info;
+  }, [getHost, hostConversation, platform]);
   const sessionStore = React.useMemo(() => createSessionStore({
     platform,
     log: (message) => panelLogRef.current?.(message),
@@ -720,6 +735,7 @@ function Shell({ cs }) {
   const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
     platform,
     getMcpSpec,
+    getWorkContext,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -730,6 +746,7 @@ function Shell({ cs }) {
     onEvent: handleChatEvent,
   }), [
     getMcpSpec,
+    getWorkContext,
     mcp,
     handleChatEvent,
     platform,
@@ -738,6 +755,7 @@ function Shell({ cs }) {
   const codexBackend = React.useMemo(() => createCodexBackend({
     platform,
     getMcpSpec,
+    getWorkContext,
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getEffort: () => runtimeRef.current.effort,
@@ -747,11 +765,12 @@ function Shell({ cs }) {
     getLang: () => langRef.current,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
-  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
+  }), [extRoot, getMcpSpec, getWorkContext, mcp, handleChatEvent, platform]);
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
     platform,
     getMcpSpec,
+    getWorkContext,
     getModel: () => runtimeRef.current.model,
     getPermissionMode: () => runtimeRef.current.permissionMode,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
@@ -760,7 +779,7 @@ function Shell({ cs }) {
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     getLang: () => langRef.current,
     onEvent: handleChatEvent,
-  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
+  }), [extRoot, getMcpSpec, getWorkContext, mcp, handleChatEvent, platform]);
 
   runtimeRef.current = {
     model: effectiveModel,
@@ -799,13 +818,14 @@ function Shell({ cs }) {
       stopActiveTurn: () => activeBackendInstanceRef.current?.stop?.(),
       resetActiveBackend: () => activeBackendInstanceRef.current?.reset?.(),
       cancelPendingUi: () => elicitationCoordinator.cancelAll(),
-      rotateHostConversation: (sessionId) => {
+      rotateHostConversation: (sessionId, context = {}) => {
         resetAttachmentDraftSession(sessionId);
         hostConversation.closeConversation();
         if (statusRef.current.state === 'ok') {
           hostConversation.ensureConversation({
             label: sessionId,
             approvalTier: permissionModeRef.current,
+            workDir: context.workDir || undefined,
           });
         }
       },
@@ -830,6 +850,8 @@ function Shell({ cs }) {
         });
       },
       currentBackend: () => effectiveBackendRef.current,
+      defaultWorkDir: () => getHost()?.getInstanceInfo?.().workDir,
+      currentWorkDir: () => hostConversation.currentConversation()?.workDir || getHost()?.getInstanceInfo?.().workDir,
       currentModel: () => runtimeRef.current.model,
       currentChannel: () => effectiveChannelRef.current,
       log: (message) => panelLogRef.current?.(message),
@@ -1140,7 +1162,8 @@ function Shell({ cs }) {
 
   React.useEffect(() => {
     if (backendPref !== 'opencode') return undefined;
-    if (status.state !== 'ok' || providerInit.state !== 'ready') return undefined;
+    if (status.state !== 'ok' || providerInit.state !== 'ready'
+        || (!workDir && !hostConversation.currentConversation()?.workDir)) return undefined;
     let alive = true;
     let disposeProbe;
     // Session creation also resets the backend asynchronously. Probe only
@@ -1154,7 +1177,7 @@ function Shell({ cs }) {
       alive = false;
       disposeProbe?.();
     };
-  }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
+  }, [backendPref, status.state, providerInit.state, workDir, sessionSnapshot.activeId, hostConversation, runOpenCodeProbe]);
 
   const sendChat = (input) => {
     if (pendingTurnRef.current || catalogEmpty) return;
@@ -1436,6 +1459,7 @@ function Shell({ cs }) {
       onStatus: (state, p, error) => {
         setStatus({ state, port: p, error: error || null });
         if (state === 'ok') {
+          setWorkDir(ctrl.current?.getHost()?.getInstanceInfo?.().workDir || '');
           savePort(window.localStorage, p);
           pushLog('Host ready on 127.0.0.1:' + p);
         }
@@ -1579,7 +1603,8 @@ function Shell({ cs }) {
     || (effective.reason && effective.reason.endsWith('-probing')
       ? (lang === 'zh' ? '正在检测凭据通道…' : 'Checking credential channels…')
       : '');
-  const composerDisabled = paused || effective.backend === 'none' || Boolean(hostConversationError) || catalogEmpty;
+  const chatWorkDir = hostConversation.currentConversation()?.workDir || workDir;
+  const composerDisabled = !chatWorkDir || status.state !== 'ok' || paused || effective.backend === 'none' || Boolean(hostConversationError) || catalogEmpty;
   const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
   const activeSessionMeta = sessionSnapshot.sessions.find(
     (meta) => meta.id === sessionSnapshot.activeId,
@@ -1620,7 +1645,9 @@ function Shell({ cs }) {
             sessionTitle={sessionTitle}
             onOpenSessions={() => setSessionsOpen(true)}
             composerDisabled={composerDisabled}
-            disabledHint={hostConversationError
+            disabledHint={!chatWorkDir
+              ? (lang === 'zh' ? '请先在设置中指定工作目录。' : 'Choose a work directory in Settings first.')
+              : hostConversationError
               ? t.approvalSyncError
               : paused ? t.pausedHint : catalogEmpty ? modelNotice : composerDisabled ? backendDisabledHint : fallbackNotice}
             noticeActionLabel={paused ? t.resume : t.goSettings}
@@ -1680,6 +1707,22 @@ function Shell({ cs }) {
             }}
             port={status.port}
             onApplyPort={applyPort}
+            workDir={workDir}
+            workDirError={workDirError}
+            onApplyWorkDir={(value) => {
+              try {
+                const directory = String(value || '').trim();
+                if (chatStreaming) throw new Error(lang === 'zh' ? '请先结束当前任务。' : 'Finish the current task first.');
+                if (!platform.paths.isAbsolute(directory) || !platform.fs.statSync(directory).isDirectory()) {
+                  throw new Error(lang === 'zh' ? '请输入已存在的绝对目录。' : 'Enter an existing absolute directory.');
+                }
+                getHost().configureInstance({ workDir: directory });
+                if (!workDir) hostConversation.closeConversation();
+                setWorkDir(directory);
+                setWorkDirError('');
+                setHostConversationError('');
+              } catch (error) { setWorkDirError(error.message || String(error)); }
+            }}
             mcpConfig={mcpConfigStr}
             mcpReady={externalMcpReady}
             logs={logs}
@@ -1841,5 +1884,10 @@ function Shell({ cs }) {
 }
 
 export function App({ cs }) {
+  const readWorker = React.useMemo(() => {
+    try { return createPlatformAdapter().completeSpawnEnv().AE_MCP_INSTANCE_ROLE === 'worker'; }
+    catch { return false; }
+  }, []);
+  if (readWorker) return null;
   return <LangProvider><Shell cs={cs} /></LangProvider>;
 }

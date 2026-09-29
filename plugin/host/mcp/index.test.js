@@ -100,6 +100,7 @@ test('MCP initializes, enforces loopback Origin/Host, and supports session lifec
             'ae_status', 'ae_exec', 'ae_execRecover', 'ae_previewFrame', 'ae_read', 'ae_checkpoint',
             'ae_revert', 'ae_validateExpressions', 'ae_nativeExec', 'ae_toolSearch',
             'ae_toolUse', 'ae_toolSave', 'ae_skillUse',
+            'ae_instances', 'ae_workspace', 'ae_readJob',
         ]);
         const status = await request(fixture.port, 'POST', '/mcp', headers, {
             jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'ae_status', arguments: {} },

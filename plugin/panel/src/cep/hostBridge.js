@@ -1,5 +1,4 @@
-// CEP-only module: spawns the in-process Express host (plugin/host/server.js)
-// the way the legacy client.js did. Pure helpers are exported for tests.
+// The listener belongs to this CEP context and must not survive its unload.
 import { createPlatformAdapter } from './platform/index.js';
 import { normalizeCepSystemPath } from './platform/paths.js';
 
@@ -189,6 +188,31 @@ function nativeAegpRuntime(platformId) {
     : { platform: 'win32', arch: 'x64' };
 }
 
+export function resolveHostInstance({ env = {}, readTicket, createId, extensionRoot, paths }) {
+  const ticketPath = env.AE_MCP_LAUNCH_TICKET;
+  let ticket = null;
+  if (ticketPath) {
+    ticket = readTicket(ticketPath);
+    if (ticket?.version !== 1 || ticket.instanceId !== env.AE_MCP_INSTANCE_ID
+        || !paths.same(ticket.workDir, env.AE_MCP_WORK_DIR)
+        || ticket.role !== env.AE_MCP_INSTANCE_ROLE
+        || !Number.isSafeInteger(ticket.pid) || ticket.pid <= 1) {
+      throw new Error('AE launch ticket does not match this panel environment');
+    }
+  }
+  const workDir = ticket?.workDir || env.AE_MCP_WORK_DIR || null;
+  if (workDir && !paths.isAbsolute(workDir)) throw new Error('Instance workDir must be absolute');
+  return {
+    instanceId: ticket?.instanceId || env.AE_MCP_INSTANCE_ID || createId(),
+    role: ticket?.role || env.AE_MCP_INSTANCE_ROLE || 'primary',
+    workDir,
+    aePid: ticket?.pid || null,
+    projectPath: ticket?.projectPath || null,
+    extensionRoot,
+    bootstrapStatusPath: ticket?.bootstrapStatusPath || null,
+  };
+}
+
 export function createHostController({
   cs,
   onStatus,
@@ -197,17 +221,29 @@ export function createHostController({
   requireImpl,
   addBeforeUnload,
   extensionRoot,
+  environment,
+  createInstanceId,
 }) {
   const adapter = platform || createPlatformAdapter();
   let host = null;
   let beforeUnloadInstalled = false;
   let lifecycleGeneration = 0;
+  let instance = null;
+
+  function writeBootstrapStatus(state) {
+    if (!instance?.bootstrapStatusPath) return;
+    try {
+      adapter.fs.writeFileSync(instance.bootstrapStatusPath, JSON.stringify({
+        instanceId: instance.instanceId, state,
+      }), 'utf8');
+    } catch {}
+  }
 
   function disposeLifecycle(hostInstance) {
     try { if (hostInstance && typeof hostInstance.stop === 'function') hostInstance.stop(); } catch { /* best effort */ }
   }
 
-  function start(port) {
+  async function start(port) {
     const generation = lifecycleGeneration += 1;
     onStatus('starting', port);
     const priorHost = host;
@@ -216,6 +252,21 @@ export function createHostController({
     try {
       const cepRequire = requireImpl || getCepRequire();
       const extRoot = normalizeCepPath(extensionRoot || cs.getSystemPath('extension'), adapter);
+      if (!instance) {
+        const env = environment || cepRequire('process').env || {};
+        instance = resolveHostInstance({
+          env,
+          readTicket: (file) => JSON.parse(String(adapter.fs.readFileSync(file, 'utf8'))),
+          createId: createInstanceId || (() => cepRequire('crypto').randomBytes(16).toString('hex')),
+          extensionRoot: extRoot,
+          paths: adapter.paths,
+        });
+      }
+      if (instance.role === 'worker') {
+        onStatus('disabled', null, 'Read workers do not start the panel host');
+        return;
+      }
+      writeBootstrapStatus('panel-loading');
       const hostPath = adapter.paths.join([extRoot, 'host', 'server.js']);
       onLog('host: ' + hostPath);
       const runtimeDependencies = loadBundledHostDependencies({
@@ -232,6 +283,7 @@ export function createHostController({
         nextHost.setNativeAegpRuntime(nativeAegpRuntime(adapter.id));
       }
       nextHost.setCSInterface(cs);
+      if (typeof nextHost.configureInstance === 'function') nextHost.configureInstance(instance);
       host = nextHost;
       // Release the port when this JS context goes away (panel close or a
       // devtools reload) — otherwise the orphaned listener keeps the port and
@@ -243,14 +295,26 @@ export function createHostController({
           lifecycleGeneration += 1;
           const closingHost = host;
           host = null;
+          writeBootstrapStatus('intentional-disconnect');
+          closingHost?.markIntentionalDisconnect?.('panel-closed');
           disposeLifecycle(closingHost);
         });
         beforeUnloadInstalled = true;
       }
-      nextHost.start(port, (err) => {
+      if (!instance.aePid && typeof adapter.resolveAeHostPid === 'function') {
+        instance.aePid = await adapter.resolveAeHostPid({ cepPid: adapter.pid, timeoutMs: 4000 });
+        if (generation !== lifecycleGeneration || host !== nextHost) return;
+        instance.nativeUnavailable = instance.aePid ? null : { code: 'AE_HOST_PID_UNVERIFIED',
+          message: 'The CEP process ancestry did not identify a formal After Effects host' };
+        nextHost.configureInstance?.(instance);
+      }
+      nextHost.start(port, (err, info) => {
         if (generation !== lifecycleGeneration || host !== nextHost) return;
         if (err) onStatus('error', port, err.message);
-        else onStatus('ok', port);
+        else {
+          writeBootstrapStatus('host-started');
+          onStatus('ok', info?.port ?? port);
+        }
       });
     } catch (e) {
       const failedHost = host;
@@ -264,12 +328,12 @@ export function createHostController({
       const generation = lifecycleGeneration;
       const restartingHost = host;
       onStatus('starting', port);
-      restartingHost.restart(port, (err) => {
+      restartingHost.restart(port, (err, info) => {
         if (generation !== lifecycleGeneration || host !== restartingHost) return;
         if (err) onStatus('error', port, err.message);
-        else onStatus('ok', port);
+        else onStatus('ok', info?.port ?? port);
       });
     }
   }
-  return { start, restart, getHost: () => host };
+  return { start, restart, getHost: () => host, getInstance: () => instance };
 }

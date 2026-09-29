@@ -247,7 +247,7 @@ test('retry restores checkpoint, restores viewer, checkpoints again, then runs e
         assert.equal(f.toolLibrary.getArtifact(retried.artifactId).source.provenance.tool, 'ae_execRecover');
         assert.equal(approvals, 1);
         assert.deepEqual(f.calls, [
-            'resolve', 'close', 'open', 'viewer', 'resolve', 'checkpoint', 'user:fixed',
+            'resolve', 'resolve', 'close', 'open', 'viewer', 'resolve', 'checkpoint', 'user:fixed',
         ]);
         const meta = f.recoveryStore.readMeta(entry);
         assert.equal(meta.attempts.length, 2);
@@ -280,12 +280,62 @@ test('continue skips restore and inline code replaces the recovery script', asyn
         }, context(null), f.deps));
         assert.equal(retried.restored, 'skipped');
         assert.equal(lookupHint, f.project);
-        assert.deepEqual(f.calls, ['user:inline-fixed']);
+        assert.deepEqual(f.calls, ['resolve', 'user:inline-fixed']);
         const entry = f.recoveryStore.lookup(first.recoveryId, f.project);
         assert.equal(f.recoveryStore.readScript(entry), 'inline-fixed');
     } finally {
         f.close();
     }
+});
+
+test('every recovery mode checks its source project before changing scripts or dispatching', async () => {
+    const f = fixture();
+    try {
+        f.deps.setUserHandler(async () => failed('boom', { projectPath: f.project, revision: { before: 1, after: 1 } }));
+        const first = value(await execTool.call({ code: 'original' }, context(null), f.deps));
+        const entry = f.recoveryStore.lookup(first.recoveryId, f.project);
+        const execute = f.deps.executeJsx;
+        f.deps.executeJsx = request => request.code === PROJECT_PATH_CODE
+            ? Promise.resolve(reply({ ok: true, path: path.join(f.root, 'another.aep') })) : execute(request);
+        for (const retryMode of ['restore', 'continue']) {
+            f.calls.length = 0;
+            const result = value(await execRecoverTool.call({ recoveryId: first.recoveryId, retryMode, code: 'replacement' }, context(null), f.deps));
+            assert.equal(result.code, 'RECOVERY_PROJECT_MISMATCH');
+            assert.equal(f.calls.length, 0);
+            assert.equal(f.recoveryStore.readScript(entry), 'original');
+        }
+    } finally { f.close(); }
+});
+
+test('checkpoint continuation validates before recovery side effects and never restores twice', async () => {
+    const f = fixture();
+    try {
+        f.deps.setUserHandler(async () => failed('boom', { projectPath: f.project, revision: { before: 1, after: 2 } }));
+        const first = value(await execTool.call({ code: 'broken', checkpoint_label: 'before' }, context(null), f.deps));
+        const entry = f.recoveryStore.lookup(first.recoveryId, f.project);
+        const execute = f.deps.executeJsx;
+        f.deps.executeJsx = request => /ae\.checkpoint create/.test(request.code)
+            ? Promise.resolve(reply({ ok: false, error: 'copy failed' })) : execute(request);
+        const ctx = { ...context(null), contextId: 'test-writer', workDir: f.root };
+        const args = { recoveryId: first.recoveryId, code: 'fixed' };
+        const blocked = value(await execRecoverTool.call(args, ctx, f.deps));
+        assert.equal(blocked.code, 'CHECKPOINT_FAILED');
+        const continuing = { ...ctx, checkpointContinue: { failure_id: blocked.checkpoint_failure_id, confirm: true } };
+        f.calls.length = 0;
+        const wrong = value(await execRecoverTool.call({ ...args, code: 'different' }, continuing, f.deps));
+        assert.equal(wrong.code, 'CHECKPOINT_CONFIRMATION_REQUIRED');
+        assert.equal(f.recoveryStore.readScript(entry), 'fixed');
+        assert.deepEqual(f.calls, ['resolve']);
+        f.calls.length = 0;
+        f.deps.setUserHandler(async () => success({ ok: true }));
+        const result = value(await execRecoverTool.call(args, continuing, f.deps));
+        assert.equal(result.ok, true);
+        assert.deepEqual(f.calls, ['resolve', 'user:fixed']);
+        assert.equal(result.checkpointContinuation.failure_id, blocked.checkpoint_failure_id);
+        f.calls.length = 0;
+        assert.equal(value(await execRecoverTool.call(args, continuing, f.deps)).code, 'CHECKPOINT_CONFIRMATION_REQUIRED');
+        assert.deepEqual(f.calls, ['resolve']);
+    } finally { f.close(); }
 });
 
 test('declined ae_execRecover approval preserves the stored recovery script', async () => {

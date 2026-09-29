@@ -361,6 +361,7 @@ export function createClaudeAgentBackend({
   platform,
   resolveClaude = resolveClaudeCli,
   getMcpSpec,
+  getWorkContext,
   getToolMeta,
   getModel,
   getPermissionMode,
@@ -1197,6 +1198,7 @@ export function createClaudeAgentBackend({
             stdio: 'pipe',
             windowsHide: true,
             env: spawnEnv,
+            ...(getWorkContext ? { cwd: getWorkContext().workDir } : {}),
           });
         } catch (error) {
           const failure = error instanceof Error

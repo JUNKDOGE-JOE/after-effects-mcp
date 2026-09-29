@@ -142,6 +142,10 @@ function mountMcp(app, deps) {
             return toolLibrary;
         },
         sessionCount: function () { return sessions.size; },
+        instances: deps.instances,
+        workspace: deps.workspace,
+        routeTool: deps.routeTool,
+        getReadJobs: deps.getReadJobs,
         recordMcpActivity: deps.recordMcpActivity,
         updateActivity: deps.updateActivity,
     });
@@ -353,7 +357,10 @@ function mountMcp(app, deps) {
         res.status(400).json(jsonrpc.error(null, -32700, 'Parse error'));
     });
     app.all(MCP_PATHS, gate, routeConversation, function (req, res) { res.status(405).end(); });
-    return { sessions, conversations, approvals, dispatch };
+    return { sessions, conversations, approvals, dispatch, getCheckpointStore: function () {
+        if (!checkpointStore) checkpointStore = new CheckpointStore(checkpointStoreOptions);
+        return checkpointStore;
+    } };
 }
 
 module.exports = mountMcp;

@@ -21,6 +21,10 @@ const test = require('node:test');
 const CEP_EXECUTED_FILES = [
     'cep-runtime-compat.js',
     'server.js',
+    'instance-service.js',
+    'instance-registry.js',
+    'instance-launcher.js',
+    'stdio-shim.js',
     'state-paths.js',
     'jsx-bridge.js',
     'auth-token.js',
@@ -38,6 +42,11 @@ const CEP_EXECUTED_FILES = [
     'mcp/approval-gate.js',
     'mcp/canonical-json.js',
     'mcp/checkpoint-store.js',
+    'mcp/checkpoint-storage.js',
+    'mcp/workspaces.js',
+    'mcp/workspace-router.js',
+    'mcp/read-jobs.js',
+    'mcp/readonly-worker.js',
     'mcp/recovery-store.js',
     'mcp/checkpoint-ops.js',
     'mcp/instructions.js',
@@ -68,6 +77,9 @@ const CEP_EXECUTED_FILES = [
     'mcp/tools/tool-use.js',
     'mcp/tools/tool-save.js',
     'mcp/tools/skill-use.js',
+    'mcp/tools/instances.js',
+    'mcp/tools/workspace.js',
+    'mcp/tools/read-job.js',
     // Generated twins the host requires at runtime. They live under plugin/host because
     // only plugin/ ships to the CEP extension directory (native/ does not).
     'mcp/generated/native_exec.generated.json',

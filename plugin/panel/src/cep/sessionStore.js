@@ -92,6 +92,8 @@ export function createSessionStore({ platform, log } = {}) {
   }
   const sessionsRoot = adapter.paths.join([adapter.paths.configRoot, 'sessions']);
   const indexFile = adapter.paths.join([sessionsRoot, 'index.json']);
+  const lockFile = indexFile + '.lock';
+  const writerId = Math.random().toString(36).slice(2);
   let nonce = 0;
 
   function report(message, error) {
@@ -113,7 +115,7 @@ export function createSessionStore({ platform, log } = {}) {
   }
 
   function writeAtomic(file, value) {
-    const temp = `${file}.${Date.now()}-${nonce += 1}.tmp`;
+    const temp = `${file}.${writerId}-${Date.now()}-${nonce += 1}.tmp`;
     try {
       fs.mkdirSync(sessionsRoot, { recursive: true });
       fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
@@ -153,6 +155,26 @@ export function createSessionStore({ platform, log } = {}) {
     };
     writeAtomic(indexFile, value);
     return clone(value);
+  }
+
+  function mutateIndex(update) {
+    fs.mkdirSync(sessionsRoot, { recursive: true });
+    try {
+      fs.writeFileSync(lockFile, writerId, { flag: 'wx', mode: 0o600 });
+    } catch (error) {
+      if (error.code === 'EEXIST') {
+        const busy = new Error('Another panel is updating the session index');
+        busy.code = 'SESSION_STORE_BUSY';
+        throw busy;
+      }
+      throw sessionStoreError(error);
+    }
+    try {
+      const latest = loadIndex();
+      return saveIndex(update(latest) || latest);
+    } finally {
+      fs.unlinkSync(lockFile);
+    }
   }
 
   function loadTranscript(id) {
@@ -197,6 +219,7 @@ export function createSessionStore({ platform, log } = {}) {
   return {
     loadIndex,
     saveIndex,
+    mutateIndex,
     loadTranscript,
     saveTranscript,
     deleteTranscript,

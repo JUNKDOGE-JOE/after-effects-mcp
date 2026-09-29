@@ -50,6 +50,8 @@ const S = {
     save: '保存',
     modelDefault: '默认模型（打开面板时使用）',
     port: '端口',
+    workDir: '工作目录',
+    workDirHint: '新会话的生成文件和检查点目录。已有会话保持原目录。',
     portHint: '默认 11488',
     apply: '应用',
     token: '访问 Token',
@@ -104,6 +106,8 @@ const S = {
     save: 'Save',
     modelDefault: 'Default model (used when the panel opens)',
     port: 'Port',
+    workDir: 'Work directory',
+    workDirHint: 'Location for new chats. Existing chats keep their work directory.',
     portHint: 'Default 11488',
     apply: 'Apply',
     token: 'Access token',
@@ -300,6 +304,9 @@ export function SettingsScreen({
   onClipboardAttachmentsChange,
   port = 11488,
   onApplyPort,
+  workDir = '',
+  workDirError = '',
+  onApplyWorkDir,
   mcpConfig,
   extensionRoot = '<extension root>',
   mcpReady = true,
@@ -339,6 +346,7 @@ export function SettingsScreen({
   const providerInitMessage = t.providerInitializationFailed;
   const [externalLinkError, setExternalLinkError] = React.useState('');
   const [draftPort, setDraftPort] = React.useState(String(port));
+  const [draftWorkDir, setDraftWorkDir] = React.useState(workDir);
   const [tokenRaw, setTokenRaw] = React.useState('');
   const [copied, setCopied] = React.useState('');
   const [sections, setSections] = React.useState(() => loadSectionState(window.localStorage));
@@ -349,6 +357,7 @@ export function SettingsScreen({
   });
 
   React.useEffect(() => setDraftPort(String(port)), [port]);
+  React.useEffect(() => setDraftWorkDir(workDir), [workDir]);
   React.useEffect(() => setTokenRaw(readTokenValue()), []);
 
   const copy = (label, text) => {
@@ -409,6 +418,12 @@ export function SettingsScreen({
       </Section>
 
       <Section id="conn" title={t.conn} expanded={sections.conn} onToggle={onToggleSection}>
+        <Field label={t.workDir} caption={workDirError || t.workDirHint}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Input mono value={draftWorkDir} onChange={setDraftWorkDir} style={{ flex: 1 }} />
+            <Button variant="secondary" onClick={() => onApplyWorkDir?.(draftWorkDir)}>{t.apply}</Button>
+          </div>
+        </Field>
         <Field label={t.port} hint={t.portHint}>
           <div style={{ display: 'flex', gap: 6 }}>
             <Input mono value={draftPort} onChange={setDraftPort} style={{ flex: 1 }} />

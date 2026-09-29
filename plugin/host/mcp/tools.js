@@ -9,6 +9,7 @@
 const jsonrpc = require('./jsonrpc');
 const { textResult, noTopLevelCombinator } = require('./tool-result');
 const { HINT_MARK, matchHint } = require('./error-hints');
+const { guardProjectCode } = require('./workspaces');
 
 function assertPatternDescriptions(schema, toolName, path) {
     if (schema === null || typeof schema !== 'object') return;
@@ -40,7 +41,26 @@ const TOOL_MODULES = [
     require('./tools/tool-use'),
     require('./tools/tool-save'),
     require('./tools/skill-use'),
+    require('./tools/instances'),
+    require('./tools/workspace'),
+    require('./tools/read-job'),
 ];
+
+function publicDefinition(mod) {
+    const common = { context_id: { type: 'string', description: 'Project binding from ae_workspace.' } };
+    if (['ae_exec', 'ae_execRecover'].includes(mod.definition.name)) common.checkpoint_continue = {
+        type: 'object', additionalProperties: false, required: ['failure_id', 'confirm'],
+        properties: {
+            failure_id: { type: 'string', description: 'Exact checkpoint_failure_id returned for this operation.' },
+            confirm: { type: 'boolean', description: 'Set true only after the user explicitly permits this operation without its failed checkpoint.' },
+        },
+    };
+    return Object.assign({}, mod.definition, {
+        inputSchema: Object.assign({}, mod.definition.inputSchema, {
+            properties: Object.assign({}, mod.definition.inputSchema.properties, common),
+        }),
+    });
+}
 
 function buildTools(deps) {
     const byName = new Map();
@@ -56,14 +76,18 @@ function buildTools(deps) {
             throw new Error('duplicate tool name: ' + mod.definition.name);
         }
         byName.set(mod.definition.name, mod);
-        return mod.definition;
+        return publicDefinition(mod);
     });
 
     async function call(params, context) {
         if (!jsonrpc.isObject(params) || typeof params.name !== 'string') {
             return { invalid: 'tools/call requires a tool name' };
         }
-        const args = params.arguments === undefined ? {} : params.arguments;
+        const rawArgs = params.arguments === undefined ? {} : params.arguments;
+        if (!jsonrpc.isObject(rawArgs)) return { invalid: 'tools/call arguments must be an object' };
+        const args = Object.assign({}, rawArgs);
+        delete args.checkpoint_continue;
+        if (params.name !== 'ae_workspace') delete args.context_id;
         if (!jsonrpc.isObject(args)) return { invalid: 'tools/call arguments must be an object' };
         const mod = byName.get(params.name);
         if (!mod) {
@@ -71,6 +95,7 @@ function buildTools(deps) {
         }
         const activityRef = {};
         const callContext = Object.assign({}, context, { tool: params.name, transport: 'mcp' });
+        let executionContext = callContext;
         const callDeps = Object.assign({}, deps, {
             executeJsx: typeof deps.executeJsx === 'function'
                 ? async function (request) {
@@ -80,15 +105,24 @@ function buildTools(deps) {
                         activityRef,
                     });
                     if (typeof input.code === 'string') activityRef.code = input.code;
+                    input.code = guardProjectCode(input.code, executionContext);
                     return deps.executeJsx(input);
                 }
                 : deps.executeJsx,
         });
         let output;
         try {
-            output = await mod.call(args, callContext, callDeps);
+            const invoke = (boundContext) => {
+                executionContext = boundContext || callContext;
+                return mod.call(args, executionContext, callDeps);
+            };
+            output = typeof deps.routeTool === 'function'
+                ? await deps.routeTool(params, callContext, invoke)
+                : await invoke(callContext);
         } catch (error) {
-            output = { result: textResult({ ok: false, error: error && error.message ? error.message : String(error) }, true) };
+            output = { result: textResult({ ok: false, error: error && error.message ? error.message : String(error),
+                ...(error && error.code ? { code: error.code } : {}),
+                ...(error && error.disposition ? { disposition: error.disposition } : {}) }, true) };
         }
         if (!output || output.result === undefined) {
             output = { result: textResult({ ok: false, error: 'tool returned no result' }, true) };
@@ -133,5 +167,6 @@ module.exports = {
     noTopLevelCombinator,
     textResult,
     TOOL_MODULES,
+    publicDefinition,
     assertPatternDescriptions,
 };

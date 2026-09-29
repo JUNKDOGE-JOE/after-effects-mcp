@@ -48,6 +48,8 @@ function publicConversation(record) {
         token: record.token,
         path: record.path,
         policy: Object.assign({}, record.policy),
+        workDir: record.workDir || null,
+        instanceId: record.instanceId || null,
     };
 }
 
@@ -66,6 +68,8 @@ class ConversationStore {
             token: randomHex(24),
             path: null,
             policy: normalizePolicy(label, input.policy),
+            workDir: input.workDir || null,
+            instanceId: input.instanceId || null,
         };
         record.path = '/mcp/c/' + record.token;
         this.byToken.set(record.token, record);

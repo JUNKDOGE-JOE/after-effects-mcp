@@ -94,6 +94,38 @@ const { RECOVERY_ID } = require('../recovery-store');
 const { revertToCheckpoint } = require('./revert');
 
 let recentProjectPath = null;
+const checkpointFailures = new Map();
+
+async function checkpointForOperation(code, args, context, deps, identity) {
+    const key = crypto.createHash('sha256').update(JSON.stringify([context.contextId || null, identity || 'new',
+        code, args.undo_group_name || null, args.checkpoint_label || null, args.timeout_sec || null])).digest('hex');
+    const choice = context.checkpointContinue;
+    if (choice !== undefined) {
+        const entry = choice && checkpointFailures.get(choice.failure_id);
+        if (!choice || choice.confirm !== true || !entry || entry.key !== key || Date.now() > entry.expires) {
+            return { blocked: { ok: false, code: 'CHECKPOINT_CONFIRMATION_REQUIRED', disposition: 'not_dispatched',
+                error: 'Use the exact checkpoint_failure_id for this unchanged operation, only after the user explicitly allows continuing.' } };
+        }
+        if (entry.run.disposition === 'uncertain' && !(context.reconciledAt >= entry.created)) return { blocked: { ok: false, code: 'CHECKPOINT_RESULT_UNKNOWN',
+            disposition: 'uncertain', error: 'Reconcile the save/copy outcome before continuing.' } };
+        checkpointFailures.delete(choice.failure_id);
+        return Object.assign({}, entry.run, { requiresAuthorization: false, continuedWithoutCheckpoint: true });
+    }
+    const run = await autoCheckpoint(args, context, deps);
+    if (!run.requiresAuthorization) return run;
+    while (checkpointFailures.size >= 32) checkpointFailures.delete(checkpointFailures.keys().next().value);
+    checkpointFailures.set(run.failureId, { key, run, created: Date.now(), expires: Date.now() + 600000 });
+    return { blocked: { ok: false, code: 'CHECKPOINT_FAILED', disposition: run.disposition || 'not_dispatched',
+        error: 'Checkpoint failed; the edit was not dispatched. The user may explicitly allow this operation without the checkpoint.',
+        checkpoint_failure_id: run.failureId, checkpointSkipped: run.skipped, checkpoint: run.checkpoint } };
+}
+
+function checkpointApprovalContext(context, args) {
+    const result = Object.assign({}, context, { arguments: Object.assign({}, args,
+        context.checkpointContinue ? { checkpoint_continue: context.checkpointContinue } : {}) });
+    if (context.checkpointContinue && context.conversation) result.policy = Object.assign({}, context.policy, { approvalTier: 'manual' });
+    return result;
+}
 
 const definition = {
     name: 'ae_exec',
@@ -229,6 +261,9 @@ function annotateCheckpoint(value, checkpointRun) {
         && !hasOwn(value, 'checkpointSkipped')) {
         value.checkpointSkipped = checkpointRun.skipped;
     }
+    if (record(value) && checkpointRun && checkpointRun.continuedWithoutCheckpoint) {
+        value.checkpointContinuation = { failure_id: checkpointRun.failureId, userConfirmed: true };
+    }
     return value;
 }
 
@@ -354,9 +389,10 @@ async function execute(code, args, context, deps) {
 }
 
 async function runInitial(args, context, deps) {
-    const denied = await enforce('ae_exec', Object.assign({}, context, { arguments: args }), deps);
+    const denied = await enforce('ae_exec', checkpointApprovalContext(context, args), deps);
     if (denied) return denied;
-    const checkpointRun = await autoCheckpoint(args, context, deps);
+    const checkpointRun = await checkpointForOperation(args.code, args, context, deps);
+    if (checkpointRun.blocked) return checkpointRun.blocked;
     const execution = await execute(args.code, args, context, deps);
     if (execution) resetPlaceholderStreak(context);
     if (execution && execution.payload
@@ -455,6 +491,11 @@ async function runRecovery(args, context, deps) {
         };
     }
     const meta = store.readMeta(entry);
+    const currentProjectPath = await resolveProjectPath(context, deps);
+    if (!sameProject(meta.sourceProjectPath || null, currentProjectPath || null)) {
+        return { ok: false, code: 'RECOVERY_PROJECT_MISMATCH', disposition: 'not_dispatched',
+            error: 'The recovery belongs to another project. Bind its original project before retrying.' };
+    }
     const code = hasOwn(args, 'code') ? args.code : store.readScript(entry);
     if (!code) return { ok: false, error: 'recovery script is empty: ' + args.recoveryId };
     const retryMode = args.retryMode || 'restore';
@@ -467,14 +508,23 @@ async function runRecovery(args, context, deps) {
     });
     const denied = await enforce(
         'ae_execRecover',
-        Object.assign({}, context, { arguments: approvalArguments }),
+        checkpointApprovalContext(context, approvalArguments),
         deps,
     );
     if (denied) return denied;
-    if (hasOwn(args, 'code')) store.writeScript(entry, code);
-    const restoration = await restoreForRetry(args.recoveryId, retryMode, meta, context, deps);
-    if (!restoration.ok) return restoration;
-    const checkpointRun = await autoCheckpoint(resolvedArgs, context, deps);
+    let restoration;
+    let checkpointRun;
+    if (context.checkpointContinue !== undefined) {
+        checkpointRun = await checkpointForOperation(code, resolvedArgs, context, deps, args.recoveryId + ':' + retryMode);
+        if (checkpointRun.blocked) return checkpointRun.blocked;
+        restoration = { ok: true, restored: 'completed-before-checkpoint-failure' };
+    } else {
+        if (hasOwn(args, 'code')) store.writeScript(entry, code);
+        restoration = await restoreForRetry(args.recoveryId, retryMode, meta, context, deps);
+        if (!restoration.ok) return restoration;
+        checkpointRun = await checkpointForOperation(code, resolvedArgs, context, deps, args.recoveryId + ':' + retryMode);
+    }
+    if (checkpointRun.blocked) return checkpointRun.blocked;
     const checkpoint = currentCheckpoint(checkpointRun);
     if (checkpoint) {
         meta.checkpointId = checkpoint.id;

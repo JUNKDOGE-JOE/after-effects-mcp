@@ -22,6 +22,9 @@ const VERB_ANNOTATIONS = Object.freeze({
     ae_toolSave: ann(false, false, false),
     ae_toolSearch: ann(true, false, true),
     ae_skillUse: ann(false, true, false),
+    ae_instances: ann(false, true, false),
+    ae_workspace: ann(false, false, false),
+    ae_readJob: ann(true, false, false),
 });
 
 module.exports = { VERB_ANNOTATIONS };

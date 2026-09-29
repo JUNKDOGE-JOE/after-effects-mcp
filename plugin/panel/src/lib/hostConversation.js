@@ -11,7 +11,7 @@ function rebindError(id) {
   return error;
 }
 
-export function createHostConversation({ getHost } = {}) {
+export function createHostConversation({ getHost, getWorkContext } = {}) {
   let current = null;
   let currentApi = null;
 
@@ -26,7 +26,7 @@ export function createHostConversation({ getHost } = {}) {
     return current;
   }
 
-  function ensureConversation({ label, approvalTier, expertGuidance } = {}) {
+  function ensureConversation({ label, approvalTier, expertGuidance, workDir } = {}) {
     const conversations = conversationApi(getHost);
     if (!conversations) {
       if (current) throw rebindError(current.id);
@@ -38,8 +38,11 @@ export function createHostConversation({ getHost } = {}) {
     if (typeof conversations.create !== 'function') return null;
     current = null;
     currentApi = conversations;
+    const supplied = getWorkContext?.();
+    const workContext = workDir === undefined ? supplied : { ...supplied, workDir };
     current = conversations.create({
       label,
+      ...(workContext ? { workDir: workContext.workDir, instanceId: workContext.instanceId } : {}),
       policy: {
         approvalTier,
         expertGuidance: expertGuidance !== false,

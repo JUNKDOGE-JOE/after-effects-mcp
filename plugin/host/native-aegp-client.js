@@ -1265,7 +1265,14 @@ function createNativeAegpClient(options) {
         }
         let endpoints;
         try {
+            if (Object.prototype.hasOwnProperty.call(input, 'expectedHostPid')
+                && (!Number.isSafeInteger(input.expectedHostPid) || input.expectedHostPid <= 1)) {
+                throw nativeError('NATIVE_UNAVAILABLE', 'The AE host PID is not verified for this panel', false);
+            }
             endpoints = discoverEndpoints(input);
+            if (input.expectedHostPid !== undefined) {
+                endpoints = endpoints.filter((candidate) => candidate.pid === input.expectedHostPid);
+            }
         } catch (error) {
             return Promise.reject(error);
         }

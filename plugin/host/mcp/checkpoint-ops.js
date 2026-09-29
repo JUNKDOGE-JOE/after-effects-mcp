@@ -9,6 +9,8 @@ const fs = require('fs');
 const path = require('path');
 const { parseJsxResult } = require('./jsx-result');
 const { renderTemplate } = require('./template');
+const { resolveCheckpointLocation } = require('./checkpoint-storage');
+const { resolveForKey } = require('./checkpoint-store');
 
 const PROJECT_PATH_CODE =
     'JSON.stringify({ok:true,' + 'path: app.project.file ? app.project.file.fsName : null})';
@@ -44,6 +46,9 @@ function requireSuccessfulExecution(execution) {
         const failure = executionFailure(execution);
         const error = new Error(failure.error || 'JSX execution failed');
         if (failure.disposition) error.disposition = failure.disposition;
+        if (failure.code) error.code = failure.code;
+        if (execution && execution.status !== undefined) error.status = execution.status;
+        if (failure.stage) error.stage = failure.stage;
         throw error;
     }
     return payload.result;
@@ -153,11 +158,19 @@ async function createCheckpoint(options, context, deps) {
     const projectPath =
         options.projectPath === undefined ? await resolveProjectPath(context, deps) : options.projectPath;
     if (!projectPath) return { ok: false, error: 'untitled-project', projectPath: null };
+    if (context && context.projectPath && resolveForKey(context.projectPath) !== resolveForKey(projectPath)) {
+        return { ok: false, error: 'source-project-changed', stage: 'save', projectPath };
+    }
     const store = deps.getCheckpointStore();
     const id = options.id || store.makeId();
-    const destination = store.aepPath(projectPath, id);
+    const workspaceMode = Boolean(context && (context.contextId || context.workspace
+        || Object.prototype.hasOwnProperty.call(context, 'workDir')));
+    const location = workspaceMode ? resolveCheckpointLocation({
+        projectPath, workDir: context.workDir,
+    }) : null;
+    const destination = location ? path.join(location.directory, id + '.aep') : store.aepPath(projectPath, id);
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    const code = renderTemplate(CHECKPOINT_TEMPLATE, { dst_path: JSON.stringify(destination) });
+    const code = renderTemplate(CHECKPOINT_TEMPLATE, { dst_path: JSON.stringify(destination), expected_path: JSON.stringify(projectPath) });
     const execution = await deps.executeJsx({
         code,
         undoGroup: options.undoGroup,
@@ -170,6 +183,11 @@ async function createCheckpoint(options, context, deps) {
         return {
             ok: false,
             error: 'checkpoint-failed: bad-result',
+            code: parsed && parsed.code || 'CHECKPOINT_FAILED',
+            disposition: parsed && parsed.disposition || 'not_dispatched',
+            stage: parsed && parsed.stage || 'save-copy',
+            status: execution && execution.status !== undefined ? execution.status : null,
+            saveCompleted: !!(parsed && parsed.saveCompleted),
             projectPath,
             backendResult: parsed,
         };
@@ -182,11 +200,18 @@ async function createCheckpoint(options, context, deps) {
             backendResult: parsed,
         };
     }
-    const sizeBytes = ensureCheckpointFile(projectPath, destination, parsed);
-    if (sizeBytes === null) {
+    if (workspaceMode && (!parsed.sourceProjectPath
+        || resolveForKey(parsed.sourceProjectPath) !== resolveForKey(projectPath))) {
+        return { ok: false, error: 'source-project-changed', stage: 'save', projectPath };
+    }
+    const sizeBytes = workspaceMode
+        ? (fs.existsSync(destination) && fs.statSync(destination).isFile() ? fs.statSync(destination).size : null)
+        : ensureCheckpointFile(projectPath, destination, parsed);
+    if (sizeBytes === null || (workspaceMode && sizeBytes <= 0)) {
         return {
             ok: false,
             error: 'checkpoint file missing after AE copy',
+            code: 'CHECKPOINT_COPY_MISSING', disposition: 'not_dispatched', stage: 'copy', saveCompleted: true,
             path: destination,
             backendResult: parsed,
         };
@@ -198,6 +223,7 @@ async function createCheckpoint(options, context, deps) {
         activeCompId: parsed.activeCompId === undefined ? null : parsed.activeCompId,
         currentTime: Number(parsed.currentTime) || 0,
         sizeBytes,
+        ...(location ? { checkpointPath: destination, placementSource: location.source } : {}),
     });
     store.prune(projectPath);
     return {
@@ -205,6 +231,7 @@ async function createCheckpoint(options, context, deps) {
         id,
         label: options.label || '',
         path: destination,
+        ...(location ? { placementSource: location.source } : {}),
         sizeBytes,
         projectPath,
         activeCompId: parsed.activeCompId === undefined ? null : parsed.activeCompId,
@@ -212,7 +239,7 @@ async function createCheckpoint(options, context, deps) {
     };
 }
 
-async function autoCheckpoint(args, context, deps) {
+async function bestEffortAutoCheckpoint(args, context, deps) {
     if (!args.checkpoint_label) return { skipped: null, checkpoint: null };
     let projectPath = null;
     try {
@@ -230,20 +257,32 @@ async function autoCheckpoint(args, context, deps) {
         );
         if (checkpoint.ok) return { skipped: null, checkpoint };
         if (checkpoint.error === 'checkpoint file missing after AE copy') {
-            return { skipped: 'checkpoint-file-missing', checkpoint };
+            return { skipped: 'checkpoint-file-missing', checkpoint, disposition: checkpoint.disposition || 'not_dispatched' };
         }
-        return { skipped: checkpoint.error || 'checkpoint-failed: bad-result', checkpoint };
+        return { skipped: checkpoint.error || 'checkpoint-failed: bad-result', checkpoint, disposition: checkpoint.disposition || 'not_dispatched' };
     } catch (error) {
         const skipped = error && error.code === 'CHECKPOINT_TIMEOUT'
             ? 'checkpoint-timeout'
             : 'checkpoint-failed: ' + (error && error.message ? error.message : String(error));
+        const disposition = error && error.disposition
+            || (error && error.code === 'CHECKPOINT_TIMEOUT' ? 'uncertain' : 'not_dispatched');
         return {
-            skipped,
-            checkpoint: projectPath
-                ? { ok: false, error: skipped, projectPath }
-                : null,
+            skipped, disposition,
+            checkpoint: { ok: false, error: skipped, projectPath,
+                disposition, code: error && error.code || 'CHECKPOINT_FAILED',
+                status: error && error.status !== undefined ? error.status : null,
+                stage: error && error.stage || 'save-copy' },
         };
     }
+}
+
+async function autoCheckpoint(args, context, deps) {
+    const result = await bestEffortAutoCheckpoint(args, context, deps);
+    if (result.skipped && context && context.contextId) {
+        return Object.assign(result, { requiresAuthorization: true,
+            failureId: crypto.randomBytes(12).toString('hex'), contextId: context.contextId });
+    }
+    return result;
 }
 
 module.exports = {
