@@ -16,6 +16,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 - **Local project contexts and multiple AE endpoints (#393)**: one writer per project, read-only snapshot workers, explicit instance and workspace routing, and bounded read jobs. Closing a panel remains an intentional disconnect.
 - **Native diagnosis and connection recovery (#392, draft #395)**: cold diagnosis probes the native handshake, reports its connection stage, and clears timed-out pending connections for retry on Windows and macOS. Passive status and ping remain passive. The original issue remains open for reporter verification.
+- **Native SDK build input**: use the existing Adobe SDK 26.5 publication v1 inputs, retaining the previous 25.6.61 locks and all 23 primitive/suite pins. The Windows AEX builds and passes PE/version verification; Mac build and packaged AE compatibility remain pending.
 - **Release limits**: development-machine dual-worker admission is not established; true unknown-write recovery has not been verified on Mac. The evalScript deadline is a soft timeout and cannot interrupt AE execution. Guide layers may be absent from PNG output. Packaged identity, signatures and T5/T6 acceptance remain pending.
 
 

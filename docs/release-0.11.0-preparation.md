@@ -42,6 +42,12 @@ review it before freezing the final clean candidate SHA.
 - Packaged artifact identity, signatures, public-MCP packaged T5 and clean
   install/upgrade/rollback T6 have not been accepted. #392 stays open for the
   original reporter; the fix references it without closing it.
+- The full Windows AEX builds from a clean source commit using the active
+  verified SDK 26.5 inputs, MSVC 14.44.35207 and Windows SDK 10.0.26100.0.
+  PE architecture, entry export, resources, product version and source identity
+  verification pass. It is an unsigned local build, not installed or run in AE.
+  Mac archive/root verification passes on Windows, but no Mac build is claimed.
+  Retained suite pins do not establish older-host compatibility with this build.
 - Production npm audit reports three moderate dependency entries: qs and its
   body-parser/Express ancestors. The existing Express 4.22.2 pin is retained.
   Advisory links: [GHSA-x5fp-wj9c-mxmx](https://github.com/advisories/GHSA-x5fp-wj9c-mxmx)
