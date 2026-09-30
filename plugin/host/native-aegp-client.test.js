@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const { EventEmitter } = require('node:events');
 const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
@@ -637,6 +638,44 @@ test('Windows pipe authorization timeout clears the pending connection and permi
         assert.equal(hello.host.platform, 'windows-x64');
         assert.equal(requests.length, 1);
     });
+
+test('a deadline that expires during synchronous discovery or open clears the attempt immediately', async (t) => {
+    for (const expiresDuring of ['discovery', 'open']) {
+        let clock = 0;
+        const sockets = [];
+        const client = createNativeAegpClient({
+            runtime: { platform: 'win32', arch: 'x64' }, expectedHostPid: 4242,
+            now: () => clock,
+            discoverEndpoints: () => {
+                if (expiresDuring === 'discovery' && sockets.length === 0) clock = 100;
+                return [{ pid: 4242, socketPath: 'owner-ae' }];
+            },
+            netImpl: {
+                createConnection: () => {
+                    const socket = new EventEmitter();
+                    socket.destroyed = false;
+                    socket.destroy = () => { socket.destroyed = true; };
+                    socket.write = () => assert.fail('an expired attempt must not dispatch');
+                    sockets.push(socket);
+                    if (expiresDuring === 'open' && sockets.length === 1) clock = 100;
+                    return socket;
+                },
+            },
+        });
+        t.after(() => client.close());
+        await assert.rejects(client.connect(100), { code: 'DEADLINE_EXCEEDED' });
+        assert.equal(client.status().state, 'disconnected', expiresDuring);
+        assert.equal(sockets[0].destroyed, true);
+        const retry = client.connect(1000);
+        assert.equal(sockets.length, 2, 'retry opens a fresh transport');
+        sockets[0].emit('close');
+        assert.equal(client.status().state, 'challenge-pending');
+        const rejected = assert.rejects(retry, { code: 'NATIVE_UNAVAILABLE' });
+        client.close();
+        await rejected;
+        assert.equal(sockets[1].destroyed, true);
+    }
+});
 
 test('native discovery only connects to the verified AE host when several instances exist', async () => {
     const opened = [];

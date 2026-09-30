@@ -1222,11 +1222,9 @@ function createNativeAegpClient(options) {
     function boundByDeadline(promise, deadlineUnixMs, message, onTimeout) {
         if (deadlineUnixMs === undefined) return promise;
         if (!Number.isSafeInteger(deadlineUnixMs) || deadlineUnixMs <= now()) {
-            return Promise.reject(nativeError(
-                'DEADLINE_EXCEEDED',
-                message,
-                true,
-            ));
+            const error = nativeError('DEADLINE_EXCEEDED', message, true);
+            if (onTimeout) onTimeout(error);
+            return Promise.reject(error);
         }
         return new Promise(function (resolve, reject) {
             const timer = setTimeout(function () {
