@@ -17,6 +17,9 @@ function start(options) {
     const mounted = mountMcp(app, {
         version: '0.9.6-test',
         getStatus: function (port) { return { ok: true, pluginVersion: '0.9.6-test', port }; },
+        getNativeStatus: options && options.getNativeStatus,
+        nativeNegotiate: options && options.nativeNegotiate,
+        nativeInvoke: options && options.nativeInvoke,
         executeJsx: options && options.executeJsx || async function () {
             return {
                 status: 200,
@@ -66,6 +69,63 @@ async function initialize(port, name) {
     });
     return { response, session: response.headers['mcp-session-id'] };
 }
+
+test('public diagnose connects the lazy native client while status and ping remain passive', async () => {
+    let connected = false;
+    let probes = 0;
+    const fixture = await start({
+        getNativeStatus: () => ({ state: connected ? 'connected' : 'disconnected' }),
+        nativeNegotiate: async (deadline) => {
+            assert.ok(deadline > Date.now() && deadline <= Date.now() + 7000);
+            probes += 1;
+            connected = true;
+        },
+        executeJsx: async () => ({ payload: { result: JSON.stringify({ ok: true, aeVersion: '26.5x89' }) } }),
+    });
+    try {
+        const initial = await initialize(fixture.port);
+        const headers = { 'Mcp-Session-Id': initial.session };
+        for (const depth of ['status', 'ping', 'diagnose', 'status']) {
+            const result = await request(fixture.port, 'POST', '/mcp', headers, {
+                jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'ae_status', arguments: { depth } },
+            });
+            assert.equal(result.body.result.isError, undefined);
+            if (depth !== 'ping') assert.equal(result.body.result.structuredContent.nativeExecutionPlane.available, connected);
+            if (depth === 'diagnose') {
+                assert.equal(result.body.result.structuredContent.nativeExecutionPlane.probeAttempted, true);
+                assert.equal(result.body.result.structuredContent.nativeExecutionPlane.state, 'connected');
+            }
+            assert.equal(probes, connected ? 1 : 0);
+        }
+    } finally {
+        await new Promise(resolve => fixture.listener.close(resolve));
+        fs.rmSync(fixture.stateRoot, { recursive: true, force: true });
+    }
+});
+
+test('public diagnose exposes a native probe failure without failing a responsive AE', async () => {
+    const fixture = await start({
+        getNativeStatus: () => ({ state: 'disconnected' }),
+        nativeNegotiate: async () => { throw Object.assign(new Error('connection timed out'), { code: 'DEADLINE_EXCEEDED', retryable: true }); },
+        executeJsx: async () => ({ payload: { result: JSON.stringify({ ok: true }) } }),
+    });
+    try {
+        const initial = await initialize(fixture.port);
+        const result = await request(fixture.port, 'POST', '/mcp', { 'Mcp-Session-Id': initial.session }, {
+            jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'ae_status', arguments: { depth: 'diagnose' } },
+        });
+        const status = result.body.result.structuredContent;
+        assert.equal(status.ae.responsive, true);
+        assert.equal(status.nativeExecutionPlane.available, false);
+        assert.equal(status.nativeExecutionPlane.error.code, 'DEADLINE_EXCEEDED');
+        assert.equal(status.nativeExecutionPlane.error.retryable, true);
+        assert.equal(status.nativeExecutionPlane.state, 'disconnected');
+        assert.equal(status.nativeExecutionPlane.probeAttempted, true);
+    } finally {
+        await new Promise(resolve => fixture.listener.close(resolve));
+        fs.rmSync(fixture.stateRoot, { recursive: true, force: true });
+    }
+});
 
 test('MCP initializes, enforces loopback Origin/Host, and supports session lifecycle', async () => {
     const fixture = await start();

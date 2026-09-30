@@ -73,6 +73,19 @@ Undo restores state. Release discipline proves restoration separately through
 an explicit Undo and state readback. A result that may have dispatched a write
 must be reconciled against After Effects state and audit evidence before retrying.
 
+### Native connection diagnosis
+
+`ae_status({"depth":"status"})` and `depth="ping"` are passive. Before the
+lazy native client has connected, `nativeExecutionPlane.available=false` does
+not establish that the native plug-in failed to load. Use
+`ae_status({"depth":"diagnose"})` for a bounded, read-only native handshake.
+It does not dispatch native project operations or modify the project or Undo
+stack. Diagnose reports `probeAttempted`, the resulting connection `state`,
+and a typed `error` when the probe fails; AE responsiveness is reported
+separately. An unsuccessful connection attempt is cleared on timeout so the
+next diagnose or native operation can retry. This applies to Windows named
+pipes and macOS Unix sockets. See [validation evidence](validation/issue392-native.md).
+
 ### Tool Library lifecycle
 
 Successful `ae_exec` and `ae_execRecover` calls add `artifactId` to their

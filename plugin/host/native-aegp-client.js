@@ -1156,14 +1156,18 @@ function createNativeAegpClient(options) {
                 sessionId = decision.sessionId;
                 sessionGeneration = decision.sessionGeneration;
                 state = 'authenticating';
+                const authenticatingSocket = socket;
                 hello().then(function (identity) {
+                    if (socket !== authenticatingSocket) return;
                     state = 'connected';
                     const resolve = connectedResolve;
                     connectedResolve = null;
                     connectedReject = null;
                     resolve(identity);
                     if (inputBuffer.length) consumeFrames();
-                }).catch(fail);
+                }).catch(function (error) {
+                    if (socket === authenticatingSocket) fail(error);
+                });
                 return;
             }
             if (state === 'authenticating' || state === 'connected') {
@@ -1215,18 +1219,18 @@ function createNativeAegpClient(options) {
         });
     }
 
-    function boundByDeadline(promise, deadlineUnixMs, message) {
+    function boundByDeadline(promise, deadlineUnixMs, message, onTimeout) {
         if (deadlineUnixMs === undefined) return promise;
         if (!Number.isSafeInteger(deadlineUnixMs) || deadlineUnixMs <= now()) {
-            return Promise.reject(nativeError(
-                'DEADLINE_EXCEEDED',
-                message,
-                true,
-            ));
+            const error = nativeError('DEADLINE_EXCEEDED', message, true);
+            if (onTimeout) onTimeout(error);
+            return Promise.reject(error);
         }
         return new Promise(function (resolve, reject) {
             const timer = setTimeout(function () {
-                reject(nativeError('DEADLINE_EXCEEDED', message, true));
+                const error = nativeError('DEADLINE_EXCEEDED', message, true);
+                if (onTimeout) onTimeout(error);
+                reject(error);
             }, Math.min(
                 requestTimeoutMs,
                 Math.max(1, deadlineUnixMs - now()),
@@ -1241,7 +1245,26 @@ function createNativeAegpClient(options) {
         });
     }
 
+    function boundConnection(promise, deadlineUnixMs) {
+        return boundByDeadline(
+            promise,
+            deadlineUnixMs === undefined ? now() + requestTimeoutMs : deadlineUnixMs,
+            'native connection deadline elapsed',
+            function (error) {
+                if (promise === connectedPromise && state !== 'connected' && state !== 'closed') {
+                    fail(error);
+                }
+            },
+        );
+    }
+
     function connect(deadlineUnixMs) {
+        if (deadlineUnixMs !== undefined
+            && (!Number.isSafeInteger(deadlineUnixMs) || deadlineUnixMs <= now())) {
+            return Promise.reject(nativeError(
+                'DEADLINE_EXCEEDED', 'native connection deadline elapsed', true,
+            ));
+        }
         if (state === 'closed') {
             return Promise.reject(nativeError(
                 'NATIVE_UNAVAILABLE',
@@ -1257,11 +1280,7 @@ function createNativeAegpClient(options) {
             );
         }
         if (connectedPromise && state !== 'disconnected') {
-            return boundByDeadline(
-                connectedPromise,
-                deadlineUnixMs,
-                'native connection deadline elapsed',
-            );
+            return boundConnection(connectedPromise, deadlineUnixMs);
         }
         let endpoints;
         try {
@@ -1300,11 +1319,7 @@ function createNativeAegpClient(options) {
                 cause,
             ));
         }
-        return boundByDeadline(
-            connectedPromise,
-            deadlineUnixMs,
-            'native connection deadline elapsed',
-        );
+        return boundConnection(connectedPromise, deadlineUnixMs);
     }
 
     function waitUntilConnected(deadlineUnixMs) {

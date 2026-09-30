@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
+const { EventEmitter } = require('node:events');
 const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
@@ -199,7 +200,9 @@ function installProtocol(server, options) {
     const input = options || {};
     const requests = [];
     let invokeCount = 0;
+    let connectionCount = 0;
     server.on('connection', function (socket) {
+        const connectionNumber = ++connectionCount;
         let bytes = Buffer.alloc(0);
         let authenticated = false;
         socket.on('data', function (chunk) {
@@ -208,6 +211,7 @@ function installProtocol(server, options) {
                 if (bytes.length < 24) return;
                 assert.equal(bytes.subarray(0, 8).toString('ascii'), 'AEMCP-A1');
                 bytes = bytes.subarray(24);
+                if (input.stallFirstAuthorization && connectionNumber === 1) return;
                 socket.write(Buffer.concat([
                     challengeMessage(),
                     decisionMessage(1, SESSION, 7),
@@ -238,13 +242,13 @@ function installProtocol(server, options) {
                         compiledSdk: {
                             version: '25.6.61',
                             build: 61,
-                            architecture: 'arm64',
+                            architecture: input.hostPlatform === 'windows-x64' ? 'x64' : 'arm64',
                         },
                         host: {
                             application: 'after-effects',
                             version: '26.3.0',
                             build: 87,
-                            platform: 'macos-arm64',
+                            platform: input.hostPlatform || 'macos-arm64',
                             instanceId: HOST,
                         },
                         sessionId: SESSION,
@@ -575,6 +579,102 @@ test('client factory accepts windows x64 and still rejects unsupported runtimes'
         runtimeRoot: os.tmpdir(),
         clientInstanceId: CLIENT,
     }), /supports macOS arm64 and Windows x64 only/u);
+});
+
+test('Unix socket authorization timeout disconnects every waiter and permits retry', UNIX_SOCKET_TEST, async (t) => {
+    const fixture = await endpointFixture(t);
+    const requests = installProtocol(fixture.server, { stallFirstAuthorization: true });
+    const client = makeClient(fixture.root, { requestTimeoutMs: 100 });
+    t.after(() => client.close());
+    const first = client.connect();
+    const concurrent = client.connect(Date.now() + 1000);
+    await Promise.all([
+        assert.rejects(first, { code: 'DEADLINE_EXCEEDED' }),
+        assert.rejects(concurrent, { code: 'DEADLINE_EXCEEDED' }),
+    ]);
+    assert.equal(client.status().state, 'disconnected');
+    assert.equal(requests.length, 0);
+    await client.connect(Date.now() + 1000);
+    assert.equal(client.status().state, 'connected');
+    assert.equal(requests.length, 1);
+});
+
+test('Windows pipe authorization timeout clears the pending connection and permits a real retry',
+    { skip: process.platform !== 'win32' }, async (t) => {
+        const pipePath = '\\\\.\\pipe\\aemcp-n1-' + crypto.randomBytes(6).toString('hex');
+        const server = net.createServer();
+        const sockets = new Set();
+        server.on('connection', socket => {
+            sockets.add(socket);
+            socket.once('close', () => sockets.delete(socket));
+        });
+        const requests = installProtocol(server, { hostPlatform: 'windows-x64', stallFirstAuthorization: true });
+        await new Promise((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(pipePath, resolve);
+        });
+        const client = createNativeAegpClient({
+            runtime: { platform: 'win32', arch: 'x64' }, expectedHostPid: 4242,
+            requestTimeoutMs: 100,
+            discoverEndpoints: () => [{ pid: 4242, socketPath: pipePath, hostInstanceId: HOST, sourceCommit: SOURCE }],
+        });
+        t.after(async () => {
+            client.close();
+            for (const socket of sockets) socket.destroy();
+            await new Promise(resolve => server.close(resolve));
+        });
+        await assert.rejects(client.connect(Date.now() - 1), { code: 'DEADLINE_EXCEEDED' });
+        assert.equal(sockets.size, 0);
+        const first = client.connect(Date.now() + 100);
+        const concurrent = client.connect(Date.now() + 1000);
+        await Promise.all([
+            assert.rejects(first, { code: 'DEADLINE_EXCEEDED' }),
+            assert.rejects(concurrent, { code: 'DEADLINE_EXCEEDED' }),
+        ]);
+        assert.equal(client.status().state, 'disconnected');
+        assert.equal(requests.length, 0);
+        const hello = await client.connect(Date.now() + 1000);
+        assert.equal(client.status().state, 'connected');
+        assert.equal(hello.host.platform, 'windows-x64');
+        assert.equal(requests.length, 1);
+    });
+
+test('a deadline that expires during synchronous discovery or open clears the attempt immediately', async (t) => {
+    for (const expiresDuring of ['discovery', 'open']) {
+        let clock = 0;
+        const sockets = [];
+        const client = createNativeAegpClient({
+            runtime: { platform: 'win32', arch: 'x64' }, expectedHostPid: 4242,
+            now: () => clock,
+            discoverEndpoints: () => {
+                if (expiresDuring === 'discovery' && sockets.length === 0) clock = 100;
+                return [{ pid: 4242, socketPath: 'owner-ae' }];
+            },
+            netImpl: {
+                createConnection: () => {
+                    const socket = new EventEmitter();
+                    socket.destroyed = false;
+                    socket.destroy = () => { socket.destroyed = true; };
+                    socket.write = () => assert.fail('an expired attempt must not dispatch');
+                    sockets.push(socket);
+                    if (expiresDuring === 'open' && sockets.length === 1) clock = 100;
+                    return socket;
+                },
+            },
+        });
+        t.after(() => client.close());
+        await assert.rejects(client.connect(100), { code: 'DEADLINE_EXCEEDED' });
+        assert.equal(client.status().state, 'disconnected', expiresDuring);
+        assert.equal(sockets[0].destroyed, true);
+        const retry = client.connect(1000);
+        assert.equal(sockets.length, 2, 'retry opens a fresh transport');
+        sockets[0].emit('close');
+        assert.equal(client.status().state, 'challenge-pending');
+        const rejected = assert.rejects(retry, { code: 'NATIVE_UNAVAILABLE' });
+        client.close();
+        await rejected;
+        assert.equal(sockets[1].destroyed, true);
+    }
 });
 
 test('native discovery only connects to the verified AE host when several instances exist', async () => {
