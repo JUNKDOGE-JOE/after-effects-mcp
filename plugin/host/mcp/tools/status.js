@@ -28,14 +28,18 @@ function errorResult(message) {
     return { result: textResult({ ok: false, error: message }, true) };
 }
 
-function getNativeExecutionPlane(deps) {
+function getNativeExecutionPlane(deps, includeState) {
+    let connectionState = 'unavailable';
     try {
         const status = typeof deps.getNativeStatus === 'function' ? deps.getNativeStatus() : null;
+        if (status && typeof status.state === 'string') connectionState = status.state;
         if (status && status.state === 'connected') {
-            return { available: true, adapter: 'native-aegp', engine: 'native-aegp' };
+            return { available: true, adapter: 'native-aegp', engine: 'native-aegp',
+                ...(includeState ? { state: connectionState } : {}) };
         }
     } catch (_) {}
-    return { available: false, adapter: null, engine: null };
+    return { available: false, adapter: null, engine: null,
+        ...(includeState ? { state: connectionState } : {}) };
 }
 
 function baseStatus(context, deps) {
@@ -85,10 +89,11 @@ async function call(args, context, deps) {
         if (typeof deps.nativeNegotiate === 'function') {
             try {
                 await deps.nativeNegotiate(Date.now() + 7000);
-                status.nativeExecutionPlane = getNativeExecutionPlane(deps);
+                status.nativeExecutionPlane = getNativeExecutionPlane(deps, true);
             } catch (error) {
                 status.nativeExecutionPlane = {
                     available: false, adapter: null, engine: null,
+                    state: getNativeExecutionPlane(deps, true).state,
                     error: {
                         code: error && error.code || 'NATIVE_UNAVAILABLE',
                         message: error && error.message || String(error),
@@ -96,6 +101,7 @@ async function call(args, context, deps) {
                     },
                 };
             }
+            status.nativeExecutionPlane.probeAttempted = true;
         }
     }
     return { result: textResult(status, false) };

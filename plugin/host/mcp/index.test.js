@@ -91,6 +91,10 @@ test('public diagnose connects the lazy native client while status and ping rema
             });
             assert.equal(result.body.result.isError, undefined);
             if (depth !== 'ping') assert.equal(result.body.result.structuredContent.nativeExecutionPlane.available, connected);
+            if (depth === 'diagnose') {
+                assert.equal(result.body.result.structuredContent.nativeExecutionPlane.probeAttempted, true);
+                assert.equal(result.body.result.structuredContent.nativeExecutionPlane.state, 'connected');
+            }
             assert.equal(probes, connected ? 1 : 0);
         }
     } finally {
@@ -115,6 +119,8 @@ test('public diagnose exposes a native probe failure without failing a responsiv
         assert.equal(status.nativeExecutionPlane.available, false);
         assert.equal(status.nativeExecutionPlane.error.code, 'DEADLINE_EXCEEDED');
         assert.equal(status.nativeExecutionPlane.error.retryable, true);
+        assert.equal(status.nativeExecutionPlane.state, 'disconnected');
+        assert.equal(status.nativeExecutionPlane.probeAttempted, true);
     } finally {
         await new Promise(resolve => fixture.listener.close(resolve));
         fs.rmSync(fixture.stateRoot, { recursive: true, force: true });

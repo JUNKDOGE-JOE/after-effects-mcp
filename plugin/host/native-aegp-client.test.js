@@ -580,6 +580,24 @@ test('client factory accepts windows x64 and still rejects unsupported runtimes'
     }), /supports macOS arm64 and Windows x64 only/u);
 });
 
+test('Unix socket authorization timeout disconnects every waiter and permits retry', UNIX_SOCKET_TEST, async (t) => {
+    const fixture = await endpointFixture(t);
+    const requests = installProtocol(fixture.server, { stallFirstAuthorization: true });
+    const client = makeClient(fixture.root, { requestTimeoutMs: 100 });
+    t.after(() => client.close());
+    const first = client.connect();
+    const concurrent = client.connect(Date.now() + 1000);
+    await Promise.all([
+        assert.rejects(first, { code: 'DEADLINE_EXCEEDED' }),
+        assert.rejects(concurrent, { code: 'DEADLINE_EXCEEDED' }),
+    ]);
+    assert.equal(client.status().state, 'disconnected');
+    assert.equal(requests.length, 0);
+    await client.connect(Date.now() + 1000);
+    assert.equal(client.status().state, 'connected');
+    assert.equal(requests.length, 1);
+});
+
 test('Windows pipe authorization timeout clears the pending connection and permits a real retry',
     { skip: process.platform !== 'win32' }, async (t) => {
         const pipePath = '\\\\.\\pipe\\aemcp-n1-' + crypto.randomBytes(6).toString('hex');
