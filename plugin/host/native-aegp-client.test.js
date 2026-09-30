@@ -821,14 +821,14 @@ test('client rejects a response for an unknown request id', UNIX_SOCKET_TEST, as
 
 test('client ignores a late timed-out response and remains connected', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t, {
-        requestTimeoutMs: 20,
-        delayFirstInvokeMs: 60,
+        requestTimeoutMs: 100,
+        delayFirstInvokeMs: 300,
     });
     await assert.rejects(
         invoke(client, 'native-program-late-0001', readProgram()),
         function (error) { return error.code === 'DEADLINE_EXCEEDED'; },
     );
-    await new Promise(function (resolve) { setTimeout(resolve, 80); });
+    await new Promise(function (resolve) { setTimeout(resolve, 350); });
     assert.equal(client.status().state, 'connected');
     const capabilities = await client.capabilities({ detail: 'summary', limit: 50 });
     assert.equal(capabilities.items.length, 1);
