@@ -199,7 +199,9 @@ function installProtocol(server, options) {
     const input = options || {};
     const requests = [];
     let invokeCount = 0;
+    let connectionCount = 0;
     server.on('connection', function (socket) {
+        const connectionNumber = ++connectionCount;
         let bytes = Buffer.alloc(0);
         let authenticated = false;
         socket.on('data', function (chunk) {
@@ -208,6 +210,7 @@ function installProtocol(server, options) {
                 if (bytes.length < 24) return;
                 assert.equal(bytes.subarray(0, 8).toString('ascii'), 'AEMCP-A1');
                 bytes = bytes.subarray(24);
+                if (input.stallFirstAuthorization && connectionNumber === 1) return;
                 socket.write(Buffer.concat([
                     challengeMessage(),
                     decisionMessage(1, SESSION, 7),
@@ -238,13 +241,13 @@ function installProtocol(server, options) {
                         compiledSdk: {
                             version: '25.6.61',
                             build: 61,
-                            architecture: 'arm64',
+                            architecture: input.hostPlatform === 'windows-x64' ? 'x64' : 'arm64',
                         },
                         host: {
                             application: 'after-effects',
                             version: '26.3.0',
                             build: 87,
-                            platform: 'macos-arm64',
+                            platform: input.hostPlatform || 'macos-arm64',
                             instanceId: HOST,
                         },
                         sessionId: SESSION,
@@ -576,6 +579,46 @@ test('client factory accepts windows x64 and still rejects unsupported runtimes'
         clientInstanceId: CLIENT,
     }), /supports macOS arm64 and Windows x64 only/u);
 });
+
+test('Windows pipe authorization timeout clears the pending connection and permits a real retry',
+    { skip: process.platform !== 'win32' }, async (t) => {
+        const pipePath = '\\\\.\\pipe\\aemcp-n1-' + crypto.randomBytes(6).toString('hex');
+        const server = net.createServer();
+        const sockets = new Set();
+        server.on('connection', socket => {
+            sockets.add(socket);
+            socket.once('close', () => sockets.delete(socket));
+        });
+        const requests = installProtocol(server, { hostPlatform: 'windows-x64', stallFirstAuthorization: true });
+        await new Promise((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(pipePath, resolve);
+        });
+        const client = createNativeAegpClient({
+            runtime: { platform: 'win32', arch: 'x64' }, expectedHostPid: 4242,
+            requestTimeoutMs: 100,
+            discoverEndpoints: () => [{ pid: 4242, socketPath: pipePath, hostInstanceId: HOST, sourceCommit: SOURCE }],
+        });
+        t.after(async () => {
+            client.close();
+            for (const socket of sockets) socket.destroy();
+            await new Promise(resolve => server.close(resolve));
+        });
+        await assert.rejects(client.connect(Date.now() - 1), { code: 'DEADLINE_EXCEEDED' });
+        assert.equal(sockets.size, 0);
+        const first = client.connect(Date.now() + 100);
+        const concurrent = client.connect(Date.now() + 1000);
+        await Promise.all([
+            assert.rejects(first, { code: 'DEADLINE_EXCEEDED' }),
+            assert.rejects(concurrent, { code: 'DEADLINE_EXCEEDED' }),
+        ]);
+        assert.equal(client.status().state, 'disconnected');
+        assert.equal(requests.length, 0);
+        const hello = await client.connect(Date.now() + 1000);
+        assert.equal(client.status().state, 'connected');
+        assert.equal(hello.host.platform, 'windows-x64');
+        assert.equal(requests.length, 1);
+    });
 
 test('native discovery only connects to the verified AE host when several instances exist', async () => {
     const opened = [];

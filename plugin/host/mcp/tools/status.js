@@ -82,6 +82,21 @@ async function call(args, context, deps) {
         } catch (error) {
             status.ae = { responsive: false, error: error && error.message ? error.message : String(error) };
         }
+        if (typeof deps.nativeNegotiate === 'function') {
+            try {
+                await deps.nativeNegotiate(Date.now() + 7000);
+                status.nativeExecutionPlane = getNativeExecutionPlane(deps);
+            } catch (error) {
+                status.nativeExecutionPlane = {
+                    available: false, adapter: null, engine: null,
+                    error: {
+                        code: error && error.code || 'NATIVE_UNAVAILABLE',
+                        message: error && error.message || String(error),
+                        retryable: Boolean(error && error.retryable),
+                    },
+                };
+            }
+        }
     }
     return { result: textResult(status, false) };
 }
