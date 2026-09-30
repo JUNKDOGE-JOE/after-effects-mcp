@@ -355,3 +355,42 @@ test('router refuses an unknown host and never reuses its cached downstream sess
     assert.equal(sessions, 2);
     assert.equal(calls.at(-1).sessionId, 'session-2');
 });
+
+test('ticket startup waits for pristine empty AE, then validates and publishes the actual project', async () => {
+    const published = [];
+    let project = { projectPath: null, dirty: false, numItems: 0 };
+    let waits = 0;
+    const service = createInstanceService({ instanceId: 'cold-wait', projectPath: '/fixture/A.aep',
+        registry: { register: async r => { published.push(r); return r; }, update: async () => {} }, launcher: {},
+        startupWait: async () => { assert.equal(published.length, 0); waits += 1;
+            project = { projectPath: '/fixture/A.aep', dirty: false, numItems: 7 }; },
+        executeJsx: async request => { assert.equal(request.code, PROJECT_READ); return reply(project); } });
+    await service.publish('http://127.0.0.1:12001/mcp');
+    assert.equal(waits, 1);
+    assert.equal(published[0].projectPath, '/fixture/A.aep');
+});
+
+test('ticket startup never waits on dirty, populated, or wrong saved projects and remains bounded', async () => {
+    for (const project of [
+        { projectPath: null, dirty: true, numItems: 0 },
+        { projectPath: null, dirty: false, numItems: 1 },
+        { projectPath: '/fixture/B.aep', dirty: false, numItems: 0 },
+        { projectPath: null, dirty: false, numItems: 0 },
+    ]) {
+        let waits = 0;
+        const service = createInstanceService({ instanceId: 'cold-refuse', projectPath: '/fixture/A.aep',
+            registry: { register: async () => assert.fail('mismatch must never publish'), update: async () => {} },
+            launcher: {}, startupWait: async () => { waits += 1; }, executeJsx: async () => reply(project) });
+        await assert.rejects(service.publish('http://127.0.0.1:12001/mcp'), { code: 'STARTUP_PROJECT_MISMATCH' });
+        assert.equal(waits, project.projectPath === null && !project.dirty && project.numItems === 0 ? 60 : 0);
+    }
+});
+
+test('closing a panel while its ticket is waiting prevents late registration', async () => {
+    let service;
+    service = createInstanceService({ instanceId: 'cold-close', projectPath: '/fixture/A.aep',
+        registry: { register: async () => assert.fail('closed panel must not publish'), update: async () => {} },
+        launcher: {}, startupWait: async () => { await service.markClosed('panel-closed'); },
+        executeJsx: async () => reply({ projectPath: null, dirty: false, numItems: 0 }) });
+    await assert.rejects(service.publish('http://127.0.0.1:12001/mcp'), { code: 'STARTUP_ABORTED' });
+});

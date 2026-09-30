@@ -1462,11 +1462,15 @@ function start(port, callback) {
         callback(error || null, Object.assign({ port: currentPort }, getInstanceInfo()));
     };
     const listening = async () => {
+        const publishingServer = httpServer;
+        const publishingService = instanceService;
         currentPort = httpServer.address().port;
         try {
             if (instanceService) await instanceService.publish('http://127.0.0.1:' + currentPort + '/mcp');
+            if (httpServer !== publishingServer || instanceService !== publishingService) return;
             complete(null);
         } catch (error) {
+            if (httpServer !== publishingServer || instanceService !== publishingService) return;
             const failed = httpServer;
             httpServer = null;
             currentPort = null;

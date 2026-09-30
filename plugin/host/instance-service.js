@@ -16,7 +16,7 @@ const PROJECT_READ = '(function(){var p=app.project;var root=p.rootFolder;var s=
     + 'try{valid=!!s&&(typeof isValid==="function"?isValid(s.root):true)&&s.root.id===root.id&&p.revision>=s.revision;}catch(e){}'
     + 'if(!valid){var n=($.global.__aemcpProjectSerial||0)+1;$.global.__aemcpProjectSerial=n;'
     + 's={root:root,generation:n,revision:p.revision};$.global.__aemcpObservedProject=s;}s.revision=p.revision;'
-    + 'return JSON.stringify({projectPath:p.file?p.file.fsName:null,projectGeneration:s.generation,revision:p.revision,dirty:p.dirty});}())';
+    + 'return JSON.stringify({projectPath:p.file?p.file.fsName:null,projectGeneration:s.generation,revision:p.revision,dirty:p.dirty,numItems:p.numItems});}())';
 
 function changesProject(name, args) {
     if (['ae_exec', 'ae_execRecover', 'ae_revert', 'ae_toolUse'].includes(name)) return true;
@@ -91,7 +91,17 @@ function createInstanceService(options) {
     const workspaces = input.executeJsx ? new WorkspaceManager({ instanceId, readProject }) : null;
 
     async function publish(endpoint) {
-        const project = await readProject();
+        let project = await readProject();
+        // CEP may restore before a PID-targeted bootstrap opens the ticket's project.
+        // Wait only on a pristine empty project; never open it ourselves or accept a mismatch.
+        for (let attempt = 0; expectedProject && project.projectPath === null
+            && project.dirty === false && project.numItems === 0 && attempt < 60; attempt += 1) {
+            if (!accepting) throw failure('STARTUP_ABORTED', 'Panel closed during project startup.');
+            await (input.startupWait || (() => new Promise(resolve => setTimeout(resolve, 500))))();
+            if (!accepting) throw failure('STARTUP_ABORTED', 'Panel closed during project startup.');
+            project = await readProject();
+        }
+        if (!accepting) throw failure('STARTUP_ABORTED', 'Panel closed during project startup.');
         if (expectedProject && normalizeProjectPath(expectedProject) !== normalizeProjectPath(project.projectPath)) {
             await registry.update(instanceId, { state: 'unknown', reason: 'startup-project-mismatch' }).catch(() => {});
             throw failure('STARTUP_PROJECT_MISMATCH', 'AE opened a different project than the requested startup ticket.');
