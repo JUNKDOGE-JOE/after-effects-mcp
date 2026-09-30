@@ -715,8 +715,8 @@ async function writeReceipt(
     protocolSchemaSha256: crypto.createHash('sha256').update(schemaBytes).digest('hex'),
     sdk: {
       name: 'Adobe After Effects C/C++ Plug-in SDK',
-      claimedVersion: '25.6.61',
-      claimedBuild: 61,
+      claimedVersion: '26.5',
+      claimedBuild: 1,
       materialIncluded: false,
       archiveVerification: sdkVerification.archiveVerification,
       rootVerification: sdkVerification.rootVerification,

@@ -12,11 +12,26 @@ test('the frozen native-plane SDK policy remains canonical and fail-closed', asy
   const policy = await loadAeSdkPolicy();
   assert.equal(policy.schemaVersion, 1);
   assert.equal(policy.sdk.claimedBitness, 64);
+  assert.equal(policy.sdk.claimedVersion, '26.5');
+  assert.equal(policy.sdk.claimedBuild, 1);
+  assert.equal(policy.sdk.previousInputs.claimedVersion, '25.6.61');
   assert.equal(policy.sdk.licenseReview.defaultPolicy, 'deny-unless-scope-approved');
   assert.doesNotThrow(() => validateAeSdkPolicy(policy));
   assert.throws(() => validateAeSdkPolicy({ ...policy, schemaVersion: 2 }), {
     code: 'AE_SDK_POLICY_INVALID',
   });
+});
+
+test('the current direct ZIP and previous wrapped SDK locks both reject byte drift', async () => {
+  const policy = await loadAeSdkPolicy();
+  assert.equal(policy.sdk.platforms['windows-x64'].innerPayload, null);
+  assert.equal(policy.sdk.previousInputs.platforms['windows-x64'].innerPayload.format, 'zip-method-93-zstd');
+  for (const records of ['platforms', 'previousInputs']) {
+    const changed = structuredClone(policy);
+    const platforms = records === 'platforms' ? changed.sdk.platforms : changed.sdk.previousInputs.platforms;
+    platforms['windows-x64'].archive.sha256 = '0'.repeat(64);
+    assert.throws(() => validateAeSdkPolicy(changed), { code: 'AE_SDK_POLICY_INVALID' });
+  }
 });
 
 test('SDK input parsing has no private Python or sidecar bootstrap path', () => {

@@ -2,20 +2,24 @@
 
 Status: local preparation only, not release-accepted. This branch includes
 merged multi-instance work (#393) and depends on draft native connection fix
-#395, currently `27fbb43debdd0f79d89136813756518362306425`. No second PR,
-merge, tag, Release, package publication, or asset upload has been performed.
+#395, currently `27fbb43debdd0f79d89136813756518362306425`. Version preparation
+is stacked draft #396. No merge, tag, Release, package publication, or asset
+upload has been performed.
 
 ## Prepared source and changes
 
 Host, panel, CEP bundle/extension, connector, Registry metadata, native client
 fallback, packaging default and version contract all declare 0.11.0. The panel
 bundle was rebuilt and verified. Native build scripts derive the product version
-from the committed host manifest; there is no native primitive or source change.
+from the committed host manifest. The SDK migration changes the compiled SDK
+identity only; the 23 native primitives and existing suite pins are retained.
 The native plug-in remains a separate artifact and is never nested in the ZXP.
 
-The release changes are 11 mechanical version files, one changelog file and one
-generated bundle. A separate version PR would include those 13 files and this
-preparation document. Keep it separate from the eight-file connection fix.
+The original version preparation covers 11 mechanical version files, one changelog
+file, one generated bundle and this document. The subsequently authorized SDK
+migration adds the input lock/validator, build and receipt metadata, native SDK
+identity, SDK contracts and input documentation. Keep both preparation changes
+separate from the connection fix in stacked draft #396.
 After the fix is approved and merged, rebase the version branch onto main and
 review it before freezing the final clean candidate SHA.
 
@@ -56,17 +60,25 @@ git status --porcelain
 git rev-parse HEAD
 node scripts/package/ae-sdk-input.mjs verify-repository --repo-root .
 $env:AE_SDK_ARCHIVE = '<existing locked Windows SDK zip>'
-$env:AE_SDK_ROOT = '<existing extracted ae25.6_61.64bit.AfterEffectsSDK>'
+$env:AE_SDK_ROOT = '<existing extracted ae26.5.64bit.AfterEffectsSDK>'
 node scripts/package/ae-sdk-input.mjs verify-input --platform windows-x64 --repo-root .
 node native/ae-plugin/build-windows.mjs --output '<new absolute directory outside Git and Adobe scan roots>' --evidence
 ```
 
-The Windows SDK archive must match the repository lock (25.6.61, 7,549,997
-bytes, SHA-256 `3d3a39175a09d07f6f9734284636f9eadce968b05161650e3cba097a95905330`).
+The Windows SDK archive must match the active repository lock (26.5 publication
+v1, 2,025,899 bytes, SHA-256
+`ad86bd6d66a1e1ffe8471e4618e3de4dbc9679f2ca47ae9bbe69f78805c82960`).
 Archive and extracted-root content verification must both pass before building.
-The local MSVC installation was found; archive/root paths were not supplied.
+Both existing 26.5 archives/root identities were verified in a private Windows
+intake. All 70 shared Win/Mac headers match after line-ending normalization.
+Mac input verification on Windows is not a Mac build or AE compatibility result.
+The previous 25.6.61 aggregate locks remain active anti-vendoring records.
 The isolated native transport compiler/lifecycle contract is a separate test
 and does not establish a full AEX build or hardware acceptance.
+
+SDK archive top folders must be normalized to `ae26.5.64bit.AfterEffectsSDK`
+outside Git without changing file content or platform line endings. See
+`docs/native-sdk/SDK_INPUTS.md` for the verified counts and provenance boundaries.
 
 ```powershell
 Push-Location plugin/panel
@@ -106,7 +118,7 @@ Mac with the locked Mac SDK input. This preparation does not access that machine
 
 1. Review/approve and merge the connection fix and version preparation; freeze
    one clean candidate SHA. Require Windows, CEP Node 15 and macOS CI success.
-2. Resolve the SDK input and dependency-audit findings. Build the separate
+2. Verify the locked SDK input and resolve the dependency-audit findings. Build the separate
    Windows AEX and Mac native artifact from that final SHA; retain build receipts,
    toolchain/SDK identity and version verification.
 3. Verify the unsigned payload and complete per-file inventory. Sign exactly

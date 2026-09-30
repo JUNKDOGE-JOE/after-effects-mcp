@@ -104,17 +104,19 @@ using aemcp::native::SystemClock;
 using aemcp::native::TimePoint;
 
 constexpr std::string_view kPluginVersion = AE_MCP_PRODUCT_VERSION;
-constexpr std::string_view kSdkVersion = "25.6.61";
-// #215 AE 2023 baseline: built against the 25.6 SDK, but every suite is
+constexpr std::string_view kSdkVersion = "26.5";
+// #215 established these suite pins with SDK 25.6. SDK 26.5 retains them;
+// older-host compatibility still requires hardware verification. Every suite is
 // acquired at the newest version the AE 2023/2024 hosts already serve, so one
-// artifact covers AE 23-26. Concretely that pins AEGP_CompSuite to version 11
+// baseline remains unchanged. Concretely that pins AEGP_CompSuite to version 11
 // (12 only adds a horzB parameter to the two text-layer creation calls this
 // plugin never makes; the other 42 entries are byte-identical), and the other
 // ten suites were already at pre-2023 versions. The AEGP_INITFUNC 1.9 entry
 // baseline has been stable since at least the CC2019-era SDKs. Raising any
 // suite version here shrinks the supported host range - check the oldest
 // target SDK first.
-constexpr std::uint64_t kSdkBuild = 61;
+// SDK publication revision v1 comes from the Adobe download path, not an AE host build.
+constexpr std::uint64_t kSdkBuild = 1;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::int64_t kMaximumProjectItems = 100000;
 static_assert(kSourceCommit.size() == 40);
