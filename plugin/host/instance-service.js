@@ -163,7 +163,13 @@ function createInstanceService(options) {
         if (action === 'reconcile') {
             const evidence = observations.get(args.observation_id);
             const state = workspaces.inspect();
-            if (args.confirm !== true || !evidence || evidence.contextId !== args.context_id
+            const prior = state.uncertain && state.uncertain.project;
+            // A replaced project invalidates the old owner binding. A fresh reader may
+            // observe it, but only that original uncertain owner can confirm recovery.
+            const replacementObservation = evidence && prior && state.uncertain.contextId === args.context_id
+                && evidence.uncertainOwner === args.context_id && evidence.uncertainAt === state.uncertain.at
+                && (evidence.projectPath !== prior.projectPath || (evidence.projectGeneration === undefined ? null : evidence.projectGeneration) !== prior.projectGeneration);
+            if (args.confirm !== true || !evidence || (evidence.contextId !== args.context_id && !replacementObservation)
                 || !state.uncertain || evidence.at < state.uncertain.at) {
                 throw failure('RECONCILIATION_REQUIRED', 'Read and verify the current AE state, then confirm that observation_id.');
             }
@@ -319,7 +325,9 @@ function createInstanceService(options) {
                     && before.projectGeneration === after.projectGeneration) {
                     const observationId = 'obs_' + crypto.randomBytes(12).toString('hex');
                     while (observations.size >= 32) observations.delete(observations.keys().next().value);
-                    observations.set(observationId, Object.assign({ contextId: current.contextId, at: Date.now() }, after));
+                    const uncertain = workspaces.inspect().uncertain;
+                    observations.set(observationId, Object.assign({ contextId: current.contextId, at: Date.now(),
+                        uncertainOwner: uncertain && uncertain.contextId, uncertainAt: uncertain && uncertain.at }, after));
                     result.result.structuredContent.observation_id = observationId;
                     result.result.content = result.result.content || [];
                     result.result.content.push({ type: 'text', text: 'Observation for explicit reconciliation: ' + observationId });

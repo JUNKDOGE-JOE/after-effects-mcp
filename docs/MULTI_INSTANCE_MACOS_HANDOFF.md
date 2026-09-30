@@ -137,7 +137,7 @@ env -u AE_MCP_HTTP_URL \
 | 取消 | 批次尚有未开始项时 cancel；停止后续派发，最终无不明 worker 清理；不声称强行中断同步脚本 |
 | 目录与路径 | 已有英文/简中目录和 cwd 回落；正常保存后复制，主工程始终指向原路径 |
 | 失败继续 | 在 fixture 内制造目录准备故障，编辑未派发；同操作/同 failure id 明确确认仅消费一次；不得把此项称为真实 AE 保存失败 |
-| 不确定写入 | 用受控短超时诱发 uncertain；普通写入受阻；读回取得 observation_id，明确 reconcile 后才能 Undo/继续 |
+| 不确定写入 | 仅安全真实unknown可复现时验证写入受阻、读回与reconcile；Mac同步evalScript短deadline不保证触发，不延长阻塞脚本碰运气 |
 | 关闭面板 | 主 AE 保活且工程仍被占用；旧 context 拒绝，同项目再 start 拒绝；worker 最终退出 |
 | 手动重开 | 同 AE PID，新宿主/上下文；旧 context 仍拒绝，不自动重放旧命令 |
 | 正常退出 | 显式 stop 后 AE PID 确认消失，工程占用释放，无残留 registry.lock |
@@ -204,3 +204,50 @@ The actual Mac CEP read-only preflight used Node 17.7.2 / libuv 1.43.0 arm64;
 all three commands completed in about 105–112 ms each without new permissions.
 This proves query availability, not worker acceptance. Resource-limited tests
 remain unrun unless the packaged candidate passes its unchanged budget.
+
+## 收官审查与证据边界（2026-09-30）
+
+可交付“实现及自动化验证完成、Mac部分实机验证”的开发状态；不能把开发机限制
+记为Mac worker PASS，不能标正式HDEV/T5/T6完成。原交接4a276c8，Mac产品启动
+实测fe4f58b，Darwin预算实测fd85475。后续收官补丁的源码/CI与已安装版本分开记录。
+
+| 功能/保护 | 自动化覆盖 | 真实AE与缺口 | 判断 |
+| --- | --- | --- | --- |
+| 主启动/PID/ticket/TCC | launcher、service、hostBridge：启动时间/路径/环境、dirty拒绝、权限失败保留PID、不重放 | fe4f58b真实stdio/CEP两入口、两PID/端口及719ms并行；fd85475单A。原-m -r失败保留 | 主路径有实证；新机器TCC/不同AE版本未证实 |
+| 双worker/固定快照/路由 | readonly-worker复制隔离、源不变、串行、超时不再派发；read-jobs峰值2、checkpoint pin、拒写、context隔离、分页/图片来源 | Windows历史通过；Mac新PID worker链在资源准入前停止 | 已实现且自动化通过；Mac未证实 |
+| 取消/退出/父CEP | 活跃请求结束后停后续派发；owner marker；120s idle从完成起算；foreign工程拒绝关闭；未确认清理为indeterminate | Mac主面板关闭/重开与主AE保活已测；Mac worker取消/父CEP退出未运行 | 可限制下开发结项；不能承诺即时退出或无残留 |
+| unknown/reconcile/锁 | bridge超时持锁、晚回调/哨兵排空；workspaces禁重放/交接；service观察、revision与显式确认 | Windows历史unknown通过；Mac1s请求同步evalScript约1668ms后回调先清timer，已知成功 | 非内存缺口：不是硬墙钟超时/抢占取消；Mac真实unknown未证实 |
+| 工程替换后恢复 | 收官service链回归：不同路径及同路径generation替换、拒新reader代确认、拒旧观察/旧writer | 受控服务集成，不是真实AE未知写入 | 修复原公开恢复链死锁，步骤见下 |
+| 单writer/中文/状态清理 | registry原子预约、workspaces串行/transfer、checkpoint中英文与回落、重注册/旧context拒绝 | 2998710 Mac真实交接、三目录、Undo、关面板/重开通过 | 有历史实机；新补丁不冒称全部重跑 |
+| Darwin资源保护 | fd85475坏数据/压力/权限失败/过期/并发，保持1GiB+2GiB及2/4上限 | CEP17.7.2 arm64查询有效；normal下450/462MiB<3072MiB，任务not-started | 正确拒绝有实证，不保证16GiB承载两个worker |
+| 兼容/分发 | Windows host/Node15、macOS packaging、panel bundle、connector/vendor/脚本合同；系统JXA无新二进制 | 开发安装已备份；native未改；非完整签名包干净安装或客户CLI全覆盖 | 未见缺包阻断；正式分发/跨机器权限验收未完成 |
+
+本次确认并修复两项实际逻辑缺陷，均先失败回归再修复：
+
+1. worker post-spawn失败且无ready/closed标记时，旧兜底仅凭启动所有权kill。
+   Mac guard可能在写标记前因用户非空工程拒绝，故启动所有权不是工程安全证明。
+   现在仅请求正常停止并有界等待；不确认则保留PID/快照，上层报告cleanup_unknown。
+   可能需人工核实遗留实例，不宣称自动清理成功。
+2. uncertain后工程替换，旧context不能读，新reader观察又被同context限制拒绝。
+   现在记录unknown时工程身份；仅工程确已替换、观察绑定同次unknown owner且当前
+   身份/revision仍匹配时，原owner可确认新reader观察。新reader不能代确认；旧writer
+   不复活，同工程仍要求同context观察。流程：保留原uncertain context_id → 新建当前
+   工程read context并ae_read → 用原context_id和新observation_id明确confirm reconcile
+   → 再绑定新write context。禁止盲重放原写入。
+
+保留限制：同步ExtendScript无法被JS定时器抢占；CEP异常死亡未写marker时worker依赖
+idle检查，长同步脚本未结束不能保证退出；父宿主已死时快照可能需手工归档。
+一次status ECONNRESET的根因未确立，重连读取同job成功，未重提任务；不是unknown写入。
+已有预算预约会在30秒内有界重测，Darwin报告两条明细是两worker最终拒绝样本，
+不代表系统查询总共仅两次。没有新增排队功能或降低预算。
+
+本机仓库外validation证据：PRODUCT-LAUNCHER-RESULT.md、timing-observation/RESULT.md、
+darwin-admission/RESULT.md；收官复现closure-worker-repro.log、closure-reconcile-repro.log，
+修复覆盖closure-targeted.log及closure-host-full.log。PR393最新HEAD/CI记录最终补丁，
+PR保持草稿：https://github.com/JUNKDOGE-JOE/after-effects-mcp/pull/393 。
+Mac五个AEP归档recovery/20260930-macos-fd85475/multi-instance，活动0、测试AE/CEP0。
+本轮收官补丁未再部署或硬开worker；安装仍fd85475，备份/PlayerDebugMode旧值缺失如实保留。
+
+最小剩余：审阅收官修复和最终CI；在满足原预算的Mac补worker/父CEP实机；另取得安全真实
+unknown/reconcile证据。可将后两项作为明确开发验证限制归档，不能据此保证未验证行为
+或升级正式验收状态。硬墙钟中断、新队列、Guide修复、新平台均不在此次范围。

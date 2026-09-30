@@ -71,7 +71,6 @@ async function createWorkerForJob(options) {
                 launched.process.once('exit', () => service.registry.unregister(reservation.instanceId, 'worker-exited').catch(() => {}));
                 return launched;
             },
-            stopWorker: record => service.launcher.stopOwnedWorker(record),
         });
         await service.registry.register({ instanceId: reservation.instanceId, role: 'worker',
             ownerInstanceId: service.instanceId, pid: worker.pid, projectPath: options.checkpointPath });

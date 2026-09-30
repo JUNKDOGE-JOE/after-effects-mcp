@@ -229,3 +229,20 @@ test('a bookkeeping failure after spawn preserves the snapshot until normal work
     assert.equal(forced, false);
     assert.equal(fs.existsSync(config.snapshotPath), false);
 });
+
+test('missing startup acknowledgement never force-kills a possibly user-adopted worker', async t => {
+    const { root, checkpointPath } = fixture(t);
+    let config, published, killed = false;
+    const record = { pid: 321, process: { exitCode: null, signalCode: null } };
+    await assert.rejects(createReadonlyWorker({ checkpointPath, workDir: root, pollMs: 1,
+        failureCloseTimeoutMs: 5, onStarted: handle => { published = handle; },
+        stopWorker: async () => { killed = true; }, startWorker: async ({ scriptPath }) => {
+            config = configuration(scriptPath);
+            // The dispatch guard can reject a user-opened project before ready.json exists.
+            throw Object.assign(new Error('AE_SCRIPT_DISPATCH_FAILED'), { launchedInstance: record });
+        } }), error => error.launchedInstance === record);
+    assert.equal(killed, false);
+    assert.equal(published.pid, 321);
+    assert.equal(fs.existsSync(config.snapshotPath), true);
+    assert.equal(fs.existsSync(path.join(config.root, 'stop.json')), true);
+});

@@ -183,7 +183,7 @@ class WorkspaceManager {
 
     markUncertain(contextId, details) {
         this._context(contextId, true, true);
-        this.uncertain = { contextId, details: clone(details || {}), at: Date.now() };
+        this.uncertain = { contextId, project: clone(this.project), details: clone(details || {}), at: Date.now() };
     }
 
     async reconcile(contextId, confirmation) {

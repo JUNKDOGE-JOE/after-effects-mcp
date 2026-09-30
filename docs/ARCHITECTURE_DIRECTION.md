@@ -25,6 +25,13 @@ Guide 缺失的历史像素断言仍为 FAIL，后续处置为 `accepted limitat
 分支/草稿 PR 的 CI 结果以远端检查记录为准；macOS 实机、合并及正式交付门禁尚未完成，
 不称为 `development-verified` 或 `release-accepted`。见 [macOS 交接](MULTI_INSTANCE_MACOS_HANDOFF.md)。
 
+
+Mac收官更新：产品主实例PID派发/双工程已实测，worker在本机保守资源准入前被拒绝；
+其固定快照/取消/父CEP退出不能记成Mac通过。Mac真实unknown/reconcile独立未验收，
+同步evalScript的超时不是硬墙钟保证。收官审查修复了未确认worker启动强杀风险和
+工程替换后公开恢复链阻塞；具体版本、自动化/实机分层与剩余门禁见Mac交接文档的
+“收官审查与证据边界”，不把下述Windows历史实机外推到Mac。
+
 ae-mcp 的公开 MCP 服务运行在 CEP Node 宿主 `plugin/host/` 中。客户端通过
 默认 `http://127.0.0.1:11488/mcp` 或已登记的实际端点调用公开工具；宿主再经 ExtendScript
 主执行平面或冻结的原生 AEGP 平面读取、修改和验证 After Effects 状态。

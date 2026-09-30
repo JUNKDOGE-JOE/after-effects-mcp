@@ -38,7 +38,7 @@ async function fixture(t) {
             cepPid,
             workDir: root, launcher: {}, executeJsx: async (request) => {
                 requests.push(request);
-                if (request.code === PROJECT_READ) return reply({ projectPath: state.projectPath, dirty: state.dirty, revision: state.revision });
+                if (request.code === PROJECT_READ) return reply({ projectPath: state.projectPath, dirty: state.dirty, revision: state.revision, projectGeneration: state.projectGeneration });
                 assert.equal(request.client, 'instance-stop');
                 return state.stop ? state.stop(request) : reply({ ok: true, stopRequested: true });
             } });
@@ -393,4 +393,35 @@ test('closing a panel while its ticket is waiting prevents late registration', a
         launcher: {}, startupWait: async () => { await service.markClosed('panel-closed'); },
         executeJsx: async () => reply({ projectPath: null, dirty: false, numItems: 0 }) });
     await assert.rejects(service.publish('http://127.0.0.1:12001/mcp'), { code: 'STARTUP_ABORTED' });
+});
+
+for (const replacement of ['path', 'generation']) test('public recovery after ' + replacement + ' replacement requires the original uncertain owner', async t => {
+    const { service, state } = await fixture(t);
+    const writer = await bind(service, 'write');
+    await route(service, writer, 'ae_exec', {}, async () => ({ result: {
+        structuredContent: { ok: false, disposition: 'uncertain' }, isError: true,
+    } }));
+    if (replacement === 'path') state.projectPath = path.join(path.dirname(state.projectPath), 'replacement.aep');
+    else state.projectGeneration = 2;
+    state.revision += 1;
+    await assert.rejects(route(service, writer, 'ae_read', {}), { code: 'SOURCE_PROJECT_CHANGED' });
+    const reader = await bind(service, 'read');
+    await assert.rejects(bind(service, 'write'), { code: 'RESULT_UNKNOWN' });
+    const observe = () => route(service, reader, 'ae_read', {}, async () => ({ result: {
+        structuredContent: { ok: true, projectPath: state.projectPath }, content: [],
+    } }));
+    const observation = (await observe()).result.structuredContent.observation_id;
+    const reconcile = (id, observation_id, confirm = true) => service.workspace('reconcile', {
+        context_id: id, observation_id, confirm,
+    }, context());
+    await assert.rejects(reconcile(reader.context_id, observation), { code: 'CONTEXT_CONFLICT' });
+    await assert.rejects(reconcile(writer.context_id, observation, false), { code: 'RECONCILIATION_REQUIRED' });
+    state.revision += 1;
+    await assert.rejects(reconcile(writer.context_id, observation), { code: 'OBSERVATION_STALE' });
+    const fresh = (await observe()).result.structuredContent.observation_id;
+    assert.equal((await reconcile(writer.context_id, fresh)).resolved, true);
+    await assert.rejects(route(service, writer, 'ae_exec', {}), { code: 'SOURCE_PROJECT_CHANGED' });
+    const rebound = await bind(service, 'write');
+    assert.equal(rebound.project_path, state.projectPath);
+    assert.equal(service.workspaces.inspect().uncertain, null);
 });

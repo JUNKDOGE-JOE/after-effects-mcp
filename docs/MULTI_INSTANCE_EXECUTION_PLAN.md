@@ -351,3 +351,12 @@ CI 当前结果以该 PR 的检查记录为准；macOS packaging job 不能代�
 当前仅支持 Apple Silicon 原生 darwin-arm64。下一阶段按交接文档核实 Mac 的 `-m -r`、
 CEP StartOn、AE PID 父链、worker 在父 CEP 退出后的生命周期与实际状态根继承。
 Windows 和模拟测试结果不提前记成 macOS PASS。
+
+## Mac收官审查补记（2026-09-30）
+
+最新分层清单见[Mac交接文档](MULTI_INSTANCE_MACOS_HANDOFF.md)的“收官审查与证据边界”。
+fe4f58b产品双工程、fd85475保守预算实机与收官修复源码/CI分别记录，Windows历史不作Mac实证。
+收官审查修复未确认worker启动兜底强杀风险，以及unknown后工程替换的公开reconcile死锁。
+Mac worker固定快照/取消/父CEP退出受开发机预算限制；Mac真实unknown独立未验收，不是内存原因。
+同步evalScript的timeout不是硬墙钟保证。可按明确限制完成开发交接，不能标正式HDEV、
+development-verified或release-accepted。无合并、打标签、发布授权变化。

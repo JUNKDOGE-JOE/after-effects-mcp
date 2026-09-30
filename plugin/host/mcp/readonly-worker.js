@@ -134,11 +134,10 @@ async function createReadonlyWorker(options) {
                         return exited() || (!child() && readJson(path.join(root, 'closed.json')));
                     }, failureCloseTimeoutMs, pollMs);
                 } catch (_) {
-                    if (!refused() && typeof options.stopWorker === 'function') {
-                        try { await options.stopWorker(record); }
-                        catch (cleanupError) { error.cleanupError = cleanupError.message; }
-                        try { await waitFor(exited, failureCloseTimeoutMs, pollMs); } catch (_) {}
-                    }
+                    // No acknowledgement cannot prove the current AE project is ours.
+                    // Keep the process/snapshot for inspection; never force-kill user work.
+                    error.cleanupError = 'Worker exit unconfirmed; PID and snapshot retained';
+                    error.snapshotRetained = true;
                 }
             }
             if (exited() && fs.existsSync(snapshotPath)) fs.unlinkSync(snapshotPath);
