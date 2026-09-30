@@ -202,3 +202,87 @@ test('registry mutations release their lock before yielding to queued teardown w
     await assert.rejects(registry._mutate(() => { throw new Error('mutation failed'); }), /mutation failed/);
     assert.equal(fs.existsSync(registry.lock), false);
 });
+
+const { darwinMemorySample } = require('./instance-registry');
+function memoryProbe(overrides = {}) {
+    const page = overrides.page || 16384;
+    const text = overrides.text === undefined ? `Mach Virtual Memory Statistics: (page size of ${page} bytes)\nPages free: 65536.\nPages purgeable: 131072.\nPages inactive: 999999.\nPages speculative: 999999.\nPages occupied by compressor: 999999.\n` : overrides.text;
+    const calls = [];
+    let tick = 0, pressure = 0;
+    const sample = darwinMemorySample({
+        now: () => tick++ ? (overrides.elapsed === undefined ? 300 : overrides.elapsed) : 0,
+        freeMemory: () => overrides.free === undefined ? 1024 ** 3 : overrides.free,
+        totalMemory: () => 16 * 1024 ** 3,
+        run: (file, args, options) => {
+            calls.push({ file, args, options });
+            if (overrides.error) throw Object.assign(new Error('private output'), { code: overrides.error });
+            return file === '/usr/bin/vm_stat' ? text : (overrides.pressures || ['1', '1'])[pressure++];
+        }
+    });
+    return { sample, calls };
+}
+
+test('Darwin counts only free plus purgeable with bounded fixed commands and normal pressure', () => {
+    const { sample, calls } = memoryProbe();
+    assert.equal(sample.availableBytes, 3 * 1024 ** 3);
+    assert.equal(sample.freeBytes, 1024 ** 3);
+    assert.equal(sample.purgeableBytes, 2 * 1024 ** 3);
+    assert.equal(sample.reason, undefined);
+    assert.deepEqual(calls.map(c => c.file), ['/usr/sbin/sysctl', '/usr/bin/vm_stat', '/usr/sbin/sysctl']);
+    assert.deepEqual(calls[0].args, ['-n', 'kern.memorystatus_vm_pressure_level']);
+    for (const c of calls) {
+        assert.equal(c.options.timeout, 200); assert.equal(c.options.maxBuffer, 16384);
+        assert.equal(c.options.env.LC_ALL, 'C'); assert.equal(c.options.shell, undefined);
+    }
+    assert.equal(memoryProbe({ page: 4096 }).sample.availableBytes, 0.75 * 1024 ** 3);
+    assert.equal(memoryProbe({ free: 512 * 1024 ** 2 }).sample.availableBytes, 2.5 * 1024 ** 3);
+});
+
+test('Darwin denies pressure changes, unknown pressure, stale samples and query failures', () => {
+    for (const pressures of [['2', '1'], ['4', '1'], ['0', '1'], ['1', '2'], ['1', '4'], ['1', 'unknown']]) {
+        const s = memoryProbe({ pressures }).sample;
+        assert.equal(s.availableBytes, 0); assert.equal(s.reason, 'pressure-not-normal');
+    }
+    for (const elapsed of [751, -1, NaN, Infinity]) {
+        assert.equal(memoryProbe({ elapsed }).sample.reason, 'stale-memory-sample');
+    }
+    assert.equal(memoryProbe({ elapsed: 750 }).sample.availableBytes, 3 * 1024 ** 3);
+    for (const error of ['EACCES', 'ENOENT', 'ETIMEDOUT']) {
+        const s = memoryProbe({ error }).sample;
+        assert.equal(s.availableBytes, 0); assert.equal(s.reason, 'memory-query-failed');
+        assert.ok(!JSON.stringify(s).includes('private output'));
+    }
+});
+
+test('Darwin rejects malformed, duplicated, unsafe and unsupported memory counts', () => {
+    const valid = 'Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free: 65536.\nPages purgeable: 131072.\n';
+    for (const text of ['', valid.replace('Pages free:', 'Other:'), valid + 'Pages free: 1.\n',
+        valid.replace('65536', '-1'), valid.replace('65536', 'NaN'), valid.replace('65536', '9007199254740992'),
+        valid.replace('131072', '1048576'), valid.replace('16384', '8192')]) {
+        const s = memoryProbe({ text }).sample; assert.equal(s.availableBytes, 0); assert.ok(s.reason);
+    }
+    for (const free of [NaN, Infinity, -1, 32 * 1024 ** 3]) {
+        assert.equal(memoryProbe({ free }).sample.reason, 'invalid-memory-count');
+    }
+});
+
+test('Darwin measured headroom retains atomic startup reservations and existing worker bookkeeping', async t => {
+    const gib = 1024 ** 3;
+    let sample = memoryProbe().sample;
+    const registry = new InstanceRegistry({ root: temporary(t), minFreeMemoryBytes: 2 * gib,
+        workerEstimateBytes: gib, memoryAvailable: () => sample, isProcessAlive: () => true });
+    const results = await Promise.allSettled([registry.reserve({ instanceId: 'a', role: 'worker' }),
+        registry.reserve({ instanceId: 'b', role: 'worker' })]);
+    assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+    const refusal = results.find(r => r.status === 'rejected').reason;
+    assert.equal(refusal.code, 'INSTANCE_BUDGET');
+    assert.ok(refusal.message.includes('"requiredBytes":4294967296'));
+    const winner = results.find(r => r.status === 'fulfilled').value;
+    sample = { availableBytes: 0, reason: 'memory-query-failed' };
+    await registry.register({ instanceId: winner.instanceId, pid: 42 });
+    await registry.unregister(winner.instanceId);
+    sample = { availableBytes: 3 * gib - 1 };
+    await assert.rejects(registry.reserve({ role: 'worker' }), { code: 'INSTANCE_BUDGET' });
+    sample = { availableBytes: 4 * gib, reason: 'stale-memory-sample' };
+    await assert.rejects(registry.reserve({ role: 'worker' }), { code: 'INSTANCE_BUDGET' });
+});

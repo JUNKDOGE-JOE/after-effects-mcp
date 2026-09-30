@@ -31,6 +31,58 @@ function processAlive(pid) {
     catch (error) { return error.code === 'ESRCH' ? false : null; }
 }
 
+// macOS exposes dispatch pressure flags: NORMAL=1, WARN=2, CRITICAL=4.
+// Query afresh under the registry lock; never count inactive, compressor or swap.
+function darwinMemorySample(options) {
+    const input = options || {};
+    const run = input.run || require('child_process').execFileSync;
+    const now = input.now || (() => Number(process.hrtime.bigint()) / 1e6);
+    const freeMemory = input.freeMemory || os.freemem;
+    const totalMemory = input.totalMemory || os.totalmem;
+    const started = now();
+    const sample = { source: 'darwin-free-purgeable', availableBytes: 0 };
+    const query = (file, args) => run(file, args, { encoding: 'utf8', timeout: 200,
+        maxBuffer: 16384, env: Object.assign({}, process.env, { LC_ALL: 'C' }) });
+    try {
+        sample.pressureBefore = String(query('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_vm_pressure_level'])).trim();
+        if (sample.pressureBefore !== '1') throw new Error('pressure-not-normal');
+        const output = String(query('/usr/bin/vm_stat', []));
+        sample.pressureAfter = String(query('/usr/sbin/sysctl', ['-n', 'kern.memorystatus_vm_pressure_level'])).trim();
+        if (sample.pressureAfter !== '1') throw new Error('pressure-not-normal');
+        const field = (pattern) => {
+            const matches = Array.from(output.matchAll(pattern));
+            if (matches.length !== 1) throw new Error('invalid-vm-stat');
+            const value = Number(matches[0][1]);
+            if (!Number.isSafeInteger(value) || value < 0) throw new Error('invalid-vm-stat');
+            return value;
+        };
+        sample.pageSize = field(/^Mach Virtual Memory Statistics: \(page size of (\d+) bytes\)\r?$/gm);
+        if (![4096, 16384].includes(sample.pageSize)) throw new Error('unsupported-page-size');
+        sample.vmFreeBytes = field(/^Pages free:\s+(\d+)\.\r?$/gm) * sample.pageSize;
+        sample.purgeableBytes = field(/^Pages purgeable:\s+(\d+)\.\r?$/gm) * sample.pageSize;
+        sample.osFreeBytes = freeMemory();
+        sample.totalBytes = totalMemory();
+        const values = [sample.vmFreeBytes, sample.purgeableBytes, sample.osFreeBytes, sample.totalBytes];
+        if (!values.every(n => Number.isSafeInteger(n) && n >= 0 && n <= sample.totalBytes)
+            || sample.totalBytes === 0 || sample.vmFreeBytes + sample.purgeableBytes > sample.totalBytes) {
+            throw new Error('invalid-memory-count');
+        }
+        // vm_stat may exclude speculative pages; do not add them again to Node free.
+        sample.freeBytes = Math.min(sample.vmFreeBytes, sample.osFreeBytes);
+        sample.elapsedMs = now() - started;
+        if (!Number.isFinite(sample.elapsedMs) || sample.elapsedMs < 0 || sample.elapsedMs > 750) {
+            throw new Error('stale-memory-sample');
+        }
+        sample.availableBytes = sample.freeBytes + sample.purgeableBytes;
+    } catch (error) {
+        sample.availableBytes = 0;
+        sample.reason = ['pressure-not-normal', 'invalid-vm-stat', 'unsupported-page-size',
+            'invalid-memory-count', 'stale-memory-sample'].includes(error.message)
+            ? error.message : 'memory-query-failed';
+    }
+    return sample;
+}
+
 class InstanceRegistry {
     constructor(options) {
         const input = options || {};
@@ -41,7 +93,7 @@ class InstanceRegistry {
         this.maxInstances = input.maxInstances === undefined ? 4 : input.maxInstances;
         this.maxWorkers = input.maxWorkers === undefined ? 2 : input.maxWorkers;
         this.lockTimeoutMs = input.lockTimeoutMs === undefined ? 2000 : input.lockTimeoutMs;
-        this.memoryAvailable = input.memoryAvailable || os.freemem;
+        this.memoryAvailable = input.memoryAvailable || (process.platform === 'darwin' ? darwinMemorySample : os.freemem);
         this.minFreeMemoryBytes = input.minFreeMemoryBytes || 0;
         this.workerEstimateBytes = input.workerEstimateBytes || 0;
         this.isProcessAlive = input.isProcessAlive || processAlive;
@@ -155,8 +207,13 @@ class InstanceRegistry {
         if (candidate.role === 'worker' && candidate.state === 'starting'
             && !records.some(record => record.instanceId === candidate.instanceId)) {
             const starting = others.filter(record => record.role === 'worker' && record.state === 'starting').length;
-            if (this.memoryAvailable() - (starting + 1) * this.workerEstimateBytes < this.minFreeMemoryBytes) {
-                throw registryError('INSTANCE_BUDGET', 'Insufficient free memory for another read worker; keep the primary responsive');
+            const memory = this.minFreeMemoryBytes || this.workerEstimateBytes ? this.memoryAvailable() : 0;
+            const available = typeof memory === 'number' ? memory : memory && memory.availableBytes;
+            const required = this.minFreeMemoryBytes + (starting + 1) * this.workerEstimateBytes;
+            if (!Number.isSafeInteger(available) || available < required || (memory && memory.reason)) {
+                const detail = typeof memory === 'number' ? { source: 'os-free', availableBytes: memory } : memory;
+                throw registryError('INSTANCE_BUDGET', 'Conservative memory budget unavailable or insufficient for another read worker: '
+                    + JSON.stringify(Object.assign({}, detail, { requiredBytes: required, startingWorkers: starting })));
             }
         }
         if (candidate.role === 'primary' && candidate.projectKey && others.some((record) =>
@@ -244,4 +301,4 @@ class InstanceRegistry {
     }
 }
 
-module.exports = { InstanceRegistry, normalizeProjectPath };
+module.exports = { InstanceRegistry, normalizeProjectPath, darwinMemorySample };

@@ -181,3 +181,26 @@ Apple Event 超时也不能重试已派发脚本。主实例等待脚本回复�
 CEP 可先于项目打开恢复：仅在 ticket 指定项目、实际为未修改的空白工程时进行有界等待，
 工程身份相符后才登记；错误项目/dirty 工程仍拒绝，面板关闭中止等待。替代路径的实机
 结果与原 `-m -r` 失败分别记录。用户仍需亲自处理任何新的系统权限，不能自动接受。
+
+### Darwin worker memory admission
+
+Darwin now samples normal pressure before and after `vm_stat` using bounded,
+read-only system commands in the existing registry reservation lock. The sysctl
+returns dispatch flags (normal=1, warning=2, critical=4), not XNU's internal enum:
+https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_memorystatus_notify.c
+and `bsd/sys/event_private.h` define the conversion and constants.
+Only `min(vm_stat free bytes, os.freemem()) + purgeable bytes` contributes.
+Inactive/file-backed, speculative, compressor and swap are not added. This is a
+conservative admission estimate, not a guarantee of AE's peak use or no paging.
+
+The 1 GiB/new worker + 2 GiB primary headroom and 2-worker/4-instance limits are
+unchanged. Starting reservations are deducted atomically. Non-normal/unknown
+pressure, query failure, invalid counts or a sample older than 750 ms refuse a
+new worker; existing worker registration/exit still work. Rejection reports the
+sample components and required bytes rather than claiming physical exhaustion.
+Windows retains `os.freemem()` admission. No new native component or permissions.
+
+The actual Mac CEP read-only preflight used Node 17.7.2 / libuv 1.43.0 arm64;
+all three commands completed in about 105–112 ms each without new permissions.
+This proves query availability, not worker acceptance. Resource-limited tests
+remain unrun unless the packaged candidate passes its unchanged budget.
