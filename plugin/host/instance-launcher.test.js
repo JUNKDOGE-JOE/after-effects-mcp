@@ -274,3 +274,27 @@ test('Mac post-spawn dispatch failure preserves ownership for reconciliation', a
         { code: 'INSTANCE_ALREADY_STARTED' });
     assert.equal(f.calls.length, 1);
 });
+
+test('JXA dispatch treats a bridged nil NSError as success, but preserves real permission errors', () => {
+    const { MAC_DISPATCH } = require('./instance-launcher');
+    for (const denied of [false, true]) {
+        let sent = 0;
+        const app = { isNil: () => false, finishedLaunching: true, terminated: false, executableURL: { path: '/AE' } };
+        const event = { setParamDescriptorForKeyword() {}, sendEventWithOptionsTimeoutError(options) {
+            sent += 1; assert.equal(options, 0x20013);
+            return { paramDescriptorForKeyword: () => ({ stringValue: '0' }) };
+        } };
+        const sandbox = {
+            ObjC: { import() {}, unwrap: x => x }, Ref: () => [{ isNil: () => !denied, code: -1744, localizedDescription: 'permission' }],
+            $: { NSRunningApplication: { runningApplicationWithProcessIdentifier: () => app },
+                NSTask: { alloc: { init: {} } }, NSPipe: { pipe: { fileHandleForReading: { readDataToEndOfFile: '' } } },
+                NSString: { alloc: { initWithDataEncoding: () => 'birth' } },
+                NSAppleEventDescriptor: { descriptorWithProcessIdentifier: () => ({}), descriptorWithString: x => x,
+                    appleEventWithEventClassEventIDTargetDescriptorReturnIDTransactionID: () => event } },
+        };
+        vm.createContext(sandbox); vm.runInContext(MAC_DISPATCH, sandbox);
+        if (denied) assert.throws(() => sandbox.run(['42', '/AE', 'birth', '/script', 'ticket', 'primary']), /AE_APPLE_EVENT_-1744/);
+        else assert.equal(JSON.parse(sandbox.run(['42', '/AE', 'birth', '/script', 'ticket', 'primary'])).dispatched, true);
+        assert.equal(sent, 1);
+    }
+});

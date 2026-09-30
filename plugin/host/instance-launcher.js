@@ -91,7 +91,7 @@ function run(a) {
   var error=Ref();
   // Never prompt for TCC or allow target interaction. Worker scripts run until their job ends.
   var reply=event.sendEventWithOptionsTimeoutError(0x20010|(role==='worker'?1:3),15,error);
-  if(error[0]) throw Error('AE_APPLE_EVENT_'+Number(error[0].code)+': '+ObjC.unwrap(error[0].localizedDescription));
+  if(error[0] && !error[0].isNil()) throw Error('AE_APPLE_EVENT_'+Number(error[0].code)+': '+ObjC.unwrap(error[0].localizedDescription));
   if(role!=='worker' && ObjC.unwrap(reply.paramDescriptorForKeyword(0x2d2d2d2d).stringValue)!=='0')
     throw Error('AE_SCRIPT_RESULT_UNKNOWN');
   return JSON.stringify({pid:pid,launchIdentity:start,dispatched:true});
