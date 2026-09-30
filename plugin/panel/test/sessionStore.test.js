@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createSessionStore } from '../src/cep/sessionStore.js';
+import { createSessionController } from '../src/lib/sessionController.js';
 
 function createMemoryPlatform() {
   const files = new Map();
@@ -78,6 +82,35 @@ test('session store round-trips index and transcripts through atomic private wri
   assert.equal(saved.entries[0].sid, 'chat-one:1');
   assert.ok(platform.calls.some((call) => call.type === 'rename' && call.to.endsWith('/index.json')));
   assert.ok(platform.calls.some((call) => call.type === 'chmod' && call.mode === 0o600));
+});
+
+test('two panel stores serialize index mutations and keep unrelated session changes', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-sessions-concurrent-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const platform = { fs, paths: { configRoot: root, join: (parts) => path.join(...parts) } };
+  const a = createSessionStore({ platform });
+  const b = createSessionStore({ platform });
+  const makeController = (store, suffix) => createSessionController({ store, uuid: () => suffix, deps: {
+    currentBackend: () => 'codex', currentChannel: () => 'cli', currentModel: () => 'model',
+  } });
+  const first = makeController(a, 'one');
+  const second = makeController(b, 'two');
+  await first.boot();
+  await second.boot();
+  first.recordEntries([{ type: 'user-text', text: 'one' }], { type: 'turn-end' });
+  second.recordEntries([{ type: 'user-text', text: 'two' }], { type: 'turn-end' });
+  first.rename('chat-one', 'First');
+  second.rename('chat-two', 'Second');
+  assert.deepEqual(a.loadIndex().sessions.map((meta) => [meta.id, meta.title]).sort(),
+    [['chat-one', 'First'], ['chat-two', 'Second']]);
+  await second.remove('chat-one');
+  first.flush();
+  assert.deepEqual(a.loadIndex().sessions.map((meta) => meta.id), ['chat-two']);
+  a.mutateIndex((latest) => {
+    assert.throws(() => b.mutateIndex(() => {}), { code: 'SESSION_STORE_BUSY' });
+    return latest;
+  });
+  assert.equal(fs.existsSync(path.join(root, 'sessions', 'index.json.lock')), false);
 });
 
 test('session store removes a failed atomic temp write and tags the error', () => {

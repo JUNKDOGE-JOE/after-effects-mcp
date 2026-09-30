@@ -315,7 +315,8 @@ test('App channel effects wait for session reset before probing and cancel a dep
       backendResetPromiseRef: { current: null }, preserveAttachmentDraftRef: { current: false },
       pendingTurnRef: { current: null }, effective: { backend }, backendPref: backend,
       claudeBackend: { reset: noop }, codexBackend: { reset: noop }, openCodeBackend: h.backend,
-      resetAttachmentDraftSession: noop, setChatStreaming: noop, setThinkingActive: noop,
+      resetAttachmentDraftSession: noop, setChatStreaming: noop, setThinkingActive: noop, workDir: 'C:\\Projects',
+      hostConversation: { currentConversation: () => null }, sessionSnapshot: { activeId: 'chat-one' },
       setTurnStage: noop, setTurnProgress: noop, setSessionModel: noop, setSessionEffort: noop,
       setSessionFast: noop, sessionController, status: { state: 'ok' }, providerInit: { state: 'ready' },
       setOpenCodeProbe: noop,
@@ -421,6 +422,18 @@ test('OpenCode decodes both child-process streams as UTF-8', async () => {
     ['stderr', 'utf8'],
   ]);
   h.backend.reset();
+});
+
+test('OpenCode separates two AE instances by identity and uses their explicit work directories', async () => {
+  for (const id of ['main-a', 'main-b']) {
+    const h = makeBackend({ getWorkContext: () => ({ instanceId: id, workDir: 'E:\\' + id }) });
+    try {
+      await h.backend.probeAccount();
+      const options = h.spawned.calls[0].options;
+      assert.equal(options.cwd, 'E:\\' + id);
+      assert.equal(options.env.XDG_CONFIG_HOME, 'C:\\Users\\test\\.ae-mcp\\opencode\\home-' + id);
+    } finally { h.backend.reset(); }
+  }
 });
 
 test('OpenCode recheck uses the same architecture and config environment as startup', async () => {

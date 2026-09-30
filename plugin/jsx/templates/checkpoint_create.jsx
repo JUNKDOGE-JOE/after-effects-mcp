@@ -1,8 +1,7 @@
 // ae.checkpoint create — copy current saved .aep to checkpoint path.
-// Placeholders: dst_path (JSON-quoted absolute path).
+// Placeholders: dst_path and expected_path (JSON-quoted absolute paths).
 //
-// Strategy: app.project.save() to the project's existing fsName (no
-// side-effects), then File.copy() to the checkpoint location. Calling
+// Save current edits to the existing fsName, then copy the checkpoint. Calling
 // app.project.save(File(...)) would change the project's fsName — DON'T.
 //
 // Untitled projects (app.project.file === null) are SKIPPED silently:
@@ -13,17 +12,24 @@
             ok: true, skipped: true, reason: "untitled-project", id: null
         });
     }
+    var expectedPath = new File($expected_path).fsName;
+    if (app.project.file.fsName !== expectedPath) {
+        return JSON.stringify({ok:false,error:"source-project-changed"});
+    }
     try {
         app.project.save();
     } catch (e) {
-        return JSON.stringify({ok: false, error: "save() failed: " + String(e)});
+        return JSON.stringify({ok:false, error:"save() failed: " + String(e), code:"CHECKPOINT_SAVE_FAILED", stage:"save", disposition:"uncertain"});
     }
     var src = app.project.file;
     var dstPath = ${dst_path};
     var dst = new File(dstPath);
-    var ok = src.copy(dst.fsName);
+    var ok = false;
+    try { ok = src.copy(dst.fsName); } catch (copyError) {
+        return JSON.stringify({ok:false, error:String(copyError), code:"CHECKPOINT_COPY_FAILED", stage:"copy", disposition:"not_dispatched", saveCompleted:true});
+    }
     if (!ok) {
-        return JSON.stringify({ok: false, error: "File.copy() returned false"});
+        return JSON.stringify({ok:false, error:"File.copy() returned false", code:"CHECKPOINT_COPY_FAILED", stage:"copy", disposition:"not_dispatched", saveCompleted:true});
     }
     var size = -1;
     try { size = dst.length; } catch (e) { }

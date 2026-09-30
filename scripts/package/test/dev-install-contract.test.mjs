@@ -18,7 +18,8 @@ async function writeExecutable(filePath, source) {
 }
 
 async function makeMacFixture(t, {
-  pgrepExitCode = 1,
+  psExitCode = 0,
+  processCommands = '/sbin/launchd',
   failSecondMove = false,
   sourceSymlink = false,
   bundleVerifierExitCode = 0,
@@ -56,7 +57,12 @@ async function makeMacFixture(t, {
   await cp(path.join(repoRoot, 'scripts/install-plugin-dev-macos.sh'), installer);
   await chmod(installer, 0o755);
 
-  await writeExecutable(path.join(bin, 'pgrep'), `#!/bin/sh\nexit ${pgrepExitCode}\n`);
+  await writeFile(path.join(bin, 'process-list'), processCommands + '\n', 'utf8');
+  await writeExecutable(path.join(bin, 'ps'), `#!/bin/sh
+[ "$*" = "-axo comm=" ] || exit 97
+cat "$(dirname "$0")/process-list"
+exit ${psExitCode}
+`);
   await writeExecutable(path.join(bin, 'defaults'), '#!/bin/sh\nexit 0\n');
   if (failSecondMove) {
     const counter = path.join(root, 'mv-count');
@@ -95,7 +101,7 @@ exec /bin/mv "$@"
 
 test('macOS dev install refuses a running AE before touching the deployed panel', async (t) => {
   if (skipUnlessMacOS(t)) return;
-  const fixture = await makeMacFixture(t, { pgrepExitCode: 0 });
+  const fixture = await makeMacFixture(t, { processCommands: '/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app/Contents/MacOS/After Effects' });
   await assert.rejects(
     execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
     /After Effects.*closed/i,
@@ -105,7 +111,7 @@ test('macOS dev install refuses a running AE before touching the deployed panel'
 
 test('macOS dev install fails closed when AE process inspection itself fails', async (t) => {
   if (skipUnlessMacOS(t)) return;
-  const fixture = await makeMacFixture(t, { pgrepExitCode: 2 });
+  const fixture = await makeMacFixture(t, { psExitCode: 2 });
   await assert.rejects(
     execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
     /could not determine whether After Effects is running/i,
@@ -236,7 +242,9 @@ test('dev installers encode preflight, isolated macOS state, rollback, and no de
   const windows = await readFile(path.join(repoRoot, 'scripts/install-plugin-dev.ps1'), 'utf8');
 
   assert.doesNotMatch(mac, /rm\s+-rf\s+"?\$\{?cep_dir/i);
-  assert.match(mac, /pgrep[\s\S]*Adobe After Effects\|AfterFX/);
+  assert.match(mac, /ps -axo comm=/);
+  assert.match(mac, /'After Effects'\|AfterFX\|AfterFX.exe/);
+  assert.doesNotMatch(mac, /pgrep -f/);
   assert.match(mac, /\.staging\./);
   assert.match(mac, /\.backup\./);
   assert.match(mac, /rsync[\s\S]*--delete/);
@@ -287,3 +295,24 @@ test('macOS dev installer is executable as documented', {
   const metadata = await stat(path.join(repoRoot, 'scripts/install-plugin-dev-macos.sh'));
   assert.notEqual(metadata.mode & 0o111, 0);
 });
+
+// Surviving Adobe helpers are not AE; actual executable names still block.
+for (const [name, processCommands, allowed] of [
+  ['Adobe helpers', '/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app/Contents/MacOS/crashpad_handler\n/Library/Application Support/Adobe/Adobe Desktop Common/IPCBox/AdobeIPCBroker.app/Contents/MacOS/AdobeIPCBroker', true],
+  ['unrelated processes', '/sbin/launchd\n/usr/bin/node', true],
+  ['Beta AE', '/Applications/Adobe After Effects (Beta)/Adobe After Effects (Beta).app/Contents/MacOS/After Effects', false],
+  ['renamed bundle', '/custom/renamed.app/Contents/MacOS/After Effects', false],
+  ['legacy executable', '/custom/AfterFX', false],
+  ['empty listing', '', false],
+]) {
+  test(`macOS installer process regression: ${name}`, async (t) => {
+    if (skipUnlessMacOS(t)) return;
+    // Stop at the bundle gate, before deploying even into the temporary fixture.
+    const fixture = await makeMacFixture(t, { processCommands, bundleVerifierExitCode: 1 });
+    await assert.rejects(
+      execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
+      allowed ? /does not match the panel sources/ : /After Effects.*closed|could not determine/,
+    );
+    assert.equal(await readFile(path.join(fixture.target, 'old-install.txt'), 'utf8'), 'preserve me\n');
+  });
+}

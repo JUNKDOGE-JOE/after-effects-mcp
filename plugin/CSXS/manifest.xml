@@ -31,6 +31,9 @@
                 </Resources>
                 <Lifecycle>
                     <AutoVisible>true</AutoVisible>
+                    <StartOn>
+                        <Event>com.aemcp.panel.launch</Event>
+                    </StartOn>
                 </Lifecycle>
                 <UI>
                     <Type>Panel</Type>

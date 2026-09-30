@@ -4,15 +4,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Module, { createRequire } from 'node:module';
+import { EventEmitter } from 'node:events';
 import {
   createHostController,
   isValidPort,
   loadBundledHostDependencies,
   loadSavedPort,
   normalizeCepPath,
+  resolveHostInstance,
   savePort,
 } from '../src/cep/hostBridge.js';
 import { createWindowsAdapter } from '../src/cep/platform/windows.js';
+import { createMacosAdapter } from '../src/cep/platform/macos.js';
 
 function testPathCatalog(platformId) {
   const nativePath = platformId === 'windows-x64' ? path.win32 : path.posix;
@@ -269,6 +272,8 @@ test('host controller loads the direct host bundle and restarts without root pay
   const controller = createHostController({
     cs: { getSystemPath: () => { throw new Error('extension root was read twice'); } },
     extensionRoot: '/Applications/AE MCP',
+    environment: {},
+    createInstanceId: () => 'manual-main',
     platform,
     requireImpl: (request) => {
       if (request === 'module') return runtime.moduleApi;
@@ -293,4 +298,153 @@ test('host controller loads the direct host bundle and restarts without root pay
 test('host bridge has no retired helper wiring', () => {
   const source = fs.readFileSync(new URL('../src/cep/hostBridge.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /platform-helper|runtimeRoot|runtime[\\/]/i);
+});
+
+test('host identity uses the AE launch PID instead of the CEP process PID', () => {
+  const env = { AE_MCP_INSTANCE_ID: 'main-launched', AE_MCP_INSTANCE_ROLE: 'primary',
+    AE_MCP_WORK_DIR: '/projects', AE_MCP_LAUNCH_TICKET: '/ticket.json' };
+  const ticket = { version: 1, instanceId: 'main-launched', role: 'primary', workDir: '/projects', pid: 902 };
+  const info = resolveHostInstance({ env, readTicket: () => ticket,
+    paths: testPathCatalog('macos-arm64'), createId: () => 'unused' });
+  assert.equal(info.aePid, 902);
+  const manual = resolveHostInstance({ env: {}, createId: () => 'manual-main', paths: testPathCatalog('macos-arm64') });
+  assert.equal(manual.instanceId, 'manual-main');
+  assert.equal(manual.aePid, null);
+  assert.equal(manual.workDir, null);
+  assert.throws(() => resolveHostInstance({ env, readTicket: () => ({ ...ticket, instanceId: 'other-main' }),
+    paths: testPathCatalog('macos-arm64') }), /does not match/);
+});
+
+test('host lifecycle reports the bound port and makes panel unload terminal without relaunching', () => {
+  const runtime = fakeHostDependencyRuntime({ platformId: 'macos-arm64', extensionRoot: '/extension', express: () => {} });
+  const calls = [];
+  let unload;
+  let configured;
+  const states = [];
+  const ticket = { version: 1, instanceId: 'main-ticket', role: 'primary', workDir: '/projects',
+    pid: 902, bootstrapStatusPath: '/launch-status.json' };
+  const files = { ...runtime.fs,
+    readFileSync: (file) => file === '/launch-ticket.json' ? JSON.stringify(ticket) : runtime.fs.readFileSync(file),
+    writeFileSync: (file, value) => {
+      assert.equal(file, ticket.bootstrapStatusPath);
+      states.push(JSON.parse(value).state);
+    },
+  };
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    configureInstance: (value) => { configured = value; },
+    start: (port, callback) => {
+      assert.deepEqual(states, ['panel-loading']);
+      calls.push(['start', port]); callback(null, { port: 12001 });
+    },
+    markIntentionalDisconnect: (reason) => calls.push(['disconnect', reason]),
+    stop: () => calls.push(['stop']),
+  };
+  const controller = createHostController({
+    cs: {}, platform: hostAdapter(files), extensionRoot: '/extension',
+    environment: { AE_MCP_WORK_DIR: '/projects', AE_MCP_INSTANCE_ROLE: 'primary',
+      AE_MCP_INSTANCE_ID: 'main-ticket', AE_MCP_LAUNCH_TICKET: '/launch-ticket.json' },
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : request === 'path' ? path : host,
+    onStatus: (...value) => calls.push(['status', ...value]), onLog() {},
+    addBeforeUnload: (callback) => { unload = callback; },
+  });
+  controller.start(0);
+  assert.equal(configured.workDir, '/projects');
+  assert.ok(calls.some((entry) => entry[0] === 'status' && entry[1] === 'ok' && entry[2] === 12001));
+  unload();
+  assert.equal(controller.getHost(), null);
+  assert.deepEqual(calls.slice(-2), [['disconnect', 'panel-closed'], ['stop']]);
+  assert.equal(calls.filter((entry) => entry[0] === 'start').length, 1);
+  assert.deepEqual(states, ['panel-loading', 'host-started', 'intentional-disconnect']);
+});
+
+test('a restored panel in a read worker does not load a host or its dependencies', () => {
+  const statuses = [];
+  const controller = createHostController({ cs: {}, platform: hostAdapter({}), extensionRoot: '/extension',
+    environment: { AE_MCP_INSTANCE_ID: 'worker', AE_MCP_INSTANCE_ROLE: 'worker', AE_MCP_WORK_DIR: '/jobs' },
+    requireImpl: () => { throw new Error('worker must not load server'); },
+    onStatus: (...value) => statuses.push(value), onLog() {},
+  });
+  controller.start(11488);
+  assert.equal(statuses.at(-1)[0], 'disabled');
+  assert.equal(controller.getHost(), null);
+});
+
+function processProbeSpawn(output) {
+  return (file, args, options) => {
+    const proc = new EventEmitter();
+    proc.stdout = new EventEmitter();
+    proc.stderr = new EventEmitter();
+    proc.stdin = { end() {} };
+    proc.kill = () => {};
+    queueMicrotask(() => {
+      proc.stdout.emit('data', Buffer.from(output(file, args, options)));
+      proc.emit('exit', 0, null);
+      proc.emit('close', 0, null);
+    });
+    return proc;
+  };
+}
+
+test('manual Windows panels bind only a formal AE process on their validated parent chain', async () => {
+  const rows = [
+    { pid: 90, ppid: 80, executablePath: 'C:\\Adobe\\CEPHtmlEngine.exe' },
+    { pid: 80, ppid: 10, executablePath: 'C:\\Adobe\\Adobe After Effects 2026\\Support Files\\AfterFX.exe' },
+  ];
+  const platform = createWindowsAdapter({ platform: 'win32', arch: 'x64', pid: 90,
+    home: 'C:\\Users\\a', temp: 'C:\\Temp', env: { SystemRoot: 'D:\\Windows' },
+    fs: { existsSync: () => false }, now: Date.now,
+    spawnImpl: processProbeSpawn((file, args, options) => {
+      assert.equal(file, 'D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+      assert.ok(args.includes('-NonInteractive'));
+      assert.equal(options.windowsHide, true);
+      return JSON.stringify(rows);
+    }),
+  });
+  assert.equal(await platform.resolveAeHostPid({ cepPid: 90 }), 80);
+  rows[1].pid = 81;
+  assert.equal(await platform.resolveAeHostPid({ cepPid: 90 }), null);
+  rows[1].pid = 80;
+  rows[1].executablePath = 'C:\\Adobe\\Adobe After Effects (Beta)\\Support Files\\AfterFX.exe';
+  assert.equal(await platform.resolveAeHostPid({ cepPid: 90 }), null);
+});
+
+test('manual macOS panels follow ps parent relationships without selecting an unrelated AE', async () => {
+  const checked = [];
+  const platform = createMacosAdapter({ platform: 'darwin', arch: 'arm64', pid: 90,
+    home: '/Users/a', temp: '/tmp', env: {}, fs: { existsSync: () => false }, now: Date.now,
+    spawnImpl: processProbeSpawn((file, args) => {
+      assert.equal(file, '/bin/ps');
+      checked.push(args[1]);
+      return args[1] === '90' ? '90 80 /Library/Adobe/CEPHtmlEngine'
+        : '80 1 /Applications/Adobe After Effects 2026/Adobe After Effects 2026.app/Contents/MacOS/After Effects';
+    }),
+  });
+  assert.equal(await platform.resolveAeHostPid({ cepPid: 90 }), 80);
+  assert.deepEqual(checked, ['90', '80']);
+});
+
+test('closing a panel during its parent process probe cannot start the listener afterwards', async () => {
+  const runtime = fakeHostDependencyRuntime({ platformId: 'macos-arm64', extensionRoot: '/extension', express: () => {} });
+  let settle;
+  let unload;
+  let starts = 0;
+  const host = { setRuntimeDependencies() {}, setCSInterface() {}, configureInstance() {},
+    stop() {}, markIntentionalDisconnect() {}, start() { starts += 1; } };
+  const platform = { ...hostAdapter(runtime.fs), pid: 90, resolveAeHostPid: ({ cepPid, timeoutMs }) => {
+    assert.equal(cepPid, 90);
+    assert.equal(timeoutMs, 4000);
+    return new Promise((resolve) => { settle = resolve; });
+  } };
+  const controller = createHostController({ cs: {}, platform, extensionRoot: '/extension',
+    environment: {}, createInstanceId: () => 'main-a',
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : request === 'path' ? path : host,
+    onStatus() {}, onLog() {}, addBeforeUnload: (callback) => { unload = callback; },
+  });
+  const starting = controller.start(0);
+  unload();
+  settle(90);
+  await starting;
+  assert.equal(starts, 0);
+  assert.equal(controller.getHost(), null);
 });

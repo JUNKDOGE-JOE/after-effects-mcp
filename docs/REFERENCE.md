@@ -50,7 +50,7 @@ Installed-extension shim alternative:
 
 ## Public tools
 
-The CEP host advertises exactly 13 tools:
+The CEP host advertises exactly 16 tools:
 
 | Area | Tools |
 |---|---|
@@ -62,6 +62,7 @@ The CEP host advertises exactly 13 tools:
 | Checkpoints and recovery | `ae_checkpoint`, `ae_revert` |
 | Skills | `ae_skillUse` |
 | Tool Library | `ae_toolSearch`, `ae_toolUse`, `ae_toolSave` |
+| Instances and work contexts | `ae_instances`, `ae_workspace`, `ae_readJob` |
 
 `ae_exec` is the default route for maintained scripting semantics. Use
 `ae_nativeExec` for the frozen native primitives. Native writes require an
@@ -123,6 +124,89 @@ the `.aep`. The legacy HTTP `/exec` route does not enable diagnostics and keeps
 its existing request and response shape.
 
 ### `ae_previewFrame` visual verification
+
+Project calls also accept `context_id` from `ae_workspace`. A direct panel connection can
+bind its local conversation; the generic multi-instance stdio entry requires an explicit
+context and never assumes a globally active AE. Project writes have one owner per host.
+Live and snapshot previews retain the `CompItem.saveFrameToPng` capture path. Its PNG
+output may omit Guide Layers that are visible in the AE viewer. This is an accepted
+limitation; the original Guide pixel checks remain recorded as FAIL rather than being
+rewritten as PASS. The tool does not promise an exact image of the viewer.
+
+Capture does not automatically change `guideLayer`, `enabled`, or other layer visibility
+states. Users or models prepare any required project state explicitly before previewing,
+using the normal write context when an edit is needed. Setting `enabled=true` alone does
+not guarantee that a layer with `guideLayer=true` will appear in the PNG. A missing Guide
+in the image therefore does not prove that the layer is disabled or deleted.
+
+There is no guide-layer override or Render Queue fallback. The unimplemented native
+Guide probe and OS window-capture proposals have been withdrawn; the frozen native
+primitive set remains unchanged.
+
+### Local instances and project contexts
+
+`ae_instances` supports `list`, `start` and `stop`. Starting requires an existing
+absolute `project_path` and an absolute task `work_dir`. It returns a starting instance;
+registration and a real AE read are required before considering it ready. `stop` is an
+explicit operation: release the writer first; `save_policy` defaults to `refuse-dirty`.
+Closing the panel is intentional disconnection, not a reason to start another AE.
+
+`ae_workspace` supports `bind`, `inspect`, `release`, `transfer` and `reconcile`:
+
+- Bind by `instance_id` or `project_path`, with `access: "read"` or `"write"` and `work_dir`.
+- Pass the returned `context_id` to subsequent AE calls, including when chats share a connection.
+- Transfer uses the current writer's `context_id` and the reader's `target_context_id`.
+  Queued, in-flight or uncertain operations must finish or be reconciled first.
+  A reader can request an explicit takeover with its own context_id and confirm:true,
+  without learning or reusing another chat's private work handle. The panel requires confirmation.
+- Release relinquishes that context without closing AE. Another connection does not automatically inherit it.
+- After an uncertain write, inspect actual state with `ae_read` or `ae_previewFrame`.
+  An observation made while the result is uncertain returns `observation_id`.
+  Only after verifying that state, call reconcile with that observation and `confirm: true`.
+  The host rejects observations from another context or an AE revision that has changed again.
+
+The stdio connector without an explicit URL discovers the installed extension's instance
+entry. `--url` / `AE_MCP_HTTP_URL` retains direct endpoint forwarding. HTTP clients require
+an already running local entry; cloud/remote access is not added. MCP initialization and
+tool listing do not wait for AE to start. The extension must already be installed; the
+connector does not install or update it. A host with only the old connector remains direct-only.
+
+### Snapshot reads and checkpoint continuation
+
+Checkpoints first save the original project, then copy it without changing the open path.
+For a bound workspace, an existing sibling `Adobe After Effects Auto-Save` directory takes
+precedence; otherwise `work_dir` is required. The destination is
+`ae-mcp/checkpoints/<project-key>/` under the chosen directory. This does not parse Adobe's
+custom auto-save preference. Checkpoint metadata keeps the actual path; old checkpoints
+remain readable in the old layout. MCP does not prune Adobe's auto-save files.
+
+If an `ae_exec` checkpoint fails in a bound context, the edit is not dispatched. To continue
+without that checkpoint, obtain explicit user permission and repeat the unchanged operation
+with `checkpoint_continue: {failure_id: <checkpoint_failure_id>, confirm: true}`.
+The confirmation is single-use and tied to the context and operation. A panel continuation
+uses its approval UI. An uncertain save/copy must be reconciled first. Continuing does not
+create a usable snapshot or retroactively mark the backup successful.
+
+`ae_readJob` consumes an existing `checkpoint_id`:
+
+```json
+{"action":"submit","context_id":"<binding>","checkpoint_id":"<checkpoint>","requests":[{"id":"overview","tool":"ae_read","arguments":{"target":"comps"}},{"id":"frame","tool":"ae_previewFrame","arguments":{"comp_id":"123","time":0}}]}
+```
+
+Use `status`, `result` or `cancel` with `context_id` and `job_id`. Result pages use `offset`
+and `limit`; at most one preview item's budgeted image content is attached per page,
+identified by `image_request_id`. Use `limit: 1` to inspect each preview separately.
+Requests are limited to maintained `ae_read` and `ae_previewFrame` operations. Select a
+composition explicitly, and supply preview times; arbitrary JSX and caller-selected
+preview output paths are not accepted. All results identify their source checkpoint and
+are marked as snapshot results, never current live state. Cancellation stops later dispatch;
+an executing synchronous AE script is not claimed to have stopped. Unconfirmed worker
+shutdown is reported as indeterminate and retains its working snapshot.
+Worker admission shares a two-worker limit across hosts and checks free RAM before starting:
+the initial estimate allows 1 GiB per starting worker while leaving 2 GiB free. These are
+admission estimates, not OS memory caps; real-AE measurements are required to tune them.
+
+### Frame capture and comparison
 
 `ae_previewFrame` uses After Effects `CompItem.saveFrameToPng` and performs all
 PNG decoding, scaling, contact-sheet composition, and comparison in the CEP

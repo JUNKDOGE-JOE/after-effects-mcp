@@ -61,6 +61,17 @@ test('host conversation returns null without throwing before the host MCP API st
   assert.equal(manager.currentPath(), null);
 });
 
+test('host conversations retain the explicit instance and work directory at creation', () => {
+  let input;
+  const manager = createHostConversation({
+    getHost: () => ({ mcp: { conversations: { create: (value) => { input = value; return { id: 'conversation' }; } } } }),
+    getWorkContext: () => ({ instanceId: 'main-a', workDir: '/projects/a' }),
+  });
+  manager.ensureConversation({ label: 'chat-one', approvalTier: 'manual' });
+  assert.equal(input.instanceId, 'main-a');
+  assert.equal(input.workDir, '/projects/a');
+});
+
 test('host conversation explicitly reports a failed rebind after the host MCP API disappears', () => {
   let host = {
     mcp: {

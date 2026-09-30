@@ -148,3 +148,61 @@ test('prune and remove affect only the selected project', () => {
         assert.equal(store.remove(other, 'other'), false);
     });
 });
+
+
+test('external checkpoints retain their location, pin active reads, and preserve recovery storage', () => {
+    withStore({ keep: 1 }, (store, root) => {
+        const source = path.join(root, 'Main.aep');
+        const projectKey = path.basename(store.dirFor(source));
+        const external = path.join(root, 'auto-save', 'ae-mcp', 'checkpoints', projectKey);
+        const first = path.join(external, 'old.aep');
+        touchAep(first);
+        store.writeMeta({ id: 'old', sourceProjectPath: source, checkpointPath: first, placementSource: 'adjacent-auto-save' });
+        const releaseOne = store.retain(source, 'old');
+        const releaseTwo = store.retain(source, 'old');
+        const newer = store.aepPath(source, 'new');
+        touchAep(newer);
+        writeMeta(store.metaPath(source, 'new'), { id: 'new', sourceProjectPath: source, ts: '2099-01-01T00:00:00Z' });
+        assert.equal(store.lookupAep(source, 'old'), first);
+        assert.equal(store.list(source).length, 2);
+        assert.deepEqual(store.prune(source), []);
+        releaseOne();
+        releaseOne();
+        assert.equal(store.remove(source, 'old'), false);
+        releaseTwo();
+        assert.deepEqual(store.prune(source), ['old']);
+        assert.equal(fs.existsSync(first), false);
+        assert.equal(store.lookupAep(source, 'new'), newer);
+        const { RecoveryStore } = require('./recovery-store');
+        const recovery = new RecoveryStore({ checkpointStore: store });
+        assert.equal(recovery.root, store.root);
+        assert.equal(recovery._recoveryDir(source), path.join(store.dirFor(source), 'recovery'));
+    });
+});
+
+test('external checkpoint records cannot make pruning delete a source project', () => {
+    withStore({}, (store, root) => {
+        const source = path.join(root, 'Main.aep');
+        touchAep(source);
+        assert.throws(() => store.writeMeta({ id: 'bad', sourceProjectPath: source, checkpointPath: source }), /registered checkpoint path/);
+        assert.equal(fs.existsSync(source), true);
+    });
+});
+
+test('keep-one pruning preserves the newest checkpoint when timestamps tie within one second', () => {
+    for (const timestamp of ['2026-09-29T10:00:00Z', '2026-09-29T10:00:00.123Z']) {
+        withStore({ keep: 1 }, (store) => {
+            const source = 'C:/projects/Main.aep';
+            const older = store.makeId();
+            const newer = store.makeId();
+            for (const id of [older, newer]) {
+                touchAep(store.aepPath(source, id));
+                writeMeta(store.metaPath(source, id), { id, ts: timestamp, sourceProjectPath: source });
+            }
+            assert.equal(store.latest(source).id, newer);
+            assert.deepEqual(store.prune(source), [older]);
+            assert.equal(store.lookupAep(source, newer), store.aepPath(source, newer));
+            assert.equal(store.lookupAep(source, older), null);
+        });
+    }
+});

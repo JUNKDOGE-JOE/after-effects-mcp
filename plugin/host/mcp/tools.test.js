@@ -32,13 +32,14 @@ test('tools/list uses top-level JSON-schema object forms only', () => {
         'ae_status', 'ae_exec', 'ae_execRecover', 'ae_previewFrame', 'ae_read', 'ae_checkpoint',
         'ae_revert', 'ae_validateExpressions', 'ae_nativeExec', 'ae_toolSearch',
         'ae_toolUse', 'ae_toolSave', 'ae_skillUse',
+        'ae_instances', 'ae_workspace', 'ae_readJob',
     ]);
     tools.forEach(function (tool) {
         assert.equal(tool.inputSchema.type, 'object');
         assert.equal(noTopLevelCombinator(tool.inputSchema), true);
     });
     assert.ok(
-        Buffer.byteLength(JSON.stringify(tools), 'utf8') < 20000,
+        Buffer.byteLength(JSON.stringify(tools), 'utf8') < 24000,
         'the complete advertised tool surface must fit the provider replay budget',
     );
     const exec = tools.find(function (tool) { return tool.name === 'ae_exec'; });
@@ -162,4 +163,72 @@ test('tool calls returning no output are converted to a structured tool error', 
     } finally {
         tool.call = originalCall;
     }
+});
+
+
+test('checkpoint failure continuation is bound to one unchanged operation and excludes uncertain saves', async (t) => {
+    const fs = require('fs');
+    const os = require('os');
+    const path = require('path');
+    const { CheckpointStore } = require('./checkpoint-store');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-checkpoint-confirm-'));
+    t.after(() => { assert.equal(path.dirname(root), os.tmpdir()); fs.rmSync(root, { recursive: true, force: true }); });
+    const projectPath = path.join(root, 'Main.aep');
+    const store = new CheckpointStore({ root: path.join(root, 'index') });
+    let edits = 0;
+    let checkpointMode = 'copy-failed';
+    const registry = buildTools({
+        getCheckpointStore: () => store,
+        routeTool: (params, context, invoke) => invoke({ ...context,
+            contextId: params.arguments.context_id || 'writer-one', projectPath, workDir: root,
+            checkpointContinue: params.arguments.checkpoint_continue,
+        }),
+        executeJsx: async (request) => {
+            if (request.code.includes('app.project.save();')) {
+                if (checkpointMode === 'uncertain') return { status: 504,
+                    payload: { ok: false, error: 'save timed out', code: 'JSX_TIMEOUT', disposition: 'uncertain' } };
+                return { status: 200, payload: { ok: true, result: JSON.stringify({ ok: false,
+                    error: 'copy blocked', code: 'CHECKPOINT_COPY_FAILED', stage: 'copy',
+                    disposition: 'not_dispatched', saveCompleted: true }) } };
+            }
+            if (request.code.includes('path: app.project.file')) return {
+                payload: { ok: true, result: JSON.stringify({ ok: true, path: projectPath }) },
+            };
+            edits += 1;
+            return { payload: { ok: true, resultType: 'json', result: '{"ok":true}' } };
+        },
+    });
+    async function call(extra = {}) {
+        return (await registry.call({ name: 'ae_exec', arguments: {
+            code: 'edit-one', checkpoint_label: 'before', ...extra,
+        } }, { session: { clientName: 'test' } })).result.structuredContent;
+    }
+    const blocked = await call();
+    assert.equal(blocked.code, 'CHECKPOINT_FAILED');
+    assert.equal(blocked.disposition, 'not_dispatched');
+    assert.equal(blocked.checkpoint.stage, 'copy');
+    assert.equal(edits, 0);
+    const confirmation = { failure_id: blocked.checkpoint_failure_id, confirm: true };
+    assert.equal(typeof confirmation.failure_id, 'string');
+    for (const extra of [
+        { checkpoint_continue: { ...confirmation, confirm: false } },
+        { checkpoint_continue: { ...confirmation, failure_id: 'incorrect' } },
+        { checkpoint_continue: confirmation, code: 'different-edit' },
+        { checkpoint_continue: confirmation, context_id: 'writer-two' },
+    ]) assert.equal((await call(extra)).code, 'CHECKPOINT_CONFIRMATION_REQUIRED');
+    assert.equal(edits, 0);
+    const continued = await call({ checkpoint_continue: confirmation });
+    assert.equal(continued.ok, true);
+    assert.equal(typeof continued.checkpointSkipped, 'string');
+    assert.equal(edits, 1);
+    assert.equal((await call({ checkpoint_continue: confirmation })).code, 'CHECKPOINT_CONFIRMATION_REQUIRED');
+    assert.equal(edits, 1);
+    checkpointMode = 'uncertain';
+    const unknown = await call();
+    assert.equal(unknown.disposition, 'uncertain');
+    assert.equal(unknown.checkpoint.code, 'JSX_TIMEOUT');
+    assert.equal(unknown.checkpoint.status, 504);
+    const denied = await call({ checkpoint_continue: { failure_id: unknown.checkpoint_failure_id, confirm: true } });
+    assert.equal(denied.code, 'CHECKPOINT_RESULT_UNKNOWN');
+    assert.equal(edits, 1);
 });

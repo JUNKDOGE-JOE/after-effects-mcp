@@ -109,6 +109,13 @@ function firstCharacters(value, limit) {
 
 function approvalSummary(args) {
     const input = args || {};
+    if (['start', 'stop', 'bind', 'transfer', 'reconcile'].includes(input.action)) {
+        const summary = { action: input.action };
+        ['instance_id', 'project_path', 'context_id', 'target_context_id', 'access', 'work_dir', 'confirm', 'save_policy', 'observation_id'].forEach(key => {
+            if (input[key] !== undefined) summary[key] = input[key];
+        });
+        return summary;
+    }
     if (['promote', 'create', 'update', 'status'].indexOf(input.operation) >= 0) {
         return {
             id: input.id === undefined ? null : input.id,
@@ -128,6 +135,7 @@ function approvalSummary(args) {
         retryMode: input.retryMode === undefined ? null : input.retryMode,
         restoreCheckpointId: input.restoreCheckpointId === undefined
             ? null : input.restoreCheckpointId,
+        ...(input.checkpoint_continue ? { checkpoint_continue: input.checkpoint_continue } : {}),
     };
 }
 

@@ -1,0 +1,92 @@
+(function () {
+    app.exitAfterLaunchAndEval = false;
+    var config = $.global.__aemcpWorkerConfig;
+    if (!config) throw new Error("Missing worker configuration");
+    $.evalFile(new File(config.runtimePath));
+    function message(error) {
+        try {
+            if (typeof error === "string") return error;
+            if (error && typeof error.message === "string") return error.message;
+        } catch (ignored) {}
+        return "AE worker operation failed";
+    }
+    function file(name) { return new File(config.root + "/" + name); }
+    function ownerClosed() { return config.ownerClosedPath && new File(config.ownerClosedPath).exists; }
+    function read(name) {
+        var input = file(name);
+        if (!input.exists) return null;
+        input.encoding = "UTF-8";
+        if (!input.open("r")) throw new Error("Cannot read worker request");
+        var text;
+        try { text = input.read(); } finally { input.close(); }
+        return JSON.parse(text);
+    }
+    function write(name, value) {
+        var output = file(name + ".tmp");
+        output.encoding = "UTF-8";
+        if (!output.open("w")) throw new Error("Cannot write worker result");
+        try { output.write(JSON.stringify(value)); } finally { output.close(); }
+        if (!output.rename(name)) throw new Error("Cannot publish worker result");
+    }
+    var target = new File(config.snapshotPath);
+    var taskId = null;
+    var lastActivityAt = new Date().getTime();
+    function stop(reason, allowEmpty) {
+        if (taskId !== null) app.cancelTask(taskId);
+        var project = app.project;
+        var ownsSnapshot = project && project.file && project.file.fsName === target.fsName;
+        var empty = allowEmpty && (!project || (!project.file && project.numItems === 0 && !project.dirty));
+        if (!ownsSnapshot && !empty) {
+            write("closed.json", {ok:false, error:"Worker project changed; leaving it open"});
+            return;
+        }
+        if (ownsSnapshot) project.close(CloseOptions.DO_NOT_SAVE_CHANGES);
+        write("closed.json", {ok:true, reason:reason});
+        app.quit();
+    }
+    if (app.project && ((app.project.file && app.project.file.fsName !== target.fsName)
+        || (!app.project.file && (app.project.numItems > 0 || app.project.dirty)))) {
+        write("ready.json", {ok:false, error:"Worker started with another project", code:"WORKER_PROJECT_CHANGED"});
+        return;
+    }
+    if (ownerClosed()) {
+        write("ready.json", {ok:false, error:"Owner panel closed", code:"OWNER_CLOSED"});
+        stop("owner-closed", true);
+        return;
+    }
+    try {
+        app.open(target);
+        if (!app.project.file || app.project.file.fsName !== target.fsName) {
+            write("ready.json", {ok:false, error:"Snapshot open did not select the expected project", code:"WORKER_PROJECT_CHANGED"});
+            return;
+        }
+        write("ready.json", {ok:true, projectPath:app.project.file.fsName});
+    } catch (error) {
+        write("ready.json", {ok:false, error:message(error)});
+        return;
+    }
+    $.global.__aemcpReadonlyWorkerTick = function () {
+        if (ownerClosed() || file("stop.json").exists) {
+            stop(ownerClosed() ? "owner-closed" : "requested", false);
+            return;
+        }
+        var request = read("request.json");
+        if (!request) {
+            if (new Date().getTime() - lastActivityAt >= 120000) stop("idle-timeout", false);
+            return;
+        }
+        file("request.json").remove();
+        var result;
+        try {
+            if (!/^[a-f0-9]{24}$/.test(request.id) || typeof request.code !== "string") throw new Error("Invalid internal worker request");
+            if (!app.project.file || app.project.file.fsName !== target.fsName) throw new Error("Worker snapshot changed");
+            result = {ok:true, result:String(eval(request.code))};
+        } catch (error) {
+            result = {ok:false, error:message(error), disposition:"failed"};
+        }
+        write(request.id + ".json", result);
+        lastActivityAt = new Date().getTime();
+    };
+    taskId = app.scheduleTask("$.global.__aemcpReadonlyWorkerTick()", 100, true);
+    $.global.__aemcpReadonlyWorkerTask = taskId;
+}());

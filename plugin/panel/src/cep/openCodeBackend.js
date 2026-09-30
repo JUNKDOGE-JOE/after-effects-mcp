@@ -345,6 +345,7 @@ export function createOpenCodeBackend({
   getModel,
   getPermissionMode,
   getMcpSpec,
+  getWorkContext,
   getToolMeta,
   getProviders = () => [],
   getSensitiveValues = () => [],
@@ -378,7 +379,7 @@ export function createOpenCodeBackend({
   // OpenCode isolates sessions and its event bus by request directory. Keep
   // the default cwd stable so resumed sessions publish to this panel's bus.
   const openCodeRoot = adapter.paths.join([adapter.paths.configRoot, 'opencode']);
-  const workspaceDir = adapter.paths.join([openCodeRoot, 'workspace']);
+  let workspaceDir = adapter.paths.join([openCodeRoot, 'workspace']);
   const totalProbeTimeoutMs = Number(probeTimeoutMs);
   if (!Number.isFinite(totalProbeTimeoutMs) || totalProbeTimeoutMs <= readyTimeoutMs) {
     throw new TypeError('probeTimeoutMs must be greater than readyTimeoutMs');
@@ -602,6 +603,14 @@ export function createOpenCodeBackend({
   }
 
   function stableConfigHome(mcpSpec) {
+    if (getWorkContext) {
+      const context = getWorkContext();
+      if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(context.instanceId || '')) {
+        throw new Error('An explicit AE instance identity is required');
+      }
+      workspaceDir = context.workDir;
+      return adapter.paths.join([openCodeRoot, 'home-' + context.instanceId]);
+    }
     let hostPort = 'default';
     try {
       hostPort = new URL(String(mcpSpec?.url || '')).port || 'default';

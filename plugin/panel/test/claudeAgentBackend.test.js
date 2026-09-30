@@ -182,6 +182,7 @@ function makeHarness(overrides = {}) {
       url: 'http://127.0.0.1:11488/mcp/c/claude-default-token',
     })),
     getToolMeta: overrides.getToolMeta || (async () => toolMeta()),
+    getWorkContext: overrides.getWorkContext,
     getModel: () => state.model,
     getPermissionMode: () => state.permissionMode,
     getEffort: () => state.effort,
@@ -313,6 +314,16 @@ test('Claude decodes both child-process streams as UTF-8', async () => {
   ]);
   finishTurn(h.processes[0]);
   await run;
+});
+
+test('Claude starts in the explicit project work directory', async () => {
+  const h = makeHarness({ getWorkContext: () => ({ instanceId: 'main-a', workDir: 'E:\\Project A' }) });
+  const run = h.backend.sendUser('inspect');
+  await flush();
+  assert.equal(h.spawns[0].options.cwd, 'E:\\Project A');
+  finishTurn(h.processes[0]);
+  await run;
+  h.backend.reset();
 });
 
 test('Claude reports spawn and dispatch before output and omits spawn on a warm turn', async () => {

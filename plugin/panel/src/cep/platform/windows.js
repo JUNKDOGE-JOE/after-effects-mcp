@@ -130,6 +130,37 @@ export function createWindowsAdapter(deps) {
     fs: deps.fs,
     requestJson: createHttpJsonRequester(deps),
     ...boundary,
+    async resolveAeHostPid({ cepPid = deps.pid, timeoutMs = 4000 } = {}) {
+      if (!Number.isSafeInteger(cepPid) || cepPid <= 1 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return null;
+      const script = [
+        '$aeProbePid=' + cepPid,
+        '$aeProbeRows=@(for($aeProbeDepth=0;$aeProbeDepth -lt 12 -and $aeProbePid -gt 1;$aeProbeDepth++){',
+        '$aeProbeItem=Get-CimInstance Win32_Process -Filter ("ProcessId = " + $aeProbePid)',
+        'if(-not $aeProbeItem){break}',
+        '[pscustomobject]@{pid=[int]$aeProbeItem.ProcessId;ppid=[int]$aeProbeItem.ParentProcessId;executablePath=$aeProbeItem.ExecutablePath}',
+        '$aeProbePid=[int]$aeProbeItem.ParentProcessId',
+        '})',
+        'ConvertTo-Json -InputObject $aeProbeRows -Compress',
+      ].join('\n');
+      try {
+        const reply = await boundary.run({ executable: powershell,
+          args: ['-NoProfile', '-NonInteractive', '-Command', script], timeoutMs: Math.min(10000, timeoutMs), maxOutputBytes: 16384 });
+        if (reply.exitCode !== 0 || reply.timedOut || reply.aborted) return null;
+        const rows = JSON.parse(reply.stdout);
+        if (!Array.isArray(rows) || rows.length > 12) return null;
+        let expected = cepPid;
+        const visited = new Set();
+        for (const row of rows) {
+          if (row.pid !== expected || visited.has(row.pid) || !Number.isSafeInteger(row.ppid)) return null;
+          visited.add(row.pid);
+          const executable = String(row.executablePath || '');
+          if (/[\\/]AfterFX\.exe$/i.test(executable)
+              && !/(?:^|[\\/])(?:Adobe )?After Effects[^\\/]*beta[^\\/]*(?:[\\/]|$)/i.test(executable)) return row.pid;
+          expected = row.ppid;
+        }
+      } catch {}
+      return null;
+    },
     async processAlive({ pid } = {}) {
       const processId = Number(pid);
       if (!Number.isInteger(processId) || processId <= 0) return false;

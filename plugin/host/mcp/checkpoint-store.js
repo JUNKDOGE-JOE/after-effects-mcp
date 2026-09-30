@@ -65,6 +65,7 @@ class CheckpointStore {
             homedir: input.homedir,
         });
         this.root = path.resolve(input.root || statePaths.checkpoints);
+        this.references = new Map();
         this.keep = input.keep === undefined
             ? checkpointKeep(environment) : Math.max(1, Number(input.keep) || 1);
         fs.mkdirSync(this.root, { recursive: true });
@@ -106,6 +107,33 @@ class CheckpointStore {
         return this.metaPath(sourcePath, id);
     }
 
+    checkpointPath(sourcePath, id, meta) {
+        if (!meta || !meta.checkpointPath) return this.aepPath(sourcePath, id);
+        const file = path.normalize(meta.checkpointPath);
+        const directory = path.dirname(file);
+        if (!path.isAbsolute(file) || path.basename(file) !== id + '.aep'
+            || path.basename(directory) !== projectDirKey(sourcePath)
+            || path.basename(path.dirname(directory)) !== 'checkpoints'
+            || path.basename(path.dirname(path.dirname(directory))) !== 'ae-mcp') {
+            throw new Error('invalid registered checkpoint path');
+        }
+        return file;
+    }
+
+    retain(sourcePath, id) {
+        if (!this.lookupAep(sourcePath, id)) throw new Error('checkpoint not found');
+        const key = projectDirKey(this._canonicalSourcePath(sourcePath)) + '/' + id;
+        this.references.set(key, (this.references.get(key) || 0) + 1);
+        let released = false;
+        return () => {
+            if (released) return;
+            released = true;
+            const count = this.references.get(key) - 1;
+            if (count > 0) this.references.set(key, count);
+            else this.references.delete(key);
+        };
+    }
+
     readMeta(sourcePath, id) {
         const candidate = this.metaPath(this._canonicalSourcePath(sourcePath), id);
         if (!fs.existsSync(candidate)) return null;
@@ -133,12 +161,16 @@ class CheckpointStore {
         const meta = {
             id: values.id,
             label: values.label,
-            ts: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
+            ts: new Date().toISOString(),
             sourceProjectPath: values.sourceProjectPath,
             activeCompId: values.activeCompId,
             currentTime: values.currentTime,
             sizeBytes: values.sizeBytes,
         };
+        if (values.checkpointPath) {
+            meta.checkpointPath = this.checkpointPath(values.sourceProjectPath, values.id, values);
+            meta.placementSource = values.placementSource;
+        }
         const output = path.join(directory, values.id + '.json');
         fs.writeFileSync(output, JSON.stringify(meta), 'utf8');
         return output;
@@ -161,11 +193,6 @@ class CheckpointStore {
             if (path.extname(names[i]) !== '.json') continue;
             const id = path.basename(names[i], '.json');
             const metaPath = path.join(directory, names[i]);
-            const aepPath = path.join(directory, id + '.aep');
-            if (!fs.existsSync(aepPath)) {
-                try { fs.unlinkSync(metaPath); } catch (error) { /* best effort */ }
-                continue;
-            }
             let meta;
             try {
                 meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
@@ -174,9 +201,17 @@ class CheckpointStore {
             }
             if (wantKey && meta.sourceProjectPath
                 && resolveForKey(meta.sourceProjectPath) !== wantKey) continue;
+            let aepPath;
+            try { aepPath = this.checkpointPath(canonical, id, meta); } catch (_) { continue; }
+            if (!fs.existsSync(aepPath)) {
+                try { fs.unlinkSync(metaPath); } catch (_) {}
+                continue;
+            }
             entries.push(meta);
         }
-        entries.sort(function (a, b) { return String(b.ts || '').localeCompare(String(a.ts || '')); });
+        entries.sort(function (a, b) {
+            return String(b.ts || '').localeCompare(String(a.ts || '')) || String(b.id).localeCompare(String(a.id));
+        });
         return entries.slice(0, limit);
     }
 
@@ -190,7 +225,7 @@ class CheckpointStore {
 
     lookupAep(sourcePath, id) {
         const canonical = this._canonicalSourcePath(sourcePath);
-        const candidate = this.aepPath(canonical, id);
+        const candidate = this.checkpointPath(canonical, id, this.readMeta(canonical, id));
         return fs.existsSync(candidate) ? candidate : null;
     }
 
@@ -205,10 +240,12 @@ class CheckpointStore {
 
     remove(sourcePath, id) {
         const canonical = this._canonicalSourcePath(sourcePath);
-        const directory = this._dirFor(canonical);
+        if (this.references.has(projectDirKey(canonical) + '/' + id)) return false;
+        const meta = this.readMeta(canonical, id);
+        if (meta && meta.sourceProjectPath && resolveForKey(meta.sourceProjectPath) !== resolveForKey(canonical)) return false;
+        const files = [this.checkpointPath(canonical, id, meta), this.metaPath(canonical, id)];
         let removed = false;
-        ['.aep', '.json'].forEach(function (extension) {
-            const candidate = path.join(directory, id + extension);
+        files.forEach(function (candidate) {
             try {
                 fs.unlinkSync(candidate);
                 removed = true;
@@ -224,8 +261,7 @@ class CheckpointStore {
         const entries = this.list(canonical, { limit: 10000 });
         const removed = [];
         for (let i = this.keep; i < entries.length; i += 1) {
-            this.remove(canonical, entries[i].id);
-            removed.push(entries[i].id);
+            if (this.remove(canonical, entries[i].id)) removed.push(entries[i].id);
         }
         return removed;
     }

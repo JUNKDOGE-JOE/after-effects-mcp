@@ -30,7 +30,7 @@ required_files=(
   '.debug'
 )
 
-require_tool pgrep
+require_tool ps
 require_tool defaults
 require_tool find
 require_tool realpath
@@ -38,15 +38,18 @@ require_tool rsync
 require_tool mv
 require_tool chmod
 
-set +e
-pgrep -f 'Adobe After Effects|AfterFX' >/dev/null 2>&1
-pgrep_status=$?
-set -e
-case "$pgrep_status" in
-  0) fail 'all Adobe After Effects / AfterFX processes must be closed before deployment' ;;
-  1) ;;
-  *) fail 'could not determine whether After Effects is running' ;;
-esac
+# Inspect executable names, not arguments: Adobe helpers can carry an AE path
+# in their arguments or live inside its application bundle after AE exits.
+process_commands="$(ps -axo comm=)" \
+  || fail 'could not determine whether After Effects is running'
+[[ -n "$process_commands" ]] \
+  || fail 'could not determine whether After Effects is running'
+while IFS= read -r process_command; do
+  case "${process_command##*/}" in
+    'After Effects'|AfterFX|AfterFX.exe)
+      fail 'all Adobe After Effects / AfterFX processes must be closed before deployment' ;;
+  esac
+done <<< "$process_commands"
 
 [[ -d "$plugin_src" && ! -L "$plugin_src" ]] \
   || fail "plugin source is missing or symbolic: ${plugin_src}"
