@@ -164,3 +164,20 @@ AEP 记录创建、正常删除、归档、保留及未分类计数；退出任�
 
 Mac 未过前保留草稿 PR，不合并、不发布。只报告实际完成的验收层级；未完成的正式 HDEV/
 发布 T5/T6 门禁保持未完成，不能仅凭 CI 绿色或 Windows 结果标记 release-accepted。
+
+## Mac PID 派发集成补充（2026-09-30）
+
+真实 AE 26.3 arm64 已证实原 `-m -r` 把 JSX 导入为素材，原项保持 FAIL。
+Mac launcher 现改为直接 executable `-m`，随后由系统 `/usr/bin/osascript` 的 JXA
+桥接发送 PID 定向 Apple Event；Windows 仍用 `-m -r`。派发代码包含在现有 host 文件，
+无需 Swift 编译器或新增辅助应用。只接受原生 arm64，等待目标初始化，并核对路径、
+捕获的 PID 启动时间、ticket 实例环境；非空/dirty 工程拒绝派发。
+
+实际发送链的 TCC 权限须独立核验，不能复用探针权限作为证明。产品派发不弹权限提示；
+缺权限返回 `AE_AUTOMATION_PERMISSION_REQUIRED`，保留已启动实例供核实，不能盲重启。
+Apple Event 超时也不能重试已派发脚本。主实例等待脚本回复；worker 发送后由既有
+只读 job 协议确认实际就绪/结果，不能把事件已发送当 worker 验收成功。
+
+CEP 可先于项目打开恢复：仅在 ticket 指定项目、实际为未修改的空白工程时进行有界等待，
+工程身份相符后才登记；错误项目/dirty 工程仍拒绝，面板关闭中止等待。替代路径的实机
+结果与原 `-m -r` 失败分别记录。用户仍需亲自处理任何新的系统权限，不能自动接受。

@@ -67,6 +67,55 @@ function discoverAfterEffects(options) {
     return candidates[0].path;
 }
 
+// JXA uses the OS-provided bridge; no compiler or application-name delivery is required.
+const MAC_DISPATCH = `ObjC.import('AppKit');
+function run(a) {
+  var pid=Number(a[0]), executable=a[1], expectedStart=a[2], script=a[3], id=a[4], role=a[5];
+  var app, deadline=Date.now()+20000;
+  while(Date.now()<deadline) {
+    app=$.NSRunningApplication.runningApplicationWithProcessIdentifier(pid);
+    if(app && !app.isNil() && app.finishedLaunching) break;
+    $.NSThread.sleepForTimeInterval(0.1);
+  }
+  if(!app || app.isNil() || !app.finishedLaunching) throw Error('AE_PID_NOT_READY');
+  var task=$.NSTask.alloc.init, pipe=$.NSPipe.pipe;
+  task.launchPath='/bin/ps'; task.arguments=['-p',String(pid),'-o','lstart=']; task.standardOutput=pipe;
+  task.launch; var data=pipe.fileHandleForReading.readDataToEndOfFile; task.waitUntilExit;
+  var start=ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data,4)).trim();
+  if(start!==expectedStart || ObjC.unwrap(app.executableURL.path)!==executable || app.terminated)
+    throw Error('AE_PID_IDENTITY_CHANGED');
+  var target=$.NSAppleEventDescriptor.descriptorWithProcessIdentifier(pid);
+  var event=$.NSAppleEventDescriptor.appleEventWithEventClassEventIDTargetDescriptorReturnIDTransactionID(0x6d697363,0x646f7363,target,-1,0);
+  var guard='if($.getenv("AE_MCP_INSTANCE_ID")!=='+JSON.stringify(id)+'||app.project.file||app.project.dirty||app.project.numItems!==0)throw new Error("STARTUP_PROJECT_CHANGED");';
+  event.setParamDescriptorForKeyword($.NSAppleEventDescriptor.descriptorWithString(guard+'$.evalFile(new File('+JSON.stringify(script)+'));'),0x2d2d2d2d);
+  var error=Ref();
+  // Never prompt for TCC or allow target interaction. Worker scripts run until their job ends.
+  var reply=event.sendEventWithOptionsTimeoutError(0x20010|(role==='worker'?1:3),15,error);
+  if(error[0]) throw Error('AE_APPLE_EVENT_'+Number(error[0].code)+': '+ObjC.unwrap(error[0].localizedDescription));
+  if(role!=='worker' && ObjC.unwrap(reply.paramDescriptorForKeyword(0x2d2d2d2d).stringValue)!=='0')
+    throw Error('AE_SCRIPT_RESULT_UNKNOWN');
+  return JSON.stringify({pid:pid,launchIdentity:start,dispatched:true});
+}`;
+
+function dispatchMacScript(record, scriptPath, executable, execFile) {
+    return new Promise((resolve, reject) => {
+        execFile('/bin/ps', ['-p', String(record.pid), '-o', 'lstart='], { env: { ...aeEnvironment(process.env), LC_ALL: 'C' } }, (identityError, identity) => {
+            if (identityError || !String(identity).trim() || record.exited) return reject(failure('AE_PID_IDENTITY_CHANGED', 'New AE exited before dispatch'));
+            execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', MAC_DISPATCH, String(record.pid), executable,
+                String(identity).trim(), scriptPath, record.instanceId, record.role],
+            { timeout: 40000, maxBuffer: 16384, env: { ...aeEnvironment(process.env), LC_ALL: 'C' } }, (error, stdout, stderr) => {
+                if (error) {
+                    const detail = String(stderr || error.message);
+                    const code = /AE_APPLE_EVENT_-(1743|1744)/.test(detail) ? 'AE_AUTOMATION_PERMISSION_REQUIRED' : 'AE_SCRIPT_DISPATCH_FAILED';
+                    reject(failure(code, detail));
+                } else {
+                    try { resolve(JSON.parse(stdout)); } catch (_) { reject(failure('AE_SCRIPT_RESULT_UNKNOWN', 'Invalid PID dispatcher response')); }
+                }
+            });
+        });
+    });
+}
+
 function createInstanceLauncher(options) {
     const input = options || {};
     const files = input.fs || fs;
@@ -97,6 +146,7 @@ function createInstanceLauncher(options) {
             throw failure('WORK_DIRECTORY_REQUIRED', 'An explicit absolute workDir is required');
         }
         if (!files.statSync(workDir).isDirectory()) throw failure('WORK_DIRECTORY_INVALID', 'workDir is not a directory');
+        if (platform === 'darwin' && (input.arch || process.arch) !== 'arm64') throw failure('AE_LAUNCH_UNSUPPORTED', 'macOS launching requires native arm64');
         const executable = discoverAfterEffects(Object.assign({}, input, request, { platform, fs: files, env: environment }));
         let scriptPath = request.scriptPath;
         if (role === 'primary') {
@@ -132,7 +182,7 @@ function createInstanceLauncher(options) {
         let child;
         try {
             // Keep primary AE alive after connector exit; Windows libuv otherwise kills its child job.
-            child = spawn(executable, ['-m', '-r', scriptPath], {
+            child = spawn(executable, platform === 'darwin' ? ['-m'] : ['-m', '-r', scriptPath], {
                 cwd: workDir, env, windowsHide: true, stdio: 'ignore', shell: false, detached: role === 'primary',
             });
         } catch (error) {
@@ -158,6 +208,7 @@ function createInstanceLauncher(options) {
             child.unref?.();
             writeTicket(ticketPath, ticket);
             if (typeof request.registration === 'function') await request.registration(Object.assign({}, ticket));
+            if (platform === 'darwin') record.dispatch = await (input.dispatchMacScript || dispatchMacScript)(record, scriptPath, executable, input.execFile || childProcess.execFile);
             return record;
         } catch (error) {
             // A post-spawn bookkeeping failure must not hide a live primary or launch a replacement.
@@ -187,4 +238,4 @@ function createInstanceLauncher(options) {
     };
 }
 
-module.exports = { createInstanceLauncher, discoverAfterEffects };
+module.exports = { createInstanceLauncher, discoverAfterEffects, dispatchMacScript, MAC_DISPATCH };

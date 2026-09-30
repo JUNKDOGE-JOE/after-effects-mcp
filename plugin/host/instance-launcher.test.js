@@ -47,12 +47,12 @@ test('formal discovery excludes Beta and selects the newest installed executable
 test('primary launch preserves its project path and supplies a PID ticket without claiming readiness', async (t) => {
     const f = fixture(t);
     let registered;
-    const launcher = createInstanceLauncher({ platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn,
+    const launcher = createInstanceLauncher({ platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn, arch: 'arm64', dispatchMacScript: async () => ({ dispatched: true }),
         env: { TASK_ENV: 'kept', OPENAI_API_KEY: 'secret-key', anthropic_auth_token: 'secret-token', CUSTOM_API_KEY: 'custom-key', OPENCODE_CONFIG_CONTENT: '{"apiKey":"secret"}' } });
     const record = await launcher.startPrimary({ instanceId: 'main-one', workDir: f.root, projectPath: f.project,
         registration: (ticket) => { registered = ticket; } });
     const call = f.calls[0];
-    assert.deepEqual(call.args.slice(0, 2), ['-m', '-r']);
+    assert.deepEqual(call.args.slice(0, 2), f.platform === 'darwin' ? ['-m'] : ['-m', '-r']);
     assert.equal(call.options.shell, false);
     assert.equal(call.options.windowsHide, true);
     assert.equal(call.options.detached, true);
@@ -78,9 +78,9 @@ test('primary launch preserves its project path and supplies a PID ticket withou
 
 test('worker executes only the supplied maintained script and only its owner may stop it', async (t) => {
     const f = fixture(t);
-    const launcher = createInstanceLauncher({ platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn, env: {} });
+    const launcher = createInstanceLauncher({ platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn, arch: 'arm64', dispatchMacScript: async () => ({ dispatched: true }), env: {} });
     const record = await launcher.startWorker({ instanceId: 'worker-one', scriptPath: f.script, workDir: f.root, env: { JOB_PATH: 'job.json' } });
-    assert.deepEqual(f.calls[0].args, ['-m', '-r', f.script]);
+    assert.deepEqual(f.calls[0].args, f.platform === 'darwin' ? ['-m'] : ['-m', '-r', f.script]);
     assert.equal(f.calls[0].options.env.AE_MCP_INSTANCE_ROLE, 'worker');
     assert.equal(f.calls[0].options.detached, false);
     assert.equal(f.calls[0].options.stdio, 'ignore');
@@ -95,14 +95,14 @@ test('worker executes only the supplied maintained script and only its owner may
 
 test('launcher rejects missing work directory before any process starts', async (t) => {
     const f = fixture(t);
-    const launcher = createInstanceLauncher({ platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn });
+    const launcher = createInstanceLauncher({ platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn, arch: 'arm64', dispatchMacScript: async () => ({ dispatched: true }) });
     await assert.rejects(launcher.startWorker({ scriptPath: f.script }), { code: 'WORK_DIRECTORY_REQUIRED' });
     assert.equal(f.calls.length, 0);
 });
 
 test('registration failure exposes the already-started process instead of killing or replacing it', async (t) => {
     const f = fixture(t);
-    const launcher = createInstanceLauncher({ platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn, env: {} });
+    const launcher = createInstanceLauncher({ platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn, arch: 'arm64', dispatchMacScript: async () => ({ dispatched: true }), env: {} });
     await assert.rejects(launcher.startPrimary({ instanceId: 'main-uncertain', projectPath: f.project, workDir: f.root,
         registration: () => { throw new Error('registration unavailable'); } }), (error) => {
         assert.equal(error.launchedInstance.pid, 4242);
@@ -133,7 +133,7 @@ test('a ticket write failure after spawn still tracks the eventual process exit'
         if (String(file).endsWith('.pending')) throw Object.assign(new Error('ticket disk full'), { code: 'ENOSPC' });
         return fs.writeFileSync(file, ...args);
     } };
-    const launcher = createInstanceLauncher({ fs: files, platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn, env: {} });
+    const launcher = createInstanceLauncher({ fs: files, platform: f.platform, afterEffectsPath: f.executable, spawn: f.spawn, arch: 'arm64', dispatchMacScript: async () => ({ dispatched: true }), env: {} });
     let record;
     await assert.rejects(launcher.startWorker({ instanceId: 'ticket-failed', workDir: f.root, scriptPath: f.script }), error => {
         record = error.launchedInstance;
@@ -228,4 +228,49 @@ test('bootstrap reports an unavailable CEP event bridge without attempting a men
     assert.match(JSON.parse(h.getStatus()).detail, /PlugPlug unavailable/);
     assert.deepEqual(h.executed, []);
     assert.equal(h.scheduled.length, 0);
+});
+
+test('Mac dispatcher binds the captured PID birth identity and never requests TCC interaction', async () => {
+    const { dispatchMacScript, MAC_DISPATCH } = require('./instance-launcher');
+    const calls = [];
+    const execFile = (exe, args, options, callback) => {
+        calls.push({ exe, args, options });
+        if (exe === '/bin/ps') callback(null, ' Wed Sep 30 13:29:19 2026\n');
+        else callback(null, '{"pid":42,"dispatched":true}');
+    };
+    const record = { pid: 42, instanceId: 'ticket-42', role: 'primary', ticket: {} };
+    assert.equal((await dispatchMacScript(record, '/fixture/bootstrap.jsx', '/AE/After Effects', execFile)).pid, 42);
+    assert.deepEqual(calls[0].args, ['-p', '42', '-o', 'lstart=']);
+    assert.deepEqual(calls[1].args.slice(4), ['42', '/AE/After Effects', 'Wed Sep 30 13:29:19 2026', '/fixture/bootstrap.jsx', 'ticket-42', 'primary']);
+    assert.match(MAC_DISPATCH, /descriptorWithProcessIdentifier\(pid\)/);
+    assert.match(MAC_DISPATCH, /start!==expectedStart/);
+    assert.match(MAC_DISPATCH, /0x20010/);
+    assert.match(MAC_DISPATCH, /STARTUP_PROJECT_CHANGED/);
+    assert.equal(calls[1].options.timeout, 40000);
+});
+
+test('Mac dispatcher reports permission failure and never retries a dispatched event', async () => {
+    const { dispatchMacScript } = require('./instance-launcher');
+    for (const code of [-1743, -1744, -1712]) {
+        let sent = 0;
+        const execFile = (exe, args, options, callback) => {
+            if (exe === '/bin/ps') callback(null, 'start');
+            else { sent += 1; callback(new Error('failed'), '', 'AE_APPLE_EVENT_' + code); }
+        };
+        await assert.rejects(dispatchMacScript({ pid: 42, role: 'primary', ticket: {} }, '/script', '/AE', execFile),
+            { code: code === -1712 ? 'AE_SCRIPT_DISPATCH_FAILED' : 'AE_AUTOMATION_PERMISSION_REQUIRED' });
+        assert.equal(sent, 1);
+    }
+});
+
+test('Mac post-spawn dispatch failure preserves ownership for reconciliation', async (t) => {
+    const f = fixture(t);
+    if (f.platform !== 'darwin') return;
+    const launcher = createInstanceLauncher({ platform: 'darwin', arch: 'arm64', afterEffectsPath: f.executable,
+        spawn: f.spawn, dispatchMacScript: async () => { throw new Error('permission blocked'); } });
+    await assert.rejects(launcher.startPrimary({ instanceId: 'blocked-mac', workDir: f.root, projectPath: f.project }),
+        error => error.launchedInstance.pid === f.calls[0].child.pid);
+    await assert.rejects(launcher.startPrimary({ instanceId: 'blocked-mac', workDir: f.root, projectPath: f.project }),
+        { code: 'INSTANCE_ALREADY_STARTED' });
+    assert.equal(f.calls.length, 1);
 });
