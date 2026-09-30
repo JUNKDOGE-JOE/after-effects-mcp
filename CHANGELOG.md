@@ -12,6 +12,13 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [未发布]
 
+### [0.11.0] — release preparation (unreleased)
+
+- **Local project contexts and multiple AE endpoints (#393)**: one writer per project, read-only snapshot workers, explicit instance and workspace routing, and bounded read jobs. Closing a panel remains an intentional disconnect.
+- **Native diagnosis and connection recovery (#392, draft #395)**: cold diagnosis probes the native handshake, reports its connection stage, and clears timed-out pending connections for retry on Windows and macOS. Passive status and ping remain passive. The original issue remains open for reporter verification.
+- **Release limits**: development-machine dual-worker admission is not established; true unknown-write recovery has not been verified on Mac. The evalScript deadline is a soft timeout and cannot interrupt AE execution. Guide layers may be absent from PNG output. Packaged identity, signatures and T5/T6 acceptance remain pending.
+
+
 ### [0.10.8] — 2026-09-23
 
 - 聊天输入区支持复制文件和截图后粘贴为附件，避免一次粘贴重复添加；设置 → 通用新增“剪贴板附件粘贴”开关，遇到 TMC Clipboard 等插件抢占 Ctrl+V 时可关闭，保留文字粘贴、拖放和文件选择。

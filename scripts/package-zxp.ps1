@@ -11,7 +11,7 @@ param(
     [string]$CertPassword = '',
     [string]$CertPath = '',
     [string]$OutputPath = '',
-    [string]$Version = '0.10.8',
+    [string]$Version = '0.11.0',
     [string]$Tsa = 'http://timestamp.digicert.com',
     [switch]$SkipSigning
 )
