@@ -12,7 +12,9 @@ that apply to that operator and use.
 
 ## What counts as the native SDK
 
-The filenames claim After Effects 25.6 build 61, 64-bit C/C++ Plug-in SDK content. The
+The active input is the 64-bit After Effects 26.5 C/C++ Plug-in SDK publication v1.
+The previous 25.6 build 61 input locks remain in `sdk.previousInputs` and continue
+to be included in the anti-vendoring scan. The
 old CC 2015 Panel SDK is a CEP/ExtendScript SDK, and the 2018 SensorManager SDK is specific
 to MGJSON conversion. Neither can satisfy the native AEGP build contract.
 
@@ -22,28 +24,41 @@ Developers must obtain the matching fixed version themselves through Adobe's off
 
 | Platform | Filename hint | Bytes | SHA-256 |
 |---|---|---:|---|
-| macOS | `AfterEffectsSDK_25.6_61_mac.zip` | 2,039,255 | `c6abccd52ae25936b819b78c4fea2858bd161f216f72f75184fe9ec55a49756e` |
-| Windows | `AfterEffectsSDK_25.6_61_win.zip` | 7,549,997 | `3d3a39175a09d07f6f9734284636f9eadce968b05161650e3cba097a95905330` |
+| macOS | `AfterEffectsSDK_26.5_MacOS.zip` | 2,055,405 | `7b837d594696ca0ece1ddba5e15b0fd3bf1ee908a1c7be04d4627180aa7ece7e` |
+| Windows | `AfterEffectsSDK_26.5_win.zip` | 2,025,899 | `ad86bd6d66a1e1ffe8471e4618e3de4dbc9679f2ca47ae9bbe69f78805c82960` |
 
 Size and SHA-256 bind only the exact developer-provided bytes reviewed here. They do
 not prove Adobe origin, authenticity, version, license, or host compatibility. The
 filename is a human hint and is not part of the cryptographic gate.
 
 The machine-readable source of truth is
-[`packaging/ae-sdk-inputs.json`](../../packaging/ae-sdk-inputs.json). It also records the
-inner payload size and digest so later extraction tooling can detect wrapper drift
-without executing the decoder binaries included in the downloads.
+[`packaging/ae-sdk-inputs.json`](../../packaging/ae-sdk-inputs.json). The 26.5 inputs
+are direct ZIP archives (`innerPayload: null`); the previous wrapped archive and
+inner-payload locks are retained without executing any bundled decoder.
 
-For macOS, a one-time intake used a separately acquired, integrity-pinned conda-forge
-`zstd 1.5.7` and the macOS system `bsdtar` after archive and tar-path preflight. No
-package-bundled executable or script ran. The canonical extracted tree contains 436
-regular files totalling 5,526,135 bytes; hashing sorted records of relative path, type,
+The authorized 2026-09-30 intake reused existing downloaded Windows and Mac ZIPs.
+Their local download provenance records point to Adobe Developer and Adobe's
+SDK CDN paths ending in `2026/windows/v1` and `2026/mac/v1`; signed query data is
+not retained or published. This evidence supports developer custody and source
+attribution; it is not an independent Adobe signature or license grant.
+Header API identifiers are AEFX 8 and plug-in API 13.29, not a host build number.
+The release label 26.5 comes from the distribution paths and archive roots.
+`claimedBuild: 1` and native `compiledSdk.build=1` identify publication revision
+v1; they do not invent an AE host/SDK internal build counter.
+
+Windows .NET ZipArchive extraction preflight rejected path escapes, collisions,
+links, special entries and excessive sizes. No bundled executable or script ran.
+Both archive top folders were normalized to `ae26.5.64bit.AfterEffectsSDK` outside
+Git without changing file bytes. Preserve each platform's line endings: all 70
+shared headers match after CRLF/LF normalization, while their byte locks differ.
+The Mac extracted tree contains 433 regular files totalling 5,691,159 bytes;
+hashing sorted records of relative path, type,
 size, and file SHA-256 yields
-`3bec810920dd6ad2d9180c6456d4af421fef20e751dca7446800de80a2751cca`.
+`85bbf6b40be790e58332dedaffa9b58db35301095bb0e3677404ca7fcf7f7f71`.
 This fingerprint verifies extracted content, not Adobe origin or license. The Windows
-canonical tree contains 497 regular files totalling 15,960,949 bytes; the corresponding
+canonical tree contains 432 regular files totalling 5,704,481 bytes; the corresponding
 sorted file-record digest is
-`9ca19fe536e39445fdf0f9f2a1e981d30dcce8e56989c17fc9170a0da98abfbe`.
+`1efedeb1a57df84f1a9ffb1cb2c6f4a360f28fcf3347ac36bb725f60d27bfd28`.
 
 The repository does not publish per-file SDK fingerprints. Public CI inspects the tracked
 Git index for SDK-only paths, recognizable SDK containers, and exact aggregate archive or
@@ -106,7 +121,7 @@ development scope or another separately approved scope:
 
 - `AE_SDK_ARCHIVE`: the original developer-provided outer archive. Exact size and
   SHA-256 establish `sha256-verified` byte identity only.
-- `AE_SDK_ROOT`: either the extracted `ae25.6_61.64bit.AfterEffectsSDK` directory or its
+- `AE_SDK_ROOT`: either the normalized `ae26.5.64bit.AfterEffectsSDK` directory or its
   direct parent. The validator checks root name, file types, build-critical sentinels, and
   the platform's canonical file-tree digest on both macOS and Windows.
 
@@ -120,13 +135,13 @@ Verify the archive before extraction:
 ```sh
 node scripts/package/ae-sdk-input.mjs verify-archive \
   --platform macos-arm64 \
-  --archive /path/to/AfterEffectsSDK_25.6_61_mac.zip
+  --archive /path/to/AfterEffectsSDK_26.5_MacOS.zip
 ```
 
 After trusted extraction, verify the complete input:
 
 ```sh
-AE_SDK_ARCHIVE=/path/to/AfterEffectsSDK_25.6_61_mac.zip \
+AE_SDK_ARCHIVE=/path/to/AfterEffectsSDK_26.5_MacOS.zip \
 AE_SDK_ROOT=/path/to/extracted-sdk \
 node scripts/package/ae-sdk-input.mjs verify-input --platform macos-arm64
 ```

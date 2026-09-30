@@ -90,8 +90,8 @@ async function makeArtifact(root, name, payload, {
     protocolSchemaSha256: 'b'.repeat(64),
     sdk: {
       name: 'Adobe After Effects C/C++ Plug-in SDK',
-      claimedVersion: '25.6.61',
-      claimedBuild: 61,
+      claimedVersion: '26.5',
+      claimedBuild: 1,
       materialIncluded: false,
       archiveVerification: 'sha256-verified',
       rootVerification: 'layout-and-content-verified',

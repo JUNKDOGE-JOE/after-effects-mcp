@@ -16,7 +16,7 @@ import {
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const DEFAULT_POLICY_PATH = path.resolve(path.dirname(MODULE_PATH), '../../packaging/ae-sdk-inputs.json');
 const PLATFORM_IDS = new Set(['macos-arm64', 'windows-x64']);
-const CLAIMED_SDK_VERSION = '25.6.61';
+const CLAIMED_SDK_VERSION = '26.5';
 const MAX_TRACKED_FILES = 100_000;
 const MAX_ROOT_ENTRIES = 20_000;
 const MAX_ROOT_DEPTH = 32;
@@ -26,10 +26,10 @@ const MAX_TRACKED_BLOB_BYTES = 16 * 1024 * 1024;
 const MAX_TRACKED_BLOB_TOTAL_BYTES = 64 * 1024 * 1024;
 
 export const AE_SDK_POLICY_CANONICAL_SHA256 =
-  '00690979c34d23e109ca0456e9ac9df285c2a12794c492a525cbd391a064b2ed';
+  'a5169d7fa8d10546811f869719ed8110a0a2e42d1e04251ec93069c1eff1cc03';
 
 const SDK_ONLY_PATH = new RegExp([
-  String.raw`(?:^|\/)(?:AfterEffectsSDK_[^/]+|ae25\.6_61\.64bit\.AfterEffectsSDK)(?:\/|$)`,
+  String.raw`(?:^|\/)(?:(?:Adobe)?AfterEffectsSDK_[^/]+|ae(?:25\.6_61|26\.5)\.64bit\.AfterEffectsSDK)(?:\/|$)`,
   String.raw`(?:^|\/)(?:After_Effects_SDK_Guide\.pdf|AE_GeneralPlug(?:Old)?\.h|AE_IO\.h|SPBasic\.h|AEGP_SuiteHandler\.h|AE_General\.r|PiPLtool\.exe)$`,
   String.raw`(?:^|\/)Examples\/(?:Util\/entry\.h|AEGP\/(?:Commando|ProjDumper)(?:\/|$))`,
 ].join('|'), 'i');
@@ -70,6 +70,7 @@ export function validateAeSdkPolicy(value) {
         'licenseReview',
         'name',
         'platforms',
+        'previousInputs',
         'rootVerification',
       ])
       || !Array.isArray(value.sdk.layoutSentinels)
@@ -676,6 +677,8 @@ function looksLikeSdkArchive(bytes) {
     && (bytes.readUInt32LE(0) === 0x04034b50 || bytes.readUInt32LE(0) === 0x06054b50);
   return isZip && [
     'AfterEffectsSDK_',
+    'AdobeAfterEffectsSDK_',
+    'ae26.5.64bit.AfterEffectsSDK',
     'ae25.6_61.64bit.AfterEffectsSDK',
     'After_Effects_SDK_Guide.pdf',
     'AE_GeneralPlug.h',
@@ -727,8 +730,9 @@ export async function verifyRepositoryHasNoVendoredAeSdk({
 }) {
   const lockedPolicy = validateAeSdkPolicy(policy);
   const forbiddenRecords = [];
-  for (const record of Object.values(lockedPolicy.sdk.platforms)) {
-    for (const locked of [record.archive, record.innerPayload]) {
+  for (const record of [...Object.values(lockedPolicy.sdk.platforms),
+    ...Object.values(lockedPolicy.sdk.previousInputs.platforms)]) {
+    for (const locked of [record.archive, record.innerPayload].filter(Boolean)) {
       forbiddenRecords.push({ bytes: locked.bytes, sha256: locked.sha256 });
     }
   }

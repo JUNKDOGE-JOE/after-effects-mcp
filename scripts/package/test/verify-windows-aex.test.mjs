@@ -385,7 +385,7 @@ test('windows aex verifier accepts a well-formed x64 plugin fixture', async (t) 
     result.artifactSha256,
     crypto.createHash('sha256').update(bytes).digest('hex'),
   );
-  assert.equal(result.receipt.sdk.claimedVersion, '25.6.61');
+  assert.equal(result.receipt.sdk.claimedVersion, '26.5');
 });
 
 test('windows aex verifier accepts OS-only imports (static CRT build)', async (t) => {
