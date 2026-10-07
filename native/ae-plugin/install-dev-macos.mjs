@@ -170,8 +170,8 @@ function validateReceipt(value) {
       || !PRODUCT_VERSION.test(value.productVersion ?? '')
       || !SHA256.test(value.protocolSchemaSha256)
       || value.sdk.name !== 'Adobe After Effects C/C++ Plug-in SDK'
-      || value.sdk.claimedVersion !== '25.6.61'
-      || value.sdk.claimedBuild !== 61
+      || value.sdk.claimedVersion !== '26.5'
+      || value.sdk.claimedBuild !== 1
       || value.sdk.materialIncluded !== false
       || value.sdk.archiveVerification !== 'sha256-verified'
       || value.sdk.rootVerification !== 'layout-and-content-verified'

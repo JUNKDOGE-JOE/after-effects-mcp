@@ -3,7 +3,19 @@ import assert from 'node:assert/strict';
 import {
   chooseToolExportPath,
   chooseToolPackage,
+  chooseWorkDirectory,
 } from '../src/cep/toolFileDialogs.js';
+
+test('work directory picker selects one folder, preserves cancellation and reports errors', () => {
+  const cepFs = { showOpenDialog: (...args) => {
+    assert.deepEqual(args, [false, true, '选择工作目录', 'C:\\工程', []]);
+    return { err: 0, data: ['file:///C:/%E5%B7%A5%E7%A8%8B%20A'] };
+  } };
+  assert.equal(chooseWorkDirectory(cepFs, { title: '选择工作目录', initialPath: 'C:\\工程' }), 'C:/工程 A');
+  assert.equal(chooseWorkDirectory({ showOpenDialog: () => ({ err: 0, data: [] }) }), null);
+  assert.equal(chooseWorkDirectory({ showOpenDialog: () => ({ data: ['file://server/share/工程'] }) }), '//server/share/工程');
+  assert.throws(() => chooseWorkDirectory({ showOpenDialog: () => ({ err: 5 }) }), /failed: 5/);
+});
 
 test('chooseToolPackage passes the exact CEP open-dialog contract', () => {
   const calls = [];

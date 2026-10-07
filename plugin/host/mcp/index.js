@@ -121,6 +121,9 @@ function mountMcp(app, deps) {
     );
     const tools = buildTools({
         getStatus: deps.getStatus,
+        getNativeStatus: deps.getNativeStatus,
+        nativeNegotiate: deps.nativeNegotiate,
+        nativeInvoke: deps.nativeInvoke,
         executeJsx: deps.executeJsx,
         approvals,
         getCheckpointStore: function () {

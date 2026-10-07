@@ -598,8 +598,8 @@ export async function verifyWindowsAex(input) {
       resources: ['PiPL/16000', 'VERSION/1'],
       sdk: {
         name: 'Adobe After Effects C/C++ Plug-in SDK',
-        claimedVersion: '25.6.61',
-        claimedBuild: 61,
+        claimedVersion: '26.5',
+        claimedBuild: 1,
         materialIncluded: false,
       },
     };

@@ -9,7 +9,7 @@ const EVALSCRIPT_ERR_SENTINEL = 'EvalScript error.';
 
 const SENTINEL_TIMEOUT_MS = 60000;
 const SENTINEL_RETRY_DELAY_MS = 1000;
-const DRAIN_SENTINEL_JSX = 'try{app.endUndoGroup()}catch(e){};1+1';
+const DRAIN_SENTINEL_JSX = '1+1';
 
 let csInterface = null;
 let queue = Promise.resolve();

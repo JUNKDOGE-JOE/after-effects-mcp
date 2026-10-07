@@ -12,6 +12,16 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [未发布]
 
+### [0.11.0] — release preparation (unreleased)
+
+- **Local project contexts and multiple AE endpoints (#393)**: one writer per project, read-only snapshot workers, explicit instance and workspace routing, and bounded read jobs. Closing a panel remains an intentional disconnect.
+- **Native diagnosis and connection recovery (#392, draft #395)**: cold diagnosis probes the native handshake, reports its connection stage, and clears timed-out pending connections for retry on Windows and macOS. Passive status and ping remain passive. The original issue remains open for reporter verification.
+- **工作目录 / Work directory**: 新聊天默认使用当前 AEP 所在目录；未保存或目录不可写时回落用户目录。设置提供系统文件夹浏览和恢复默认，取消保持原值；已有聊天保留原目录。New chats use the current AEP folder, falling back to the home folder; native folder browsing and reset are available in settings, while existing chats keep their directory.
+- **渲染与 Undo / Render and Undo (#397)**: 分组执行在派发前拒绝可识别的 `render()` 或 `$.evalFile()` 调用；渲染需拆成独立、不带 Undo 分组的 `ae_exec`。检查不保证识别任意动态脚本。超时排空哨兵不再调用无对应分组的 `endUndoGroup()`，串行锁保持有效。Recognizable render/evalFile calls are rejected before grouped execution; render separately without an Undo group. Dynamic JSX still requires this calling discipline. The drain sentinel no longer alters Undo state.
+- **Native SDK build input**: use the existing Adobe SDK 26.5 publication v1 inputs, retaining the previous 25.6.61 locks and all 23 primitive/suite pins. Windows build/PE checks and unified-source Mac AE26/AE24 core development checks are recorded; packaged AE compatibility remains a separate gate.
+- **Release limits**: Mac worker cases blocked by development-machine resources are deferred to public beta testing, not marked passed. True unknown-write recovery remains unverified on Mac, and AE23 was not tested there. The evalScript deadline is soft and cannot interrupt AE execution. Guide layers may be absent from PNG output. Packaged identity, signatures and T5/T6 acceptance remain pending.
+
+
 ### [0.10.8] — 2026-09-23
 
 - 聊天输入区支持复制文件和截图后粘贴为附件，避免一次粘贴重复添加；设置 → 通用新增“剪贴板附件粘贴”开关，遇到 TMC Clipboard 等插件抢占 Ctrl+V 时可关闭，保留文字粘贴、拖放和文件选择。

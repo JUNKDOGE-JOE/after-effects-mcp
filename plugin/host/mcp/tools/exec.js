@@ -129,7 +129,7 @@ function checkpointApprovalContext(context, args) {
 
 const definition = {
     name: 'ae_exec',
-    description: 'Run a new ExtendScript in After Effects. Dispatched failures may return a recoveryId and editable scriptPath; retry those only with ae_execRecover. Successful content remains a string with contentType "json" or "text".',
+    description: 'Run ExtendScript in After Effects. Render or $.evalFile in a separate call without undo_group_name and with no open Undo groups. Source checks cannot cover all dynamic calls. Timeout does not stop a script: reconcile before retrying. If suppressing dialogs, restore in finally and return errors; verify render status/output. Dispatched failures may return recoveryId/scriptPath; retry via ae_execRecover. Success content is a string with contentType "json" or "text".',
     inputSchema: {
         type: 'object',
         properties: {
@@ -138,7 +138,7 @@ const definition = {
                 minLength: 1,
                 description: 'New ExtendScript to run.',
             },
-            undo_group_name: { type: 'string' },
+            undo_group_name: { type: 'string', description: 'Edit label only; omit for render or $.evalFile.' },
             checkpoint_label: { type: 'string' },
             timeout_sec: { type: 'number', minimum: 1, maximum: 600 },
         },

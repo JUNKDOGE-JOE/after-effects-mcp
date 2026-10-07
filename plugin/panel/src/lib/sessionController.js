@@ -234,7 +234,7 @@ export function createSessionController({
     }, 400);
   }
 
-  function newMeta() {
+  async function newMeta() {
     const timestamp = isoTime(now);
     return {
       id: `chat-${uuid()}`,
@@ -245,7 +245,7 @@ export function createSessionController({
       backend: deps.currentBackend(),
       channel: deps.currentChannel(),
       model: deps.currentModel() || null,
-      ...(deps.defaultWorkDir ? { workDir: deps.defaultWorkDir() || null } : {}),
+      ...(deps.defaultWorkDir ? { workDir: await deps.defaultWorkDir() || null } : {}),
       backendRef: null,
       archived: false,
       entryCount: 0,
@@ -266,7 +266,7 @@ export function createSessionController({
       persistActive();
       await switchAway();
     }
-    activeMeta = newMeta();
+    activeMeta = await newMeta();
     activeId = activeMeta.id;
     latestEntries = [];
     index.activeId = null;

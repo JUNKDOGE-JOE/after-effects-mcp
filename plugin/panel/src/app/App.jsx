@@ -24,6 +24,7 @@ import { redactCredentialText } from '../lib/credentialTextRedaction.js';
 import { firstErrorDetailLine, serializeErrorDetail } from '../lib/errorDetail.js';
 import { createMcpClient } from '../cep/mcpClient';
 import { createToolsApi } from '../cep/toolsApi';
+import { chooseWorkDirectory } from '../cep/toolFileDialogs.js';
 import { probeClaudeLogin } from '../cep/claudeAuth';
 import { createCliUpdateChecker, codexCatalogNotice } from '../lib/cliUpdates.js';
 import { createPanelUpdateChecker, PANEL_UPDATE_DISMISSED, showPanelUpdate } from '../lib/panelUpdates.js';
@@ -850,7 +851,14 @@ function Shell({ cs }) {
         });
       },
       currentBackend: () => effectiveBackendRef.current,
-      defaultWorkDir: () => getHost()?.getInstanceInfo?.().workDir,
+      defaultWorkDir: async () => {
+        try {
+          const directory = await ctrl.current.refreshWorkDirectory();
+          setWorkDir(directory);
+          setWorkDirError('');
+          return directory;
+        } catch (error) { setWorkDirError(error.message || String(error)); throw error; }
+      },
       currentWorkDir: () => hostConversation.currentConversation()?.workDir || getHost()?.getInstanceInfo?.().workDir,
       currentModel: () => runtimeRef.current.model,
       currentChannel: () => effectiveChannelRef.current,
@@ -1246,11 +1254,22 @@ function Shell({ cs }) {
       setConfirmChatNavigation({ kind: 'new' });
       return;
     }
-    await sessionController.createSession();
+    try {
+      await sessionController.createSession();
+    } catch (error) { setWorkDirError(error.message || String(error)); return; }
     setChatStreaming(false);
     setThinkingActive(false);
     setTurnStage(null);
     setTurnProgress(null);
+  };
+
+  const applyWorkDirectory = async (directory) => {
+    try {
+      if (chatStreaming || pendingTurnRef.current) throw new Error(lang === 'zh' ? '请先结束当前任务。' : 'Finish the current task first.');
+      setWorkDir(await ctrl.current.refreshWorkDirectory(directory));
+      setWorkDirError('');
+      setHostConversationError('');
+    } catch (error) { setWorkDirError(error.message || String(error)); }
   };
 
   // Note: the log-level filter is intentionally applied at append time only; existing buffered lines are unaffected by later level changes.
@@ -1709,18 +1728,15 @@ function Shell({ cs }) {
             onApplyPort={applyPort}
             workDir={workDir}
             workDirError={workDirError}
-            onApplyWorkDir={(value) => {
+            workDirDisabled={chatStreaming || Boolean(pendingTurnRef.current)}
+            onApplyWorkDir={(value) => applyWorkDirectory(String(value || '').trim())}
+            onResetWorkDir={() => applyWorkDirectory(null)}
+            onBrowseWorkDir={() => {
               try {
-                const directory = String(value || '').trim();
-                if (chatStreaming) throw new Error(lang === 'zh' ? '请先结束当前任务。' : 'Finish the current task first.');
-                if (!platform.paths.isAbsolute(directory) || !platform.fs.statSync(directory).isDirectory()) {
-                  throw new Error(lang === 'zh' ? '请输入已存在的绝对目录。' : 'Enter an existing absolute directory.');
-                }
-                getHost().configureInstance({ workDir: directory });
-                if (!workDir) hostConversation.closeConversation();
-                setWorkDir(directory);
-                setWorkDirError('');
-                setHostConversationError('');
+                const directory = chooseWorkDirectory(window.cep?.fs, {
+                  title: lang === 'zh' ? '选择工作目录' : 'Choose work directory', initialPath: workDir,
+                });
+                if (directory) applyWorkDirectory(directory);
               } catch (error) { setWorkDirError(error.message || String(error)); }
             }}
             mcpConfig={mcpConfigStr}

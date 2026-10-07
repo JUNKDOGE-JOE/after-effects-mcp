@@ -12,6 +12,7 @@ import {
   loadSavedPort,
   normalizeCepPath,
   resolveHostInstance,
+  resolveWorkDirectory,
   savePort,
 } from '../src/cep/hostBridge.js';
 import { createWindowsAdapter } from '../src/cep/platform/windows.js';
@@ -24,6 +25,7 @@ function testPathCatalog(platformId) {
     return platformId === 'windows-x64' ? resolved.toLowerCase() : resolved;
   };
   return {
+    home: platformId === 'windows-x64' ? 'C:\\Users\\a' : '/Users/a',
     join: (parts) => nativePath.join(...parts),
     resolve: (parts) => nativePath.resolve(...parts),
     dirname: (value) => nativePath.dirname(value),
@@ -88,7 +90,8 @@ function fakeHostDependencyRuntime({ platformId, extensionRoot, express }) {
       isFile: () => [anchor, expressEntry, expressPackage].includes(candidate),
       isSymbolicLink: () => false,
     }),
-    statSync: () => ({ isFile: () => true }),
+    statSync: () => ({ isFile: () => true, isDirectory: () => true }),
+    accessSync() {},
     realpathSync: (candidate) => candidate,
     readFileSync: (candidate) => {
       if (candidate === expressPackage) return '{"name":"express","main":"index.js"}\n';
@@ -264,6 +267,7 @@ test('host controller loads the direct host bundle and restarts without root pay
     setRuntimeDependencies(dependencies) { receivedDependencies = dependencies; },
     setNativeAegpRuntime(value) { receivedNativeRuntime = value; },
     setCSInterface() {},
+    configureInstance() {},
     start(port, callback) { calls.push({ method: 'start', port }); callback(null); },
     restart(port, callback) { calls.push({ method: 'restart', port }); callback(null); },
     stop() {},
@@ -313,6 +317,63 @@ test('host identity uses the AE launch PID instead of the CEP process PID', () =
   assert.equal(manual.workDir, null);
   assert.throws(() => resolveHostInstance({ env, readTicket: () => ({ ...ticket, instanceId: 'other-main' }),
     paths: testPathCatalog('macos-arm64') }), /does not match/);
+});
+
+test('work directory defaults to the saved project parent or writable home on both platforms', () => {
+  for (const id of ['windows-x64', 'macos-arm64']) {
+    const paths = testPathCatalog(id);
+    const platform = { id, paths, fs: {
+      statSync: () => ({ isDirectory: () => true }),
+      accessSync: (directory) => { if (directory.includes('locked')) throw new Error('EACCES'); },
+    } };
+    const parent = paths.join([paths.home, '工程 空格']);
+    const projectPath = paths.join([parent, '镜头.aep']);
+    const resolve = (options) => resolveWorkDirectory({ platform, projectPath, ...options });
+    assert.equal(resolve({}), parent);
+    assert.equal(resolve({ directory: paths.home }), paths.home);
+    assert.equal(resolve({ projectPath: null }), paths.home);
+    assert.equal(resolve({ projectPath: paths.join([paths.home, 'locked', 'a.aep']) }), paths.home);
+    assert.throws(() => resolve({ directory: 'relative' }), /writable absolute/);
+    assert.throws(() => resolve({ directory: paths.join([paths.home, 'locked']) }), /writable absolute/);
+  }
+});
+
+test('work directory changes are scoped to the current project and controller and can reset', async () => {
+  const runtime = fakeHostDependencyRuntime({ platformId: 'macos-arm64', extensionRoot: '/extension', express: () => {} });
+  function harness() {
+    let projectPath = '/shots/a/main.aep';
+    let workDir;
+    const host = { setRuntimeDependencies() {}, setCSInterface() {},
+      configureInstance: (value) => { workDir = value.workDir; },
+      getInstanceInfo: () => ({ projectPath, workDir }),
+      executeJsx: async (input) => {
+        assert.equal(input.nativeProjectGraphEffect, 'preserve');
+        assert.equal(input.undoGroup, undefined);
+        return { payload: { ok: true, result: projectPath } };
+      },
+      start: (port, callback) => callback(null, { port }),
+    };
+    const controller = createHostController({ cs: {}, platform: hostAdapter(runtime.fs), extensionRoot: '/extension',
+      environment: {}, createInstanceId: () => 'test-main', addBeforeUnload() {}, onLog() {},
+      onStatus: (state, port, error) => { assert.notEqual(state, 'error', error); },
+      requireImpl: (request) => request === 'module' ? runtime.moduleApi : request === 'path' ? path : host,
+    });
+    return { host, controller, open: (value) => { projectPath = value; } };
+  }
+  const a = harness();
+  const b = harness();
+  await a.controller.start(11488);
+  await b.controller.start(11489);
+  assert.equal(a.host.getInstanceInfo().workDir, '/shots/a');
+  assert.equal(await a.controller.refreshWorkDirectory('/custom'), '/custom');
+  assert.equal(b.host.getInstanceInfo().workDir, '/shots/a');
+  a.open('/shots/b/save-as.aep');
+  assert.equal(await a.controller.refreshWorkDirectory(), '/shots/b');
+  a.open('/shots/a/main.aep');
+  assert.equal(await a.controller.refreshWorkDirectory(), '/custom');
+  assert.equal(await a.controller.refreshWorkDirectory(null), '/shots/a');
+  a.open(null);
+  assert.equal(await a.controller.refreshWorkDirectory(), '/Users/a');
 });
 
 test('host lifecycle reports the bound port and makes panel unload terminal without relaunching', () => {

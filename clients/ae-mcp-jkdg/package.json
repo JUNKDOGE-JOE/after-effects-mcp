@@ -1,6 +1,6 @@
 {
   "name": "ae-mcp-jkdg",
-  "version": "0.10.4",
+  "version": "0.11.0",
   "description": "A stdio connector for the local ae-mcp After Effects panel.",
   "bin": {
     "ae-mcp-jkdg": "bin/ae-mcp-jkdg.js"

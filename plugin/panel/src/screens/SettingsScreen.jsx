@@ -51,7 +51,9 @@ const S = {
     modelDefault: '默认模型（打开面板时使用）',
     port: '端口',
     workDir: '工作目录',
-    workDirHint: '新会话的生成文件和检查点目录。已有会话保持原目录。',
+    workDirHint: '默认使用 AEP 所在目录；未保存或目录不可写时使用用户目录。更改只对新会话生效，已有会话保持原目录。',
+    browseWorkDir: '浏览…',
+    resetWorkDir: '恢复默认',
     portHint: '默认 11488',
     apply: '应用',
     token: '访问 Token',
@@ -107,7 +109,9 @@ const S = {
     modelDefault: 'Default model (used when the panel opens)',
     port: 'Port',
     workDir: 'Work directory',
-    workDirHint: 'Location for new chats. Existing chats keep their work directory.',
+    workDirHint: 'Defaults to the AEP folder, or your home folder for unsaved projects or unwritable folders. Changes apply to new chats; existing chats keep their directory.',
+    browseWorkDir: 'Browse…',
+    resetWorkDir: 'Use default',
     portHint: 'Default 11488',
     apply: 'Apply',
     token: 'Access token',
@@ -306,7 +310,10 @@ export function SettingsScreen({
   onApplyPort,
   workDir = '',
   workDirError = '',
+  workDirDisabled = false,
   onApplyWorkDir,
+  onBrowseWorkDir,
+  onResetWorkDir,
   mcpConfig,
   extensionRoot = '<extension root>',
   mcpReady = true,
@@ -420,8 +427,12 @@ export function SettingsScreen({
       <Section id="conn" title={t.conn} expanded={sections.conn} onToggle={onToggleSection}>
         <Field label={t.workDir} caption={workDirError || t.workDirHint}>
           <div style={{ display: 'flex', gap: 6 }}>
-            <Input mono value={draftWorkDir} onChange={setDraftWorkDir} style={{ flex: 1 }} />
-            <Button variant="secondary" onClick={() => onApplyWorkDir?.(draftWorkDir)}>{t.apply}</Button>
+            <Input mono value={draftWorkDir} disabled={workDirDisabled} onChange={setDraftWorkDir} style={{ flex: 1 }} />
+            <Button variant="secondary" disabled={workDirDisabled} onClick={() => onApplyWorkDir?.(draftWorkDir)}>{t.apply}</Button>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <Button variant="secondary" disabled={workDirDisabled} onClick={onBrowseWorkDir}>{t.browseWorkDir}</Button>
+            <Button variant="secondary" disabled={workDirDisabled} onClick={onResetWorkDir}>{t.resetWorkDir}</Button>
           </div>
         </Field>
         <Field label={t.port} hint={t.portHint}>

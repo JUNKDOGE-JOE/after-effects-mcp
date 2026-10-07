@@ -73,6 +73,46 @@ function nativeInvokeBody() {
     };
 }
 
+test('grouped recognizable render and evalFile calls are rejected before JSX dispatch', async () => {
+    const server = loadServer();
+    let dispatched = 0;
+    server.setCSInterface({ evalScript: function () { dispatched += 1; } });
+    for (const code of ['app.project.renderQueue.render()', 'var rq=app.project.renderQueue;rq.render()',
+        'rq["render"]()', '$.evalFile("render.jsx")', '$ ["evalFile"] ("edit.jsx")']) {
+        const output = await server.executeJsx({ code, undoGroup: 'Edit' });
+        assert.equal(output.status, 400);
+        assert.equal(output.payload.code, 'UNDO_RENDER_CONFLICT');
+        assert.equal(output.payload.disposition, 'not_dispatched');
+        assert.match(output.payload.error, /Split edits from rendering/);
+    }
+    assert.equal(dispatched, 0);
+});
+
+test('ordinary grouped edits and separate ungrouped render/file calls still execute', async () => {
+    const server = loadServer();
+    const calls = [];
+    const render = function () { calls.push('render'); };
+    const app = {
+        project: { renderQueue: { render } },
+        beginUndoGroup: function () { calls.push('begin'); },
+        endUndoGroup: function () { calls.push('end'); },
+    };
+    server.setCSInterface({ evalScript: function (code, callback) {
+        callback(require('node:vm').runInNewContext(code, {
+            app, $: { evalFile: function () { return app.project.renderQueue.render(); } },
+        }));
+    } });
+    const edit = await server.executeJsx({ code: 'var a=20; app.edited=true; a+22;', undoGroup: 'Edit' });
+    assert.equal(edit.payload.ok, true);
+    assert.equal(edit.payload.result, '42');
+    assert.equal(app.edited, true);
+    for (const code of ['app.project.renderQueue.render()', '$.evalFile("render.jsx")']) {
+        assert.equal((await server.executeJsx({ code })).payload.ok, true);
+    }
+    assert.deepEqual(calls, ['begin', 'end', 'render', 'render']);
+    assert.equal(app.project.renderQueue.render, render);
+});
+
 const stateRoots = [];
 test.after(function () {
     stateRoots.forEach(function (root) { fs.rmSync(root, { recursive: true, force: true }); });
@@ -1573,7 +1613,7 @@ test('/exec distinguishes uncertain timeout from a queued not_dispatched call', 
     const fixture = await startApp({
         evalScript: function (jsx, callback) {
             evalCalls.push(jsx);
-            if (/endUndoGroup/.test(jsx) && !/beginUndoGroup/.test(jsx)) {
+            if (jsx === '1+1') {
                 sentinelCallback = callback;
             }
         },

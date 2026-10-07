@@ -118,3 +118,9 @@ jobs:
 
       - name: Run frozen native protocol contracts
         run: node --test native/ae-plugin/protocol/protocol.test.mjs
+
+      - name: Run Unix native transport and public diagnosis contracts
+        working-directory: plugin/host
+        run: |
+          npm ci
+          node --test native-aegp-client.test.js mcp/index.test.js mcp/tools/status.test.js

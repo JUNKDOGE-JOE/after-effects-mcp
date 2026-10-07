@@ -213,6 +213,18 @@ export function resolveHostInstance({ env = {}, readTicket, createId, extensionR
   };
 }
 
+export function resolveWorkDirectory({ directory, projectPath, platform }) {
+  const candidates = directory ? [directory] : [projectPath && platform.paths.dirname(projectPath), platform.paths.home];
+  for (const candidate of candidates.filter(Boolean)) {
+    try {
+      if (!platform.paths.isAbsolute(candidate) || !platform.fs.statSync(candidate).isDirectory()) continue;
+      platform.fs.accessSync(candidate, 2);
+      return platform.paths.resolve([candidate]);
+    } catch {}
+  }
+  throw new Error('Choose an existing, writable absolute directory.');
+}
+
 export function createHostController({
   cs,
   onStatus,
@@ -229,6 +241,34 @@ export function createHostController({
   let beforeUnloadInstalled = false;
   let lifecycleGeneration = 0;
   let instance = null;
+  const workDirectories = new Map();
+  let workDirectoryInitialized = false;
+
+  function updateWorkDirectory(projectPath, directory) {
+    const key = projectPath ? adapter.paths.resolve([projectPath]) : '';
+    const projectKey = adapter.id === 'windows-x64' ? key.toLowerCase() : key;
+    if (!workDirectoryInitialized && instance.workDir) workDirectories.set(projectKey, instance.workDir);
+    const explicit = directory === undefined ? workDirectories.get(projectKey) : directory;
+    const workDir = resolveWorkDirectory({ directory: explicit, projectPath, platform: adapter });
+    if (directory !== undefined) {
+      if (directory) workDirectories.set(projectKey, workDir);
+      else workDirectories.delete(projectKey);
+    }
+    workDirectoryInitialized = true;
+    instance.workDir = workDir;
+    host.configureInstance({ workDir });
+    return workDir;
+  }
+
+  async function refreshWorkDirectory(directory) {
+    const current = host;
+    const reply = await current.executeJsx({
+      code: '(function(){return app.project.file ? app.project.file.fsName : "";}())',
+      nativeProjectGraphEffect: 'preserve', client: 'panel/work-directory', timeoutMs: 10000,
+    });
+    if (host !== current || !reply?.payload?.ok) throw new Error('Could not read the current AE project.');
+    return updateWorkDirectory(reply.payload.result || null, directory);
+  }
 
   function writeBootstrapStatus(state) {
     if (!instance?.bootstrapStatusPath) return;
@@ -312,6 +352,8 @@ export function createHostController({
         if (generation !== lifecycleGeneration || host !== nextHost) return;
         if (err) onStatus('error', port, err.message);
         else {
+          try { updateWorkDirectory(nextHost.getInstanceInfo?.().projectPath || instance.projectPath); }
+          catch (error) { onStatus('error', info?.port ?? port, error.message); return; }
           writeBootstrapStatus('host-started');
           onStatus('ok', info?.port ?? port);
         }
@@ -335,5 +377,5 @@ export function createHostController({
       });
     }
   }
-  return { start, restart, getHost: () => host, getInstance: () => instance };
+  return { start, restart, refreshWorkDirectory, getHost: () => host, getInstance: () => instance };
 }

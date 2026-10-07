@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "sdk": {
     "name": "Adobe After Effects C/C++ Plug-in SDK",
-    "claimedVersion": "25.6.61",
-    "claimedBuild": 61,
+    "claimedVersion": "26.5",
+    "claimedBuild": 1,
     "claimedBitness": 64,
     "acquisition": "developer-supplied-unverified-origin",
     "byteIdentityMeaning": "exact-developer-provided-bytes-only",
-    "extractedRoot": "ae25.6_61.64bit.AfterEffectsSDK",
+    "extractedRoot": "ae26.5.64bit.AfterEffectsSDK",
     "rootVerification": "structural-only-not-provenance",
     "antiVendoring": {
       "strategy": "tracked-git-path-container-and-locked-payload-scan",
@@ -15,52 +15,63 @@
       "gitLfsPointers": "rejected-uninspectable"
     },
     "layoutSentinels": [
-      { "path": "Examples/Headers/AE_GeneralPlug.h", "type": "file" },
-      { "path": "Examples/Headers/AE_GeneralPlugOld.h", "type": "file" },
-      { "path": "Examples/Headers/SP/SPBasic.h", "type": "file" },
-      { "path": "Examples/Resources/AE_General.r", "type": "file" },
-      { "path": "Examples/Util/AEGP_SuiteHandler.h", "type": "file" }
+      {
+        "path": "Examples/Headers/AE_GeneralPlug.h",
+        "type": "file"
+      },
+      {
+        "path": "Examples/Headers/AE_GeneralPlugOld.h",
+        "type": "file"
+      },
+      {
+        "path": "Examples/Headers/SP/SPBasic.h",
+        "type": "file"
+      },
+      {
+        "path": "Examples/Resources/AE_General.r",
+        "type": "file"
+      },
+      {
+        "path": "Examples/Util/AEGP_SuiteHandler.h",
+        "type": "file"
+      }
     ],
     "platforms": {
-      "macos-arm64": {
-        "archive": {
-          "fileNameHint": "AfterEffectsSDK_25.6_61_mac.zip",
-          "bytes": 2039255,
-          "sha256": "c6abccd52ae25936b819b78c4fea2858bd161f216f72f75184fe9ec55a49756e"
-        },
-        "innerPayload": {
-          "entryPath": "AfterEffectsSDK_25.6_61_mac/ae25.6_61.64bit.AfterEffectsSDK.tar.zstd.zip",
-          "format": "raw-zstd-containing-tar",
-          "bytes": 1540471,
-          "sha256": "e02fa2b488c3cceb238866b648eb9a2526d308a260744367915a2f173663c36c"
-        },
-        "rootContentLock": {
-          "status": "canonical-file-tree-verified",
-          "fileCount": 436,
-          "fileBytes": 5526135,
-          "sha256": "3bec810920dd6ad2d9180c6456d4af421fef20e751dca7446800de80a2751cca"
-        },
-        "buildSentinel": { "path": "Examples/Buildall.xcodeproj", "type": "directory" }
-      },
       "windows-x64": {
         "archive": {
-          "fileNameHint": "AfterEffectsSDK_25.6_61_win.zip",
-          "bytes": 7549997,
-          "sha256": "3d3a39175a09d07f6f9734284636f9eadce968b05161650e3cba097a95905330"
+          "fileNameHint": "AfterEffectsSDK_26.5_win.zip",
+          "bytes": 2025899,
+          "sha256": "ad86bd6d66a1e1ffe8471e4618e3de4dbc9679f2ca47ae9bbe69f78805c82960"
         },
-        "innerPayload": {
-          "entryPath": "AfterEffectsSDK_25.6_61_win/ae25.6_61.64bit.AfterEffectsSDK.zstd.zip",
-          "format": "zip-method-93-zstd",
-          "bytes": 1941777,
-          "sha256": "640b513bfdfdab264057f3fce0356ced468cdb6d3bd3e2666e6743ec8be1fdba"
-        },
+        "innerPayload": null,
         "rootContentLock": {
           "status": "canonical-file-tree-verified",
-          "fileCount": 497,
-          "fileBytes": 15960949,
-          "sha256": "9ca19fe536e39445fdf0f9f2a1e981d30dcce8e56989c17fc9170a0da98abfbe"
+          "fileCount": 432,
+          "fileBytes": 5704481,
+          "sha256": "1efedeb1a57df84f1a9ffb1cb2c6f4a360f28fcf3347ac36bb725f60d27bfd28"
         },
-        "buildSentinel": { "path": "Examples/BuildAll.sln", "type": "file" }
+        "buildSentinel": {
+          "path": "Examples/BuildAll.sln",
+          "type": "file"
+        }
+      },
+      "macos-arm64": {
+        "archive": {
+          "fileNameHint": "AfterEffectsSDK_26.5_MacOS.zip",
+          "bytes": 2055405,
+          "sha256": "7b837d594696ca0ece1ddba5e15b0fd3bf1ee908a1c7be04d4627180aa7ece7e"
+        },
+        "innerPayload": null,
+        "rootContentLock": {
+          "status": "canonical-file-tree-verified",
+          "fileCount": 433,
+          "fileBytes": 5691159,
+          "sha256": "85bbf6b40be790e58332dedaffa9b58db35301095bb0e3677404ca7fcf7f7f71"
+        },
+        "buildSentinel": {
+          "path": "Examples/Buildall.xcodeproj",
+          "type": "directory"
+        }
       }
     },
     "licenseReview": {
@@ -78,12 +89,20 @@
         "lastUpdated": "2024-06-18",
         "retrievedAt": "2026-07-14",
         "relevance": "review-evidence-not-adobe-authorization",
-        "reviewedClauses": ["4.1(A)", "6.5", "6.16", "6.17"],
+        "reviewedClauses": [
+          "4.1(A)",
+          "6.5",
+          "6.16",
+          "6.17"
+        ],
         "approvalId": null
       },
       "regionalEligibility": {
         "status": "operator-attested-authorized-at-actual-location",
-        "restrictedCountryDefinitionIncludes": ["mainland China", "Russia"],
+        "restrictedCountryDefinitionIncludes": [
+          "mainland China",
+          "Russia"
+        ],
         "locationInferredFromTimezone": false
       },
       "purposeEligibility": {
@@ -92,7 +111,11 @@
       },
       "embeddedNotices": {
         "status": "restrictive-notices-present-applicability-pending",
-        "observedCategories": ["headers", "utilities", "sample-source"],
+        "observedCategories": [
+          "headers",
+          "utilities",
+          "sample-source"
+        ],
         "noticeTextCopiedToRepository": false
       },
       "scopes": {
@@ -113,6 +136,59 @@
       "aegpSuites": "unknown",
       "toolchains": "unknown",
       "macosArchitectures": "unknown"
+    },
+    "previousInputs": {
+      "claimedVersion": "25.6.61",
+      "claimedBuild": 61,
+      "extractedRoot": "ae25.6_61.64bit.AfterEffectsSDK",
+      "platforms": {
+        "macos-arm64": {
+          "archive": {
+            "fileNameHint": "AfterEffectsSDK_25.6_61_mac.zip",
+            "bytes": 2039255,
+            "sha256": "c6abccd52ae25936b819b78c4fea2858bd161f216f72f75184fe9ec55a49756e"
+          },
+          "innerPayload": {
+            "entryPath": "AfterEffectsSDK_25.6_61_mac/ae25.6_61.64bit.AfterEffectsSDK.tar.zstd.zip",
+            "format": "raw-zstd-containing-tar",
+            "bytes": 1540471,
+            "sha256": "e02fa2b488c3cceb238866b648eb9a2526d308a260744367915a2f173663c36c"
+          },
+          "rootContentLock": {
+            "status": "canonical-file-tree-verified",
+            "fileCount": 436,
+            "fileBytes": 5526135,
+            "sha256": "3bec810920dd6ad2d9180c6456d4af421fef20e751dca7446800de80a2751cca"
+          },
+          "buildSentinel": {
+            "path": "Examples/Buildall.xcodeproj",
+            "type": "directory"
+          }
+        },
+        "windows-x64": {
+          "archive": {
+            "fileNameHint": "AfterEffectsSDK_25.6_61_win.zip",
+            "bytes": 7549997,
+            "sha256": "3d3a39175a09d07f6f9734284636f9eadce968b05161650e3cba097a95905330"
+          },
+          "innerPayload": {
+            "entryPath": "AfterEffectsSDK_25.6_61_win/ae25.6_61.64bit.AfterEffectsSDK.zstd.zip",
+            "format": "zip-method-93-zstd",
+            "bytes": 1941777,
+            "sha256": "640b513bfdfdab264057f3fce0356ced468cdb6d3bd3e2666e6743ec8be1fdba"
+          },
+          "rootContentLock": {
+            "status": "canonical-file-tree-verified",
+            "fileCount": 497,
+            "fileBytes": 15960949,
+            "sha256": "9ca19fe536e39445fdf0f9f2a1e981d30dcce8e56989c17fc9170a0da98abfbe"
+          },
+          "buildSentinel": {
+            "path": "Examples/BuildAll.sln",
+            "type": "file"
+          }
+        }
+      }
     }
   }
 }
