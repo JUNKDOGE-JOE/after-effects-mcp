@@ -23190,7 +23190,9 @@
       modelDefault: "\u9ED8\u8BA4\u6A21\u578B\uFF08\u6253\u5F00\u9762\u677F\u65F6\u4F7F\u7528\uFF09",
       port: "\u7AEF\u53E3",
       workDir: "\u5DE5\u4F5C\u76EE\u5F55",
-      workDirHint: "\u65B0\u4F1A\u8BDD\u7684\u751F\u6210\u6587\u4EF6\u548C\u68C0\u67E5\u70B9\u76EE\u5F55\u3002\u5DF2\u6709\u4F1A\u8BDD\u4FDD\u6301\u539F\u76EE\u5F55\u3002",
+      workDirHint: "\u9ED8\u8BA4\u4F7F\u7528 AEP \u6240\u5728\u76EE\u5F55\uFF1B\u672A\u4FDD\u5B58\u6216\u76EE\u5F55\u4E0D\u53EF\u5199\u65F6\u4F7F\u7528\u7528\u6237\u76EE\u5F55\u3002\u66F4\u6539\u53EA\u5BF9\u65B0\u4F1A\u8BDD\u751F\u6548\uFF0C\u5DF2\u6709\u4F1A\u8BDD\u4FDD\u6301\u539F\u76EE\u5F55\u3002",
+      browseWorkDir: "\u6D4F\u89C8\u2026",
+      resetWorkDir: "\u6062\u590D\u9ED8\u8BA4",
       portHint: "\u9ED8\u8BA4 11488",
       apply: "\u5E94\u7528",
       token: "\u8BBF\u95EE Token",
@@ -23245,7 +23247,9 @@
       modelDefault: "Default model (used when the panel opens)",
       port: "Port",
       workDir: "Work directory",
-      workDirHint: "Location for new chats. Existing chats keep their work directory.",
+      workDirHint: "Defaults to the AEP folder, or your home folder for unsaved projects or unwritable folders. Changes apply to new chats; existing chats keep their directory.",
+      browseWorkDir: "Browse\u2026",
+      resetWorkDir: "Use default",
       portHint: "Default 11488",
       apply: "Apply",
       token: "Access token",
@@ -23447,7 +23451,10 @@
     onApplyPort,
     workDir = "",
     workDirError = "",
+    workDirDisabled = false,
     onApplyWorkDir,
+    onBrowseWorkDir,
+    onResetWorkDir,
     mcpConfig,
     extensionRoot = "<extension root>",
     mcpReady = true,
@@ -23553,10 +23560,16 @@
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || FALLBACK_MODEL_OPTIONS }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(Section, { id: "conn", title: t.conn, expanded: sections.conn, onToggle: onToggleSection, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.workDir, caption: workDirError || t.workDirHint, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Input, { mono: true, value: draftWorkDir, onChange: setDraftWorkDir, style: { flex: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { variant: "secondary", onClick: () => onApplyWorkDir == null ? void 0 : onApplyWorkDir(draftWorkDir), children: t.apply })
-        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(Field, { label: t.workDir, caption: workDirError || t.workDirHint, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Input, { mono: true, value: draftWorkDir, disabled: workDirDisabled, onChange: setDraftWorkDir, style: { flex: 1 } }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { variant: "secondary", disabled: workDirDisabled, onClick: () => onApplyWorkDir == null ? void 0 : onApplyWorkDir(draftWorkDir), children: t.apply })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 6 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { variant: "secondary", disabled: workDirDisabled, onClick: onBrowseWorkDir, children: t.browseWorkDir }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { variant: "secondary", disabled: workDirDisabled, onClick: onResetWorkDir, children: t.resetWorkDir })
+          ] })
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
@@ -29732,6 +29745,22 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
         execute: true
       })
     };
+  }
+
+  // src/cep/toolFileDialogs.js
+  init_cep_runtime_inject();
+  function selectedValue(result) {
+    if (!result || Number(result.err || 0) !== 0) return null;
+    const data2 = result.data;
+    if (Array.isArray(data2)) return data2.length === 1 ? data2[0] : null;
+    return data2 || null;
+  }
+  function chooseWorkDirectory(cepFs, { title = "Choose work directory", initialPath = "" } = {}) {
+    if (typeof (cepFs == null ? void 0 : cepFs.showOpenDialog) !== "function") throw new Error("CEP folder dialog is unavailable");
+    const result = cepFs.showOpenDialog(false, true, title, initialPath, []);
+    if (Number((result == null ? void 0 : result.err) || 0) !== 0) throw new Error("CEP folder dialog failed: " + result.err);
+    const selected = selectedValue(result);
+    return selected ? normalizeCepSystemPath(selected) : null;
   }
 
   // src/cep/claudeAuth.js
@@ -37178,6 +37207,18 @@ ${command}`
       bootstrapStatusPath: (ticket == null ? void 0 : ticket.bootstrapStatusPath) || null
     };
   }
+  function resolveWorkDirectory({ directory, projectPath, platform }) {
+    const candidates = directory ? [directory] : [projectPath && platform.paths.dirname(projectPath), platform.paths.home];
+    for (const candidate of candidates.filter(Boolean)) {
+      try {
+        if (!platform.paths.isAbsolute(candidate) || !platform.fs.statSync(candidate).isDirectory()) continue;
+        platform.fs.accessSync(candidate, 2);
+        return platform.paths.resolve([candidate]);
+      } catch {
+      }
+    }
+    throw new Error("Choose an existing, writable absolute directory.");
+  }
   function createHostController({
     cs: cs2,
     onStatus,
@@ -37194,6 +37235,35 @@ ${command}`
     let beforeUnloadInstalled = false;
     let lifecycleGeneration = 0;
     let instance = null;
+    const workDirectories = /* @__PURE__ */ new Map();
+    let workDirectoryInitialized = false;
+    function updateWorkDirectory(projectPath, directory) {
+      const key = projectPath ? adapter.paths.resolve([projectPath]) : "";
+      const projectKey = adapter.id === "windows-x64" ? key.toLowerCase() : key;
+      if (!workDirectoryInitialized && instance.workDir) workDirectories.set(projectKey, instance.workDir);
+      const explicit = directory === void 0 ? workDirectories.get(projectKey) : directory;
+      const workDir = resolveWorkDirectory({ directory: explicit, projectPath, platform: adapter });
+      if (directory !== void 0) {
+        if (directory) workDirectories.set(projectKey, workDir);
+        else workDirectories.delete(projectKey);
+      }
+      workDirectoryInitialized = true;
+      instance.workDir = workDir;
+      host.configureInstance({ workDir });
+      return workDir;
+    }
+    async function refreshWorkDirectory(directory) {
+      var _a;
+      const current = host;
+      const reply = await current.executeJsx({
+        code: '(function(){return app.project.file ? app.project.file.fsName : "";}())',
+        nativeProjectGraphEffect: "preserve",
+        client: "panel/work-directory",
+        timeoutMs: 1e4
+      });
+      if (host !== current || !((_a = reply == null ? void 0 : reply.payload) == null ? void 0 : _a.ok)) throw new Error("Could not read the current AE project.");
+      return updateWorkDirectory(reply.payload.result || null, directory);
+    }
     function writeBootstrapStatus(state) {
       if (!(instance == null ? void 0 : instance.bootstrapStatusPath)) return;
       try {
@@ -37276,12 +37346,18 @@ ${command}`
           (_a = nextHost.configureInstance) == null ? void 0 : _a.call(nextHost, instance);
         }
         nextHost.start(port, (err, info) => {
-          var _a2;
+          var _a2, _b, _c;
           if (generation !== lifecycleGeneration || host !== nextHost) return;
           if (err) onStatus("error", port, err.message);
           else {
+            try {
+              updateWorkDirectory(((_a2 = nextHost.getInstanceInfo) == null ? void 0 : _a2.call(nextHost).projectPath) || instance.projectPath);
+            } catch (error) {
+              onStatus("error", (_b = info == null ? void 0 : info.port) != null ? _b : port, error.message);
+              return;
+            }
             writeBootstrapStatus("host-started");
-            onStatus("ok", (_a2 = info == null ? void 0 : info.port) != null ? _a2 : port);
+            onStatus("ok", (_c = info == null ? void 0 : info.port) != null ? _c : port);
           }
         });
       } catch (e) {
@@ -37304,7 +37380,7 @@ ${command}`
         });
       }
     }
-    return { start, restart, getHost: () => host, getInstance: () => instance };
+    return { start, restart, refreshWorkDirectory, getHost: () => host, getInstance: () => instance };
   }
 
   // src/lib/logExport.js
@@ -38353,7 +38429,7 @@ ${command}`
         persistActive();
       }, 400);
     }
-    function newMeta() {
+    async function newMeta() {
       const timestamp = isoTime(now);
       return {
         id: `chat-${uuid()}`,
@@ -38364,7 +38440,7 @@ ${command}`
         backend: deps.currentBackend(),
         channel: deps.currentChannel(),
         model: deps.currentModel() || null,
-        ...deps.defaultWorkDir ? { workDir: deps.defaultWorkDir() || null } : {},
+        ...deps.defaultWorkDir ? { workDir: await deps.defaultWorkDir() || null } : {},
         backendRef: null,
         archived: false,
         entryCount: 0,
@@ -38383,7 +38459,7 @@ ${command}`
         persistActive();
         await switchAway();
       }
-      activeMeta = newMeta();
+      activeMeta = await newMeta();
       activeId = activeMeta.id;
       latestEntries = [];
       index.activeId = null;
@@ -39585,9 +39661,16 @@ ${draft.baseUrl}`)) return;
           });
         },
         currentBackend: () => effectiveBackendRef.current,
-        defaultWorkDir: () => {
-          var _a2, _b;
-          return (_b = (_a2 = getHost()) == null ? void 0 : _a2.getInstanceInfo) == null ? void 0 : _b.call(_a2).workDir;
+        defaultWorkDir: async () => {
+          try {
+            const directory = await ctrl.current.refreshWorkDirectory();
+            setWorkDir(directory);
+            setWorkDirError("");
+            return directory;
+          } catch (error) {
+            setWorkDirError(error.message || String(error));
+            throw error;
+          }
         },
         currentWorkDir: () => {
           var _a2, _b, _c;
@@ -39975,11 +40058,26 @@ ${draft.baseUrl}`)) return;
         setConfirmChatNavigation({ kind: "new" });
         return;
       }
-      await sessionController.createSession();
+      try {
+        await sessionController.createSession();
+      } catch (error) {
+        setWorkDirError(error.message || String(error));
+        return;
+      }
       setChatStreaming(false);
       setThinkingActive(false);
       setTurnStage(null);
       setTurnProgress(null);
+    };
+    const applyWorkDirectory = async (directory) => {
+      try {
+        if (chatStreaming || pendingTurnRef.current) throw new Error(lang === "zh" ? "\u8BF7\u5148\u7ED3\u675F\u5F53\u524D\u4EFB\u52A1\u3002" : "Finish the current task first.");
+        setWorkDir(await ctrl.current.refreshWorkDirectory(directory));
+        setWorkDirError("");
+        setHostConversationError("");
+      } catch (error) {
+        setWorkDirError(error.message || String(error));
+      }
     };
     const pushLog = import_react49.default.useCallback((m) => {
       const message = String(m != null ? m : "");
@@ -40419,18 +40517,17 @@ ${draft.baseUrl}`)) return;
             onApplyPort: applyPort,
             workDir,
             workDirError,
-            onApplyWorkDir: (value) => {
+            workDirDisabled: chatStreaming || Boolean(pendingTurnRef.current),
+            onApplyWorkDir: (value) => applyWorkDirectory(String(value || "").trim()),
+            onResetWorkDir: () => applyWorkDirectory(null),
+            onBrowseWorkDir: () => {
+              var _a2;
               try {
-                const directory = String(value || "").trim();
-                if (chatStreaming) throw new Error(lang === "zh" ? "\u8BF7\u5148\u7ED3\u675F\u5F53\u524D\u4EFB\u52A1\u3002" : "Finish the current task first.");
-                if (!platform.paths.isAbsolute(directory) || !platform.fs.statSync(directory).isDirectory()) {
-                  throw new Error(lang === "zh" ? "\u8BF7\u8F93\u5165\u5DF2\u5B58\u5728\u7684\u7EDD\u5BF9\u76EE\u5F55\u3002" : "Enter an existing absolute directory.");
-                }
-                getHost().configureInstance({ workDir: directory });
-                if (!workDir) hostConversation.closeConversation();
-                setWorkDir(directory);
-                setWorkDirError("");
-                setHostConversationError("");
+                const directory = chooseWorkDirectory((_a2 = window.cep) == null ? void 0 : _a2.fs, {
+                  title: lang === "zh" ? "\u9009\u62E9\u5DE5\u4F5C\u76EE\u5F55" : "Choose work directory",
+                  initialPath: workDir
+                });
+                if (directory) applyWorkDirectory(directory);
               } catch (error) {
                 setWorkDirError(error.message || String(error));
               }

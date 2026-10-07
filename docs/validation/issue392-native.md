@@ -56,7 +56,22 @@ counts are 71 focused and 425 full host tests passing. Four host JS files were
 backed up for that Mac installation. These are delegated prior-run observations,
 not a new Mac run and not evidence for this PR's final SHA.
 
-Before merge or release, validate the final shared revision on macOS through
-first diagnose and public native read. Packaged identity, signatures, T5/T6,
+## Unified-source Mac validation
+
+The later Mac validation used `343e686119f6b3cb8cd6fe1fcc9465121de4bc44`, which
+includes the final `27fbb43` connection fix, SDK 26.5 and native 0.11.0.
+The recorded AE 26.3.0.87 run made 45 public MCP calls; AE 24.6.2x2 ARM64 made
+24. Both passed cold first diagnose, native read/write, independent readback,
+real GUI Undo, reconnect with stale-context rejection, and normal exit.
+AE26 additionally checked cancellation before launch. Original native/CEP
+components were restored and the disposable fixtures were archived.
+
+These results were retrieved from the completed Mac validation report; they
+supersede the earlier pending-hardware statement for this implementation.
+They do not validate later source changes. AE23 was not installed or tested.
+The machine's resource-blocked Mac worker cases are explicitly deferred to
+public beta by the owner; Mac true unknown/reconcile remains separately untested.
+
+Packaged identity, signatures, T5/T6,
 the original reporter's result and broader release limitations remain separate
 gates. Do not interpret this local repair as release acceptance.

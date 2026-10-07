@@ -1,3 +1,5 @@
+import { normalizeCepSystemPath } from './platform/paths.js';
+
 const TOOL_PACKAGE_SUFFIX = '.aemcptools';
 const SYSTEM_COMMAND_SUFFIXES = ['.ps1', '.psm1', '.bat', '.cmd', '.sh', '.command'];
 
@@ -15,6 +17,14 @@ function normalizeFileUrl(value) {
     if (/^\/[A-Za-z]:[\\/]/.test(path)) path = path.slice(1);
   }
   return path;
+}
+
+export function chooseWorkDirectory(cepFs, { title = 'Choose work directory', initialPath = '' } = {}) {
+  if (typeof cepFs?.showOpenDialog !== 'function') throw new Error('CEP folder dialog is unavailable');
+  const result = cepFs.showOpenDialog(false, true, title, initialPath, []);
+  if (Number(result?.err || 0) !== 0) throw new Error('CEP folder dialog failed: ' + result.err);
+  const selected = selectedValue(result);
+  return selected ? normalizeCepSystemPath(selected) : null;
 }
 
 export function chooseToolPackage(cepFs, {

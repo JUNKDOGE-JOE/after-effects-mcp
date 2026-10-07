@@ -482,17 +482,7 @@ function sendNativeFailure(res, error) {
     res.status(status).json(response);
 }
 
-// Wrap user JSX in app.beginUndoGroup / app.endUndoGroup.
-//
-// Multi-statement user code is evaluated via ExtendScript's `eval()` so that
-// every statement runs and the value of the last expression is returned to
-// CSInterface — same semantics as the no-undoGroup path where `code` is
-// passed to evalScript directly.
-//
-// The earlier `try { return <code>; }` shape silently dropped everything past
-// the first statement: `return var x = 1; ...` is invalid as a `return`
-// expression, so for multi-statement scripts the wrapper executed only
-// `app.beginUndoGroup(...)` (returning undefined) and skipped the rest.
+// eval preserves the last expression result of multi-statement user scripts.
 function wrapWithUndoGroup(code, undoGroup) {
     return (
         '(function(){' +
@@ -884,6 +874,17 @@ async function executeJsx(request) {
             status: 400,
             payload: { ok: false, error: '`nativeProjectGraphEffect` must be invalidate or preserve' },
         };
+    }
+    // This conservative source check catches common calls, not dynamic code.
+    // File execution is opaque and may render, so keep it outside host Undo groups.
+    if (undoGroup && /(?:\.\s*render|\[\s*["']render["']\s*\])\s*\(|\$\s*(?:\.\s*evalFile|\[\s*["']evalFile["']\s*\])\s*\(/.test(code)) {
+        recordExecution({ undoGroup, ok: false, denied: 'undo_render_conflict', ...scriptEvidence });
+        return { status: 400, payload: {
+            ok: false, code: 'UNDO_RENDER_CONFLICT', disposition: 'not_dispatched',
+            error: 'A render or evalFile call was detected with an Undo group. Split edits from rendering; '
+                + 'use ae_exec without undo_group_name for render/file execution after all Undo groups close. '
+                + 'Source checks cannot detect every indirect or dynamically constructed render call.',
+        } };
     }
     const requestedTimeoutMs = Number.isFinite(input.timeoutMs) && input.timeoutMs > 0
         ? input.timeoutMs : 30000;

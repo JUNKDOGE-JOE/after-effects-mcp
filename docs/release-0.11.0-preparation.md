@@ -6,6 +6,26 @@ merged multi-instance work (#393) and depends on draft native connection fix
 is stacked draft #396. No merge, tag, Release, package publication, or asset
 upload has been performed.
 
+## Authorized completion scope
+
+The 2026-10-08 owner decision includes the AEP-adjacent default work directory,
+a native folder chooser with reset/cancel behavior, and issue #397 render/Undo
+and bridge recovery fixes in this 0.11.0 update. Existing conversations keep
+their working directory; project identity and single-writer protections remain.
+These bounded changes share this release branch and its existing PR. They add
+no native primitive, provider, installer, workflow or dependency upgrade.
+Acceptance uses the real CEP settings UI and public MCP in one disposable
+`ephemeral-validation` project: default/custom directories, checkpoint fallback,
+ordinary Undo, render-conflict rejection, and subsequent 2D/3D one-frame output.
+The runtime render method must not be assumed writable: the Windows AE 26.5x89
+probe ignored its replacement while preserving the original method and empty
+project state. Static checks cannot guarantee safety for arbitrary dynamic JSX.
+
+Mac worker cases blocked by development-machine resources are deferred to public
+beta testing by the owner. Record them as unverified, not failed or passed, and
+do not lower resource admission to make this machine run them. This exception
+does not waive other real-AE checks or packaged release acceptance.
+
 ## Prepared source and changes
 
 Host, panel, CEP bundle/extension, connector, Registry metadata, native client
@@ -30,14 +50,18 @@ review it before freezing the final clean candidate SHA.
   and a public native project-items read returned total=0/effect=none with a
   verified postcondition. AE 26.5x89, CEP 12.0.1, native 0.10.8 and wire 1;
   empty project stayed dirty=false. The subsequent `27fbb43` expiry cleanup is
-  covered by deterministic clock/socket regression and host tests; it has not
-  been installed or tested on AE because the user resumed using AE.
-- Mac `bf20064` development smoke was separately reported passing on AE 26.3x87
-  and native 0.10.8. That patch was not obtained. Mac hardware validation of the
-  unified PR head remains pending. The existing macOS CI job runs Unix socket
-  fixtures, not real AE. PR CI runs against GitHub's synthetic merge candidate.
-- Development-machine dual-worker admission is not established; true unknown
-  write recovery on Mac is unverified. evalScript has a soft deadline and cannot
+  covered by deterministic clock/socket regression and the Mac run below.
+- The later Mac report used unified source `343e686119f6b3cb8cd6fe1fcc9465121de4bc44`,
+  SDK 26.5 and native 0.11.0: AE 26.3.0.87 recorded 45 public MCP calls and
+  AE 24.6.2x2 ARM64 recorded 24. First diagnose, native read/write, real Undo,
+  reconnect and exit passed; AE26 also checked cancellation before launch.
+  The original components were restored and disposable projects archived.
+  These are prior development records, not new-source or packaged acceptance.
+  AE23 was not installed and was not tested. macOS CI is separate socket/build
+  contract evidence and does not itself run AE.
+- Windows dual-worker cases have development evidence. Mac resource-blocked
+  workers await public beta testing; true unknown-write recovery on Mac remains
+  separately unverified. evalScript has a soft deadline and cannot
   interrupt AE execution. Guide layers may be absent from PNG output.
 - Packaged artifact identity, signatures, public-MCP packaged T5 and clean
   install/upgrade/rollback T6 have not been accepted. #392 stays open for the
@@ -46,7 +70,7 @@ review it before freezing the final clean candidate SHA.
   verified SDK 26.5 inputs, MSVC 14.44.35207 and Windows SDK 10.0.26100.0.
   PE architecture, entry export, resources, product version and source identity
   verification pass. It is an unsigned local build, not installed or run in AE.
-  Mac archive/root verification passes on Windows, but no Mac build is claimed.
+  The subsequent Mac build and core AE24/AE26 checks are recorded above.
   Retained suite pins do not establish older-host compatibility with this build.
 - Production npm audit reports three moderate dependency entries: qs and its
   body-parser/Express ancestors. The existing Express 4.22.2 pin is retained.
@@ -138,8 +162,8 @@ Mac with the locked Mac SDK input. This preparation does not access that machine
    Supply the password through the owner's established secure invocation;
    never commit it, put it in a receipt, or paste it into shared logs. Record
    native artifact and signed ZXP SHA-256 and size; ZXP must stay below 80 MB.
-4. Obtain a new hardware window before installing or using AE. Validate the
-   final unified fix on Mac; perform packaged public-MCP T5 with native diagnosis
+4. Use an authorized hardware window for installing or using AE. Perform
+   packaged public-MCP T5 with native diagnosis
    and a read, then the release milestone's clean install/upgrade/rollback T6.
    Keep prior development evidence separate from these release gates.
 5. Have the owner approve the final limitations, artifact list and release

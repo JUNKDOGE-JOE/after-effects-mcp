@@ -144,17 +144,17 @@ test('boot restores a matching active session and adopts its backend reference',
   assert.ok(h.calls.includes('rotate:chat-saved'));
 });
 
-test('new chats use the new default directory while restored chats keep their saved directory', async () => {
+test('all new chats await the current directory before storing backend refs; restored chats keep their directory', async () => {
   let saved = { version: 1, activeId: null, sessions: [] };
   let directory = '/projects/a';
   let sequence = 0;
   const rotated = [];
   const controller = createSessionController({
     store: { loadIndex: () => saved, saveIndex: (value) => { saved = copy(value); },
-      saveTranscript() {}, loadTranscript: () => ({ entries: [] }) },
+      saveTranscript() {}, deleteTranscript() {}, loadTranscript: () => ({ entries: [] }) },
     uuid: () => String(++sequence), deps: {
       currentBackend: () => 'codex', currentChannel: () => 'cli', currentModel: () => 'model',
-      defaultWorkDir: () => directory,
+      defaultWorkDir: async () => { await Promise.resolve(); return directory; },
       rotateHostConversation: (id, context) => rotated.push({ id, ...context }),
     },
   });
@@ -162,10 +162,17 @@ test('new chats use the new default directory while restored chats keep their sa
   controller.recordEntries([{ type: 'user-text', text: 'first' }], { type: 'turn-end' });
   directory = '/projects/b';
   await controller.createSession();
-  controller.recordEntries([{ type: 'user-text', text: 'second' }], { type: 'turn-end' });
+  controller.recordBackendRef({ kind: 'codex-thread', id: 'remote-b' });
+  assert.equal(saved.sessions.find((item) => item.id === 'chat-2').workDir, '/projects/b');
   await controller.switchTo('chat-1');
   assert.deepEqual(rotated, [{ id: 'chat-1', workDir: '/projects/a' },
     { id: 'chat-2', workDir: '/projects/b' }, { id: 'chat-1', workDir: '/projects/a' }]);
+  directory = '/projects/c';
+  await controller.archive('chat-1');
+  assert.deepEqual(rotated.at(-1), { id: 'chat-3', workDir: '/projects/c' });
+  directory = '/projects/d';
+  await controller.remove('chat-3');
+  assert.deepEqual(rotated.at(-1), { id: 'chat-4', workDir: '/projects/d' });
 });
 
 test('boot creates an unpersisted draft for missing or backend-mismatched active sessions', async () => {

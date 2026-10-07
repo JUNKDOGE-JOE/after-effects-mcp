@@ -203,7 +203,7 @@ test('a sentinel callback drains the engine when the real callback never arrives
     await firstRejected;
     assert.strictEqual(calls.length, 2);
     assert.doesNotMatch(calls[1].jsx, /beginUndoGroup/);
-    assert.match(calls[1].jsx, /endUndoGroup/);
+    assert.doesNotMatch(calls[1].jsx, /endUndoGroup/);
 
     calls[1].cb('ignored-sentinel-result');
     await clock.flush();
