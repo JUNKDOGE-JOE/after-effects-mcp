@@ -87,9 +87,10 @@ the workflow; v0.11.0 additions are described below.
 - **Native and worker reliability:** improved cold-start native diagnosis, connection timeout recovery, and Windows background worker startup and shutdown cleanup.
 - **16 public tools, up from 13:** adds `ae_instances`, `ae_workspace`, and `ae_readJob`, with the matching `ae-mcp-jkdg@0.11.0` stdio connector.
 
-The release provides the Windows ZXP, Windows x64 native plug-in, and checksums.
-The macOS arm64 native release asset is not yet available; final Mac package
-installation and worker acceptance remain incomplete. See the
+The release provides a shared Windows/macOS ZXP, native plug-ins for Windows
+x64 and macOS arm64, and checksums. The final Mac package completed scoped
+read/write, Undo, rendering, recovery, and installation checks on AE 26.3x87
+arm64. Mac worker scenarios remain unverified. See the
 [v0.11.0 release notes](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0)
 for verification scope and known limitations.
 
@@ -102,12 +103,14 @@ for verification scope and known limitations.
 
 1. Download and install `ae-mcp-panel-v0.11.0.zxp` from the
    [v0.11.0 release](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0).
-2. For `ae_nativeExec`, install `AeMcpNative-v0.11.0-windows-x64.aex` from the
-   same release in the target AE plug-in directory. The native plug-in ships
-   separately from the ZXP; see [Install](docs/INSTALL.md) for destinations.
-   The roughly 60 MB ZXP includes the Windows OpenCode runtime. macOS uses
-   OpenCode from PATH; check the release page for the later Mac native asset
-   and its installation verification.
+2. For `ae_nativeExec`, download the native plug-in from the same release:
+   `AeMcpNative-v0.11.0-windows-x64.aex` for Windows x64, or
+   `AeMcpNative-v0.11.0-macos-arm64.plugin.zip` for macOS arm64. Extract the Mac
+   ZIP and install `AeMcpNative.plugin`. Native plug-ins ship separately from
+   the ZXP; see [Install](docs/INSTALL.md) for destinations and macOS download
+   quarantine handling. The Mac package requires macOS 14.0 or later.
+   Both platforms use the same roughly 60 MB ZXP, which includes the Windows
+   OpenCode runtime; macOS uses OpenCode from PATH.
 3. Start After Effects and open **Window > Extensions > ae-mcp**. Keep the panel
    open while an external client uses MCP.
 4. Configure Claude, Codex, or OpenCode in panel Settings, or connect an
