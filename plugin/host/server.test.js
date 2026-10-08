@@ -851,6 +851,36 @@ test('/exec requires auth and invalidates a connected native graph before JSX', 
     }
 });
 
+test('JSX invalidation deadlines tolerate a lagging peer clock and preserve shorter budgets', async t => {
+    const cepNow = 1800000000000, nativeNow = cepNow - 40;
+    t.mock.method(Date, 'now', () => cepNow);
+    const deadlines = [];
+    let evaluated = 0;
+    const nativeClient = fakeNativeClient({ invalidateProjectGraph: async ({ deadlineUnixMs }) => {
+        if (deadlineUnixMs > nativeNow + 30000) throw Object.assign(new Error('native request was rejected'), {
+            code: 'INVALID_ARGUMENT', sideEffect: 'not-started',
+        });
+        deadlines.push(deadlineUnixMs);
+        return { generation: 8, invalidated: true };
+    } });
+    await nativeClient.connect(cepNow + 5000);
+    const fixture = await startApp({ nativeClient, evalScript: (_jsx, callback) => {
+        evaluated += 1;
+        callback('{"ok":true,"resultType":"string","result":"1"}');
+    } });
+    try {
+        for (const timeoutMs of [500, 30000, 600000]) {
+            const response = await post(fixture.port, '/exec', HEADERS, { code: '1', timeoutMs });
+            assert.equal(response.body.ok, true, JSON.stringify(response.body));
+            assert.ok(deadlines.at(-1) <= cepNow + timeoutMs);
+        }
+        assert.equal(deadlines[0], cepNow + 500);
+        assert.ok(deadlines.every(deadline => deadline > cepNow && deadline <= nativeNow + 30000));
+        assert.equal(evaluated, 3);
+        assert.equal(NATIVE_EXEC_TIMEOUT_MS, 30000);
+    } finally { await closeFixture(fixture); }
+});
+
 test('/exec preserves the graph only when explicitly requested', async () => {
     const nativeClient = fakeNativeClient();
     await nativeClient.connect(Date.now() + 10000);

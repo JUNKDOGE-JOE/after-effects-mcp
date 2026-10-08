@@ -9,6 +9,7 @@ const { createValidator, isPlainObject } = require('./json-schema-lite');
 const CAPABILITY_ID = 'ae.native.exec';
 const CAPABILITY_VERSION = 1;
 const NATIVE_EXEC_TIMEOUT_MS = 30000;
+const NATIVE_CLOCK_MARGIN_MS = 1000;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const OPERATION_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -18,6 +19,13 @@ const CAPABILITY_DETAIL_ERROR_CODES = new Set([
     'NATIVE_UNSUPPORTED', 'PRECONDITION_FAILED', 'STALE_LOCATOR',
     'CAPABILITY_FAILED', 'POSSIBLY_SIDE_EFFECTING_FAILURE',
 ]);
+
+// CEP and native wall clocks can differ on the same host. Generated deadlines
+// stay below native admission's ceiling; caller-supplied deadlines remain intact.
+function generatedNativeDeadline(startedAt, timeoutMs = NATIVE_EXEC_TIMEOUT_MS) {
+    return Math.min(Number.MAX_SAFE_INTEGER,
+        startedAt + Math.min(Math.ceil(timeoutMs), NATIVE_EXEC_TIMEOUT_MS - NATIVE_CLOCK_MARGIN_MS));
+}
 
 const NATIVE_EXEC_INPUT_SCHEMA = generated.NATIVE_EXEC_INPUT_SCHEMA;
 const PRIMITIVES = generated.PRIMITIVES;
@@ -583,6 +591,7 @@ module.exports = {
     CAPABILITY_ID,
     CAPABILITY_VERSION,
     NATIVE_EXEC_TIMEOUT_MS,
+    generatedNativeDeadline,
     NATIVE_EXEC_INPUT_SCHEMA,
     NATIVE_EXEC_ADVERTISED_INPUT_SCHEMA,
     PRIMITIVES,

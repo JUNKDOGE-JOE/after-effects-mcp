@@ -7,7 +7,7 @@ const { textResult } = require('../tool-result');
 const { VERB_ANNOTATIONS } = require('../annotations');
 const { enforce } = require('../approval-gate');
 const {
-    NATIVE_EXEC_TIMEOUT_MS,
+    generatedNativeDeadline,
     NATIVE_EXEC_ADVERTISED_INPUT_SCHEMA,
     validateNativeProgramArguments,
     makeRequestId,
@@ -44,7 +44,7 @@ async function call(args, context, deps) {
             deps,
         );
         if (denied) return { result: textResult(denied, true) };
-        const deadlineUnixMs = Date.now() + NATIVE_EXEC_TIMEOUT_MS;
+        const deadlineUnixMs = generatedNativeDeadline(Date.now());
         const status = deps && deps.getStatus;
         const execution = await invokeNativeProgram({
             requestId: makeRequestId(),

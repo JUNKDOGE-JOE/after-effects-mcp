@@ -8,7 +8,7 @@ const authToken = require('./auth-token');
 const activity = require('./activity');
 const hostLog = require('./host-log');
 const nativeAegp = require('./native-aegp-client');
-const { NATIVE_EXEC_TIMEOUT_MS } = require('./mcp/native-program');
+const { NATIVE_EXEC_TIMEOUT_MS, generatedNativeDeadline } = require('./mcp/native-program');
 const mountMcp = require('./mcp');
 const { createClientBlocklist } = require('./mcp/client-blocklist');
 const { ToolLibrary } = require('./mcp/tool-library');
@@ -136,7 +136,6 @@ let clientBlocklist = null;
 // Self-reported label of the panel's own diagnostic /exec probes. Must match
 // the x-ae-mcp-client header in plugin/panel/src/cep/diagnostics.js.
 const INTERNAL_CLIENT = 'panel-diagnostics/internal';
-const NATIVE_MAX_REQUEST_WINDOW_MS = 30000;
 const NATIVE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 const EXEC_TIMEOUT_MAX_MS = 600000;
 const STOP_FALLBACK_TIMEOUT_MS = 3000;
@@ -937,10 +936,7 @@ async function executeJsx(request) {
     const startedAt = Date.now();
     let dispatched = false;
     try {
-        const invalidationDeadlineUnixMs = Math.min(
-            Number.MAX_SAFE_INTEGER,
-            startedAt + Math.min(Math.ceil(t), NATIVE_MAX_REQUEST_WINDOW_MS),
-        );
+        const invalidationDeadlineUnixMs = generatedNativeDeadline(startedAt, t);
         if (nativeProjectGraphEffect === 'invalidate') {
             await invalidateConnectedNativeProjectGraph(invalidationDeadlineUnixMs);
         }

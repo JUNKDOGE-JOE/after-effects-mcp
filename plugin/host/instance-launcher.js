@@ -181,8 +181,11 @@ function createInstanceLauncher(options) {
         });
         let child;
         try {
+            const args = platform === 'darwin' ? ['-m'] : ['-m', '-r', scriptPath];
+            // Workspace GUI extensions can block worker shutdown; snapshot reads do not need them.
+            if (platform === 'win32' && role === 'worker') args.unshift('-noui');
             // Keep primary AE alive after connector exit; Windows libuv otherwise kills its child job.
-            child = spawn(executable, platform === 'darwin' ? ['-m'] : ['-m', '-r', scriptPath], {
+            child = spawn(executable, args, {
                 cwd: workDir, env, windowsHide: true, stdio: 'ignore', shell: false, detached: role === 'primary',
             });
         } catch (error) {
