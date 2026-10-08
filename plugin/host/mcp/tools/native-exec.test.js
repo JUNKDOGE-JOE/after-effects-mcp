@@ -15,6 +15,7 @@ const {
     NATIVE_EXEC_INPUT_SCHEMA,
     PRIMITIVES,
     invokeRequestDigest,
+    invokeNativeProgram,
     nativeProgramPostconditionDigest,
     validateNativeProgramArguments,
 } = require('../native-program');
@@ -212,6 +213,36 @@ test('real Express MCP route runs ae_nativeExec through fake negotiate/invoke', 
     } finally {
         await closeFixture(host);
     }
+});
+
+test('public native deadlines tolerate a lagging peer clock without changing explicit caller deadlines', async t => {
+    const cepNow = 1800000000000, nativeNow = cepNow - 40;
+    t.mock.method(Date, 'now', () => cepNow);
+    const admit = deadline => {
+        if (deadline > nativeNow + 30000) throw Object.assign(new Error('native request was rejected'), {
+            code: 'INVALID_ARGUMENT', sideEffect: 'not-started',
+        });
+    };
+    assert.throws(() => admit(cepNow + 30000), { code: 'INVALID_ARGUMENT' });
+    const deadlines = [];
+    const nativeInvoke = request => {
+        admit(request.deadlineUnixMs);
+        deadlines.push(request.deadlineUnixMs);
+        return fakeInvoke(request);
+    };
+    const host = await fixture({ nativeInvoke });
+    try {
+        const session = await initialize(host);
+        const response = await callTool(host, session, 'ae_nativeExec', readArguments());
+        const value = response.body.result.structuredContent;
+        assert.equal(value.ok, true, JSON.stringify(value));
+        assert.equal(value.evidence.postcondition.verified, true);
+        assert.ok(deadlines[0] > cepNow && deadlines[0] <= nativeNow + 30000);
+        const explicitDeadline = cepNow + 5000;
+        await invokeNativeProgram({ requestId: 'explicit-caller-deadline', args: readArguments(),
+            deadlineUnixMs: explicitDeadline, nativeNegotiate: async () => NEGOTIATION, nativeInvoke });
+        assert.equal(deadlines[1], explicitDeadline);
+    } finally { await closeFixture(host); }
 });
 
 test('ae_nativeExec returns generated-schema errors before approval or native dispatch', async () => {
