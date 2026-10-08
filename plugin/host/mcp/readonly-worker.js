@@ -51,7 +51,8 @@ async function createReadonlyWorker(options) {
     const scriptPath = path.join(root, 'start.jsx');
     const runtimePath = path.resolve(__dirname, '../../jsx/runtime.jsx');
     const entryPath = path.resolve(__dirname, '../../jsx/readonly-worker.jsx');
-    const configuration = { root, snapshotPath, runtimePath, ownerClosedPath: options.ownerClosedPath || null };
+    const configuration = { root, snapshotPath, runtimePath, ownerClosedPath: options.ownerClosedPath || null,
+        ownerProcessId: (options.platform || process.platform) === 'win32' ? process.pid : null };
     const pollMs = options.pollMs || 50;
     let record;
     let queue = Promise.resolve();
@@ -85,7 +86,7 @@ async function createReadonlyWorker(options) {
                 let snapshotRemoved = false;
                 if (path.dirname(snapshotPath) !== root) throw new Error('worker snapshot escaped its directory');
                 try { fs.unlinkSync(snapshotPath); snapshotRemoved = true; }
-                catch (error) { if (error.code !== 'ENOENT') return { closed: true, snapshotRemoved }; }
+                catch (error) { if (error.code !== 'ENOENT') return { closed: true, snapshotRemoved }; snapshotRemoved = true; }
                 return { closed: true, snapshotRemoved };
             });
         return closePromise;

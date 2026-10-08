@@ -27,8 +27,9 @@ test('worker copies the fixed checkpoint, serializes requests, and stops without
     let timer;
     const requests = [];
     t.after(() => clearInterval(timer));
-    const worker = await createReadonlyWorker({ checkpointPath, workDir: root, pollMs: 1, startWorker: async ({ scriptPath }) => {
+    const worker = await createReadonlyWorker({ checkpointPath, workDir: root, platform: 'win32', pollMs: 1, startWorker: async ({ scriptPath }) => {
         config = configuration(scriptPath);
+        assert.equal(config.ownerProcessId, process.pid);
         assert.equal(fs.readFileSync(config.snapshotPath, 'utf8'), 'immutable source');
         fs.writeFileSync(path.join(config.root, 'ready.json'), JSON.stringify({ ok: true, projectPath: config.snapshotPath }));
         timer = setInterval(() => {
@@ -41,7 +42,8 @@ test('worker copies the fixed checkpoint, serializes requests, and stops without
             }
             if (fs.existsSync(path.join(config.root, 'stop.json'))) {
                 clearInterval(timer);
-                fs.writeFileSync(path.join(config.root, 'closed.json'), '{"ok":true}');
+                fs.unlinkSync(config.snapshotPath);
+                fs.writeFileSync(path.join(config.root, 'closed.json'), '{"ok":true,"snapshotRemoved":true}');
             }
         }, 1);
         return { pid: 123, instanceId: 'owned-worker' };
@@ -59,8 +61,9 @@ test('worker copies the fixed checkpoint, serializes requests, and stops without
 test('a worker read timeout prevents a second dispatch until the owned worker exits', async (t) => {
     const { root, checkpointPath } = fixture(t);
     let config;
-    const worker = await createReadonlyWorker({ checkpointPath, workDir: root, pollMs: 1, startWorker: async ({ scriptPath }) => {
+    const worker = await createReadonlyWorker({ checkpointPath, workDir: root, platform: 'darwin', pollMs: 1, startWorker: async ({ scriptPath }) => {
         config = configuration(scriptPath);
+        assert.equal(config.ownerProcessId, null);
         fs.writeFileSync(path.join(config.root, 'ready.json'), JSON.stringify({ ok: true, projectPath: config.snapshotPath }));
         return {};
     } });
@@ -74,6 +77,9 @@ test('a worker read timeout prevents a second dispatch until the owned worker ex
 
 function jsxFixture(t, options = {}) {
     const { root, checkpointPath } = fixture(t);
+    const snapshotPath = options.invalidSnapshot ? checkpointPath : path.join(root, 'snapshot.aep');
+    if (!options.invalidSnapshot) fs.copyFileSync(checkpointPath, snapshotPath);
+    const events = [], ownerProbes = [];
     class File {
         constructor(value) { this.fsName = path.normalize(String(value)); }
         get exists() { return fs.existsSync(this.fsName); }
@@ -81,8 +87,8 @@ function jsxFixture(t, options = {}) {
         read() { return fs.readFileSync(this.fsName, 'utf8'); }
         write(value) { this.text = value; }
         close() { if (this.mode === 'w') fs.writeFileSync(this.fsName, this.text); }
-        rename(name) { fs.renameSync(this.fsName, path.join(path.dirname(this.fsName), name)); return true; }
-        remove() { fs.unlinkSync(this.fsName); return true; }
+        rename(name) { fs.renameSync(this.fsName, path.join(path.dirname(this.fsName), name)); if (name === 'closed.json') events.push('receipt'); return true; }
+        remove() { if (this.fsName === snapshotPath) events.push('remove'); fs.unlinkSync(this.fsName); return true; }
     }
     let clock = 0;
     let scheduled;
@@ -92,21 +98,23 @@ function jsxFixture(t, options = {}) {
     if (options.ownerClosed) closeOwner();
     const app = {
         project: { file: options.foreign ? new File(path.join(root, 'user.aep')) : null, numItems: 0,
-            close(option) { assert.equal(option, 'discard'); state.closed = true; } },
+            close(option) { assert.equal(option, 'discard'); if (options.closeRefused) return false; this.file = null; state.closed = true; events.push('close'); } },
         open(file) { this.project.file = file; state.opened += 1; },
         scheduleTask(code) { scheduled = code; return 1; },
         cancelTask(id) { assert.equal(id, 1); },
-        quit() { state.quit = true; },
+        quit() { state.quit = true; events.push('quit'); },
     };
     const context = { File, app, CloseOptions: { DO_NOT_SAVE_CHANGES: 'discard' },
         Date: function () { this.getTime = () => clock; }, advance: (ms) => { clock += ms; }, closeOwner,
-        $: { global: { __aemcpWorkerConfig: { root, snapshotPath: checkpointPath, runtimePath: 'runtime.jsx', ownerClosedPath } }, evalFile() {} },
+        system: { callSystem(command) { ownerProbes.push(command); return options.ownerProbe?.(command) || 'UNKNOWN'; } },
+        $: { global: { __aemcpWorkerConfig: { root, snapshotPath, runtimePath: 'runtime.jsx', ownerClosedPath,
+            ownerProcessId: options.ownerProcessId } }, evalFile() {}, getenv: () => 'C:\\Windows' },
     };
     vm.createContext(context);
     vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../../jsx/readonly-worker.jsx'), 'utf8'), context);
     const tick = () => vm.runInContext(scheduled, context);
     const read = (name) => JSON.parse(fs.readFileSync(path.join(root, name)));
-    return { root, checkpointPath, state, context, tick, read, closeOwner,
+    return { root, checkpointPath, snapshotPath, state, events, ownerProbes, context, tick, read, closeOwner,
         request(code) {
             const id = '1234567890abcdef12345678';
             fs.writeFileSync(path.join(root, 'request.json'), JSON.stringify({ id, code }));
@@ -123,6 +131,8 @@ test('maintained JSX entry opens its snapshot, serves a request, and closes with
     worker.tick();
     assert.equal(worker.state.closed, true);
     assert.equal(worker.state.quit, true);
+    assert.equal(fs.existsSync(worker.snapshotPath), false);
+    assert.equal(worker.read('closed.json').snapshotRemoved, true);
     assert.equal(fs.readFileSync(worker.checkpointPath, 'utf8'), 'immutable source');
 });
 
@@ -131,19 +141,38 @@ test('an owner already closed before startup exits an empty worker without openi
     assert.equal(worker.read('ready.json').code, 'OWNER_CLOSED');
     assert.equal(worker.state.opened, 0);
     assert.equal(worker.state.quit, true);
+    assert.equal(fs.existsSync(worker.snapshotPath), false);
+    assert.equal(fs.readFileSync(worker.checkpointPath, 'utf8'), 'immutable source');
 });
 
-test('owner closure during a synchronous request is handled only after its result', (t) => {
+test('owner closure during a read completes the result and cleans its snapshot without parent callbacks', (t) => {
     const worker = jsxFixture(t);
     assert.equal(worker.request('closeOwner(); JSON.stringify({ok:true})').ok, true);
     assert.equal(worker.state.quit, false);
+    assert.equal(fs.existsSync(worker.snapshotPath), true);
     worker.tick();
     assert.equal(worker.read('closed.json').reason, 'owner-closed');
     assert.equal(worker.state.quit, true);
+    assert.equal(fs.existsSync(worker.snapshotPath), false);
+    assert.equal(fs.readFileSync(worker.checkpointPath, 'utf8'), 'immutable source');
+    assert.deepEqual(worker.events, ['close', 'remove', 'receipt', 'quit']);
 });
 
-test('idle timeout counts from completion and never interrupts a long request', (t) => {
-    const worker = jsxFixture(t);
+test('worker refuses a configured source checkpoint and retains a snapshot that did not close', (t) => {
+    const invalid = jsxFixture(t, { invalidSnapshot: true });
+    assert.equal(invalid.read('ready.json').code, 'WORKER_SNAPSHOT_INVALID');
+    assert.equal(invalid.state.opened, 0);
+    assert.equal(fs.readFileSync(invalid.checkpointPath, 'utf8'), 'immutable source');
+    const refused = jsxFixture(t, { closeRefused: true });
+    refused.closeOwner(); refused.tick();
+    assert.equal(refused.read('closed.json').ok, false);
+    assert.equal(refused.state.quit, false);
+    assert.equal(fs.existsSync(refused.snapshotPath), true);
+    assert.deepEqual(refused.events, ['receipt']);
+});
+
+test('idle timeout survives unknown owner probes and never interrupts a long request', (t) => {
+    const worker = jsxFixture(t, { ownerProcessId: 123 });
     assert.equal(worker.request('advance(180000); JSON.stringify({ok:true})').ok, true);
     worker.tick();
     assert.equal(worker.state.quit, false);
@@ -151,6 +180,43 @@ test('idle timeout counts from completion and never interrupts a long request', 
     worker.tick();
     assert.equal(worker.read('closed.json').reason, 'idle-timeout');
     assert.equal(worker.state.quit, true);
+    assert.equal(worker.ownerProbes.length, 2);
+});
+
+test('numeric owner PID probe is throttled and only an exact GONE result closes the snapshot', (t) => {
+    const replies = ['ALIVE', 'UNKNOWN', 'noise GONE', new Error('probe failed'), 'GONE\r\n'];
+    const worker = jsxFixture(t, { ownerProcessId: 123, ownerProbe() {
+        const value = replies.shift(); if (value instanceof Error) throw value; return value;
+    } });
+    worker.context.advance(4999); worker.tick();
+    assert.equal(worker.ownerProbes.length, 0);
+    worker.context.advance(1);
+    for (let i = 0; i < 4; i += 1) {
+        worker.tick(); worker.tick();
+        assert.equal(worker.ownerProbes.length, i + 1);
+        assert.equal(worker.state.quit, false);
+        worker.context.advance(5000);
+    }
+    worker.tick();
+    assert.equal(worker.read('closed.json').reason, 'owner-exited');
+    assert.equal(worker.read('closed.json').snapshotRemoved, true);
+    assert.equal(worker.state.quit, true);
+    assert.equal(fs.existsSync(worker.snapshotPath), false);
+    assert.equal(fs.readFileSync(worker.checkpointPath, 'utf8'), 'immutable source');
+    assert.match(worker.ownerProbes[0], /-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden/);
+    assert.match(worker.ownerProbes[0], /GetProcessById\(123\)/);
+});
+
+test('stop files take priority over owner probes and invalid or absent PIDs never query', (t) => {
+    for (const mode of ['owner', 'stop', 'absent', 'invalid']) {
+        const worker = jsxFixture(t, { ownerProcessId: mode === 'absent' ? undefined : mode === 'invalid' ? '123' : 123 });
+        worker.context.advance(5000);
+        if (mode === 'owner') worker.closeOwner();
+        if (mode === 'stop') fs.writeFileSync(path.join(worker.root, 'stop.json'), '{}');
+        worker.tick();
+        assert.equal(worker.ownerProbes.length, 0);
+        assert.equal(worker.state.quit, mode === 'owner' || mode === 'stop');
+    }
 });
 
 test('worker reports host errors without invoking their unsafe string coercion', (t) => {
@@ -164,6 +230,7 @@ test('owner closure does not close an unrelated project at startup or after swit
     const foreign = jsxFixture(t, { foreign: true, ownerClosed: true });
     assert.equal(foreign.read('ready.json').code, 'WORKER_PROJECT_CHANGED');
     assert.equal(foreign.state.quit, false);
+    assert.equal(fs.existsSync(foreign.snapshotPath), true);
     const changed = jsxFixture(t);
     changed.context.app.project.file = { fsName: path.join(changed.root, 'user.aep') };
     changed.closeOwner();
@@ -171,6 +238,7 @@ test('owner closure does not close an unrelated project at startup or after swit
     assert.equal(changed.read('closed.json').ok, false);
     assert.equal(changed.state.closed, false);
     assert.equal(changed.state.quit, false);
+    assert.equal(fs.existsSync(changed.snapshotPath), true);
 });
 
 test('unconfirmed worker closure is bounded and retains the snapshot and pid', async (t) => {

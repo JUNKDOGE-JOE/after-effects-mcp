@@ -29,8 +29,29 @@
         if (!output.rename(name)) throw new Error("Cannot publish worker result");
     }
     var target = new File(config.snapshotPath);
+    if (target.fsName !== file("snapshot.aep").fsName) {
+        write("ready.json", {ok:false, error:"Worker snapshot is outside its dedicated path", code:"WORKER_SNAPSHOT_INVALID"});
+        return;
+    }
     var taskId = null;
     var lastActivityAt = new Date().getTime();
+    var nextOwnerProbeAt = lastActivityAt + 5000;
+    // CEP may exit without an unload event; a failed probe must not close the worker.
+    function ownerState() {
+        var pid = config.ownerProcessId;
+        var now = new Date().getTime();
+        if (typeof pid !== "number" || pid <= 1 || pid !== Math.floor(pid) || pid > 2147483647
+            || now < nextOwnerProbeAt) return "UNKNOWN";
+        nextOwnerProbeAt = now + 5000;
+        try {
+            var powershell = ($.getenv("SystemRoot") || "C:\\Windows") + "\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+            var command = '"' + powershell + '" -NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -Command "'
+                + "try{$aeWorkerOwner=[System.Diagnostics.Process]::GetProcessById(" + pid
+                + ");$aeWorkerOwner.Dispose();[Console]::Write('ALIVE')}catch [System.ArgumentException]{[Console]::Write('GONE')}catch{[Console]::Write('UNKNOWN')}\"";
+            var state = String(system.callSystem(command)).replace(/^\s+|\s+$/g, "");
+            return state === "ALIVE" || state === "GONE" ? state : "UNKNOWN";
+        } catch (ignored) { return "UNKNOWN"; }
+    }
     function stop(reason, allowEmpty) {
         if (taskId !== null) app.cancelTask(taskId);
         var project = app.project;
@@ -41,7 +62,13 @@
             return;
         }
         if (ownsSnapshot) project.close(CloseOptions.DO_NOT_SAVE_CHANGES);
-        write("closed.json", {ok:true, reason:reason});
+        if (app.project && app.project.file && app.project.file.fsName === target.fsName) {
+            write("closed.json", {ok:false, error:"Worker snapshot is still open"});
+            return;
+        }
+        // The CEP owner may already be gone, so cleanup cannot depend on its Node callbacks.
+        var snapshotRemoved = !target.exists || target.remove();
+        write("closed.json", {ok:true, reason:reason, snapshotRemoved:snapshotRemoved});
         app.quit();
     }
     if (app.project && ((app.project.file && app.project.file.fsName !== target.fsName)
@@ -70,6 +97,7 @@
             stop(ownerClosed() ? "owner-closed" : "requested", false);
             return;
         }
+        if (ownerState() === "GONE") { stop("owner-exited", false); return; }
         var request = read("request.json");
         if (!request) {
             if (new Date().getTime() - lastActivityAt >= 120000) stop("idle-timeout", false);
