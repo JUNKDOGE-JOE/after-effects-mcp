@@ -85,14 +85,18 @@ test('turn progress is reduced in App and rendered below the transcript', () => 
 test('running session navigation requires confirmation and stops the current task', () => {
   assert.match(APP, /confirmChatNavigation/);
   assert.match(APP, /当前任务仍在运行|A task is still running/);
-  assert.match(APP, /activeBackend\?\.stop\(\)/);
+  const controller = readFileSync(new URL('../src/lib/sessionController.js', import.meta.url), 'utf8');
+  assert.match(APP, /stopActiveTurn: stopActiveHostTurn/);
+  assert.match(APP, /const stopActiveHostTurn = React\.useCallback\(async[\s\S]*?await turn\.backend\.stop\(\);\s*await turn\.ended;/);
+  assert.match(controller, /async function switchAway\(\)[\s\S]*?await Promise\.resolve\(deps\.stopActiveTurn && deps\.stopActiveTurn\(\)\);[\s\S]*?deps\.resetActiveBackend/);
+  assert.match(APP, /const confirmChatNavigationNow = React\.useCallback\(async[\s\S]*?await newChatSession\(true\);\s*else await switchChatSessionNow\(request\.id\);/);
   assert.match(APP, /stopTaskConfirm/);
 });
 
 test('host approval policy sync failure is visible and blocks new sends', () => {
   assert.match(APP, /hostConversationError/);
   assert.match(APP, /审批档位未同步|Approval mode is not synced/);
-  assert.match(APP, /composerDisabled[\s\S]*Boolean\(hostConversationError\)/);
+  assert.match(APP, /const composerDisabled = [^;]*Boolean\(hostConversationError \|\| turnHoldError\)/);
   assert.match(APP, /runHostConversationSync[\s\S]*hostConversation\.updatePolicy/);
 });
 

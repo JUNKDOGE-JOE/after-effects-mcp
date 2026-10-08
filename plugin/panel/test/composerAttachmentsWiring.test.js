@@ -129,7 +129,12 @@ test('App keeps backend instances stable across backend and language changes', (
   const app = source('../src/app/App.jsx');
   assert.equal((app.match(/getLang: \(\) => langRef\.current/g) || []).length, 3);
   assert.match(app, /const effectiveBackend = effectiveBackendRef\.current/);
-  assert.match(app, /\}, \[commitChatEntries, releaseTurnAttachments\]\);/);
+  const eventDependencies = app.match(/const handleChatEvent = React\.useCallback\([\s\S]*?\}, \[([^\]]*)\]\);/);
+  assert.ok(eventDependencies);
+  assert.deepEqual(eventDependencies[1].split(',').map((value) => value.trim()),
+    ['commitChatEntries', 'releaseTurnAttachments', 'finishHostTurn']);
+  assert.doesNotMatch(eventDependencies[1], /backend|lang/i);
+  assert.match(app, /const finishHostTurn = React\.useCallback\([\s\S]*?\}, \[hostConversation\]\);/);
   assert.equal(
     (app.match(/\[extRoot, getMcpSpec, getWorkContext, mcp, handleChatEvent, platform\]\);/g) || []).length,
     2,

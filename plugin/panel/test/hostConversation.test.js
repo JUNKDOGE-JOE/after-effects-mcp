@@ -107,3 +107,57 @@ test('host conversation rebinds by id when the host API object changes', () => {
   assert.equal(manager.ensureConversation({ label: 'chat-0' }).path, '/mcp/c/token-2');
   assert.equal(manager.updatePolicy({ approvalTier: 'auto' }).policy.approvalTier, 'auto');
 });
+
+test('turn acquisition is awaited, prevents navigation, and cannot be released by an old turn', async () => {
+  let accept;
+  const releases = [];
+  const conversation = { id: 'conversation-1', path: '/mcp/c/one' };
+  const conversations = {
+    create: () => conversation,
+    startTurn: (_id, turnId) => turnId === 'first'
+      ? new Promise((resolve) => { accept = () => resolve(conversation); }) : conversation,
+    endTurn: async (id, turnId) => { releases.push([id, turnId]); return true; },
+    close: () => true,
+  };
+  const manager = createHostConversation({ getHost: () => ({ mcp: { conversations } }) });
+  manager.ensureConversation();
+  let ready = false;
+  const pending = manager.startTurn('first').then((turn) => { ready = true; return turn; });
+  await Promise.resolve();
+  assert.equal(ready, false);
+  assert.throws(() => manager.closeConversation(), { code: 'TURN_STILL_ACTIVE' });
+  await assert.rejects(manager.startTurn('second'), { code: 'TURN_STILL_ACTIVE' });
+  accept();
+  const first = await pending;
+  await Promise.all([manager.endTurn(first), manager.endTurn(first)]);
+  assert.deepEqual(releases, [['conversation-1', 'first']]);
+  const second = await manager.startTurn('second');
+  assert.equal(await manager.endTurn(first), false);
+  assert.equal(manager.currentTurn(), second);
+  await manager.endTurn(second);
+  assert.equal(manager.closeConversation(), true);
+});
+
+test('failed acquisition clears its token but an unconfirmed release retains the turn', async () => {
+  let unavailable = true;
+  let ended = false;
+  const conversation = { id: 'conversation-1' };
+  const conversations = {
+    create: () => conversation,
+    startTurn: async () => {
+      if (unavailable) throw Object.assign(new Error('busy'), { code: 'WORKSPACE_BUSY' });
+      return conversation;
+    },
+    endTurn: async () => ended,
+  };
+  const manager = createHostConversation({ getHost: () => ({ mcp: { conversations } }) });
+  manager.ensureConversation();
+  await assert.rejects(manager.startTurn('blocked'), { code: 'WORKSPACE_BUSY' });
+  assert.equal(manager.currentTurn(), null);
+  unavailable = false;
+  const turn = await manager.startTurn('active');
+  await assert.rejects(manager.endTurn(turn), { code: 'TURN_STILL_ACTIVE' });
+  assert.equal(manager.currentTurn(), turn);
+  ended = true;
+  assert.equal(await manager.endTurn(turn), true);
+});

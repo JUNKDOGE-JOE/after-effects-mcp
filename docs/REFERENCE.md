@@ -100,6 +100,22 @@ globally. Saved/pinned artifacts can be exported and imported from the panel's
 Tools page. See [Tool Library](TOOL_LIBRARY.md) for schemas, state transitions,
 placeholder protection, host routes, and bundled generation.
 
+### ExtendScript Undo ownership and project replacement
+
+Use `undo_group_name` for the host to own the group, or omit it and manage one
+balanced, non-nested group in the script. Recognizable mixed ownership, nested/unbalanced
+groups and grouped close/open/new return `UNDO_GROUP_CONFLICT`; grouped render/evalFile
+returns `UNDO_RENDER_CONFLICT`. Both are `not_dispatched` and include a `reason`.
+These are conservative source-order checks, not execution of branches/helpers or a
+guarantee for arbitrary aliases/generated JSX. Keep rendering, file execution and
+project replacement in separate calls after all groups close.
+
+Checkpoint revert/restore verifies its closed empty project and reopened original path.
+Only its executing writer adopts the new generation; other contexts become invalid.
+An active panel turn retains ownership throughout recovery.
+Uncertain close/reopen outcomes require reconciliation; there is no public guard bypass.
+Implementation acceptance is recorded in [PR #398](https://github.com/JUNKDOGE-JOE/after-effects-mcp/pull/398); the original [35-case diagnostic](validation/active-session-undo-regression.md) remains 26 PASS / 9 FAIL.
+
 ### `ae_exec` failure recovery
 
 `ae_exec` accepts only a new script and requires `code`. Recovery is a separate
@@ -161,17 +177,27 @@ primitive set remains unchanged.
 `ae_instances` supports `list`, `start` and `stop`. Starting requires an existing
 absolute `project_path` and an absolute task `work_dir`. It returns a starting instance;
 registration and a real AE read are required before considering it ready. `stop` is an
-explicit operation: release the writer first; `save_policy` defaults to `refuse-dirty`.
+explicit operation: finish active turns and reconcile outstanding writes first;
+`save_policy` defaults to `refuse-dirty`.
 Closing the panel is intentional disconnection, not a reason to start another AE.
 
 `ae_workspace` supports `bind`, `inspect`, `release`, `transfer` and `reconcile`:
 
 - Bind by `instance_id` or `project_path`, with `access: "read"` or `"write"` and `work_dir`.
+- `access: "write"` grants write eligibility, not a permanent lock. A panel conversation
+  owns its local project throughout a streaming turn. External MCP clients own it only
+  while an AE call is executing; their model text streams are not visible to MCP.
+  The next eligible context takes idle ownership automatically, without a takeover prompt.
+  An explicitly read-only context stays read-only until an explicit write binding/transfer.
 - Pass the returned `context_id` to subsequent AE calls, including when chats share a connection.
-- Transfer uses the current writer's `context_id` and the reader's `target_context_id`.
-  Queued, in-flight or uncertain operations must finish or be reconciled first.
-  A reader can request an explicit takeover with its own context_id and confirm:true,
-  without learning or reusing another chat's private work handle. The panel requires confirmation.
+- Transfer remains available to grant an existing context write eligibility. It no longer
+  forces a separate manual takeover approval. Existing write-operation approval policy remains.
+  Queued/in-flight calls, a still-active turn, bridge draining or an uncertain result
+  prevent takeover. Stop/error UI alone is not termination: the provider must confirm its
+  turn ended or its owned process exited. Old completion events cannot release a newer turn.
+- `inspect` reports `active_turn` and `draining` separately from `has_writer`. An idle
+  write-capable context may therefore have `has_writer: false`. An open SSE connection is
+  not an active turn. Cross-instance forwarded calls use call-level ownership at the target.
 - Release relinquishes that context without closing AE. Another connection does not automatically inherit it.
 - After an uncertain write, inspect actual state with `ae_read` or `ae_previewFrame`.
   An observation made while the result is uncertain returns `observation_id`.

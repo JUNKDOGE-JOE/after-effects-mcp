@@ -4,9 +4,11 @@
 // No placeholders. Never throws — returns {ok:false,error:...} on failure.
 (function() {
     try {
-        app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES);
+        if (!app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES)) {
+            return JSON.stringify({ok: false, error: "project close was cancelled"});
+        }
     } catch (e) {
-        return JSON.stringify({ok: false, error: "close() failed: " + String(e)});
+        return JSON.stringify({ok: false, error: "close() failed: " + String(e), disposition: "uncertain"});
     }
     return JSON.stringify({ok: true, closed: true});
 })()

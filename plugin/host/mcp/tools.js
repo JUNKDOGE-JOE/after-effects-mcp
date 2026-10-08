@@ -9,7 +9,7 @@
 const jsonrpc = require('./jsonrpc');
 const { textResult, noTopLevelCombinator } = require('./tool-result');
 const { HINT_MARK, matchHint } = require('./error-hints');
-const { guardProjectCode } = require('./workspaces');
+const { createProjectRestoreGuard } = require('./workspaces');
 
 function assertPatternDescriptions(schema, toolName, path) {
     if (schema === null || typeof schema !== 'object') return;
@@ -96,6 +96,7 @@ function buildTools(deps) {
         const activityRef = {};
         const callContext = Object.assign({}, context, { tool: params.name, transport: 'mcp' });
         let executionContext = callContext;
+        const restoreGuard = createProjectRestoreGuard();
         const callDeps = Object.assign({}, deps, {
             executeJsx: typeof deps.executeJsx === 'function'
                 ? async function (request) {
@@ -105,8 +106,15 @@ function buildTools(deps) {
                         activityRef,
                     });
                     if (typeof input.code === 'string') activityRef.code = input.code;
-                    input.code = guardProjectCode(input.code, executionContext);
-                    return deps.executeJsx(input);
+                    const phase = input.projectRestorePhase;
+                    if (phase && !['ae_revert', 'ae_execRecover'].includes(params.name)) {
+                        throw new Error('Only checkpoint recovery may continue a project restore');
+                    }
+                    delete input.projectRestorePhase;
+                    input.code = restoreGuard.wrap(input.code, phase, executionContext);
+                    const execution = await deps.executeJsx(input);
+                    await restoreGuard.accept(execution, phase, executionContext);
+                    return execution;
                 }
                 : deps.executeJsx,
         });

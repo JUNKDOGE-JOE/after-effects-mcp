@@ -10,10 +10,11 @@
         return JSON.stringify({ok: false, error: "project file missing: " + aepPath});
     }
     try {
-        app.open(f);
+        if (!app.open(f)) return JSON.stringify({ok: false, error: "project open was cancelled"});
     } catch (e) {
         return JSON.stringify({ok: false, error: "open() failed: " + String(e)});
     }
     var openedPath = (app.project.file ? app.project.file.fsName : null);
+    if (openedPath !== f.fsName) return JSON.stringify({ok: false, error: "opened project does not match restore target", openedPath: openedPath});
     return JSON.stringify({ok: true, openedPath: openedPath});
 })()

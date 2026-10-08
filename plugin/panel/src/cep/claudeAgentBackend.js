@@ -400,6 +400,8 @@ export function createClaudeAgentBackend({
   let activeTurn = null;
   let activeTurnAccepted = false;
   let activeTurnDispatched = false;
+  let activeTurnProcess = null;
+  const exitedProcesses = new WeakSet();
   let activeSawTextDelta = false;
   let activeAttachmentPaths = [];
   let processChannel = 'subscription';
@@ -609,7 +611,20 @@ export function createClaudeAgentBackend({
     }
   }
 
-  function finishActive() {
+  function finishActive(terminal = false) {
+    const turnId = activeTurn?.turnId;
+    const target = activeTurnProcess;
+    if (turnId && terminal !== 'completed') {
+      const terminated = () => emit({ type: 'turn-terminated', turnId });
+      if (terminal || (target && exitedProcesses.has(target))) terminated();
+      else if (activeTurnDispatched && target) {
+        let notified = false;
+        target.on('exit', () => { if (!notified) { notified = true; terminated(); } });
+        if (proc === target) void discardRuntime();
+        else { try { target.kill(); } catch {} }
+      }
+    }
+    activeTurnProcess = null;
     clearNoProgressWarning();
     const resolve = activeResolve;
     activeResolve = null;
@@ -995,7 +1010,7 @@ export function createClaudeAgentBackend({
           },
         } : {}),
       });
-      finishActive();
+      finishActive(true);
       return;
     }
     if (!activeAssistantText && typeof message.result === 'string' && message.result) {
@@ -1005,10 +1020,11 @@ export function createClaudeAgentBackend({
     transcript.push({ role: 'assistant', text: activeAssistantText });
     emit({
       type: 'turn-end',
+      turnId: activeTurn?.turnId,
       stopReason: message.stop_reason
         || (message.subtype === 'success' ? 'end_turn' : String(message.subtype || 'end_turn')),
     });
-    finishActive();
+    finishActive('completed');
   }
 
   function handleCliMessage(message) {
@@ -1142,7 +1158,7 @@ export function createClaudeAgentBackend({
     const pendingStart = (async () => {
       const resolvedLang = currentLang();
       const resolved = await resolveClaude({ platform: adapter, env, lang: resolvedLang });
-      if (activeRun === null) throw cancelledStartError();
+      if (activeTurn !== turn) throw cancelledStartError();
       if (!resolved?.ok) {
         const classification = classifyErrorCode({ resolutionCode: resolved?.code });
         const resolution = boundedResolution(resolved?.resolution || resolved);
@@ -1227,6 +1243,7 @@ export function createClaudeAgentBackend({
         stderrDeltaRedactor.feed(chunk);
       });
       spawnedProc.on?.('exit', (code, signal) => {
+        exitedProcesses.add(spawnedProc);
         handleExit(spawnedProc, generation, code, signal);
       });
       spawnedProc.on?.('error', (error) => {
@@ -1369,7 +1386,7 @@ export function createClaudeAgentBackend({
         role: 'user',
         content: [{ type: 'text', text: withAttachmentManifest(turn.text, turn.attachments) }],
       },
-    })) emitTurnProgress('dispatch');
+    })) { activeTurnProcess = proc; emitTurnProgress('dispatch'); }
   }
 
   async function sendUser(input) {
@@ -1411,6 +1428,7 @@ export function createClaudeAgentBackend({
     const userText = withAttachmentManifest(turn.text, turn.attachments);
     transcript.push({ role: 'user', text: turn.text });
     activeTurnDispatched = true;
+    activeTurnProcess = proc;
     if (writeMessage({
       type: 'user',
       message: {
@@ -1432,6 +1450,7 @@ export function createClaudeAgentBackend({
   }
 
   function reset() {
+    if (activeRun) stop();
     void discardRuntime({
       clearTranscript: true,
       clearSession: true,

@@ -790,7 +790,40 @@ export function createOpenCodeBackend({
     return error;
   }
 
-  function finishActive() {
+  let activeTurnProcess = null;
+  const exitedProcesses = new WeakSet();
+
+  function retireTurnProcess(target) {
+    if (proc === target) {
+      generation += 1;
+      adoptedSessionId = sessionId || adoptedSessionId;
+      sessionId = null;
+      sessionPromise = null;
+      serverPromise = null;
+      sseClosed = true;
+      sseStarted = false;
+      proc = null;
+      port = null;
+      baseUrl = '';
+      removeInstanceMarker(configHome);
+      configHome = '';
+    }
+    try { target?.kill?.(); } catch {}
+  }
+
+  function finishActive(terminal = false) {
+    const turnId = activeTurn?.turnId;
+    const target = activeTurnProcess;
+    if (turnId && terminal !== 'completed') {
+      const terminated = () => emit({ type: 'turn-terminated', turnId });
+      if (terminal || (target && exitedProcesses.has(target))) terminated();
+      else if (messageDispatched && target) {
+        let notified = false;
+        target.on('exit', () => { if (!notified) { notified = true; terminated(); } });
+        retireTurnProcess(target);
+      }
+    }
+    activeTurnProcess = null;
     clearStallWatchdog();
     if (!activeResolve) {
       activeRun = null;
@@ -1064,6 +1097,7 @@ export function createOpenCodeBackend({
   }
 
   function handleExit(exitedProc, processGeneration, home, code, signal) {
+    exitedProcesses.add(exitedProc);
     if (processGeneration !== generation || proc !== exitedProc) return;
     const wasStopping = stopping;
     generation += 1;
@@ -1514,9 +1548,9 @@ export function createOpenCodeBackend({
         if (!activeRun || !turnStarted) return;
         assistantDeltaRedactor.flush();
         drainApprovals();
-        emit({ type: 'turn-end', stopReason: 'end_turn' });
+        emit({ type: 'turn-end', turnId: activeTurn?.turnId, stopReason: 'end_turn' });
         transcript.push({ role: 'assistant', text: activeAssistantText });
-        finishActive();
+        finishActive('completed');
       }
       return;
     }
@@ -1656,7 +1690,7 @@ export function createOpenCodeBackend({
         ...activeTurnFailureFields(),
         ...(mediaRejected ? { dispatchState: 'not-started' } : {}),
       });
-      finishActive();
+      finishActive(true);
       return;
     }
     // Permission prompts may not appear on read-only tool paths, so match
@@ -1775,6 +1809,7 @@ export function createOpenCodeBackend({
     };
     try {
       messageDispatched = true;
+      activeTurnProcess = proc;
       armStallWatchdog();
       const controller = new AbortController();
       messageAbortController = controller;
@@ -1788,6 +1823,7 @@ export function createOpenCodeBackend({
       adoptedSessionId = null;
       sessionWasAdopted = false;
       const replacementId = await ensureSession();
+      if (activeTurn !== turn || stopRequested) return;
       const controller = new AbortController();
       messageAbortController = controller;
       const replacementRequest = postJson(
@@ -1836,6 +1872,7 @@ export function createOpenCodeBackend({
     const turnRun = activeRun;
     try {
       const id = await prepareTurnSession();
+      if (activeTurn !== turn || stopRequested) return;
       const userText = turn.text;
       transcript.push({ role: 'user', text: userText });
       // Accept at dispatch, not on POST completion: OpenCode's message POST
@@ -1979,12 +2016,16 @@ export function createOpenCodeBackend({
   }
 
   async function stop() {
+    const turn = activeTurn;
     if (activeRun) stopRequested = true;
     messageAbortController?.abort();
     await finalizeActiveTurnRequests();
-    if (activeRun) {
+    if (activeRun && activeTurn === turn) {
       emitAfterText({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.', ...activeTurnFailureFields() });
+      const target = proc;
+      const dispatched = messageDispatched;
       finishActive();
+      if (!dispatched) retireTurnProcess(target);
     }
   }
 

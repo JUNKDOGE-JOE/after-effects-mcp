@@ -63,6 +63,7 @@ function createInstanceService(options) {
         } catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
     const defaults = new Map();
+    const conversationTurnIds = new Map();
     const ownerClosedPath = registry.root ? path.join(registry.root, instanceId + '.closed') : null;
     const observations = new Map();
     const reconciliations = new Map();
@@ -88,7 +89,7 @@ function createInstanceService(options) {
         return project;
     }
 
-    const workspaces = input.executeJsx ? new WorkspaceManager({ instanceId, readProject }) : null;
+    const workspaces = input.executeJsx ? new WorkspaceManager({ instanceId, readProject, isDraining: input.isDraining }) : null;
 
     async function publish(endpoint) {
         let project = await readProject();
@@ -148,6 +149,17 @@ function createInstanceService(options) {
         if (action === 'bind') {
             value = await workspaces.bind({ access: args.access || 'read', workDir: args.work_dir === undefined ? info.workDir : args.work_dir,
                 projectPath: args.project_path, contextId: args.context_id });
+            const conversation = context && context.conversation;
+            if (args.access === 'write' && conversation && conversation.managedTurns && !context.panelUi) {
+                const { id, activeTurnId } = conversation;
+                if (!activeTurnId || conversationTurnIds.get(id) !== activeTurnId) throw failure('TURN_INACTIVE', 'The panel turn has ended');
+                await workspaces.startTurn(value.contextId, id, activeTurnId);
+                if (conversationTurnIds.get(id) !== activeTurnId) {
+                    workspaces.endTurn(id, activeTurnId);
+                    throw failure('TURN_INACTIVE', 'The panel turn ended while binding the project');
+                }
+                defaults.set(id, value);
+            }
             if (context && context.session) context.session.workContextId = value.contextId;
             await registry.update(instanceId, { workspaceId: value.workspaceId, projectPath: value.projectPath });
             info.workspaceId = value.workspaceId;
@@ -158,6 +170,7 @@ function createInstanceService(options) {
             return { ok: true, instance_id: instanceId, workspace_id: state.workspaceId,
                 project: state.project, has_writer: Boolean(state.writerContextId),
                 pending: state.pending, inflight: state.inflight, uncertain: Boolean(state.uncertain),
+                active_turn: state.activeTurn, draining: state.draining,
                 context: publicContext(state.context) };
         }
         if (action === 'reconcile') {
@@ -189,10 +202,8 @@ function createInstanceService(options) {
         } else if (action === 'transfer') {
             if (args.target_context_id) value = publicContext(await workspaces.transfer(args.context_id, args.target_context_id));
             else {
-                if (args.confirm !== true) throw failure('TRANSFER_CONFIRMATION_REQUIRED', 'Explicit user confirmation is required to take over writes.');
                 const writer = workspaces.inspect().writerContextId;
-                value = publicContext(writer ? await workspaces.transfer(writer, args.context_id)
-                    : await workspaces.bind({ contextId: args.context_id, access: 'write' }));
+                value = publicContext(await workspaces.transfer(writer, args.context_id));
             }
         } else throw failure('INVALID_ACTION', 'Unknown workspace action.');
         return Object.assign({ ok: true }, value);
@@ -286,13 +297,28 @@ function createInstanceService(options) {
         if (supplied) return workspaces.getContext(supplied);
         const key = context.conversation && context.conversation.id || context.session && context.session.id;
         let existing = defaults.get(key);
+        if (existing) existing = workspaces.getContext(existing.contextId);
         if (!existing || (write && existing.access !== 'write')) {
             existing = await workspaces.bind({ access: write ? 'write' : 'read',
+                contextId: existing && existing.contextId,
                 workDir: context.conversation && context.conversation.workDir || info.workDir });
             defaults.set(key, existing);
         }
         return existing;
     }
+
+    const conversationTurns = {
+        async start(conversation, turnId) {
+            if (!accepting) throw failure('WORKSPACE_CLOSED', 'The project host is closed');
+            const bound = await contextFor({}, { conversation }, true);
+            await workspaces.startTurn(bound.contextId, conversation.id, turnId);
+            conversationTurnIds.set(conversation.id, turnId);
+        },
+        end(conversation, turnId) {
+            if (conversationTurnIds.get(conversation.id) === turnId) conversationTurnIds.delete(conversation.id);
+            return workspaces.endTurn(conversation.id, turnId);
+        },
+    };
 
     async function routeTool(params, context, invoke) {
         if (!accepting) return { result: textResult({ ok: false, code: 'OWNER_CLOSED', error: 'This project owner stopped accepting requests.' }, true) };
@@ -318,6 +344,15 @@ function createInstanceService(options) {
                 checkpointContinue: args.checkpoint_continue,
                 reconciledAt: reconciliations.get(current.contextId),
                 workspace: { instanceId, workspaceId: current.workspaceId },
+                ...(['ae_revert', 'ae_execRecover'].includes(name) ? {
+                    acceptRestoredProject: async restored => {
+                        const adopted = workspaces.acceptRestoredProject(current.contextId, restored);
+                        Object.assign(bound, adopted);
+                        await registry.update(instanceId, { workspaceId: adopted.workspaceId, projectPath: adopted.projectPath });
+                        info.workspaceId = adopted.workspaceId;
+                        return { ...adopted, workspace: { instanceId, workspaceId: adopted.workspaceId } };
+                    },
+                } : {}),
             }));
             if (observe && result.result && result.result.structuredContent && !result.result.isError) {
                 const after = await readProject();
@@ -339,7 +374,10 @@ function createInstanceService(options) {
             if (args.action === 'submit' || !args.action) await workspaces.assertContext(bound.contextId, false);
             return execute(workspaces.getContext(bound.contextId));
         }
-        const result = await workspaces.run(bound.contextId, write, execute);
+        const conversation = context.conversation;
+        const result = await workspaces.run(bound.contextId, write, execute, conversation && !context.panelUi ? {
+            ownerId: conversation.id, managedTurns: conversation.managedTurns, turnId: conversation.activeTurnId,
+        } : undefined);
         if (result.result && result.result.structuredContent) {
             const source = { instance_id: instanceId, workspace_id: bound.workspaceId,
                 context_id: bound.contextId, mode: 'live', project_path: bound.projectPath };
@@ -374,7 +412,7 @@ function createInstanceService(options) {
     }
 
     return { instanceId, ownerClosedPath, registry, launcher, router, workspaces, publish, configure, workspace, instances,
-        target, contextFor, routeTool, setJobs, markClosed, accepting: () => accepting,
+        target, contextFor, routeTool, conversationTurns, setJobs, markClosed, accepting: () => accepting,
         setApprovalDeps: value => { input.approvalDeps = value; },
         getInfo: () => Object.assign({}, info, { workspaceId: workspaces ? workspaces.workspaceId : null }) };
 }

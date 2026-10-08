@@ -2,7 +2,8 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { WorkspaceManager, contextInstanceId } = require('./workspaces');
+const { WorkspaceManager, contextInstanceId, createProjectRestoreGuard } = require('./workspaces');
+const vm = require('node:vm');
 
 function fixture(instanceId) {
     const project = { projectPath: 'C:/jobs/one.aep', projectGeneration: 1 };
@@ -16,6 +17,53 @@ function deferred() {
     return { promise, resolve };
 }
 
+test('restore continuation only opens its exact unchanged empty project and updates the calling generation', async () => {
+    for (const change of ['none', 'empty-project', 'edited-project', 'token']) {
+        const guard = createProjectRestoreGuard();
+        const app = { project: { file: { fsName: 'C:/one.aep' }, rootFolder: {}, revision: 1 } };
+        const $ = { global: { __aemcpProjectSerial: 1, __aemcpObservedProject: { root: app.project.rootFolder, generation: 1 } } };
+        const scope = vm.createContext({ app, $, isValid: root => root === app.project.rootFolder });
+        const context = { contextId: 'bound', projectPath: 'C:/one.aep', projectGeneration: 1,
+            acceptRestoredProject: value => value };
+        const close = '(function(){app.project={file:null,rootFolder:{},numItems:0,dirty:false,revision:1};return JSON.stringify({ok:true,closed:true});}())';
+        const open = '(function(){app.project={file:{fsName:"C:/one.aep"},rootFolder:{},revision:1};return JSON.stringify({ok:true,openedPath:"C:/one.aep"});}())';
+        assert.throws(() => guard.wrap(open, 'open', context), /No completed project close/);
+        vm.runInContext(guard.wrap(close, 'close', context), scope);
+        if (change === 'empty-project') app.project.rootFolder = {};
+        if (change === 'edited-project') app.project.dirty = true;
+        if (change === 'token') $.global.__aemcpRestore.token = 'other';
+        if (change !== 'none') {
+            assert.throws(() => vm.runInContext(guard.wrap(open, 'open', context), scope), /SOURCE_PROJECT_CHANGED/);
+            continue;
+        }
+        const result = vm.runInContext(guard.wrap(open, 'open', context), scope);
+        await guard.accept({ payload: { ok: true, result } }, 'open', context);
+        assert.equal(context.projectGeneration, 2);
+        assert.equal(vm.runInContext(guard.wrap('42', null, context), scope), 42);
+        assert.throws(() => guard.wrap(open, 'open', context), /No completed project close/);
+    }
+});
+
+test('confirmed restore rebinds only the executing writer while its panel turn retains ownership', async () => {
+    const { manager, project } = fixture();
+    const writer = await bind(manager), stale = await bind(manager);
+    const activity = { ownerId: 'panel', turnId: 'turn', managedTurns: true };
+    await manager.startTurn(writer.contextId, 'panel', 'turn');
+    assert.throws(() => manager.acceptRestoredProject(writer.contextId, { ...project, projectGeneration: 2 }), /executing writer/);
+    await manager.run(writer.contextId, true, async () => {
+        project.projectGeneration = 2;
+        const restored = manager.acceptRestoredProject(writer.contextId, project);
+        assert.notEqual(restored.workspaceId, writer.workspaceId);
+        assert.equal(manager.inspect().activeTurn.turnId, 'turn');
+    }, activity);
+    assert.equal(await manager.run(writer.contextId, true, current => current.projectGeneration, activity), 2);
+    await assert.rejects(manager.run(stale.contextId, false, () => assert.fail()), { code: 'SOURCE_PROJECT_CHANGED' });
+    const next = await bind(manager);
+    await assert.rejects(manager.run(next.contextId, true, () => assert.fail()), { code: 'WORKSPACE_BUSY' });
+    manager.endTurn('panel', 'turn');
+    assert.equal(await manager.run(next.contextId, true, () => 'handoff'), 'handoff');
+});
+
 test('workspace, instance and context identities stay distinct and explicit context reuse keeps ownership', async () => {
     const { manager } = fixture();
     const writer = await bind(manager);
@@ -24,7 +72,8 @@ test('workspace, instance and context identities stay distinct and explicit cont
     assert.equal(contextInstanceId('ae-one:invented'), null);
     assert.notEqual(writer.workspaceId, writer.instanceId);
     assert.notEqual(writer.contextId, writer.workspaceId);
-    await assert.rejects(bind(manager), { code: 'WORKSPACE_BUSY' });
+    assert.equal((await bind(manager)).access, 'write');
+    assert.equal(manager.inspect().writerContextId, null);
     assert.deepEqual(await manager.bind({ access: 'write', contextId: writer.contextId }), writer);
     await assert.rejects(manager.bind({ access: 'write', contextId: 'ae-one:' + 'a'.repeat(32) }), { code: 'CONTEXT_NOT_FOUND' });
     await assert.rejects(manager.run(reader.contextId, true, () => assert.fail('must not dispatch')), { code: 'WORKSPACE_READONLY' });
@@ -151,4 +200,56 @@ test('the original uncertain owner can reconcile an observed project switch but 
     assert.throws(() => manager.getContext(writer.contextId), { code: 'SOURCE_PROJECT_CHANGED' });
     const next = await bind(manager);
     assert.equal(next.projectPath, project.projectPath);
+});
+
+test('panel turns retain ownership between calls and only their matching end permits another owner', async () => {
+    const { manager } = fixture();
+    const a = await bind(manager);
+    const explicit = await bind(manager);
+    const b = await bind(manager);
+    const activity = { ownerId: 'chat-a', turnId: 'turn-1', managedTurns: true };
+    await manager.startTurn(a.contextId, 'chat-a', 'turn-1');
+    await manager.run(explicit.contextId, true, () => 'same conversation', activity);
+    await assert.rejects(manager.run(b.contextId, true, () => assert.fail()), { code: 'WORKSPACE_BUSY' });
+    await assert.rejects(manager.transfer(a.contextId, b.contextId), { code: 'WORKSPACE_BUSY' });
+    assert.equal(manager.endTurn('chat-a', 'wrong-turn'), false);
+    assert.equal(manager.inspect().activeTurn.turnId, 'turn-1');
+    manager.endTurn('chat-a', 'turn-1');
+    assert.equal(manager.inspect().writerContextId, null);
+    await manager.startTurn(b.contextId, 'chat-b', 'turn-2');
+    assert.equal(manager.endTurn('chat-a', 'turn-1'), false);
+    await assert.rejects(manager.run(a.contextId, true, () => assert.fail(), activity), { code: 'TURN_INACTIVE' });
+    manager.endTurn('chat-b', 'turn-2');
+    assert.equal(await manager.run(a.contextId, true, () => 'external call'), 'external call');
+    assert.equal(manager.inspect().writerContextId, null);
+});
+
+test('turn end cannot release pending writes, stale queued calls, draining engines or uncertain results', async () => {
+    const { manager } = fixture();
+    const a = await bind(manager);
+    const b = await bind(manager);
+    const started = deferred(), finish = deferred();
+    const activity = { ownerId: 'chat', turnId: 'turn', managedTurns: true };
+    await manager.startTurn(a.contextId, 'chat', 'turn');
+    const first = manager.run(a.contextId, true, async () => { started.resolve(); await finish.promise; }, activity);
+    await started.promise;
+    const queued = manager.run(a.contextId, true, () => assert.fail('ended turn must not dispatch'), activity);
+    const rejected = assert.rejects(queued, { code: 'TURN_INACTIVE' });
+    manager.endTurn('chat', 'turn');
+    assert.equal(manager.inspect().writerContextId, a.contextId);
+    await assert.rejects(manager.startTurn(b.contextId, 'other', 'next'), { code: 'WORKSPACE_BUSY' });
+    finish.resolve();
+    await Promise.all([first, rejected]);
+    let draining = true;
+    manager.isDraining = () => draining;
+    await assert.rejects(manager.run(b.contextId, true, () => assert.fail()), { code: 'WORKSPACE_BUSY' });
+    draining = false;
+    await manager.startTurn(a.contextId, 'chat', 'next');
+    await manager.run(a.contextId, true, () => ({ disposition: 'uncertain' }), { ownerId: 'chat' });
+    manager.endTurn('chat', 'next');
+    assert.equal(manager.inspect().writerContextId, a.contextId);
+    await assert.rejects(manager.run(b.contextId, true, () => assert.fail()), { code: 'RESULT_UNKNOWN' });
+    await manager.reconcile(a.contextId, { resolved: true, evidenceId: 'verified' });
+    assert.equal(manager.inspect().writerContextId, null);
+    await manager.run(b.contextId, true, () => 'safe takeover');
 });

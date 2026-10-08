@@ -315,6 +315,8 @@ export function createCodexBackend({
   let activeTurn = null;
   let activeTurnAccepted = false;
   let activeTurnDispatched = false;
+  let activeTurnProcess = null;
+  const exitedProcesses = new WeakSet();
   let activeUserText = '';
   let activeUserRecorded = false;
   const pendingApprovals = new Map();
@@ -404,7 +406,37 @@ export function createCodexBackend({
     };
   }
 
-  function finishActive() {
+  function retireRuntime() {
+    runtimeGeneration += 1;
+    if (threadId) adoptedThreadId = threadId;
+    threadId = null;
+    currentTurnId = null;
+    preambleSent = false;
+    const current = proc;
+    proc = null;
+    const currentRpc = rpc;
+    rpc = null;
+    startPromise = null;
+    initializePromise = null;
+    initialized = false;
+    currentRpc?.close(new Error('Codex turn ended'));
+    try { current?.kill(); } catch {}
+  }
+
+  function finishActive(terminal = false) {
+    const turnId = activeTurn?.turnId;
+    const target = activeTurnProcess;
+    if (turnId && terminal !== 'completed') {
+      const terminated = () => emit({ type: 'turn-terminated', turnId });
+      if (terminal || (target && exitedProcesses.has(target))) terminated();
+      else if (activeTurnDispatched && target) {
+        let notified = false;
+        target.on('exit', () => { if (!notified) { notified = true; terminated(); } });
+        if (proc === target) retireRuntime();
+        else { try { target.kill(); } catch {} }
+      }
+    }
+    activeTurnProcess = null;
     const resolve = activeResolve;
     activeResolve = null;
     activeRun = null;
@@ -464,6 +496,7 @@ export function createCodexBackend({
   function handleNotification(message) {
     const params = message.params || {};
     if (message.method === 'turn/started') {
+      if (!activeRun) return;
       currentTurnId = (params.turn && params.turn.id) || params.turnId || null;
       resetProviderDeltaRedactor();
       if (activeTurn && activeTurn.turnId && !activeTurnAccepted) {
@@ -516,8 +549,9 @@ export function createCodexBackend({
       return;
     }
     if (message.method === 'turn/completed') {
-      currentTurnId = null;
       const turn = params.turn && typeof params.turn === 'object' ? params.turn : params;
+      if (!activeRun || !currentTurnId || (turn.id || params.turnId) !== currentTurnId) return;
+      currentTurnId = null;
       const cancelled = ['cancelled', 'canceled', 'interrupted'].includes(String(turn.status || '').toLowerCase());
       const completionFailure = turn.error || params.error
         || (turn.status === 'failed' || turn.status === 'error'
@@ -525,14 +559,14 @@ export function createCodexBackend({
           : (cancelled ? { code: turn.status, message: `Codex turn ${turn.status}.` } : null));
       if (completionFailure) {
         providerDeltaRedactor.discard();
-        void handleTurnFailure(completionFailure);
+        void handleTurnFailure(completionFailure, false, true);
         return;
       }
       providerDeltaRedactor.flush();
       drainApprovals();
-      emit({ type: 'turn-end', stopReason: 'end_turn' });
+      emit({ type: 'turn-end', turnId: activeTurn?.turnId, stopReason: 'end_turn' });
       transcript.push({ role: 'assistant', text: activeAssistantText });
-      finishActive();
+      finishActive('completed');
       return;
     }
     if (message.method === 'error') {
@@ -799,6 +833,7 @@ export function createCodexBackend({
         providerStderrRedactor.feed(chunk);
       });
       spawnedProc.on('exit', (code, signal) => {
+        exitedProcesses.add(spawnedProc);
         if (generation === runtimeGeneration && proc === spawnedProc) handleExit(code, signal);
       });
       spawnedProc.on('error', (error) => {
@@ -940,8 +975,9 @@ export function createCodexBackend({
   }
 
   async function launchActiveTurn() {
+    const turn = activeTurn;
     await ensureThread();
-    if (!activeRun) return;
+    if (!activeRun || activeTurn !== turn) return;
     if (!activeUserRecorded) {
       transcript.push({ role: 'user', text: activeUserText });
       activeUserRecorded = true;
@@ -953,14 +989,15 @@ export function createCodexBackend({
       preambleSent = true;
     }
     activeTurnDispatched = true;
+    activeTurnProcess = proc;
     const turnRequest = rpc.request('turn/start', turnParams(activeTurn, turnText), turnTimeoutMs);
     emitTurnProgress('dispatch');
     turnRequest.catch((error) => {
-      void handleTurnFailure(taggedError(error, 'method', 'turn/start'), true);
+      if (activeTurn === turn) void handleTurnFailure(taggedError(error, 'method', 'turn/start'), true);
     });
   }
 
-  async function handleTurnFailure(error, turnStartRejected = false) {
+  async function handleTurnFailure(error, turnStartRejected = false, terminal = false) {
     if (!activeRun || turnFailureInFlight) return;
     turnFailureInFlight = true;
     try {
@@ -1023,7 +1060,7 @@ export function createCodexBackend({
         ...activeTurnFailureFields(),
         ...(audioRejected ? { dispatchState: 'not-started' } : {}),
       });
-      finishActive();
+      finishActive(terminal || audioRejected);
     } finally {
       turnFailureInFlight = false;
     }
@@ -1061,7 +1098,7 @@ export function createCodexBackend({
     try {
       await launchActiveTurn();
     } catch (error) {
-      await handleTurnFailure(error);
+      if (activeTurn === turn) await handleTurnFailure(error);
     }
     return run;
   }
@@ -1101,10 +1138,12 @@ export function createCodexBackend({
     if (activeRun) {
       emitAfterText({ type: 'error', kind: 'aborted', code: 'TURN_ABORTED', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
+      retireRuntime();
     }
   }
 
   function reset() {
+    if (activeRun) stop();
     stopping = true;
     runtimeGeneration += 1;
     drainApprovals();
