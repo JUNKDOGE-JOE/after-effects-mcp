@@ -12,19 +12,18 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [未发布]
 
-### [0.11.0] — release preparation (unreleased)
+### [0.11.0] — 2026-10-09 (UTC+8)
 
-- **会话接管与恢复 / Session handoff and recovery (#398)**: 面板仅在完整流式回合活动时占用工程，外接客户端仅在 AE 调用在途时占用；结束后其他可写会话可直接接管。停止须等待后端结束，未知写入及排空期间继续保护工程。检查点恢复后保持调用方的有效上下文，并使其他旧上下文失效。Idle eligible sessions can take over without confirmation; confirmed Stop, uncertain-write protection and checkpoint context recovery remain enforced.
-- **原生请求稳定性 / Native request reliability**: 内部请求的截止时间为同机进程间的时钟差保留余量，修复偶发的派发前拒绝；本地等待预算和调用者显式截止时间保持原契约。Generated deadlines leave clock headroom below the native admission limit, preventing intermittent pre-dispatch rejection without extending caller deadlines.
-- **Local project contexts and multiple AE endpoints (#393)**: one writer per project, read-only snapshot workers, explicit instance and workspace routing, and bounded read jobs. Closing a panel remains an intentional disconnect.
-- **Windows 后台 worker / Windows background workers**: 快照 worker 使用无界面启动，避免用户工作区中的 GUI 扩展阻塞启动或退出；继续使用原有取帧流程，主实例保留正常界面。Snapshot workers start without the workspace GUI and retain the existing PNG capture path; primary instances keep their normal UI.
-- **Worker 退出清理 / Worker shutdown cleanup**: Windows 快照 worker 独立于面板进程完成退出，并定期确认所属 CEP 进程是否仍在运行；关闭工程副本后由 worker 清理自己的临时快照。Windows snapshot workers detect owner exit independently of panel unload events and remove their own closed temporary snapshot; failed liveness queries retain the idle-timeout fallback.
-- **Native diagnosis and connection recovery (#392, draft #395)**: cold diagnosis probes the native handshake, reports its connection stage, and clears timed-out pending connections for retry on Windows and macOS. Passive status and ping remain passive. The original issue remains open for reporter verification.
-- **工作目录 / Work directory**: 新聊天默认使用当前 AEP 所在目录；未保存或目录不可写时回落用户目录。设置提供系统文件夹浏览和恢复默认，取消保持原值；已有聊天保留原目录。New chats use the current AEP folder, falling back to the home folder; native folder browsing and reset are available in settings, while existing chats keep their directory.
-- **渲染与 Undo / Render and Undo (#397)**: 分组执行在派发前拒绝可识别的 `render()` 或 `$.evalFile()` 调用；渲染需拆成独立、不带 Undo 分组的 `ae_exec`。检查不保证识别任意动态脚本。超时排空哨兵不再调用无对应分组的 `endUndoGroup()`，串行锁保持有效。Recognizable render/evalFile calls are rejected before grouped execution; render separately without an Undo group. Dynamic JSX still requires this calling discipline. The drain sentinel no longer alters Undo state.
-- **Native SDK build input**: use the existing Adobe SDK 26.5 publication v1 inputs, retaining the previous 25.6.61 locks and all 23 primitive/suite pins. Windows build/PE checks and unified-source Mac AE26/AE24 core development checks are recorded; packaged AE compatibility remains a separate gate.
-- **Release limits**: Mac worker cases blocked by development-machine resources are deferred to public beta testing, not marked passed. True unknown-write recovery remains unverified on Mac, and AE23 was not tested there. The evalScript deadline is soft and cannot interrupt AE execution. Guide layers may be absent from PNG output. Packaged identity, signatures and T5/T6 acceptance remain pending.
+- **多实例与并行预览（#393）**：连接器支持发现、启动及路由多个 AE 实例；不同工程可并行操作，同一工程保持单个活动写入者。只读 worker 从固定检查点快照执行读取和预览，结果不代表实时工程。
+- **工具面 13 → 16**：新增 `ae_instances`、`ae_workspace`、`ae_readJob`，分别管理实例、工程上下文与有界只读任务。配套 stdio 连接器为 `ae-mcp-jkdg@0.11.0`；不指定 URL 时发现已安装扩展的多实例入口，显式 URL 保留直连模式。
+- **会话接管与恢复（#398）**：面板在完整流式回合期间占用工程，外部客户端仅在 AE 调用在途时占用；正常结束后其他有写入资格的会话可接管。已派发操作、引擎排空及未知写入继续阻止接管；检查点恢复后保留执行方上下文，并使其他旧上下文失效。
+- **AI 工作目录（#396）**：新聊天默认使用当前 AEP 所在目录，未保存或目录不可写时回落用户目录；设置中可浏览文件夹或恢复默认，取消保留原值，已有聊天保留原目录。
+- **Undo 与渲染修复（#397、#398）**：派发前拒绝可识别的混合、嵌套或不平衡分组，以及分组内的渲染、外部脚本执行和工程替换。渲染需独立于 Undo 分组；排空哨兵不再额外调用 `endUndoGroup()`。静态检查不保证覆盖任意动态 JSX，同步脚本超时不保证立即中断。
+- **原生连接与 Windows worker（#399、#400）**：冷启动诊断主动探测握手，超时连接可重试；内部截止时间保留同机时钟余量。Windows 快照 worker 无界面启动，并独立监测所属 CEP 退出，关闭副本后清理临时快照。#392 仍等待原报告者确认。
+- **发布资产与验证范围**：已发布签名 ZXP、Windows x64 AEX 和 SHA-256 校验文件。Windows AE 26.5x89 最终包完成选定的 24 项核心回归、真实原生写入与 GUI Undo、会话交接、双 worker 正常任务及运行中取消；完成 0.10.8 基线、升级、回滚与 0.11.0 干净文件安装，保留已有用户状态。
+- **已知边界**：macOS arm64 原生资产与最终包安装验收尚未完成，受资源限制的 Mac worker 场景未计为通过。自动验收未完成实际选择中文目录及 worker 运行中关闭并重开面板；Claude 仅做代码与契约验证。PNG 可能不含 Guide 图层；Overlord 曾阻塞第二主实例退出，约 350px 窄面板可能遮挡 Stop。
 
+完整资产、签名说明与验证边界见 [v0.11.0 Release](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0)。
 
 ### [0.10.8] — 2026-09-23
 
@@ -419,6 +418,19 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ## English
 
 ### [Unreleased]
+
+### [0.11.0] — 2026-10-09 (UTC+8)
+
+- **Multiple instances and parallel previews (#393):** the connector discovers, starts, and routes to multiple AE instances. Separate projects can run concurrently; each project has one active writer. Read-only workers inspect and preview fixed checkpoint snapshots, not live project state.
+- **16 public tools, up from 13:** adds `ae_instances`, `ae_workspace`, and `ae_readJob` for instances, project contexts, and bounded read jobs. The matching connector is `ae-mcp-jkdg@0.11.0`; without an explicit URL it discovers the installed multi-instance entry, while an explicit URL retains direct forwarding.
+- **Session handoff and recovery (#398):** panel conversations hold ownership for the full streaming turn; external clients hold it only while AE calls are in flight. Eligible sessions can take over idle projects. Dispatched calls, draining, and uncertain writes continue to block takeover; checkpoint restoration preserves the executing context and invalidates other old contexts.
+- **AI working directory (#396):** new chats use the current AEP folder, falling back to the home folder when unsaved or unwritable. Settings supports folder browsing and reset; cancellation preserves the value, and existing chats retain their directory.
+- **Undo and rendering fixes (#397, #398):** recognizable mixed, nested, or unbalanced groups and grouped rendering, external script execution, or project replacement are rejected before dispatch. Render outside Undo groups; the drain sentinel no longer calls an extra `endUndoGroup()`. Static checks do not cover arbitrary dynamic JSX, and synchronous script timeouts do not guarantee immediate interruption.
+- **Native connections and Windows workers (#399, #400):** cold diagnosis probes the handshake and clears timed-out connections for retry; internal deadlines allow clock headroom. Windows snapshot workers start without the workspace GUI, independently detect CEP owner exit, and clean up closed temporary snapshots. #392 still awaits confirmation from the original reporter.
+- **Assets and verification:** published the signed ZXP, Windows x64 AEX, and SHA-256 checksums. The final package on Windows AE 26.5x89 passed 24 selected core cases, actual native writes with GUI Undo, session handoff, two-worker tasks, and in-flight cancellation. Baseline 0.10.8, upgrade, rollback, and clean file installation of 0.11.0 passed while preserving existing user state.
+- **Known limits:** the macOS arm64 asset and final Mac installation acceptance remain incomplete; resource-blocked Mac worker cases are not marked passed. Automated acceptance did not complete selecting a Chinese-named folder or closing/reopening the panel with active workers. Claude coverage is limited to code and contract checks. PNGs may omit Guide layers; Overlord has blocked second-primary exit, and a roughly 350px panel may obscure Stop.
+
+See [v0.11.0 Release](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0) for full assets, signing details, and verification limits.
 
 ### [0.10.8] — 2026-09-23
 
