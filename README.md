@@ -170,17 +170,21 @@ Refresh or reconnect the client after setup, then call `ae_status` to verify.
 
 The MCP service runs directly in the CEP panel's Node host, at
 `http://127.0.0.1:11488/mcp` by default. Additional instances register their
-own endpoints.
+own endpoints. The host manages approvals, project contexts, the Tool Library,
+and logs.
 
-```text
-Panel Claude / Codex / OpenCode       External MCP client
-                 |                   | HTTP or stdio connector
-                 +---------+---------+
-                    CEP Node MCP host
-          Approvals · Project contexts · Tool Library · Logs
-                     +-- ExtendScript → AE project reads/writes
-                     +-- AEGP → Exact time and object locators
-                     +-- Checkpoint → Read-only workers → Reads/PNG previews
+```mermaid
+flowchart TB
+    panel["In-panel AI chat"] --> host["CEP Node MCP host"]
+    client["External MCP client"] -->|"HTTP / stdio connector"| host
+
+    host --> jsx["ExtendScript"]
+    host --> native["AEGP"]
+    host --> worker["Read-only workers"]
+
+    jsx --> project["AE project reads / writes"]
+    native --> precision["Exact time and object locators"]
+    worker -->|"Checkpoint snapshot"| preview["Reads and PNG previews"]
 ```
 
 ExtendScript handles general operations. The native AEGP plane retains 23

@@ -154,16 +154,20 @@ claude mcp add --transport http ae http://127.0.0.1:11488/mcp
 
 MCP 服务直接运行在 CEP 面板的 Node 宿主中，默认地址为
 `http://127.0.0.1:11488/mcp`；多实例使用各自登记的端点。
+宿主统一管理审批、工程上下文、工具库和日志。
 
-```text
-面板内 Claude / Codex / OpenCode       外部 MCP 客户端
-                 │                   │ HTTP 或 stdio 连接器
-                 └─────────┬─────────┘
-                    CEP Node MCP 宿主
-               审批 · 工程上下文 · 工具库 · 日志
-                     ├─ ExtendScript → AE 工程读写
-                     ├─ AEGP → 精确时间与对象定位
-                     └─ 检查点快照 → 只读 worker → 读取与 PNG 预览
+```mermaid
+flowchart TB
+    panel["面板内 AI 对话"] --> host["CEP Node MCP 宿主"]
+    client["外部 MCP 客户端"] -->|"HTTP / stdio 连接器"| host
+
+    host --> jsx["ExtendScript"]
+    host --> native["AEGP"]
+    host --> worker["只读 worker"]
+
+    jsx --> project["AE 工程读写"]
+    native --> precision["精确时间与对象定位"]
+    worker -->|"基于检查点快照"| preview["读取与 PNG 预览"]
 ```
 
 常规操作走 ExtendScript；原生 AEGP 平面保留 23 个固定原语，提供精确有理数时间与
