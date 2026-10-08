@@ -80,8 +80,9 @@ AI 通过 AE 宿主获取当前状态，包括尚未保存的修改；工程结�
 - **原生连接与 worker 稳定性**：改进原生冷启动诊断、连接超时重试、Windows 后台 worker 启动与退出清理。
 - **公开工具从 13 个增至 16 个**：新增 `ae_instances`、`ae_workspace`、`ae_readJob`；配套 stdio 连接器为 `ae-mcp-jkdg@0.11.0`。
 
-该版本已发布 Windows ZXP、Windows x64 原生插件与校验文件；macOS arm64 原生发布包尚未提供，
-最终 Mac 包安装与 worker 验收尚未完成。完整验证范围与已知限制见
+该版本已发布 Windows / macOS 共用的 ZXP、Windows x64 与 macOS arm64 原生插件及校验文件。
+Mac 最终包已在 AE 26.3x87 arm64 完成指定的读写、Undo、渲染、恢复与安装检查；
+Mac worker 场景仍待验证。完整验证范围与已知限制见
 [v0.11.0 发布说明](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0)。
 
 <a href="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp">
@@ -93,10 +94,12 @@ AI 通过 AE 宿主获取当前状态，包括尚未保存的修改；工程结�
 
 1. 从 [v0.11.0 发布页](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0)
    下载并安装 `ae-mcp-panel-v0.11.0.zxp`。
-2. 如需 `ae_nativeExec`，将同一发布中的 `AeMcpNative-v0.11.0-windows-x64.aex`
-   单独安装到目标 AE 的插件目录。原生插件不包含在 ZXP 内；具体路径见[安装文档](docs/INSTALL.md)。
-   ZXP 随附 Windows OpenCode 运行时，约 60 MB。macOS 使用 PATH 中的 OpenCode；
-   Mac 原生包与完整安装验证以发布页后续提供的资产为准。
+2. 如需 `ae_nativeExec`，按平台下载同一发布中的原生插件：Windows x64 使用
+   `AeMcpNative-v0.11.0-windows-x64.aex`；macOS arm64 使用
+   `AeMcpNative-v0.11.0-macos-arm64.plugin.zip`，解压后安装 `AeMcpNative.plugin`。
+   原生插件不包含在 ZXP 内；具体路径与 macOS 下载隔离处理见[安装文档](docs/INSTALL.md)。
+   Mac 包要求 macOS 14.0 或更高版本。约 60 MB 的 ZXP 为两平台共用，随附 Windows
+   OpenCode 运行时；macOS 使用 PATH 中的 OpenCode。
 3. 启动 After Effects，打开 **Window > Extensions > ae-mcp**。外部客户端
    使用 MCP 时保持面板打开。
 4. 在面板设置中配置 Claude、Codex 或 OpenCode 通道，或按下节连接外部客户端。
