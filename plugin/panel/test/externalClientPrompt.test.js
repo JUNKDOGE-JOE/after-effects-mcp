@@ -46,7 +46,9 @@ test('externalClientSetupPrompt includes the verification and stdio environment 
 test('both prompt entry points target the receiving client without a client-specific command', () => {
   for (const lang of ['zh', 'en']) {
     const readme = readFileSync(new URL(lang === 'zh' ? '../../../README.zh-CN.md' : '../../../README.md', import.meta.url), 'utf8');
-    const setup = readme.match(/```text\n([\s\S]*?)```/)[1];
+    const setupBlock = readme.match(/<details(?: open)?>\s*<summary>(?:自动配置：|Automatic setup:)[^<]*<\/summary>\s*```text\n([\s\S]*?)```\s*<\/details>/);
+    assert.ok(setupBlock, `${lang} README must contain the automatic setup prompt section`);
+    const setup = setupBlock[1];
     for (const prompt of [setup, externalClientSetupPrompt({ lang })]) {
       assert.match(prompt, lang === 'zh' ? /正在接收并执行此提示词的当前客户端/ : /current client receiving and executing/);
       assert.match(prompt, lang === 'zh' ? /手动步骤/ : /manual steps/);

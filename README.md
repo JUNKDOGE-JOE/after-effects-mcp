@@ -2,11 +2,8 @@
 
 English | [简体中文](README.zh-CN.md)
 
-<a href="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp/badge" alt="ae-mcp MCP server" />
-</a>
-
-**Setup prompt — paste this into the MCP client you want to use:**
+<details open>
+<summary>Automatic setup: paste this prompt into the MCP client you want to use</summary>
 
 ```text
 Install and configure ae-mcp for the current client receiving and executing
@@ -33,27 +30,88 @@ new session as this client requires, then call ae_status to verify. If user
 action is required first, state that verification is still pending.
 ```
 
-ae-mcp connects an After Effects CEP panel to AI clients through a local MCP
-endpoint. The panel hosts the service at `http://127.0.0.1:11488/mcp`; the
-host is a Node process using Express, and After Effects state is reached
-through ExtendScript and the frozen native AEGP plane.
+</details>
+
+**Let AI read your After Effects project, build animations, inspect the results, and save successful operations as reusable tools.**
+
+ae-mcp is an open-source CEP extension that connects a running After Effects
+project to the Model Context Protocol (MCP). Chat with Claude, Codex, or OpenCode
+inside the panel, or connect an external MCP client to work with compositions,
+layers, keyframes, and expressions.
+
+[Download v0.11.0](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0)
+· [Install](docs/INSTALL.md) · [Tool reference](docs/REFERENCE.md) · [Changelog](CHANGELOG.md)
+
+## What it does
+
+- **Read real project state:** inspect projects, compositions, layers, properties, and keyframes with pagination, sorting, and filtering.
+- **Build and edit animations:** run ExtendScript for general AE operations; use native AEGP tools for exact time and object locators.
+- **Inspect composition pixels:** export PNG frames from AE, sample multiple times in a grid, and compare A/B pixel differences.
+- **Recover failed operations:** use checkpoints of saved projects, captured failure scripts, and a `recoveryId` to inspect, correct, or restore state.
+- **Keep reusable tools:** successful scripts become replayable candidates that can be saved, pinned, archived, exported, and imported; prompt skills are supported too.
+- **Follow execution:** use the panel's approvals, activity timeline, conversation history, and diagnostic export.
+
+The workflow is read → execute → preview → correct → save for reuse. The AI
+reads current state through the AE host, including unsaved changes, and checks
+results using both project structure and composition previews.
+
+## A complete workflow
+
+Try a task like this in a test project:
+
+```text
+Create a new composition with the text Hello AE. Over one second, fade it in
+and move it upward into the center. Read back the keyframes, then check the
+animation with a multi-frame preview.
+```
+
+The screenshots show task entry, a six-frame preview, and the successful script
+captured in the Tool Library. These are **actual v0.10.7 screens** illustrating
+the workflow; v0.11.0 additions are described below.
+
+<table>
+  <tr><th>Describe the task</th><th>Inspect the result</th><th>Keep a reusable tool</th></tr>
+  <tr>
+    <td><a href="docs/assets/readme/chat-input.png"><img src="docs/assets/readme/chat-input.png" alt="Entering a text animation task in the ae-mcp chat panel" width="260" /></a></td>
+    <td><a href="docs/assets/readme/preview-result.png"><img src="docs/assets/readme/preview-result.png" alt="Hello AE multi-frame preview and execution result in chat" width="260" /></a></td>
+    <td><a href="docs/assets/readme/tool-library.png"><img src="docs/assets/readme/tool-library.png" alt="Tool Library showing the captured animation script and save action" width="260" /></a></td>
+  </tr>
+</table>
+
+## What's new in v0.11.0
+
+- **Multiple instances and parallel previews:** external clients can discover, launch, and route to multiple AE instances. Different projects can run concurrently; each project has one active writer, while read-only workers inspect and preview fixed checkpoint snapshots.
+- **Session handoff:** after a panel turn or external AE call finishes, another eligible session can take over the idle project. In-flight calls, engine draining, and uncertain writes continue to block handoff.
+- **AI working directory:** new chats default to the current AEP's folder, falling back to the user home folder if the project is unsaved or the directory is not writable. Choose a folder or restore the default in Settings; existing chats retain their directory.
+- **Undo and recovery fixes:** fixes for mismatched Undo groups and checkpoint recovery contexts. Rendering must run separately, outside an Undo group.
+- **Native and worker reliability:** improved cold-start native diagnosis, connection timeout recovery, and Windows background worker startup and shutdown cleanup.
+- **16 public tools, up from 13:** adds `ae_instances`, `ae_workspace`, and `ae_readJob`, with the matching `ae-mcp-jkdg@0.11.0` stdio connector.
+
+The release provides the Windows ZXP, Windows x64 native plug-in, and checksums.
+The macOS arm64 native release asset is not yet available; final Mac package
+installation and worker acceptance remain incomplete. See the
+[v0.11.0 release notes](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0)
+for verification scope and known limitations.
+
+<a href="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@JUNKDOGE-JOE/after-effects-mcp/badge" alt="ae-mcp MCP server" />
+</a>
+
 
 ## Install and first run
 
-1. Install the signed ZXP in After Effects.
-2. Install the matching native plug-in beside the After Effects plug-ins
-   selected for the host — the `.aex` on Windows, the `AeMcpNative.plugin`
-   bundle on macOS. Keep the version pair from the same release. The same
-   ZXP installs on both systems; it bundles the OpenCode runtime for Windows
-   (`runtime/opencode/opencode.exe`, about 60 MB), which the panel uses only
-   on Windows, while macOS falls back to an `opencode` found on PATH. Only
-   this native plug-in is built per platform, and `ae_nativeExec` is the one
-   tool that needs it. [Install](docs/INSTALL.md) has the exact per-platform
-   destination, and the macOS bundle additionally needs its download
-   quarantine cleared before After Effects will load it.
+1. Download and install `ae-mcp-panel-v0.11.0.zxp` from the
+   [v0.11.0 release](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0).
+2. For `ae_nativeExec`, install `AeMcpNative-v0.11.0-windows-x64.aex` from the
+   same release in the target AE plug-in directory. The native plug-in ships
+   separately from the ZXP; see [Install](docs/INSTALL.md) for destinations.
+   The roughly 60 MB ZXP includes the Windows OpenCode runtime. macOS uses
+   OpenCode from PATH; check the release page for the later Mac native asset
+   and its installation verification.
 3. Start After Effects and open **Window > Extensions > ae-mcp**. Keep the panel
    open while an external client uses MCP.
-4. Configure one of the two supported external connection forms below.
+4. Configure Claude, Codex, or OpenCode in panel Settings, or connect an
+   external client as described below.
 
 The panel itself is the MCP service. No separate repository server is needed.
 External clients must run on the same machine as After Effects because the
@@ -61,30 +119,36 @@ default endpoint is loopback.
 
 ## Client connections
 
-Claude Code uses the URL transport:
+For one running panel, clients supporting Streamable HTTP can connect to the
+URL shown in the panel. For example, Claude Code with the default address:
 
 ```bash
 claude mcp add --transport http ae http://127.0.0.1:11488/mcp
 ```
 
-Claude Desktop can use the published connector through the system Node
-installation, without needing access to the installed extension directory.
-This `npx -y ae-mcp-jkdg` form wraps the same dependency-free
-`host/stdio-shim.js`:
+For instance discovery and launch, or a stdio client such as Claude Desktop,
+use the matching connector (requires Node.js 18 or later):
 
 ```json
 {
   "mcpServers": {
     "ae": {
       "command": "npx",
-      "args": ["-y", "ae-mcp-jkdg"]
+      "args": ["-y", "ae-mcp-jkdg@0.11.0"]
     }
   }
 }
 ```
 
-Alternatively, Claude Desktop can run the dependency-free stdio shim shipped
-in the installed extension. Set `command` to the system Node executable and
+Without an explicit URL, the connector discovers the installed extension's
+multi-instance entry. It does not install or update the extension. Discover
+or explicitly start an instance with `ae_instances`, bind the project with
+`ae_workspace`, and pass the returned `context_id` on subsequent AE calls.
+Setting `--url` or `AE_MCP_HTTP_URL` pins forwarding to one endpoint. Closing
+the panel is an intentional disconnect and does not automatically reopen AE.
+
+Alternatively, run the dependency-free stdio shim shipped in the installed
+extension. This example pins one endpoint. Set `command` to system Node and
 point `args` at the extension directory's `host/stdio-shim.js`:
 
 ```json
@@ -101,12 +165,38 @@ point `args` at the extension directory's `host/stdio-shim.js`:
 }
 ```
 
-Claude Desktop therefore needs a system Node installation. The shim keeps one
-stdio request queue and forwards MCP responses to the panel host.
+Refresh or reconnect the client after setup, then call `ae_status` to verify.
+
+## How it works
+
+The MCP service runs directly in the CEP panel's Node host, at
+`http://127.0.0.1:11488/mcp` by default. Additional instances register their
+own endpoints. The host manages approvals, project contexts, the Tool Library,
+and logs.
+
+```mermaid
+flowchart TB
+    panel["In-panel AI chat"] --> host["CEP Node MCP host"]
+    client["External MCP client"] -->|"HTTP / stdio connector"| host
+
+    host --> jsx["ExtendScript"]
+    host --> native["AEGP"]
+    host --> worker["Read-only workers"]
+
+    jsx --> project["AE project reads / writes"]
+    native --> precision["Exact time and object locators"]
+    worker -->|"Checkpoint snapshot"| preview["Reads and PNG previews"]
+```
+
+ExtendScript handles general operations. The native AEGP plane retains 23
+fixed primitives for exact rational time and generation-bound object locators.
+Multiple instances do not permit simultaneous writers to the same project;
+worker results always describe their specified checkpoint snapshot. See
+[Architecture](docs/ARCHITECTURE_DIRECTION.md) for details.
 
 ## Panel capabilities
 
-The CEP host advertises 13 public MCP tools:
+The CEP host advertises 16 public MCP tools:
 
 | Area | Tools |
 | --- | --- |
@@ -116,6 +206,7 @@ The CEP host advertises 13 public MCP tools:
 | Project checkpoints | `ae_checkpoint`, `ae_revert` |
 | Frozen native AEGP | `ae_nativeExec` |
 | Tool Library and skills | `ae_toolSearch`, `ae_toolUse`, `ae_toolSave`, `ae_skillUse` |
+| Instances, project contexts, and read jobs | `ae_instances`, `ae_workspace`, `ae_readJob` |
 
 Successful `ae_exec` and `ae_execRecover` scripts are captured as deduplicated,
 rerunnable Tool Library candidates. `ae_toolSave` promotes or creates reusable
@@ -132,6 +223,9 @@ defaults to `~/.ae-mcp`; developers and tests can relocate it with
 The public MCP tools are served by the CEP host. Writes should be followed by
 an independent readback; potentially side-effecting failures must be
 reconciled before retry, and Undo must be executed and verified separately.
+A timeout cannot guarantee immediate interruption of synchronous ExtendScript;
+PNG previews may omit Guide layers. See [Reference](docs/REFERENCE.md) for
+multi-frame and difference parameters, recovery rules, and snapshot jobs.
 
 ## Development
 
@@ -239,6 +333,7 @@ with the project's development and maintenance.
 | Sponsor | About | Contribution | Note |
 | --- | --- | --- | --- |
 | [**biheye-g**](https://github.com/biheye-g) | Bilibili content creator **匕禾页** | CNY 18 | First sponsor |
+| \*青 | Alipay sponsor | CNY 30 | — |
 
 ## License
 
