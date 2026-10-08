@@ -35,6 +35,23 @@
     }
     var taskId = null;
     var lastActivityAt = new Date().getTime();
+    var nextOwnerProbeAt = lastActivityAt + 5000;
+    // CEP may exit without an unload event; a failed probe must not close the worker.
+    function ownerState() {
+        var pid = config.ownerProcessId;
+        var now = new Date().getTime();
+        if (typeof pid !== "number" || pid <= 1 || pid !== Math.floor(pid) || pid > 2147483647
+            || now < nextOwnerProbeAt) return "UNKNOWN";
+        nextOwnerProbeAt = now + 5000;
+        try {
+            var powershell = ($.getenv("SystemRoot") || "C:\\Windows") + "\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+            var command = '"' + powershell + '" -NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -Command "'
+                + "try{$aeWorkerOwner=[System.Diagnostics.Process]::GetProcessById(" + pid
+                + ");$aeWorkerOwner.Dispose();[Console]::Write('ALIVE')}catch [System.ArgumentException]{[Console]::Write('GONE')}catch{[Console]::Write('UNKNOWN')}\"";
+            var state = String(system.callSystem(command)).replace(/^\s+|\s+$/g, "");
+            return state === "ALIVE" || state === "GONE" ? state : "UNKNOWN";
+        } catch (ignored) { return "UNKNOWN"; }
+    }
     function stop(reason, allowEmpty) {
         if (taskId !== null) app.cancelTask(taskId);
         var project = app.project;
@@ -80,6 +97,7 @@
             stop(ownerClosed() ? "owner-closed" : "requested", false);
             return;
         }
+        if (ownerState() === "GONE") { stop("owner-exited", false); return; }
         var request = read("request.json");
         if (!request) {
             if (new Date().getTime() - lastActivityAt >= 120000) stop("idle-timeout", false);

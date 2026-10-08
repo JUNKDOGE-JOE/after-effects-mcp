@@ -51,7 +51,8 @@ async function createReadonlyWorker(options) {
     const scriptPath = path.join(root, 'start.jsx');
     const runtimePath = path.resolve(__dirname, '../../jsx/runtime.jsx');
     const entryPath = path.resolve(__dirname, '../../jsx/readonly-worker.jsx');
-    const configuration = { root, snapshotPath, runtimePath, ownerClosedPath: options.ownerClosedPath || null };
+    const configuration = { root, snapshotPath, runtimePath, ownerClosedPath: options.ownerClosedPath || null,
+        ownerProcessId: (options.platform || process.platform) === 'win32' ? process.pid : null };
     const pollMs = options.pollMs || 50;
     let record;
     let queue = Promise.resolve();
