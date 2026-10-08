@@ -37,6 +37,11 @@ Mac收官更新：产品主实例PID派发/双工程已实测，worker在本机�
 工程替换后公开恢复链阻塞；具体版本、自动化/实机分层与剩余门禁见Mac交接文档的
 “收官审查与证据边界”，不把下述Windows历史实机外推到Mac。
 
+2026-10-08 完整工程诊断（源 `720a956`）完成 35 例，26 PASS、9 FAIL：
+7 例 Undo 栈警告、2 例恢复链工程切换失败。当前补丁约束可见源码中的分组所有权，
+并为受控 checkpoint 恢复核实关闭／重开身份；任意动态 JSX 不在完整静态保护承诺内。
+原诊断安装已撤下，复验沿用同一 fixture；诊断本身不代表验收通过。修复验收见 [PR #398](https://github.com/JUNKDOGE-JOE/after-effects-mcp/pull/398)，原始结果见[诊断记录](validation/active-session-undo-regression.md)。原生平面继续冻结。
+
 ae-mcp 的公开 MCP 服务运行在 CEP Node 宿主 `plugin/host/` 中。客户端通过
 默认 `http://127.0.0.1:11488/mcp` 或已登记的实际端点调用公开工具；宿主再经 ExtendScript
 主执行平面或冻结的原生 AEGP 平面读取、修改和验证 After Effects 状态。

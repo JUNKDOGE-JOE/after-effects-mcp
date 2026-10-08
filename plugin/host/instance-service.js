@@ -344,6 +344,15 @@ function createInstanceService(options) {
                 checkpointContinue: args.checkpoint_continue,
                 reconciledAt: reconciliations.get(current.contextId),
                 workspace: { instanceId, workspaceId: current.workspaceId },
+                ...(['ae_revert', 'ae_execRecover'].includes(name) ? {
+                    acceptRestoredProject: async restored => {
+                        const adopted = workspaces.acceptRestoredProject(current.contextId, restored);
+                        Object.assign(bound, adopted);
+                        await registry.update(instanceId, { workspaceId: adopted.workspaceId, projectPath: adopted.projectPath });
+                        info.workspaceId = adopted.workspaceId;
+                        return { ...adopted, workspace: { instanceId, workspaceId: adopted.workspaceId } };
+                    },
+                } : {}),
             }));
             if (observe && result.result && result.result.structuredContent && !result.result.isError) {
                 const after = await readProject();

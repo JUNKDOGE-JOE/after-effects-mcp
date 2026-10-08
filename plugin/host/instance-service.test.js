@@ -64,6 +64,45 @@ function route(service, binding, name, args, invoke) {
     return service.routeTool({ name, arguments: Object.assign({}, args, { context_id: binding.context_id }) }, context(), invoke || (async (value) => value));
 }
 
+test('checkpoint restore adopts its generation inside the active turn and reports the new workspace', async t => {
+    const { service, root, state, registry } = await fixture(t);
+    state.projectGeneration = 1;
+    const stale = await bind(service, 'read');
+    const conversations = new ConversationStore(null, service.conversationTurns);
+    const conversation = conversations.create({ label: 'restore', workDir: root });
+    const active = await conversations.startTurn(conversation.id, 'restore-turn');
+    const panel = { ...context(), conversation: active };
+    const result = await service.routeTool({ name: 'ae_revert', arguments: {} }, panel, async bound => {
+        state.projectGeneration = 2;
+        const adopted = await bound.acceptRestoredProject({ projectPath: state.projectPath, projectGeneration: 2 });
+        assert.equal(adopted.projectGeneration, 2);
+        return { result: { structuredContent: { ok: true } } };
+    });
+    const source = result.result.structuredContent.execution_source;
+    assert.equal(source.workspace_id, service.workspaces.inspect().workspaceId);
+    assert.equal((await registry.get(service.instanceId)).workspaceId, source.workspace_id);
+    assert.equal(service.workspaces.inspect().activeTurn.turnId, 'restore-turn');
+    await assert.rejects(route(service, stale, 'ae_read', {}), { code: 'SOURCE_PROJECT_CHANGED' });
+    const external = await bind(service, 'write');
+    await assert.rejects(route(service, external, 'ae_exec', {}), { code: 'WORKSPACE_BUSY' });
+    await service.routeTool({ name: 'ae_exec', arguments: {} }, panel, async bound => {
+        assert.equal(bound.projectGeneration, 2);
+        assert.equal(bound.acceptRestoredProject, undefined);
+        return { result: { structuredContent: { ok: true } } };
+    });
+    await conversations.endTurn(conversation.id, 'restore-turn');
+    await route(service, { context_id: source.context_id }, 'ae_revert', {}, async () => {
+        state.projectPath = null; state.projectGeneration = 3;
+        return { result: { structuredContent: { ok: false, disposition: 'uncertain' } } };
+    });
+    await assert.rejects(bind(service, 'write'), { code: 'RESULT_UNKNOWN' });
+    const reader = await bind(service, 'read');
+    const observed = await route(service, reader, 'ae_read', {}, async () => ({ result: { structuredContent: { ok: true } } }));
+    await service.workspace('reconcile', { context_id: source.context_id, confirm: true,
+        observation_id: observed.result.structuredContent.observation_id }, context());
+    assert.equal(service.workspaces.inspect().uncertain, null);
+});
+
 test('publish reads the attached AE path and registers the actual endpoint and PID', async (t) => {
     const { service, registry, state, requests } = await fixture(t);
     const record = await registry.get(service.instanceId);

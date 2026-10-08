@@ -1,6 +1,8 @@
 # Active-session ownership and Undo regression
 
-Status: scope approved on 2026-10-08; implementation and hardware evidence pending.
+This record preserves the failed development diagnostic and repair scope.
+Final implementation acceptance is recorded in [PR #398](https://github.com/JUNKDOGE-JOE/after-effects-mcp/pull/398).
+The 2026-10-08 sweep of source `720a956` completed 35 cases: 26 PASS and 9 FAIL.
 Base: main `8807aeb`; branch `codex/active-session-undo-regression`.
 
 ## Scope and contract
@@ -14,9 +16,8 @@ No new public tool, native primitive, provider, service, installer or dependency
 The internal conversation API starts/ends a turn with a matching conversation/turn ID.
 Normal provider completion and confirmed termination carry that ID; UI stop is not proof.
 
-Approved footprint: about 21 repository files (11 implementation, 6 tests,
-3 documentation, 1 generated bundle), plus 3 local validation scripts; approximately
-1100–1500 handwritten additions. Generated fixture media and evidence are separate.
+Approved footprint: up to 29 repository files plus 3 local validation scripts;
+approximately 1700–1850 handwritten additions. Generated bundles/media/evidence are separate.
 The local hardware window is budgeted at 80–120 minutes; source/runner failures
 remain visible and never turn an unexecuted or unreconciled case into a pass.
 
@@ -60,3 +61,19 @@ Stop writes for an unreconciled result, corrupted fixture, crash or incompatible
 component. Continue only independent cases with restored/trustworthy state; batch
 observed blockers before repair. A timeout does not terminate JSX. Record dialogs
 and post-render 3D health; do not infer mismatch solely from a generic script error.
+
+## Diagnostic disposition and replacement boundary
+
+The run used Host 0.11.0, AE26.5x89 and the unchanged native 0.10.8 component.
+Cases 4, 8 and 31–35 had Undo-stack warnings; 27/28 failed at the checkpoint project-transition guard.
+Clean-process case 4 and script-only nested groups also reproduced; these do not enlarge the 35-case denominator.
+Case 19 produced 48 Main frames plus two single frames: 50 verified 256×144 PSDs.
+Case 29 recorded an actual 1000 ms JSX timeout, queued read, drain, reconciliation and real Undo/Redo.
+The scoped 115 runner logs contain 705 public tool calls; mixed historical helper logs are excluded.
+Case 12's marker-preparation failure and case 32's first health-runner failure remain preserved;
+the later replay/health result does not erase either incident or case 32's actual mismatch.
+All test AE processes exited and the 96-path prior runtime installation was restored; native was unchanged.
+Twelve AEP files remain pending cleanup: one baseline, one Save As, one copy, four checkpoints and five autosaves.
+They belong to one ephemeral fixture, retained for this package's repair replay; none is recorded as archived.
+Private `evidence/summary.json`, `diagnostic-progress.md`, ledger and screenshots retain the original failed run.
+Replacement evidence is separate and reuses this fixture. This diagnostic is neither development-verified nor release-accepted evidence.

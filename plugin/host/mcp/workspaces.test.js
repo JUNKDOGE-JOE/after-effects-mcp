@@ -2,7 +2,8 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { WorkspaceManager, contextInstanceId } = require('./workspaces');
+const { WorkspaceManager, contextInstanceId, createProjectRestoreGuard } = require('./workspaces');
+const vm = require('node:vm');
 
 function fixture(instanceId) {
     const project = { projectPath: 'C:/jobs/one.aep', projectGeneration: 1 };
@@ -15,6 +16,53 @@ function deferred() {
     const promise = new Promise((done) => { resolve = done; });
     return { promise, resolve };
 }
+
+test('restore continuation only opens its exact unchanged empty project and updates the calling generation', async () => {
+    for (const change of ['none', 'empty-project', 'edited-project', 'token']) {
+        const guard = createProjectRestoreGuard();
+        const app = { project: { file: { fsName: 'C:/one.aep' }, rootFolder: {}, revision: 1 } };
+        const $ = { global: { __aemcpProjectSerial: 1, __aemcpObservedProject: { root: app.project.rootFolder, generation: 1 } } };
+        const scope = vm.createContext({ app, $, isValid: root => root === app.project.rootFolder });
+        const context = { contextId: 'bound', projectPath: 'C:/one.aep', projectGeneration: 1,
+            acceptRestoredProject: value => value };
+        const close = '(function(){app.project={file:null,rootFolder:{},numItems:0,dirty:false,revision:1};return JSON.stringify({ok:true,closed:true});}())';
+        const open = '(function(){app.project={file:{fsName:"C:/one.aep"},rootFolder:{},revision:1};return JSON.stringify({ok:true,openedPath:"C:/one.aep"});}())';
+        assert.throws(() => guard.wrap(open, 'open', context), /No completed project close/);
+        vm.runInContext(guard.wrap(close, 'close', context), scope);
+        if (change === 'empty-project') app.project.rootFolder = {};
+        if (change === 'edited-project') app.project.dirty = true;
+        if (change === 'token') $.global.__aemcpRestore.token = 'other';
+        if (change !== 'none') {
+            assert.throws(() => vm.runInContext(guard.wrap(open, 'open', context), scope), /SOURCE_PROJECT_CHANGED/);
+            continue;
+        }
+        const result = vm.runInContext(guard.wrap(open, 'open', context), scope);
+        await guard.accept({ payload: { ok: true, result } }, 'open', context);
+        assert.equal(context.projectGeneration, 2);
+        assert.equal(vm.runInContext(guard.wrap('42', null, context), scope), 42);
+        assert.throws(() => guard.wrap(open, 'open', context), /No completed project close/);
+    }
+});
+
+test('confirmed restore rebinds only the executing writer while its panel turn retains ownership', async () => {
+    const { manager, project } = fixture();
+    const writer = await bind(manager), stale = await bind(manager);
+    const activity = { ownerId: 'panel', turnId: 'turn', managedTurns: true };
+    await manager.startTurn(writer.contextId, 'panel', 'turn');
+    assert.throws(() => manager.acceptRestoredProject(writer.contextId, { ...project, projectGeneration: 2 }), /executing writer/);
+    await manager.run(writer.contextId, true, async () => {
+        project.projectGeneration = 2;
+        const restored = manager.acceptRestoredProject(writer.contextId, project);
+        assert.notEqual(restored.workspaceId, writer.workspaceId);
+        assert.equal(manager.inspect().activeTurn.turnId, 'turn');
+    }, activity);
+    assert.equal(await manager.run(writer.contextId, true, current => current.projectGeneration, activity), 2);
+    await assert.rejects(manager.run(stale.contextId, false, () => assert.fail()), { code: 'SOURCE_PROJECT_CHANGED' });
+    const next = await bind(manager);
+    await assert.rejects(manager.run(next.contextId, true, () => assert.fail()), { code: 'WORKSPACE_BUSY' });
+    manager.endTurn('panel', 'turn');
+    assert.equal(await manager.run(next.contextId, true, () => 'handoff'), 'handoff');
+});
 
 test('workspace, instance and context identities stay distinct and explicit context reuse keeps ownership', async () => {
     const { manager } = fixture();

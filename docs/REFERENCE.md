@@ -100,6 +100,22 @@ globally. Saved/pinned artifacts can be exported and imported from the panel's
 Tools page. See [Tool Library](TOOL_LIBRARY.md) for schemas, state transitions,
 placeholder protection, host routes, and bundled generation.
 
+### ExtendScript Undo ownership and project replacement
+
+Use `undo_group_name` for the host to own the group, or omit it and manage one
+balanced, non-nested group in the script. Recognizable mixed ownership, nested/unbalanced
+groups and grouped close/open/new return `UNDO_GROUP_CONFLICT`; grouped render/evalFile
+returns `UNDO_RENDER_CONFLICT`. Both are `not_dispatched` and include a `reason`.
+These are conservative source-order checks, not execution of branches/helpers or a
+guarantee for arbitrary aliases/generated JSX. Keep rendering, file execution and
+project replacement in separate calls after all groups close.
+
+Checkpoint revert/restore verifies its closed empty project and reopened original path.
+Only its executing writer adopts the new generation; other contexts become invalid.
+An active panel turn retains ownership throughout recovery.
+Uncertain close/reopen outcomes require reconciliation; there is no public guard bypass.
+Implementation acceptance is recorded in [PR #398](https://github.com/JUNKDOGE-JOE/after-effects-mcp/pull/398); the original [35-case diagnostic](validation/active-session-undo-regression.md) remains 26 PASS / 9 FAIL.
+
 ### `ae_exec` failure recovery
 
 `ae_exec` accepts only a new script and requires `code`. Recovery is a separate

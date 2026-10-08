@@ -88,6 +88,58 @@ test('grouped recognizable render and evalFile calls are rejected before JSX dis
     assert.equal(dispatched, 0);
 });
 
+test('visible unsafe Undo ownership and project transitions never dispatch', async () => {
+    const server = loadServer();
+    let dispatched = 0;
+    server.setCSInterface({ evalScript() { dispatched += 1; } });
+    const begin = 'app.beginUndoGroup("Script");', end = 'app.endUndoGroup();';
+    const cases = [
+        [begin + end, 'Host', 'mixed-owner'], ['app["endUndoGroup"]()', 'Host', 'mixed-owner'],
+        [begin + begin + end + end, null, 'nested-group'], [end, null, 'unmatched-end'],
+        [begin + 'app.edited=true;', null, 'unclosed-group'],
+        [begin + 'rq["render"]();' + end, null, 'render-or-file'],
+        [begin + '$["evalFile"]("render.jsx");' + end, null, 'render-or-file'],
+        ['p.renderQueue["ren"+"der"]()', 'Host', 'render-or-file'],
+        [begin + 'p["renderQueue"][method]();' + end, null, 'render-or-file'],
+        ['app.project.close()', 'Host', 'project-transition'],
+        [begin + 'p.close(CloseOptions.DO_NOT_SAVE_CHANGES);' + end, null, 'project-transition'],
+        ['app["open"](file)', 'Host', 'project-transition'],
+        [begin + 'app.newProject();' + end, null, 'project-transition'],
+    ];
+    for (const [code, undoGroup, reason] of cases) {
+        const { status, payload } = await server.executeJsx({ code, undoGroup });
+        assert.equal(status, 400, code);
+        assert.equal(payload.code, reason === 'render-or-file' ? 'UNDO_RENDER_CONFLICT' : 'UNDO_GROUP_CONFLICT', code);
+        assert.equal(payload.disposition, 'not_dispatched', code);
+        assert.equal(payload.reason, reason, code);
+    }
+    assert.equal(dispatched, 0);
+});
+
+test('single and sequential script groups retain results and close after exceptions', async () => {
+    const server = loadServer(), calls = [];
+    const app = { beginUndoGroup: () => calls.push('begin'), endUndoGroup: () => calls.push('end'),
+        project: { renderQueue: { items: { add: () => calls.push('add') }, render: () => calls.push('render') } } };
+    server.setCSInterface({ evalScript(code, callback) { callback(require('node:vm').runInNewContext(code, { app })); } });
+    const group = 'app["beginUndoGroup"]("Script");try{app.edited=true;}finally{app.endUndoGroup();}';
+    for (const code of [group + '42;', group + group + '42;',
+        '// app.beginUndoGroup("ignored");\n"app.endUndoGroup(); rq.render()";42;',
+        '/* app.beginUndoGroup("ignored"); */ app.project.renderQueue.items.add();42;']) {
+        assert.equal((await server.executeJsx({ code })).payload.result, '42');
+    }
+    assert.deepEqual(calls, ['begin', 'end', 'begin', 'end', 'begin', 'end', 'add']);
+    calls.length = 0;
+    assert.equal((await server.executeJsx({ code: group + 'app.project.renderQueue.render();' })).payload.ok, true);
+    assert.deepEqual(calls, ['begin', 'end', 'render']);
+    calls.length = 0;
+    assert.equal((await server.executeJsx({ code: 'app.project.renderQueue.items.add();42;', undoGroup: 'Host' })).payload.result, '42');
+    assert.deepEqual(calls, ['begin', 'add', 'end']);
+    calls.length = 0;
+    const failed = await server.executeJsx({ code: 'app.beginUndoGroup("Script");try{throw new Error("expected");}finally{app.endUndoGroup();}' });
+    assert.equal(failed.payload.ok, false);
+    assert.deepEqual(calls, ['begin', 'end']);
+});
+
 test('ordinary grouped edits and separate ungrouped render/file calls still execute', async () => {
     const server = loadServer();
     const calls = [];

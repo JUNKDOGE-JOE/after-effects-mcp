@@ -493,6 +493,43 @@ function wrapWithUndoGroup(code, undoGroup) {
     );
 }
 
+// Source order is conservative: helpers, branches and dynamic aliases are not evaluated.
+function undoSourceConflict(code, hostGroup) {
+    const tokens = (code.match(/\/\*[\s\S]*?\*\/|\/\/[^\r\n]*|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|[A-Za-z_$][\w$]*|[^\s]/g) || [])
+        .filter(token => !token.startsWith('//') && !token.startsWith('/*'));
+    const literal = token => { const found = /^(['"])([A-Za-z_$][\w$]*)\1$/.exec(token || ''); return found ? found[2] : null; };
+    let depth = 0;
+    for (let i = 0; i < tokens.length; i += 1) {
+        if (tokens[i] !== '(') continue;
+        let method, receiver, computed = false, start = i - 1;
+        if (tokens[i - 2] === '.') { method = tokens[i - 1]; receiver = i - 3; }
+        else if (tokens[start] === ']') {
+            let brackets = 1;
+            while (brackets && --start >= 0) {
+                if (tokens[start] === ']') brackets += 1;
+                if (tokens[start] === '[') brackets -= 1;
+            }
+            if (brackets) continue;
+            computed = true; receiver = start - 1;
+            if (i - start === 3) method = literal(tokens[start + 1]);
+        } else continue;
+        let owner = tokens[receiver];
+        if (owner === ']' && tokens[receiver - 2] === '[') owner = literal(tokens[receiver - 1]);
+        if (owner === 'app' && ['beginUndoGroup', 'endUndoGroup'].includes(method)) {
+            if (hostGroup) return 'mixed-owner';
+            depth += method === 'beginUndoGroup' ? 1 : -1;
+            if (depth > 1) return 'nested-group';
+            if (depth < 0) return 'unmatched-end';
+        } else if (hostGroup || depth > 0) {
+            if (method === 'render' || (owner === '$' && method === 'evalFile')
+                || (computed && owner === 'renderQueue')) return 'render-or-file';
+            if ((owner === 'app' && ['open', 'newProject'].includes(method))
+                || (method === 'close' && (owner === 'project' || tokens[i + 1] === 'CloseOptions'))) return 'project-transition';
+        }
+    }
+    return depth ? 'unclosed-group' : null;
+}
+
 function quoteAsciiJsString(value) {
     const s = String(value);
     let out = '"';
@@ -875,15 +912,19 @@ async function executeJsx(request) {
             payload: { ok: false, error: '`nativeProjectGraphEffect` must be invalidate or preserve' },
         };
     }
-    // This conservative source check catches common calls, not dynamic code.
-    // File execution is opaque and may render, so keep it outside host Undo groups.
-    if (undoGroup && /(?:\.\s*render|\[\s*["']render["']\s*\])\s*\(|\$\s*(?:\.\s*evalFile|\[\s*["']evalFile["']\s*\])\s*\(/.test(code)) {
-        recordExecution({ undoGroup, ok: false, denied: 'undo_render_conflict', ...scriptEvidence });
+    const undoConflict = undoSourceConflict(code, Boolean(undoGroup));
+    if (undoConflict) {
+        const renderConflict = undoConflict === 'render-or-file';
+        recordExecution({ undoGroup: undoGroup || null, ok: false,
+            denied: renderConflict ? 'undo_render_conflict' : 'undo_group_conflict', reason: undoConflict, ...scriptEvidence });
         return { status: 400, payload: {
-            ok: false, code: 'UNDO_RENDER_CONFLICT', disposition: 'not_dispatched',
-            error: 'A render or evalFile call was detected with an Undo group. Split edits from rendering; '
-                + 'use ae_exec without undo_group_name for render/file execution after all Undo groups close. '
-                + 'Source checks cannot detect every indirect or dynamically constructed render call.',
+            ok: false, code: renderConflict ? 'UNDO_RENDER_CONFLICT' : 'UNDO_GROUP_CONFLICT',
+            disposition: 'not_dispatched', reason: undoConflict,
+            error: (renderConflict ? 'Split edits from rendering. ' : '')
+                + 'With undo_group_name, remove script beginUndoGroup/endUndoGroup calls. '
+                + 'To manage one balanced, non-nested group in the script, omit undo_group_name. '
+                + 'Run render, evalFile and project close/open/new in separate calls after all groups close. '
+                + 'Source checks follow visible calls, not runtime branches, aliases or generated code.',
         } };
     }
     const requestedTimeoutMs = Number.isFinite(input.timeoutMs) && input.timeoutMs > 0

@@ -42,12 +42,13 @@ const definition = {
     annotations: VERB_ANNOTATIONS.ae_revert,
 };
 
-async function runTemplate(template, variables, context, deps) {
+async function runTemplate(template, variables, context, deps, phase) {
     const execution = await deps.executeJsx({
         code: renderTemplate(template, variables || {}),
         timeoutMs: 60000,
         client: context.session.clientName,
-        nativeProjectGraphEffect: 'preserve',
+        nativeProjectGraphEffect: 'invalidate',
+        projectRestorePhase: phase,
     });
     return parseJsxResult(requireSuccessfulExecution(execution));
 }
@@ -96,6 +97,9 @@ async function restoreViewer(meta, context, deps) {
 
 async function revertToCheckpoint(checkpointId, options, context, deps) {
     const input = options || {};
+    let stage = 'resolve';
+    let closed = false;
+    let replaced = false;
     try {
         const projectPath = input.projectPath === undefined
             ? await resolveProjectPath(context, deps) : input.projectPath;
@@ -123,24 +127,29 @@ async function revertToCheckpoint(checkpointId, options, context, deps) {
         const branchedFromId = input.branchBeforeRevert
             ? await branch(projectPath, checkpointId, context, deps)
             : null;
-        const close = await runTemplate(CLOSE_TEMPLATE, {}, context, deps);
+        stage = 'close';
+        const close = await runTemplate(CLOSE_TEMPLATE, {}, context, deps, 'close');
         if (!close || close.ok !== true)
             return {
                 ok: false,
                 reverted: false,
                 stage: 'close',
+                ...(close && close.disposition ? { disposition: close.disposition, reconciliationRequired: true } : {}),
                 error:
                     'revert aborted: close failed: ' +
                     ((close && close.error) || JSON.stringify(close)),
                 branchedFromId,
             };
+        closed = true;
+        stage = 'replace';
         const openVariables = { aep_path: JSON.stringify(String(projectPath).replace(/\\/g, '/')) };
         try {
             (deps.atomicReplace || atomicReplace)(checkpoint, projectPath);
+            replaced = true;
         } catch (error) {
             let recoveredOriginal = false;
             try {
-                const reopened = await runTemplate(OPEN_TEMPLATE, openVariables, context, deps);
+                const reopened = await runTemplate(OPEN_TEMPLATE, openVariables, context, deps, 'open');
                 recoveredOriginal = Boolean(reopened && reopened.ok);
             } catch (openError) {
                 /* reporting below */
@@ -153,15 +162,19 @@ async function revertToCheckpoint(checkpointId, options, context, deps) {
                     'revert failed during restore: ' +
                     (error && error.message ? error.message : String(error)),
                 recoveredOriginal,
+                projectClosed: recoveredOriginal ? false : null,
+                ...(!recoveredOriginal ? { disposition: 'uncertain', reconciliationRequired: true } : {}),
                 branchedFromId,
             };
         }
-        const opened = await runTemplate(OPEN_TEMPLATE, openVariables, context, deps);
+        stage = 'reopen';
+        const opened = await runTemplate(OPEN_TEMPLATE, openVariables, context, deps, 'open');
         if (!opened || opened.ok !== true)
             return {
                 ok: false,
                 reverted: true,
                 stage: 'reopen',
+                projectClosed: null, disposition: 'uncertain', reconciliationRequired: true,
                 error:
                     'checkpoint restored but reopen failed: ' +
                     ((opened && opened.error) || JSON.stringify(opened)),
@@ -180,8 +193,12 @@ async function revertToCheckpoint(checkpointId, options, context, deps) {
     } catch (error) {
         return {
             ok: false,
-            reverted: false,
-            stage: 'resolve',
+            reverted: replaced,
+            stage,
+            projectClosed: closed || stage === 'close' ? null : false,
+            ...(closed || error.disposition === 'uncertain' || (stage === 'close' && error.disposition !== 'not_dispatched')
+                ? { disposition: 'uncertain', reconciliationRequired: true }
+                : (error.disposition ? { disposition: error.disposition } : {})),
             error: error && error.message ? error.message : String(error),
         };
     }

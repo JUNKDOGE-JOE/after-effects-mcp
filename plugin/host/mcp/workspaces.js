@@ -21,6 +21,47 @@ function guardProjectCode(code, context) {
         + '||(typeof isValid==="function"&&!isValid(s.root)))))throw new Error("SOURCE_PROJECT_CHANGED: bind the current project before executing");}());' + code;
 }
 
+function createProjectRestoreGuard() {
+    let token = null;
+    return {
+        wrap(code, phase, context) {
+            if (!phase) return guardProjectCode(code, context);
+            if (phase === 'close') {
+                token = crypto.randomBytes(16).toString('hex');
+                return guardProjectCode('(function(){var r=JSON.parse((\n' + code + '\n));'
+                    + 'if(r.ok){var p=app.project;if(p.file||p.numItems!==0||p.dirty)throw new Error("RESTORE_CLOSE_NOT_EMPTY");'
+                    + '$.global.__aemcpRestore={token:' + JSON.stringify(token) + ',root:p.rootFolder};}'
+                    + 'return JSON.stringify(r);}())', context);
+            }
+            if (phase !== 'open' || !token) throw new Error('No completed project close to restore');
+            // An unrelated empty project must not consume this restore's continuation.
+            return '(function(){var p=app.project;var t=$.global.__aemcpRestore;'
+                + 'if(!t||t.token!==' + JSON.stringify(token)
+                + '||t.root!==p.rootFolder||(typeof isValid==="function"&&!isValid(t.root))'
+                + '||p.file||p.numItems!==0||p.dirty)throw new Error("SOURCE_PROJECT_CHANGED: restore target changed");'
+                + 'delete $.global.__aemcpRestore;var r=JSON.parse((\n' + code + '\n));'
+                + 'if(r.ok){p=app.project;var n=($.global.__aemcpProjectSerial||0)+1;'
+                + '$.global.__aemcpProjectSerial=n;$.global.__aemcpObservedProject={root:p.rootFolder,generation:n,revision:p.revision};'
+                + 'r.projectGeneration=n;}return JSON.stringify(r);}())';
+        },
+        async accept(execution, phase, context) {
+            if (phase !== 'open') return;
+            token = null;
+            const payload = execution && execution.payload;
+            if (!payload || payload.ok !== true) return;
+            const result = JSON.parse(payload.result);
+            if (!result.ok || !context.contextId) return;
+            if (normalizeProjectPath(result.openedPath) !== normalizeProjectPath(context.projectPath)
+                || !Number.isSafeInteger(result.projectGeneration) || !context.acceptRestoredProject) {
+                throw failure('SOURCE_PROJECT_CHANGED', 'Restored project identity was not confirmed');
+            }
+            Object.assign(context, await context.acceptRestoredProject({
+                projectPath: result.openedPath, projectGeneration: result.projectGeneration,
+            }));
+        },
+    };
+}
+
 function unknownOutcome(value, depth) {
     if (!value || typeof value !== 'object' || (depth || 0) > 4) return false;
     if (value.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE' || value.errorCode === 'POSSIBLY_SIDE_EFFECTING_FAILURE'
@@ -127,6 +168,22 @@ class WorkspaceManager {
     }
 
     getContext(contextId) { return clone(this._context(contextId, false)); }
+
+    acceptRestoredProject(contextId, restored) {
+        const context = this._context(contextId, true);
+        if (!this.inflight || this.writer !== contextId
+            || normalizeProjectPath(restored.projectPath) !== this.project.projectKey
+            || !Number.isSafeInteger(restored.projectGeneration) || restored.projectGeneration <= 0
+            || restored.projectGeneration === this.project.projectGeneration) {
+            throw failure('SOURCE_PROJECT_CHANGED', 'Only the executing writer may adopt its confirmed restore');
+        }
+        this.contexts.forEach(value => { value.valid = false; });
+        this.workspaceId = id('workspace');
+        this.project = { ...this.project, ...restored };
+        Object.assign(context, restored, { workspaceId: this.workspaceId, valid: true });
+        if (this.activeTurn) this.activeTurn.contextId = contextId;
+        return clone(context);
+    }
 
     inspect(contextId) {
         this._settleWriter();
@@ -236,4 +293,4 @@ class WorkspaceManager {
     close() { this.closed = true; }
 }
 
-module.exports = { WorkspaceManager, contextInstanceId, guardProjectCode };
+module.exports = { WorkspaceManager, contextInstanceId, guardProjectCode, createProjectRestoreGuard };

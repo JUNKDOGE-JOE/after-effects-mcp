@@ -6,6 +6,8 @@ const os = require('os');
 const path = require('path');
 const test = require('node:test');
 const { call, revertToCheckpoint } = require('./revert');
+const { buildTools } = require('../tools');
+const vm = require('node:vm');
 function reply(value) {
     return { payload: { ok: true, result: JSON.stringify(value) } };
 }
@@ -132,6 +134,7 @@ test('ae_revert branches before close and reports missing, replace, reopen, and 
     });
     assert.equal(reopen.result.structuredContent.stage, 'reopen');
     assert.equal(reopen.result.structuredContent.reverted, true);
+    assert.equal(reopen.result.structuredContent.disposition, 'uncertain');
     const readonly = await call({ checkpoint_id: 'saved' }, context('readonly'), {
         getCheckpointStore: function () {
             return f.store;
@@ -164,6 +167,68 @@ test('ae_revert branches before close and reports missing, replace, reopen, and 
     assert.equal(approved, true);
     assert.equal(manual.result.structuredContent.ok, true);
     fs.rmSync(f.root, { recursive: true, force: true });
+});
+
+test('bound revert and recovery run through the public tool guard and continue on the restored generation', async t => {
+    for (const tool of ['ae_revert', 'ae_execRecover']) {
+        const f = fixture();
+        t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+        const app = {};
+        function project(file) {
+            return { file, rootFolder: {}, numItems: file ? 1 : 0, dirty: false, revision: 1,
+                close() { app.project = project(null); return true; } };
+        }
+        app.project = project({ fsName: f.project });
+        app.open = file => (app.project = project(file));
+        const $ = { global: { __aemcpProjectSerial: 1,
+            __aemcpObservedProject: { root: app.project.rootFolder, generation: 1 } } };
+        const scope = vm.createContext({ app, $, CloseOptions: { DO_NOT_SAVE_CHANGES: 0 },
+            File: function (file) { this.fsName = path.resolve(file); this.exists = fs.existsSync(this.fsName); },
+            isValid: root => root === app.project.rootFolder });
+        const bound = { ...context(null), contextId: 'writer', projectPath: f.project, projectGeneration: 1,
+            acceptRestoredProject: restored => restored };
+        const tools = buildTools({
+            getCheckpointStore: () => f.store,
+            getRecoveryStore: () => ({ lookup: () => ({}), appendAttempt() {},
+                readMeta: () => ({ sourceProjectPath: f.project, checkpointId: 'saved', args: {}, attempts: [] }),
+                readScript: () => '$.global.recoveryRan=true;JSON.stringify({ok:true})' }),
+            routeTool: (_params, _context, invoke) => invoke(bound),
+            executeJsx: async input => {
+                assert.equal(input.projectRestorePhase, undefined);
+                if (/CloseOptions|app\.open\(f\)/.test(input.code)) assert.equal(input.nativeProjectGraphEffect, 'invalidate');
+                return { payload: { ok: true, resultType: 'string', result: vm.runInContext(input.code, scope) } };
+            },
+        });
+        const result = await tools.call({ name: tool, arguments: tool === 'ae_revert'
+            ? { checkpoint_id: 'saved' } : { recoveryId: 'abc123', retryMode: 'restore' } }, context(null));
+        assert.equal(result.result.structuredContent.ok, true, JSON.stringify(result.result));
+        assert.equal(bound.projectGeneration, 2);
+        assert.equal(app.project.file.fsName, f.project);
+        assert.equal(fs.readFileSync(f.project, 'utf8'), 'checkpoint');
+        if (tool === 'ae_execRecover') assert.equal($.global.recoveryRan, true);
+    }
+});
+
+test('failed replace and reopen retain an uncertain result; a cancelled close never replaces the file', async t => {
+    for (const failure of ['cancel', 'replace', 'open', 'timeout']) {
+        const f = fixture();
+        t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+        const result = await revertToCheckpoint('saved', { projectPath: f.project }, context(null), {
+            getCheckpointStore: () => f.store,
+            atomicReplace: () => { if (failure === 'replace') throw new Error('copy failed'); },
+            executeJsx: async input => {
+                if (input.projectRestorePhase === 'close') {
+                    if (failure === 'timeout') throw Object.assign(new Error('timeout'), { disposition: 'uncertain' });
+                    return reply(failure === 'cancel' ? { ok: false, error: 'cancelled' } : { ok: true, closed: true });
+                }
+                return reply({ ok: false, error: 'open failed' });
+            },
+        });
+        assert.equal(result.ok, false);
+        assert.equal(result.disposition, failure === 'cancel' ? undefined : 'uncertain');
+        assert.equal(result.stage, failure === 'replace' ? 'replace' : failure === 'open' ? 'reopen' : 'close');
+        assert.equal(fs.readFileSync(f.project, 'utf8'), 'changed');
+    }
 });
 
 test('revertToCheckpoint is the shared result path and viewer restoration stays best-effort', async function () {
