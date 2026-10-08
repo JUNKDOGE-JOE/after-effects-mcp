@@ -85,7 +85,7 @@ async function createReadonlyWorker(options) {
                 let snapshotRemoved = false;
                 if (path.dirname(snapshotPath) !== root) throw new Error('worker snapshot escaped its directory');
                 try { fs.unlinkSync(snapshotPath); snapshotRemoved = true; }
-                catch (error) { if (error.code !== 'ENOENT') return { closed: true, snapshotRemoved }; }
+                catch (error) { if (error.code !== 'ENOENT') return { closed: true, snapshotRemoved }; snapshotRemoved = true; }
                 return { closed: true, snapshotRemoved };
             });
         return closePromise;

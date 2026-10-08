@@ -29,6 +29,10 @@
         if (!output.rename(name)) throw new Error("Cannot publish worker result");
     }
     var target = new File(config.snapshotPath);
+    if (target.fsName !== file("snapshot.aep").fsName) {
+        write("ready.json", {ok:false, error:"Worker snapshot is outside its dedicated path", code:"WORKER_SNAPSHOT_INVALID"});
+        return;
+    }
     var taskId = null;
     var lastActivityAt = new Date().getTime();
     function stop(reason, allowEmpty) {
@@ -41,7 +45,13 @@
             return;
         }
         if (ownsSnapshot) project.close(CloseOptions.DO_NOT_SAVE_CHANGES);
-        write("closed.json", {ok:true, reason:reason});
+        if (app.project && app.project.file && app.project.file.fsName === target.fsName) {
+            write("closed.json", {ok:false, error:"Worker snapshot is still open"});
+            return;
+        }
+        // The CEP owner may already be gone, so cleanup cannot depend on its Node callbacks.
+        var snapshotRemoved = !target.exists || target.remove();
+        write("closed.json", {ok:true, reason:reason, snapshotRemoved:snapshotRemoved});
         app.quit();
     }
     if (app.project && ((app.project.file && app.project.file.fsName !== target.fsName)

@@ -82,7 +82,7 @@ test('worker executes only the supplied maintained script and only its owner may
     const record = await launcher.startWorker({ instanceId: 'worker-one', scriptPath: f.script, workDir: f.root, env: { JOB_PATH: 'job.json' } });
     assert.deepEqual(f.calls[0].args, f.platform === 'darwin' ? ['-m'] : ['-noui', '-m', '-r', f.script]);
     assert.equal(f.calls[0].options.env.AE_MCP_INSTANCE_ROLE, 'worker');
-    assert.equal(f.calls[0].options.detached, false);
+    assert.equal(f.calls[0].options.detached, f.platform === 'win32');
     assert.equal(f.calls[0].options.stdio, 'ignore');
     assert.equal(f.calls[0].child.unrefCalls, 1);
     assert.equal(f.calls[0].options.env.JOB_PATH, 'job.json');
@@ -93,26 +93,28 @@ test('worker executes only the supplied maintained script and only its owner may
     assert.equal(launcher.stopOwnedWorker(record), false);
 });
 
-test('only Windows snapshot workers use non-UI startup; other roles keep their dispatch paths', async () => {
+test('Windows workers start without UI and survive CEP exit; other launch paths stay unchanged', async () => {
     for (const platform of ['win32', 'darwin']) for (const role of ['primary', 'worker']) {
         const paths = platform === 'win32' ? path.win32 : path.posix;
         const root = platform === 'win32' ? 'C:\\test workspace' : '/test workspace';
         const executable = paths.join(root, platform === 'win32' ? 'AfterFX.exe' : 'After Effects');
         const script = paths.join(root, 'snapshot read.jsx');
-        let spawned, dispatched;
+        let spawned, dispatched, unrefCalls = 0;
         const files = { statSync: () => ({ isFile: () => true, isDirectory: () => true }),
             mkdirSync() {}, writeFileSync() {}, renameSync() {}, readFileSync: () => '$bootstrap_json' };
         const launcher = createInstanceLauncher({ platform, arch: 'arm64', fs: files, afterEffectsPath: executable, env: {},
             spawn: (exe, args, options) => {
                 spawned = { exe, args, options };
-                const child = new EventEmitter(); child.pid = 42; child.unref = () => {};
+                const child = new EventEmitter(); child.pid = 42; child.unref = () => { unrefCalls += 1; };
                 process.nextTick(() => child.emit('spawn')); return child;
             }, dispatchMacScript: async (record, scriptPath) => { dispatched = { role: record.role, scriptPath }; } });
         const record = await launcher[role === 'worker' ? 'startWorker' : 'startPrimary']({
             instanceId: role, scriptPath: script, projectPath: paths.join(root, 'project.aep'), workDir: root });
         const entry = role === 'worker' ? script : paths.join(root, 'ae-mcp', 'launches', role, 'bootstrap.jsx');
         assert.deepEqual(spawned.args, platform === 'darwin' ? ['-m'] : role === 'worker' ? ['-noui', '-m', '-r', entry] : ['-m', '-r', entry]);
-        assert.equal(spawned.options.detached, role === 'primary');
+        assert.equal(spawned.options.detached, role === 'primary' || platform === 'win32');
+        assert.equal(unrefCalls, 1);
+        assert.equal(spawned.options.stdio, 'ignore');
         assert.deepEqual(dispatched, platform === 'darwin' ? { role, scriptPath: entry } : undefined);
         assert.equal(record.pid, 42);
     }
