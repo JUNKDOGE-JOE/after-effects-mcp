@@ -50,12 +50,15 @@ function publicConversation(record) {
         policy: Object.assign({}, record.policy),
         workDir: record.workDir || null,
         instanceId: record.instanceId || null,
+        managedTurns: record.managedTurns === true,
+        activeTurnId: record.activeTurnId || null,
     };
 }
 
 class ConversationStore {
-    constructor(sessions) {
+    constructor(sessions, conversationTurns) {
         this.sessions = sessions;
+        this.turns = conversationTurns;
         this.byToken = new Map();
         this.byId = new Map();
     }
@@ -108,11 +111,39 @@ class ConversationStore {
     close(id) {
         const record = typeof id === 'string' ? this.byId.get(id) : null;
         if (!record) return false;
+        if (record.activeTurnId) return false;
         if (this.sessions && typeof this.sessions.deleteByConversationId === 'function') {
             this.sessions.deleteByConversationId(record.id);
         }
         this.byId.delete(record.id);
         this.byToken.delete(record.token);
+        return true;
+    }
+
+    async startTurn(id, turnId) {
+        const record = this.byId.get(id);
+        if (!record || typeof turnId !== 'string' || !turnId || !this.turns) throw new Error('Conversation turn is unavailable');
+        if (record.activeTurnId && record.activeTurnId !== turnId) throw new Error('Conversation already has an active turn');
+        record.managedTurns = true;
+        record.activeTurnId = turnId;
+        try {
+            await this.turns.start(publicConversation(record), turnId);
+            if (this.byId.get(id) !== record || record.activeTurnId !== turnId) {
+                await this.turns.end(publicConversation(record), turnId);
+                throw new Error('Conversation turn was cancelled before it started');
+            }
+            return publicConversation(record);
+        } catch (error) {
+            if (record.activeTurnId === turnId) record.activeTurnId = null;
+            throw error;
+        }
+    }
+
+    async endTurn(id, turnId) {
+        const record = this.byId.get(id);
+        if (!record || record.activeTurnId !== turnId) return false;
+        record.activeTurnId = null;
+        await this.turns.end(publicConversation(record), turnId);
         return true;
     }
 

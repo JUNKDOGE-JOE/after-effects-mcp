@@ -14,6 +14,41 @@ function rebindError(id) {
 export function createHostConversation({ getHost, getWorkContext } = {}) {
   let current = null;
   let currentApi = null;
+  let activeTurn = null;
+
+  function turnHeldError() {
+    return Object.assign(new Error('The current turn has not confirmed completion.'), { code: 'TURN_STILL_ACTIVE' });
+  }
+
+  async function startTurn(turnId) {
+    if (activeTurn) throw turnHeldError();
+    const api = conversationApi(getHost);
+    if (!current || typeof api?.startTurn !== 'function') throw rebindError(current?.id);
+    bindCurrent(api);
+    const turn = { conversationId: current.id, turnId, api };
+    activeTurn = turn;
+    try {
+      const conversation = await api.startTurn(turn.conversationId, turnId);
+      if (!conversation) throw rebindError(turn.conversationId);
+      current = conversation;
+      return turn;
+    } catch (error) {
+      if (activeTurn === turn) activeTurn = null;
+      throw error;
+    }
+  }
+
+  async function endTurn(turn) {
+    if (!turn || activeTurn !== turn) return false;
+    if (!turn.ending) {
+      turn.ending = Promise.resolve().then(() => turn.api.endTurn(turn.conversationId, turn.turnId)).then((ended) => {
+        if (!ended) throw turnHeldError();
+        if (activeTurn === turn) activeTurn = null;
+        return true;
+      }).catch((error) => { turn.ending = null; throw error; });
+    }
+    return turn.ending;
+  }
 
   function bindCurrent(conversations) {
     if (!current) return null;
@@ -65,6 +100,7 @@ export function createHostConversation({ getHost, getWorkContext } = {}) {
 
   function closeConversation() {
     if (!current) return false;
+    if (activeTurn) throw turnHeldError();
     const closing = current;
     const conversations = conversationApi(getHost);
     if (!conversations || typeof conversations.close !== 'function') throw rebindError(closing.id);
@@ -95,5 +131,8 @@ export function createHostConversation({ getHost, getWorkContext } = {}) {
     currentPath,
     currentId,
     currentConversation,
+    startTurn,
+    endTurn,
+    currentTurn: () => activeTurn,
   };
 }

@@ -30483,6 +30483,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let activeTurn = null;
     let activeTurnAccepted = false;
     let activeTurnDispatched = false;
+    let activeTurnProcess = null;
+    const exitedProcesses = /* @__PURE__ */ new WeakSet();
     let activeSawTextDelta = false;
     let activeAttachmentPaths = [];
     let processChannel = "subscription";
@@ -30672,7 +30674,30 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         emitAfterText({ type: "question-resolved", toolUseId, outcome: "cancelled" });
       }
     }
-    function finishActive() {
+    function finishActive(terminal = false) {
+      const turnId = activeTurn == null ? void 0 : activeTurn.turnId;
+      const target = activeTurnProcess;
+      if (turnId && terminal !== "completed") {
+        const terminated = () => emit({ type: "turn-terminated", turnId });
+        if (terminal || target && exitedProcesses.has(target)) terminated();
+        else if (activeTurnDispatched && target) {
+          let notified = false;
+          target.on("exit", () => {
+            if (!notified) {
+              notified = true;
+              terminated();
+            }
+          });
+          if (proc === target) void discardRuntime();
+          else {
+            try {
+              target.kill();
+            } catch {
+            }
+          }
+        }
+      }
+      activeTurnProcess = null;
       clearNoProgressWarning();
       const resolve = activeResolve;
       activeResolve = null;
@@ -31043,7 +31068,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             }
           } : {}
         });
-        finishActive();
+        finishActive(true);
         return;
       }
       if (!activeAssistantText && typeof message.result === "string" && message.result) {
@@ -31053,9 +31078,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       transcript.push({ role: "assistant", text: activeAssistantText });
       emit({
         type: "turn-end",
+        turnId: activeTurn == null ? void 0 : activeTurn.turnId,
         stopReason: message.stop_reason || (message.subtype === "success" ? "end_turn" : String(message.subtype || "end_turn"))
       });
-      finishActive();
+      finishActive("completed");
     }
     function handleCliMessage(message) {
       if (!message || typeof message !== "object") return;
@@ -31188,7 +31214,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
         const resolvedLang = currentLang();
         const resolved = await resolveClaude({ platform: adapter, env, lang: resolvedLang });
-        if (activeRun === null) throw cancelledStartError();
+        if (activeTurn !== turn) throw cancelledStartError();
         if (!(resolved == null ? void 0 : resolved.ok)) {
           const classification = classifyErrorCode({ resolutionCode: resolved == null ? void 0 : resolved.code });
           const resolution = boundedResolution((resolved == null ? void 0 : resolved.resolution) || resolved);
@@ -31269,6 +31295,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           stderrDeltaRedactor.feed(chunk);
         });
         (_i = spawnedProc.on) == null ? void 0 : _i.call(spawnedProc, "exit", (code, signal) => {
+          exitedProcesses.add(spawnedProc);
           handleExit(spawnedProc, generation, code, signal);
         });
         (_j = spawnedProc.on) == null ? void 0 : _j.call(spawnedProc, "error", (error) => {
@@ -31403,7 +31430,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           role: "user",
           content: [{ type: "text", text: withAttachmentManifest(turn.text, turn.attachments) }]
         }
-      })) emitTurnProgress("dispatch");
+      })) {
+        activeTurnProcess = proc;
+        emitTurnProgress("dispatch");
+      }
     }
     async function sendUser(input) {
       if (activeRun) return activeRun;
@@ -31446,6 +31476,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const userText = withAttachmentManifest(turn.text, turn.attachments);
       transcript.push({ role: "user", text: turn.text });
       activeTurnDispatched = true;
+      activeTurnProcess = proc;
       if (writeMessage({
         type: "user",
         message: {
@@ -31465,6 +31496,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       void discardRuntime();
     }
     function reset() {
+      if (activeRun) stop();
       void discardRuntime({
         clearTranscript: true,
         clearSession: true,
@@ -32037,6 +32069,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let activeTurn = null;
     let activeTurnAccepted = false;
     let activeTurnDispatched = false;
+    let activeTurnProcess = null;
+    const exitedProcesses = /* @__PURE__ */ new WeakSet();
     let activeUserText = "";
     let activeUserRecorded = false;
     const pendingApprovals = /* @__PURE__ */ new Map();
@@ -32113,7 +32147,49 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         } : {}
       };
     }
-    function finishActive() {
+    function retireRuntime() {
+      runtimeGeneration += 1;
+      if (threadId) adoptedThreadId = threadId;
+      threadId = null;
+      currentTurnId = null;
+      preambleSent = false;
+      const current = proc;
+      proc = null;
+      const currentRpc = rpc;
+      rpc = null;
+      startPromise = null;
+      initializePromise = null;
+      initialized = false;
+      currentRpc == null ? void 0 : currentRpc.close(new Error("Codex turn ended"));
+      try {
+        current == null ? void 0 : current.kill();
+      } catch {
+      }
+    }
+    function finishActive(terminal = false) {
+      const turnId = activeTurn == null ? void 0 : activeTurn.turnId;
+      const target = activeTurnProcess;
+      if (turnId && terminal !== "completed") {
+        const terminated = () => emit({ type: "turn-terminated", turnId });
+        if (terminal || target && exitedProcesses.has(target)) terminated();
+        else if (activeTurnDispatched && target) {
+          let notified = false;
+          target.on("exit", () => {
+            if (!notified) {
+              notified = true;
+              terminated();
+            }
+          });
+          if (proc === target) retireRuntime();
+          else {
+            try {
+              target.kill();
+            } catch {
+            }
+          }
+        }
+      }
+      activeTurnProcess = null;
       const resolve = activeResolve;
       activeResolve = null;
       activeRun = null;
@@ -32163,6 +32239,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       var _a;
       const params = message.params || {};
       if (message.method === "turn/started") {
+        if (!activeRun) return;
         currentTurnId = params.turn && params.turn.id || params.turnId || null;
         resetProviderDeltaRedactor();
         if (activeTurn && activeTurn.turnId && !activeTurnAccepted) {
@@ -32215,20 +32292,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return;
       }
       if (message.method === "turn/completed") {
-        currentTurnId = null;
         const turn = params.turn && typeof params.turn === "object" ? params.turn : params;
+        if (!activeRun || !currentTurnId || (turn.id || params.turnId) !== currentTurnId) return;
+        currentTurnId = null;
         const cancelled = ["cancelled", "canceled", "interrupted"].includes(String(turn.status || "").toLowerCase());
         const completionFailure = turn.error || params.error || (turn.status === "failed" || turn.status === "error" ? { code: turn.status, message: "Codex turn failed." } : cancelled ? { code: turn.status, message: `Codex turn ${turn.status}.` } : null);
         if (completionFailure) {
           providerDeltaRedactor.discard();
-          void handleTurnFailure(completionFailure);
+          void handleTurnFailure(completionFailure, false, true);
           return;
         }
         providerDeltaRedactor.flush();
         drainApprovals();
-        emit({ type: "turn-end", stopReason: "end_turn" });
+        emit({ type: "turn-end", turnId: activeTurn == null ? void 0 : activeTurn.turnId, stopReason: "end_turn" });
         transcript.push({ role: "assistant", text: activeAssistantText });
-        finishActive();
+        finishActive("completed");
         return;
       }
       if (message.method === "error") {
@@ -32479,6 +32557,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           providerStderrRedactor.feed(chunk);
         });
         spawnedProc.on("exit", (code, signal) => {
+          exitedProcesses.add(spawnedProc);
           if (generation === runtimeGeneration && proc === spawnedProc) handleExit(code, signal);
         });
         spawnedProc.on("error", (error) => {
@@ -32615,8 +32694,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return params;
     }
     async function launchActiveTurn() {
+      const turn = activeTurn;
       await ensureThread();
-      if (!activeRun) return;
+      if (!activeRun || activeTurn !== turn) return;
       if (!activeUserRecorded) {
         transcript.push({ role: "user", text: activeUserText });
         activeUserRecorded = true;
@@ -32628,13 +32708,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         preambleSent = true;
       }
       activeTurnDispatched = true;
+      activeTurnProcess = proc;
       const turnRequest = rpc.request("turn/start", turnParams(activeTurn, turnText), turnTimeoutMs);
       emitTurnProgress("dispatch");
       turnRequest.catch((error) => {
-        void handleTurnFailure(taggedError(error, "method", "turn/start"), true);
+        if (activeTurn === turn) void handleTurnFailure(taggedError(error, "method", "turn/start"), true);
       });
     }
-    async function handleTurnFailure(error, turnStartRejected = false) {
+    async function handleTurnFailure(error, turnStartRejected = false, terminal = false) {
       if (!activeRun || turnFailureInFlight) return;
       turnFailureInFlight = true;
       try {
@@ -32688,7 +32769,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           ...activeTurnFailureFields(),
           ...audioRejected ? { dispatchState: "not-started" } : {}
         });
-        finishActive();
+        finishActive(terminal || audioRejected);
       } finally {
         turnFailureInFlight = false;
       }
@@ -32724,7 +32805,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       try {
         await launchActiveTurn();
       } catch (error) {
-        await handleTurnFailure(error);
+        if (activeTurn === turn) await handleTurnFailure(error);
       }
       return run;
     }
@@ -32758,9 +32839,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (activeRun) {
         emitAfterText({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
+        retireRuntime();
       }
     }
     function reset() {
+      if (activeRun) stop();
       stopping = true;
       runtimeGeneration += 1;
       drainApprovals();
@@ -34043,7 +34126,47 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       error.categoryCode = "CANCELLED";
       return error;
     }
-    function finishActive() {
+    let activeTurnProcess = null;
+    const exitedProcesses = /* @__PURE__ */ new WeakSet();
+    function retireTurnProcess(target) {
+      var _a;
+      if (proc === target) {
+        generation += 1;
+        adoptedSessionId = sessionId || adoptedSessionId;
+        sessionId = null;
+        sessionPromise = null;
+        serverPromise = null;
+        sseClosed = true;
+        sseStarted = false;
+        proc = null;
+        port = null;
+        baseUrl = "";
+        removeInstanceMarker(configHome);
+        configHome = "";
+      }
+      try {
+        (_a = target == null ? void 0 : target.kill) == null ? void 0 : _a.call(target);
+      } catch {
+      }
+    }
+    function finishActive(terminal = false) {
+      const turnId = activeTurn == null ? void 0 : activeTurn.turnId;
+      const target = activeTurnProcess;
+      if (turnId && terminal !== "completed") {
+        const terminated = () => emit({ type: "turn-terminated", turnId });
+        if (terminal || target && exitedProcesses.has(target)) terminated();
+        else if (messageDispatched && target) {
+          let notified = false;
+          target.on("exit", () => {
+            if (!notified) {
+              notified = true;
+              terminated();
+            }
+          });
+          retireTurnProcess(target);
+        }
+      }
+      activeTurnProcess = null;
       clearStallWatchdog();
       if (!activeResolve) {
         activeRun = null;
@@ -34298,6 +34421,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return home;
     }
     function handleExit(exitedProc, processGeneration, home, code, signal) {
+      exitedProcesses.add(exitedProc);
       if (processGeneration !== generation || proc !== exitedProc) return;
       const wasStopping = stopping;
       generation += 1;
@@ -34733,9 +34857,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           if (!activeRun || !turnStarted) return;
           assistantDeltaRedactor.flush();
           drainApprovals();
-          emit({ type: "turn-end", stopReason: "end_turn" });
+          emit({ type: "turn-end", turnId: activeTurn == null ? void 0 : activeTurn.turnId, stopReason: "end_turn" });
           transcript.push({ role: "assistant", text: activeAssistantText });
-          finishActive();
+          finishActive("completed");
         }
         return;
       }
@@ -34860,7 +34984,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           ...activeTurnFailureFields(),
           ...mediaRejected ? { dispatchState: "not-started" } : {}
         });
-        finishActive();
+        finishActive(true);
         return;
       }
       if (/permission/i.test(String(type)) && /ask/i.test(String(type))) {
@@ -34964,6 +35088,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       };
       try {
         messageDispatched = true;
+        activeTurnProcess = proc;
         armStallWatchdog();
         const controller = new AbortController();
         messageAbortController = controller;
@@ -34978,6 +35103,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         adoptedSessionId = null;
         sessionWasAdopted = false;
         const replacementId = await ensureSession();
+        if (activeTurn !== turn || stopRequested) return;
         const controller = new AbortController();
         messageAbortController = controller;
         const replacementRequest = postJson(
@@ -35026,6 +35152,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       const turnRun = activeRun;
       try {
         const id = await prepareTurnSession();
+        if (activeTurn !== turn || stopRequested) return;
         const userText = turn.text;
         transcript.push({ role: "user", text: userText });
         if (turn.turnId) {
@@ -35155,12 +35282,16 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       await Promise.allSettled(rejects);
     }
     async function stop() {
+      const turn = activeTurn;
       if (activeRun) stopRequested = true;
       messageAbortController == null ? void 0 : messageAbortController.abort();
       await finalizeActiveTurnRequests();
-      if (activeRun) {
+      if (activeRun && activeTurn === turn) {
         emitAfterText({ type: "error", kind: "aborted", code: "TURN_ABORTED", message: "Turn aborted.", ...activeTurnFailureFields() });
+        const target = proc;
+        const dispatched = messageDispatched;
         finishActive();
+        if (!dispatched) retireTurnProcess(target);
       }
     }
     function reset() {
@@ -38025,6 +38156,41 @@ ${command}`
   function createHostConversation({ getHost, getWorkContext } = {}) {
     let current = null;
     let currentApi = null;
+    let activeTurn = null;
+    function turnHeldError() {
+      return Object.assign(new Error("The current turn has not confirmed completion."), { code: "TURN_STILL_ACTIVE" });
+    }
+    async function startTurn(turnId) {
+      if (activeTurn) throw turnHeldError();
+      const api = conversationApi(getHost);
+      if (!current || typeof (api == null ? void 0 : api.startTurn) !== "function") throw rebindError(current == null ? void 0 : current.id);
+      bindCurrent(api);
+      const turn = { conversationId: current.id, turnId, api };
+      activeTurn = turn;
+      try {
+        const conversation = await api.startTurn(turn.conversationId, turnId);
+        if (!conversation) throw rebindError(turn.conversationId);
+        current = conversation;
+        return turn;
+      } catch (error) {
+        if (activeTurn === turn) activeTurn = null;
+        throw error;
+      }
+    }
+    async function endTurn(turn) {
+      if (!turn || activeTurn !== turn) return false;
+      if (!turn.ending) {
+        turn.ending = Promise.resolve().then(() => turn.api.endTurn(turn.conversationId, turn.turnId)).then((ended) => {
+          if (!ended) throw turnHeldError();
+          if (activeTurn === turn) activeTurn = null;
+          return true;
+        }).catch((error) => {
+          turn.ending = null;
+          throw error;
+        });
+      }
+      return turn.ending;
+    }
     function bindCurrent(conversations) {
       if (!current) return null;
       if (currentApi === conversations) return current;
@@ -38072,6 +38238,7 @@ ${command}`
     }
     function closeConversation() {
       if (!current) return false;
+      if (activeTurn) throw turnHeldError();
       const closing = current;
       const conversations = conversationApi(getHost);
       if (!conversations || typeof conversations.close !== "function") throw rebindError(closing.id);
@@ -38097,7 +38264,10 @@ ${command}`
       closeConversation,
       currentPath,
       currentId,
-      currentConversation
+      currentConversation,
+      startTurn,
+      endTurn,
+      currentTurn: () => activeTurn
     };
   }
 
@@ -39095,6 +39265,8 @@ ${command}`
     const attachmentOperationsRef = import_react49.default.useRef(/* @__PURE__ */ new Map());
     const pendingTurnRef = import_react49.default.useRef(null);
     const acceptedTurnRef = import_react49.default.useRef(null);
+    const hostTurnRef = import_react49.default.useRef(null);
+    const [turnHoldError, setTurnHoldError] = import_react49.default.useState("");
     const preserveAttachmentDraftRef = import_react49.default.useRef(false);
     import_react49.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
     const backendMigration = import_react49.default.useMemo(() => migrateBackendPref(window.localStorage), []);
@@ -39427,9 +39599,49 @@ ${draft.baseUrl}`)) return;
       setChatEntries(chatEntriesRef.current);
       (_a2 = sessionControllerRef.current) == null ? void 0 : _a2.recordEntries(chatEntriesRef.current, event);
     }, []);
-    const handleChatEvent = import_react49.default.useCallback((evt) => {
+    const finishHostTurn = import_react49.default.useCallback((turn) => {
+      if (!turn || hostTurnRef.current !== turn) return Promise.resolve();
+      turn.confirmed = true;
+      if (!turn.ending) turn.ending = hostConversation.endTurn(turn.token).then(() => {
+        if (hostTurnRef.current === turn) {
+          hostTurnRef.current = null;
+          setTurnHoldError("");
+        }
+        turn.resolveEnd();
+      }).catch((error) => {
+        turn.ending = null;
+        setTurnHoldError(error.message || String(error));
+      });
+      return turn.ending;
+    }, [hostConversation]);
+    const stopActiveHostTurn = import_react49.default.useCallback(async () => {
+      const turn = hostTurnRef.current;
+      if (!turn) return;
+      turn.cancelled = true;
+      setTurnHoldError(langRef.current === "zh" ? "\u6B63\u5728\u7B49\u5F85\u4EFB\u52A1\u786E\u8BA4\u7ED3\u675F\uFF0C\u5DE5\u7A0B\u4ECD\u7531\u5F53\u524D\u56DE\u5408\u5360\u7528\u3002" : "Waiting for the task to stop; this turn still holds the project.");
+      try {
+        if (turn.confirmed) await finishHostTurn(turn);
+        else await turn.backend.stop();
+        await turn.ended;
+      } catch (error) {
+        setTurnHoldError(error.message || String(error));
+        throw error;
+      }
+    }, [finishHostTurn]);
+    const handleChatEvent = import_react49.default.useCallback((evt, backendId) => {
       var _a2;
       const pending = pendingTurnRef.current;
+      const held = hostTurnRef.current;
+      if (held && backendId && backendId !== held.backendId) return;
+      if (evt.turnId && evt.turnId !== (pending == null ? void 0 : pending.turnId) && evt.turnId !== (held == null ? void 0 : held.turnId)) return;
+      if (evt.type === "turn-end" || evt.type === "turn-terminated") {
+        if (!held || evt.turnId !== held.turnId || backendId !== held.backendId) return;
+        void finishHostTurn(held);
+        if (evt.type === "turn-terminated") return;
+      } else if (evt.type === "error" && held && evt.turnId === held.turnId) {
+        if (evt.dispatchState === "not-started") void finishHostTurn(held);
+        else setTurnHoldError(langRef.current === "zh" ? "\u4EFB\u52A1\u7ED3\u675F\u5C1A\u672A\u786E\u8BA4\uFF0C\u5DE5\u7A0B\u4ECD\u7531\u5F53\u524D\u56DE\u5408\u5360\u7528\u3002" : "Task completion is unconfirmed; this turn still holds the project.");
+      }
       setTurnStage((current) => reduceTurnStage(current, evt, {
         pendingTurnId: pending == null ? void 0 : pending.turnId
       }));
@@ -39536,7 +39748,7 @@ ${draft.baseUrl}`)) return;
         setTurnProgress(null);
       }
       commitChatEntries((entries) => reduceEvent(entries, evt), evt);
-    }, [commitChatEntries, releaseTurnAttachments]);
+    }, [commitChatEntries, releaseTurnAttachments, finishHostTurn]);
     const claudeBackend = import_react49.default.useMemo(() => createClaudeAgentBackend({
       platform,
       getMcpSpec: getMcpSpec2,
@@ -39548,7 +39760,7 @@ ${draft.baseUrl}`)) return;
       getThinking: () => runtimeRef.current.thinking,
       getChannel: () => "subscription",
       getLang: () => langRef.current,
-      onEvent: handleChatEvent
+      onEvent: (event) => handleChatEvent(event, "subscription")
     }), [
       getMcpSpec2,
       getWorkContext,
@@ -39568,7 +39780,7 @@ ${draft.baseUrl}`)) return;
       getServerInstructions: () => mcp.getServerInstructions(),
       getLang: () => langRef.current,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
-      onEvent: handleChatEvent
+      onEvent: (event) => handleChatEvent(event, "codex")
     }), [extRoot, getMcpSpec2, getWorkContext, mcp, handleChatEvent, platform]);
     const openCodeBackend = import_react49.default.useMemo(() => createOpenCodeBackend({
       platform,
@@ -39581,7 +39793,7 @@ ${draft.baseUrl}`)) return;
       getSensitiveValues: () => providerSensitiveValuesRef.current,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       getLang: () => langRef.current,
-      onEvent: handleChatEvent
+      onEvent: (event) => handleChatEvent(event, "opencode")
     }), [extRoot, getMcpSpec2, getWorkContext, mcp, handleChatEvent, platform]);
     runtimeRef.current = {
       model: effectiveModel,
@@ -39616,10 +39828,7 @@ ${draft.baseUrl}`)) return;
       now: () => Date.now(),
       uuid: randomProviderCredentialId,
       deps: {
-        stopActiveTurn: () => {
-          var _a2, _b;
-          return (_b = (_a2 = activeBackendInstanceRef.current) == null ? void 0 : _a2.stop) == null ? void 0 : _b.call(_a2);
-        },
+        stopActiveTurn: stopActiveHostTurn,
         resetActiveBackend: () => {
           var _a2, _b;
           return (_b = (_a2 = activeBackendInstanceRef.current) == null ? void 0 : _a2.reset) == null ? void 0 : _b.call(_a2);
@@ -39686,6 +39895,7 @@ ${draft.baseUrl}`)) return;
     }), [
       elicitationCoordinator,
       hostConversation,
+      stopActiveHostTurn,
       resetAttachmentDraftSession,
       sessionStore
     ]);
@@ -39947,20 +40157,27 @@ ${draft.baseUrl}`)) return;
         pendingSessionLoadRef.current = null;
       }
       if (!decision.reset) return;
-      preserveAttachmentDraftRef.current = !pendingTurnRef.current && !pendingSessionLoad;
-      claudeBackend.reset();
-      codexBackend.reset();
-      openCodeBackend.reset();
-      resetAttachmentDraftSession();
-      setChatStreaming(false);
-      setThinkingActive(false);
-      setTurnStage(null);
-      setTurnProgress(null);
-      if (pendingSessionLoad) return;
-      setSessionModel(null);
-      setSessionEffort(null);
-      setSessionFast(null);
-      backendResetPromiseRef.current = sessionController.createSession();
+      let current = true;
+      backendResetPromiseRef.current = (async () => {
+        await stopActiveHostTurn();
+        if (!current) return;
+        preserveAttachmentDraftRef.current = !pendingTurnRef.current && !pendingSessionLoad;
+        await Promise.all([claudeBackend.reset(), codexBackend.reset(), openCodeBackend.reset()]);
+        if (!current) return;
+        resetAttachmentDraftSession();
+        setChatStreaming(false);
+        setThinkingActive(false);
+        setTurnStage(null);
+        setTurnProgress(null);
+        if (pendingSessionLoad) return;
+        setSessionModel(null);
+        setSessionEffort(null);
+        setSessionFast(null);
+        await sessionController.createSession();
+      })().catch((error) => setTurnHoldError(error.message || String(error)));
+      return () => {
+        current = false;
+      };
     }, [
       effective.backend,
       backendPref,
@@ -39968,7 +40185,8 @@ ${draft.baseUrl}`)) return;
       codexBackend,
       openCodeBackend,
       resetAttachmentDraftSession,
-      sessionController
+      sessionController,
+      stopActiveHostTurn
     ]);
     import_react49.default.useEffect(() => {
       var _a2;
@@ -39986,9 +40204,9 @@ ${draft.baseUrl}`)) return;
         disposeProbe == null ? void 0 : disposeProbe();
       };
     }, [backendPref, status.state, providerInit.state, workDir, sessionSnapshot.activeId, hostConversation, runOpenCodeProbe]);
-    const sendChat = (input) => {
+    const sendChat = async (input) => {
       var _a2;
-      if (pendingTurnRef.current || catalogEmpty) return;
+      if (pendingTurnRef.current || hostTurnRef.current || catalogEmpty) return;
       let turn;
       try {
         turn = normalizeTurnInput(input);
@@ -40027,8 +40245,21 @@ ${draft.baseUrl}`)) return;
         });
         return;
       }
+      const held = { turnId: turn.turnId, backendId: effective.backend, backend: activeBackend, token: null };
+      held.ended = new Promise((resolve) => {
+        held.resolveEnd = resolve;
+      });
+      hostTurnRef.current = held;
+      let acquired = false;
       try {
         setTurnStage("connect");
+        setTurnHoldError("");
+        held.token = await hostConversation.startTurn(turn.turnId);
+        acquired = true;
+        if (held.cancelled) {
+          handleChatEvent({ type: "error", code: "TURN_ABORTED", message: "Turn aborted.", turnId: turn.turnId, dispatchState: "not-started" });
+          return;
+        }
         const result = activeBackend.sendUser(turn);
         Promise.resolve(result).catch((error) => {
           var _a3;
@@ -40043,6 +40274,10 @@ ${draft.baseUrl}`)) return;
           });
         });
       } catch (error) {
+        if (!acquired && hostTurnRef.current === held) {
+          hostTurnRef.current = null;
+          held.resolveEnd();
+        }
         handleChatEvent({
           type: "error",
           kind: (error == null ? void 0 : error.kind) || "backend",
@@ -40054,7 +40289,7 @@ ${draft.baseUrl}`)) return;
       }
     };
     const newChatSession = async (skipConfirmation = false) => {
-      if (!skipConfirmation && (pendingTurnRef.current || chatStreaming)) {
+      if (!skipConfirmation && (pendingTurnRef.current || hostTurnRef.current || chatStreaming)) {
         setConfirmChatNavigation({ kind: "new" });
         return;
       }
@@ -40095,7 +40330,7 @@ ${draft.baseUrl}`)) return;
     panelLogRef.current = pushLog;
     const switchChatSession = import_react49.default.useCallback(async (id) => {
       if (id === sessionController.snapshot().activeId) return;
-      if (pendingTurnRef.current || chatStreaming) {
+      if (pendingTurnRef.current || hostTurnRef.current || chatStreaming) {
         setConfirmChatNavigation({ kind: "switch", id });
         return;
       }
@@ -40127,7 +40362,6 @@ ${draft.baseUrl}`)) return;
       const request = confirmChatNavigation;
       setConfirmChatNavigation(null);
       if (!request) return;
-      if (pendingTurnRef.current || chatStreaming) activeBackend == null ? void 0 : activeBackend.stop();
       if (request.kind === "new") await newChatSession(true);
       else await switchChatSessionNow(request.id);
     }, [activeBackend, chatStreaming, confirmChatNavigation, newChatSession, switchChatSessionNow]);
@@ -40390,7 +40624,7 @@ ${draft.baseUrl}`)) return;
         }
       );
     }
-    const statusForBar = hostConversationError ? "error" : paused ? "paused" : status.state === "ok" ? "connected" : status.state === "starting" ? "waiting" : "error";
+    const statusForBar = hostConversationError || turnHoldError ? "error" : paused ? "paused" : status.state === "ok" ? "connected" : status.state === "starting" ? "waiting" : "error";
     const tabs = [
       { id: "chat", icon: "message-square", label: t.chat },
       { id: "activity", icon: "list-checks", label: t.activity },
@@ -40399,7 +40633,7 @@ ${draft.baseUrl}`)) return;
     ];
     const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
     const chatWorkDir = ((_a = hostConversation.currentConversation()) == null ? void 0 : _a.workDir) || workDir;
-    const composerDisabled = !chatWorkDir || status.state !== "ok" || paused || effective.backend === "none" || Boolean(hostConversationError) || catalogEmpty;
+    const composerDisabled = !chatWorkDir || status.state !== "ok" || paused || effective.backend === "none" || Boolean(hostConversationError || turnHoldError) || catalogEmpty;
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
     const activeSessionMeta = sessionSnapshot.sessions.find(
       (meta) => meta.id === sessionSnapshot.activeId
@@ -40410,7 +40644,7 @@ ${draft.baseUrl}`)) return;
         StatusBar,
         {
           status: statusForBar,
-          label: hostConversationError ? `${t.error} \xB7 ${t.approvalSyncError}` : paused ? t.paused : status.state === "ok" ? `${t.connected} \xB7 127.0.0.1:${status.port}` : status.state === "error" ? `${t.error} \xB7 ${status.error || ""}` : t.starting,
+          label: turnHoldError || (hostConversationError ? `${t.error} \xB7 ${t.approvalSyncError}` : paused ? t.paused : status.state === "ok" ? `${t.connected} \xB7 127.0.0.1:${status.port}` : status.state === "error" ? `${t.error} \xB7 ${status.error || ""}` : t.starting),
           onStatusClick: () => {
             setDrawerOpen(true);
           },
@@ -40449,11 +40683,15 @@ ${draft.baseUrl}`)) return;
             sessionTitle,
             onOpenSessions: () => setSessionsOpen(true),
             composerDisabled,
-            disabledHint: !chatWorkDir ? lang === "zh" ? "\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\u3002" : "Choose a work directory in Settings first." : hostConversationError ? t.approvalSyncError : paused ? t.pausedHint : catalogEmpty ? modelNotice : composerDisabled ? backendDisabledHint : fallbackNotice,
-            noticeActionLabel: paused ? t.resume : t.goSettings,
-            onNoticeAction: () => paused ? togglePause() : setTab("settings"),
+            disabledHint: turnHoldError || (!chatWorkDir ? lang === "zh" ? "\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\u3002" : "Choose a work directory in Settings first." : hostConversationError ? t.approvalSyncError : paused ? t.pausedHint : catalogEmpty ? modelNotice : composerDisabled ? backendDisabledHint : fallbackNotice),
+            noticeActionLabel: turnHoldError ? lang === "zh" ? "\u505C\u6B62\u4EFB\u52A1" : "Stop task" : paused ? t.resume : t.goSettings,
+            onNoticeAction: () => turnHoldError ? void stopActiveHostTurn().catch(() => {
+            }) : paused ? togglePause() : setTab("settings"),
             onSend: sendChat,
-            onStop: () => activeBackend == null ? void 0 : activeBackend.stop(),
+            onStop: () => {
+              void stopActiveHostTurn().catch(() => {
+              });
+            },
             onApprove: (id, decision) => activeBackend == null ? void 0 : activeBackend.approve(id, decision),
             onAnswerQuestion: (id, result) => (activeBackend == null ? void 0 : activeBackend.answerQuestion) && activeBackend.answerQuestion(id, result),
             onNewSession: newChatSession,

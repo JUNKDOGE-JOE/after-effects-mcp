@@ -8,9 +8,11 @@ const test = require('node:test');
 const vm = require('node:vm');
 const { InstanceRegistry } = require('./instance-registry');
 const { createInstanceService, PROJECT_READ, changesProject } = require('./instance-service');
+const { ConversationStore } = require('./mcp/conversations');
+const mountMcp = require('./mcp');
 
 function reply(value) { return { payload: { ok: true, result: JSON.stringify(value) } }; }
-function context() { return { session: { id: 'shared-connection', clientName: 'test' }, policy: { approvalTier: null } }; }
+function context() { return { session: { id: 'shared-connection', clientName: 'test' }, conversation: null, policy: { approvalTier: null } }; }
 function deferred() {
     let resolve;
     const promise = new Promise((done) => { resolve = done; });
@@ -77,11 +79,10 @@ test('a reader can explicitly take over writes without learning another chat han
     const { service } = await fixture(t);
     const old = await bind(service, 'write');
     const reader = await bind(service, 'read');
-    await assert.rejects(service.workspace('transfer', { context_id: reader.context_id }, context()), { code: 'TRANSFER_CONFIRMATION_REQUIRED' });
-    const transferred = await service.workspace('transfer', { context_id: reader.context_id, confirm: true }, context());
+    const transferred = await service.workspace('transfer', { context_id: reader.context_id }, context());
     assert.equal(transferred.context_id, reader.context_id);
     assert.equal(transferred.access, 'write');
-    await assert.rejects(route(service, old, 'ae_exec', { code: 'ignored' }), { code: 'WORKSPACE_READONLY' });
+    assert.equal((await route(service, old, 'ae_exec', { code: 'return 1;' })).contextId, old.context_id);
     await service.workspace('release', { context_id: reader.context_id }, context());
     const acquired = await service.workspace('bind', { context_id: old.context_id, access: 'write' }, context());
     assert.equal(acquired.context_id, old.context_id);
@@ -98,10 +99,75 @@ test('explicit contexts isolate read and write rights even with the same client 
     assert.equal(current.contextId, reader.context_id);
     await assert.rejects(route(service, reader, 'ae_exec', { code: 'return 1;' }), { code: 'WORKSPACE_READONLY' });
     assert.equal((await route(service, writer, 'ae_exec', { code: 'return 1;' })).contextId, writer.context_id);
-    await assert.rejects(bind(service, 'write'), { code: 'WORKSPACE_BUSY' });
+    assert.equal((await bind(service, 'write')).access, 'write');
     await service.workspace('transfer', { context_id: writer.context_id, target_context_id: reader.context_id }, context());
     await assert.rejects(route(service, writer, 'ae_exec', { code: 'return 1;' }), { code: 'WORKSPACE_READONLY' });
     assert.equal((await route(service, reader, 'ae_exec', { code: 'return 1;' })).contextId, reader.context_id);
+});
+
+test('conversation lifecycle protects full panel turns and leaves external calls and idle sessions independent', async t => {
+    const { service, root } = await fixture(t);
+    const store = new ConversationStore(null, service.conversationTurns);
+    const a = store.create({ label: 'a', workDir: root });
+    const b = store.create({ label: 'b', workDir: root });
+    const panel = (conversation) => ({ ...context(), conversation });
+    const call = (conversation, args = {}, panelUi = false) => service.routeTool({ name: 'ae_exec', arguments: args },
+        { ...panel(conversation), panelUi }, async current => ({ result: { structuredContent: { ok: true, workDir: current.workDir } } }));
+    await call(a);
+    const external = await bind(service, 'write');
+    await route(service, external, 'ae_exec', {});
+    const active = await store.startTurn(a.id, 'a-1');
+    await assert.rejects(route(service, external, 'ae_exec', {}), { code: 'WORKSPACE_BUSY' });
+    assert.equal(store.close(a.id), false);
+    const explicit = await service.workspace('bind', { access: 'write' }, panel(active));
+    await call(active, { context_id: explicit.context_id });
+    assert.equal(await store.endTurn(a.id, 'a-1'), true);
+    await assert.rejects(call(active), { code: 'TURN_INACTIVE' });
+    await call(store.getById(a.id), {}, true);
+    await route(service, external, 'ae_exec', {});
+    await store.startTurn(b.id, 'b-1');
+    assert.equal(await store.endTurn(a.id, 'a-1'), false);
+    assert.equal(service.workspaces.inspect().activeTurn.ownerId, b.id);
+    await store.endTurn(b.id, 'b-1');
+    assert.equal(store.close(a.id), true);
+    await route(service, external, 'ae_exec', {});
+});
+
+test('only the in-process dispatch marks manual panel calls, never an HTTP request argument', async () => {
+    let post;
+    const flags = [];
+    const app = { get() {}, delete() {}, use() {}, all() {}, post: (...args) => { post = args.at(-1); } };
+    const api = mountMcp(app, { statePaths: {}, routeTool: async (params, ctx) => {
+        flags.push(ctx.panelUi); return { result: { content: [] } };
+    } });
+    let sessionId;
+    const req = { get: () => sessionId, socket: { localPort: 11488 } };
+    sessionId = (await api.dispatch(req, { jsonrpc: '2.0', id: 1, method: 'initialize' }, null)).session.id;
+    const body = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'ae_exec', arguments: { panelUi: true } } };
+    await api.dispatch(req, body, null);
+    const res = { set() {}, status() { return this; }, json() {}, end() {} };
+    await post({ ...req, body }, res);
+    assert.deepEqual(flags, [true, false]);
+});
+
+test('a streaming conversation can explicitly rebind a changed project while its old context stays invalid', async t => {
+    const { service, state, root } = await fixture(t);
+    const store = new ConversationStore(null, service.conversationTurns);
+    const conversation = await store.startTurn(store.create({ label: 'save-as', workDir: root }).id, 'turn-1');
+    const ctx = { ...context(), conversation };
+    const oldId = service.workspaces.inspect().activeTurn.contextId;
+    state.projectPath = path.join(root, 'saved-as.aep');
+    const reader = await service.workspace('bind', { access: 'read' }, ctx);
+    assert.equal(service.workspaces.inspect().activeTurn, null);
+    const rebound = await service.workspace('bind', { access: 'write' }, ctx);
+    await service.routeTool({ name: 'ae_exec', arguments: { context_id: rebound.context_id } }, ctx, async current => current);
+    await assert.rejects(route(service, { context_id: oldId }, 'ae_exec', {}), { code: 'SOURCE_PROJECT_CHANGED' });
+    await assert.rejects(route(service, reader, 'ae_exec', {}), { code: 'WORKSPACE_READONLY' });
+    await store.endTurn(conversation.id, 'turn-1');
+    await assert.rejects(service.workspace('bind', { access: 'write' }, ctx), { code: 'TURN_INACTIVE' });
+    await store.startTurn(conversation.id, 'turn-2');
+    assert.equal(service.workspaces.inspect().activeTurn.contextId, rebound.context_id);
+    await store.endTurn(conversation.id, 'turn-2');
 });
 
 test('a live project change invalidates old contexts and a new bind updates the registered workspace', async (t) => {

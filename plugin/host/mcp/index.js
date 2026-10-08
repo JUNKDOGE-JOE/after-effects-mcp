@@ -108,7 +108,7 @@ function mountMcp(app, deps) {
         logger: deps.hostLog && typeof deps.hostLog.record === 'function'
             ? function (event) { deps.hostLog.record(event); } : null,
     });
-    const conversations = new ConversationStore(sessions);
+    const conversations = new ConversationStore(sessions, deps.conversationTurns);
     const approvals = deps.approvals || new ApprovalQueue({ timeoutMs: deps.approvalTimeoutMs });
     let checkpointStore = deps.checkpointStore || null;
     let recoveryStore = deps.recoveryStore || null;
@@ -201,7 +201,7 @@ function mountMcp(app, deps) {
         });
     }
 
-    async function dispatch(req, message, conversation) {
+    async function dispatch(req, message, conversation, panelUi = false) {
         if (jsonrpc.isResponse(message)) return { status: 202, response: null };
         const problem = jsonrpc.validateMessage(message);
         // MCP SDKs treat a non-2xx response as a transport failure and discard
@@ -271,6 +271,7 @@ function mountMcp(app, deps) {
                 session,
                 port: req.socket.localPort,
                 conversation: currentConversation,
+                panelUi,
                 policy: currentConversation ? currentConversation.policy : EXTERNAL_POLICY,
                 arguments: params.arguments,
             });
@@ -360,7 +361,8 @@ function mountMcp(app, deps) {
         res.status(400).json(jsonrpc.error(null, -32700, 'Parse error'));
     });
     app.all(MCP_PATHS, gate, routeConversation, function (req, res) { res.status(405).end(); });
-    return { sessions, conversations, approvals, dispatch, getCheckpointStore: function () {
+    return { sessions, conversations, approvals,
+        dispatch: (req, message, conversation) => dispatch(req, message, conversation, true), getCheckpointStore: function () {
         if (!checkpointStore) checkpointStore = new CheckpointStore(checkpointStoreOptions);
         return checkpointStore;
     } };

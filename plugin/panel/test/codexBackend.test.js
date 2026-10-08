@@ -132,6 +132,64 @@ async function startTurn(
   return { pending, proc, thread, turn };
 }
 
+test('Codex stops release only after owned process exit and preserve the original turn identity', async () => {
+  const h = makeBackend();
+  const first = await startTurn(h.backend, h.spawned);
+  first.proc.emit({ method: 'turn/started', params: { turn: { id: 'remote-old' } } });
+  first.proc.emit({ method: 'turn/completed', params: { turn: { id: 'other', status: 'completed' } } });
+  assert.equal(h.events.some((event) => event.type === 'turn-end'), false);
+  h.backend.stop();
+  await first.pending;
+  assert.equal(h.events.some((event) => event.type === 'turn-terminated'), false);
+  assert.equal(first.proc.killCount, 1);
+  const next = h.backend.sendUser({ turnId: 'next', text: 'continue', attachments: [] });
+  await flush();
+  const proc = h.spawned[1].proc;
+  proc.emit({ id: parseWrites(proc)[0].id, result: {} });
+  await flush();
+  const resume = parseWrites(proc)[1];
+  assert.equal(resume.method, 'thread/resume');
+  proc.emit({ id: resume.id, result: { threadId: 'thread_1' } });
+  await flush();
+  first.proc.exit();
+  first.proc.exit();
+  assert.deepEqual(h.events.filter((event) => event.type === 'turn-terminated').map((event) => event.turnId), ['turn_1']);
+  proc.emit({ method: 'turn/started', params: { turn: { id: 'remote-new' } } });
+  proc.emit({ method: 'turn/completed', params: { turn: { id: 'remote-new', status: 'completed' } } });
+  await next;
+  assert.equal(h.events.find((event) => event.type === 'turn-end').turnId, 'next');
+  h.backend.reset();
+});
+
+test('Codex distinguishes confirmed failure from an unconfirmed process error', async () => {
+  for (const terminal of [true, false]) {
+    const h = makeBackend();
+    const { proc, pending } = await startTurn(h.backend, h.spawned);
+    proc.emit({ method: 'turn/started', params: { turn: { id: 'remote' } } });
+    if (terminal) proc.emit({ method: 'turn/completed', params: { turn: { id: 'remote', status: 'failed' } } });
+    else proc.error(new Error('transport failed'));
+    await pending;
+    assert.equal(h.events.some((event) => event.type === 'turn-terminated'), terminal);
+    if (!terminal) proc.exit(1);
+    const events = h.events.filter((event) => ['error', 'turn-terminated'].includes(event.type));
+    assert.deepEqual(events.map((event) => [event.type, event.turnId]), [['error', 'turn_1'], ['turn-terminated', 'turn_1']]);
+    h.backend.reset();
+  }
+});
+
+test('Codex cancellation during startup cannot dispatch after the resolution completes', async () => {
+  let resolve;
+  const h = makeBackend({ resolveCli: () => new Promise((done) => { resolve = done; }) });
+  const pending = h.backend.sendUser({ turnId: 'starting', text: 'hello', attachments: [] });
+  await flush();
+  h.backend.stop();
+  resolve({ ok: true, cliPath: 'C:\\Tools\\codex.exe' });
+  await pending;
+  assert.equal(h.spawned.length, 0);
+  assert.equal(h.events.find((event) => event.type === 'error').dispatchState, 'not-started');
+  assert.equal(h.events.some((event) => event.type === 'turn-terminated'), false);
+});
+
 test('GPT-6 Sol and Luna send their selected model and effort to Codex', async () => {
   for (const [model, effort] of [['gpt-6-sol', 'ultra'], ['gpt-6-luna', 'max']]) {
     const h = makeBackend({ state: { model, effort } });
@@ -200,7 +258,8 @@ test('Codex routes blank-MIME images and audio as media with the selected model'
       { type: 'localImage', path: 'C:\\tmp\\image.PNG' },
       { type: 'localAudio', path: 'C:\\tmp\\audio.WAV' },
     ]);
-    proc.emit({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+    proc.emit({ method: 'turn/started', params: { turn: { id: 'mime-remote' } } });
+    proc.emit({ method: 'turn/completed', params: { turn: { id: 'mime-remote', status: 'completed' } } });
     await pending;
   } finally { h.backend.reset(); }
 });
@@ -320,7 +379,7 @@ test('Codex reports cold-start stages before output and omits spawn on a warm tu
 
     first.proc.emit({ method: 'turn/started', params: { turn: { id: 'remote_1' } } });
     first.proc.emit({ method: 'item/agentMessage/delta', params: { delta: 'hello' } });
-    first.proc.emit({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+    first.proc.emit({ method: 'turn/completed', params: { turn: { id: 'remote_1', status: 'completed' } } });
     await first.pending;
     const acceptedIndex = events.findIndex((event) => event.type === 'turn-accepted');
     const textIndex = events.findIndex((event) => event.type === 'text-delta');
@@ -333,7 +392,7 @@ test('Codex reports cold-start stages before output and omits spawn on a warm tu
     const secondTurn = parseWrites(first.proc).at(-1);
     assert.equal(secondTurn.method, 'turn/start');
     first.proc.emit({ method: 'turn/started', params: { turn: { id: 'remote_2' } } });
-    first.proc.emit({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+    first.proc.emit({ method: 'turn/completed', params: { turn: { id: 'remote_2', status: 'completed' } } });
     await secondPending;
     assert.deepEqual(
       events.slice(boundary).filter((event) => event.type === 'turn-progress').map((event) => event.stage),
@@ -392,7 +451,7 @@ test('Codex flushes redacted assistant text before MCP tool start events', async
       beforeToolChunks.join(''),
     );
 
-    proc.emit({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
+    proc.emit({ method: 'turn/completed', params: { turn: { id: 'remote_text_order', status: 'completed' } } });
     await pending;
     assert.equal(
       h.events.filter((event) => event.type === 'text-delta').map((event) => event.text).join(''),
@@ -617,7 +676,8 @@ test('Codex maps all app-server cancellation spellings to CANCELLED', async () =
     const { backend, spawned, events } = makeBackend();
     try {
       const { pending, proc } = await startTurn(backend, spawned);
-      proc.emit({ method: 'turn/completed', params: { turn: { status } } });
+      proc.emit({ method: 'turn/started', params: { turn: { id: 'cancel-remote' } } });
+      proc.emit({ method: 'turn/completed', params: { turn: { id: 'cancel-remote', status } } });
       await pending;
       assert.equal(events.find((event) => event.type === 'error')?.code, 'CANCELLED');
     } finally {

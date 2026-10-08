@@ -213,6 +213,57 @@ function finishTurn(proc, resultLine = 99) {
   emitWire(proc, wire('B', resultLine));
 }
 
+test('Claude cancellation waits for process exit and does not terminate the resumed turn', async () => {
+  const h = makeHarness();
+  const first = h.backend.sendUser({ turnId: 'old', text: 'hello', attachments: [] });
+  await flush();
+  const proc = h.processes[0];
+  emitWire(proc, { type: 'system', subtype: 'init', session_id: 'saved-session' });
+  h.backend.stop();
+  await first;
+  assert.equal(h.events.some((event) => event.type === 'turn-terminated'), false);
+  const next = h.backend.sendUser({ turnId: 'next', text: 'continue', attachments: [] });
+  await flush();
+  assert.ok(h.spawns[1].args.includes('saved-session'));
+  proc.emit('exit', 0);
+  proc.emit('exit', 0);
+  assert.deepEqual(h.events.filter((event) => event.type === 'turn-terminated').map((event) => event.turnId), ['old']);
+  finishTurn(h.processes[1]);
+  await next;
+  assert.equal(h.events.find((event) => event.type === 'turn-end').turnId, 'next');
+  h.backend.reset();
+});
+
+test('Claude result errors terminate immediately but process errors wait for exit', async () => {
+  for (const terminal of [true, false]) {
+    const h = makeHarness();
+    const pending = h.backend.sendUser({ turnId: 'error-turn', text: 'hello', attachments: [] });
+    await flush();
+    const proc = h.processes[0];
+    emitWire(proc, { type: 'system', subtype: 'init' });
+    if (terminal) emitWire(proc, { type: 'result', is_error: true, result: 'upstream unavailable' });
+    else proc.emit('error', new Error('transport failed'));
+    await pending;
+    assert.equal(h.events.some((event) => event.type === 'turn-terminated'), terminal);
+    if (!terminal) proc.emit('exit', 1);
+    assert.deepEqual(h.events.filter((event) => ['error', 'turn-terminated'].includes(event.type)).map((event) => [event.type, event.turnId]), [['error', 'error-turn'], ['turn-terminated', 'error-turn']]);
+    h.backend.reset();
+  }
+});
+
+test('Claude cancellation during startup is not-started and cannot dispatch later', async () => {
+  let resolve;
+  const h = makeHarness({ resolveClaude: () => new Promise((done) => { resolve = done; }) });
+  const pending = h.backend.sendUser({ turnId: 'starting', text: 'hello', attachments: [] });
+  await flush();
+  h.backend.stop();
+  resolve(resolvedClaude());
+  await pending;
+  assert.equal(h.processes.length, 0);
+  assert.equal(h.events.find((event) => event.type === 'error').dispatchState, 'not-started');
+  assert.equal(h.events.some((event) => event.type === 'turn-terminated'), false);
+});
+
 test('resolveClaudeCli requires Claude 2.x and the host architecture', async () => {
   let request;
   const executable = resolvedClaude().executable;

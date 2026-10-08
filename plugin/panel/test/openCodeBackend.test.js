@@ -287,6 +287,42 @@ function makeBackend(options = {}) {
   return { backend, events, spawned, fetched, fsImpl, terminated };
 }
 
+test('OpenCode cancellation releases only the exited process turn and resumes its session', async () => {
+  const h = makeBackend();
+  const first = h.backend.sendUser({ turnId: 'old', text: 'hello', attachments: [] });
+  await flush();
+  const proc = h.spawned.procs[0];
+  await h.backend.stop();
+  await first;
+  assert.equal(h.events.some((event) => event.type === 'turn-terminated'), false);
+  const next = h.backend.sendUser({ turnId: 'next', text: 'continue', attachments: [] });
+  await flush();
+  assert.equal(h.fetched.calls.filter((call) => call.path === '/session' && call.method === 'POST').length, 1);
+  proc.exit();
+  proc.exit();
+  assert.deepEqual(h.events.filter((event) => event.type === 'turn-terminated').map((event) => event.turnId), ['old']);
+  completeTurn(h.fetched);
+  await next;
+  assert.equal(h.events.find((event) => event.type === 'turn-end').turnId, 'next');
+  h.backend.reset();
+});
+
+test('OpenCode session errors terminate after their UI error while process errors await exit', async () => {
+  for (const terminal of [true, false]) {
+    const h = makeBackend();
+    const pending = h.backend.sendUser({ turnId: 'error-turn', text: 'hello', attachments: [] });
+    await flush();
+    const proc = h.spawned.procs[0];
+    if (terminal) h.fetched.sse.push({ type: 'session.error', properties: { sessionID: 'session_1', error: { message: 'provider failed' } } });
+    else proc.error(new Error('transport failed'));
+    await pending;
+    assert.equal(h.events.some((event) => event.type === 'turn-terminated'), terminal);
+    if (!terminal) proc.exit(1);
+    assert.deepEqual(h.events.filter((event) => ['error', 'turn-terminated'].includes(event.type)).map((event) => [event.type, event.turnId]), [['error', 'error-turn'], ['turn-terminated', 'error-turn']]);
+    h.backend.reset();
+  }
+});
+
 test('App channel effects wait for session reset before probing and cancel a departed channel', async () => {
   const app = readFileSync(new URL('../src/app/App.jsx', import.meta.url), 'utf8');
   const start = app.indexOf('  React.useEffect(() => {', app.indexOf('}, [backendPref, openCodeProbe, openCodeProbeAttempt]);'));
@@ -320,6 +356,7 @@ test('App channel effects wait for session reset before probing and cancel a dep
       setTurnStage: noop, setTurnProgress: noop, setSessionModel: noop, setSessionEffort: noop,
       setSessionFast: noop, sessionController, status: { state: 'ok' }, providerInit: { state: 'ready' },
       setOpenCodeProbe: noop,
+      stopActiveHostTurn: async () => {}, setTurnHoldError: noop,
       runOpenCodeProbe: () => { probePromise = h.backend.probeAccount(); return noop; },
     };
     const cleanups = [];
@@ -1280,7 +1317,7 @@ test('createOpenCodeBackend maps text, reasoning, tool, and idle SSE events to p
     { type: 'text-delta', text: 'hi' },
     { type: 'tool-start', toolUseId: 'tool_1', name: 'mcp__ae__ae_ping', input: { x: 1 } },
     { type: 'tool-result', toolUseId: 'tool_1', name: 'mcp__ae__ae_ping', ok: true, text: '{"ok":true}', durationMs: 25 },
-    { type: 'turn-end', stopReason: 'end_turn' },
+    { type: 'turn-end', turnId: '', stopReason: 'end_turn' },
   ]);
 });
 
@@ -2537,6 +2574,36 @@ test('OpenCode does not rebuild a new session after a non-adopted message 503', 
   assert.equal(calls.filter((call) => call.method === 'POST' && call.path === '/session').length, 1);
   assert.equal(calls.filter((call) => call.path === '/session/session_1/message').length, 1);
   assert.equal(h.events.find((event) => event.type === 'error')?.code, 'UPSTREAM_HTTP_503');
+});
+
+test('OpenCode Stop prevents message dispatch after adopted-session replacement', async () => {
+  for (const status of [404, 503]) {
+    const base = makeFetch();
+    let stopping;
+    let releaseAbort;
+    const h = makeBackend({
+      fetchImpl: (url, options) => {
+        if (url.endsWith('/session/session_saved/message')) return Promise.resolve(jsonResponse({}, false, status));
+        if (url.endsWith('/abort')) return new Promise((resolve) => { releaseAbort = resolve; });
+        return base.fetchImpl(url, options);
+      },
+      onEvent: (event) => {
+        if (event.type === 'session-ref' && event.ref.id === 'session_1') stopping = h.backend.stop();
+      },
+    });
+    h.backend.adoptSessionRef({ kind: 'opencode-session', id: 'session_saved' });
+    const run = h.backend.sendUser({ turnId: 'cancel-replacement', text: 'continue', attachments: [] });
+    await flush();
+    try {
+      assert.equal(typeof releaseAbort, 'function');
+      assert.equal(base.calls.some((call) => call.path === '/session/session_1/message'), false);
+    } finally {
+      releaseAbort?.(jsonResponse({}));
+      await stopping;
+      await run;
+      h.backend.reset();
+    }
+  }
 });
 
 test('OpenCode recreates an adopted session once after a message 404', async () => {

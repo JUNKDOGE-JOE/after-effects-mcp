@@ -4,7 +4,7 @@ const { textResult } = require('../tool-result');
 const { enforce } = require('../approval-gate');
 const definition = {
     name: 'ae_workspace',
-    description: 'Bind a task to an AE project. One context may write; others read. Pass context_id on subsequent AE calls, including when several chats share one MCP connection. Releasing a context does not close AE.',
+    description: 'Bind a task to an AE project. Write access is a capability; ownership lasts for an active panel turn or external AE call. Idle ownership is handed over automatically. Pass context_id on AE calls. Releasing a context does not close AE.',
     inputSchema: {
         type: 'object', additionalProperties: false,
         properties: {
@@ -12,7 +12,7 @@ const definition = {
             instance_id: { type: 'string' }, project_path: { type: 'string' },
             context_id: { type: 'string' }, target_context_id: { type: 'string' },
             observation_id: { type: 'string', description: 'Server-issued observation from ae_read or ae_previewFrame after an uncertain write.' },
-            confirm: { type: 'boolean', description: 'Explicit user confirmation for taking over writes (transfer without target_context_id), or for a verified reconciliation observation.' },
+            confirm: { type: 'boolean', description: 'Confirm a verified reconciliation observation. Idle ownership transfer needs no confirmation.' },
             access: { type: 'string', enum: ['read', 'write'], default: 'read' },
             work_dir: { type: 'string', description: 'Absolute task working directory used for checkpoint fallback.' },
         },
@@ -25,7 +25,6 @@ async function call(args, context, deps) {
         if (!deps.workspace) throw new Error('Workspace binding is unavailable in this host.');
         if (args.access === 'write' || ['transfer', 'reconcile'].includes(args.action)) {
             const approvalContext = Object.assign({}, context, { arguments: args });
-            if (args.action === 'transfer' && context.conversation) approvalContext.policy = Object.assign({}, context.policy, { approvalTier: 'manual' });
             const denied = await enforce('ae_workspace', approvalContext, deps);
             if (denied) return { result: textResult(denied, true) };
         }

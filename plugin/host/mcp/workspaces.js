@@ -37,9 +37,11 @@ class WorkspaceManager {
         this.instanceId = input.instanceId;
         this.workspaceId = input.workspaceId || id('workspace');
         this.readProject = input.readProject;
+        this.isDraining = input.isDraining || (() => false);
         this.contexts = new Map();
         this.project = null;
         this.writer = null;
+        this.activeTurn = null;
         this.uncertain = null;
         this.closed = false;
         this.pending = 0;
@@ -52,7 +54,7 @@ class WorkspaceManager {
         const run = this.queue.then(async () => {
             this.inflight = true;
             try { return await task(); }
-            finally { this.inflight = false; this.pending -= 1; }
+            finally { this.inflight = false; this.pending -= 1; this._settleWriter(); }
         });
         this.queue = run.catch(() => {});
         return run;
@@ -70,6 +72,7 @@ class WorkspaceManager {
             || this.project.projectGeneration !== project.projectGeneration)) {
             this.contexts.forEach((context) => { context.valid = false; });
             this.writer = null;
+            this.activeTurn = null;
             this.workspaceId = id('workspace');
         }
         this.project = project;
@@ -81,23 +84,56 @@ class WorkspaceManager {
         const context = this.contexts.get(contextId);
         if (!context) throw failure('CONTEXT_NOT_FOUND', 'Unknown work context');
         if (!context.valid || context.workspaceId !== this.workspaceId) throw failure('SOURCE_PROJECT_CHANGED', 'The source project changed; bind the new project explicitly');
-        if (write && this.writer !== contextId) throw failure('WORKSPACE_READONLY', 'This context does not own project writes');
+        if (write && context.access !== 'write') throw failure('WORKSPACE_READONLY', 'This context is read-only');
         if (write && this.uncertain && !allowUncertain) throw failure('RESULT_UNKNOWN', 'A dispatched operation must be reconciled before writing');
         return context;
     }
 
     _idle() {
-        if (this.pending || this.inflight) throw failure('WORKSPACE_BUSY', 'Work is queued or in flight; ownership cannot change');
+        if (this.pending || this.inflight || this.activeTurn || this.isDraining()) throw failure('WORKSPACE_BUSY', 'A turn or AE operation is active; ownership cannot change');
         if (this.uncertain) throw failure('RESULT_UNKNOWN', 'A dispatched operation must be reconciled before ownership changes');
+    }
+
+    _settleWriter() {
+        if (!this.pending && !this.activeTurn && !this.uncertain && !this.isDraining()) this.writer = null;
+    }
+
+    _claim(contextId, activity = {}) {
+        this._context(contextId, true);
+        const ownerId = activity.ownerId || contextId;
+        if (activity.managedTurns && (!this.activeTurn || this.activeTurn.ownerId !== ownerId
+            || this.activeTurn.turnId !== activity.turnId)) throw failure('TURN_INACTIVE', 'The panel turn has ended');
+        if (this.isDraining() || (this.activeTurn && this.activeTurn.ownerId !== ownerId)) {
+            throw failure('WORKSPACE_BUSY', 'Another turn or a draining AE operation still owns this project');
+        }
+        this.writer = contextId;
+    }
+
+    async startTurn(contextId, ownerId, turnId) {
+        if (this.activeTurn && this.activeTurn.ownerId === ownerId && this.activeTurn.turnId === turnId) return;
+        this._idle();
+        return this._enqueue(async () => {
+            await this._refresh();
+            this._claim(contextId, { ownerId });
+            this.activeTurn = { contextId, ownerId, turnId };
+        });
+    }
+
+    endTurn(ownerId, turnId) {
+        if (!this.activeTurn || this.activeTurn.ownerId !== ownerId || this.activeTurn.turnId !== turnId) return false;
+        this.activeTurn = null;
+        this._settleWriter();
+        return true;
     }
 
     getContext(contextId) { return clone(this._context(contextId, false)); }
 
     inspect(contextId) {
+        this._settleWriter();
         const context = contextId ? this.getContext(contextId) : null;
         return clone({ instanceId: this.instanceId, workspaceId: this.workspaceId, project: this.project,
             writerContextId: this.writer, pending: this.pending, inflight: this.inflight,
-            uncertain: this.uncertain, closed: this.closed, context });
+            uncertain: this.uncertain, activeTurn: this.activeTurn, draining: this.isDraining(), closed: this.closed, context });
     }
 
     bind(options) {
@@ -115,22 +151,15 @@ class WorkspaceManager {
                 if (input.workDir !== undefined && normalizeProjectPath(input.workDir) !== normalizeProjectPath(existing.workDir)) {
                     throw failure('CONTEXT_CONFLICT', 'An existing context keeps its original work directory');
                 }
-                if (input.access === 'write' && this.writer !== input.contextId) {
-                    if (this.uncertain) throw failure('RESULT_UNKNOWN', 'The prior write outcome is unresolved');
-                    if (this.writer) throw failure('WORKSPACE_BUSY', 'The project already has a writer context');
-                    existing.access = 'write';
-                    this.writer = input.contextId;
-                }
+                if (input.access === 'write') existing.access = 'write';
                 return clone(existing);
             }
             normalizeProjectPath(input.workDir);
             if (input.access === 'write' && this.uncertain) throw failure('RESULT_UNKNOWN', 'The prior write outcome is unresolved');
-            if (input.access === 'write' && this.writer) throw failure('WORKSPACE_BUSY', 'The project already has a writer context');
             const context = { contextId: this.instanceId + ':' + crypto.randomBytes(16).toString('hex'), workspaceId: this.workspaceId, instanceId: this.instanceId,
                 access: input.access, workDir: input.workDir || null, projectPath: this.project.projectPath,
                 projectGeneration: this.project.projectGeneration, valid: true };
             this.contexts.set(context.contextId, context);
-            if (input.access === 'write') this.writer = context.contextId;
             return clone(context);
         });
     }
@@ -140,12 +169,13 @@ class WorkspaceManager {
         return this._enqueue(async () => { await this._refresh(); return clone(this._context(contextId, write)); });
     }
 
-    async run(contextId, write, callback) {
+    async run(contextId, write, callback, activity) {
         if (typeof callback !== 'function') return Promise.reject(new TypeError('callback is required'));
         this._context(contextId, write);
         return this._enqueue(async () => {
             await this._refresh();
             const context = this._context(contextId, write);
+            if (write) this._claim(contextId, activity);
             try {
                 const result = await callback(clone(context));
                 if (write && unknownOutcome(result)) this.markUncertain(contextId, { reason: 'dispatched result is unknown' });
@@ -172,9 +202,9 @@ class WorkspaceManager {
         this._idle();
         return this._enqueue(async () => {
             await this._refresh();
-            const from = this._context(fromContextId, true);
+            const from = fromContextId ? this._context(fromContextId, true) : null;
             const to = this._context(toContextId, false);
-            from.access = 'read';
+            if (from) from.access = 'read';
             to.access = 'write';
             this.writer = toContextId;
             return clone(to);
@@ -183,6 +213,7 @@ class WorkspaceManager {
 
     markUncertain(contextId, details) {
         this._context(contextId, true, true);
+        this.writer = contextId;
         this.uncertain = { contextId, project: clone(this.project), details: clone(details || {}), at: Date.now() };
     }
 

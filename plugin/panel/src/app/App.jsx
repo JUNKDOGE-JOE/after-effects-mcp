@@ -288,6 +288,8 @@ function Shell({ cs }) {
   const attachmentOperationsRef = React.useRef(new Map());
   const pendingTurnRef = React.useRef(null);
   const acceptedTurnRef = React.useRef(null);
+  const hostTurnRef = React.useRef(null);
+  const [turnHoldError, setTurnHoldError] = React.useState('');
   const preserveAttachmentDraftRef = React.useRef(false);
   React.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
   const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
@@ -622,8 +624,42 @@ function Shell({ cs }) {
     setChatEntries(chatEntriesRef.current);
     sessionControllerRef.current?.recordEntries(chatEntriesRef.current, event);
   }, []);
-  const handleChatEvent = React.useCallback((evt) => {
+  const finishHostTurn = React.useCallback((turn) => {
+    if (!turn || hostTurnRef.current !== turn) return Promise.resolve();
+    turn.confirmed = true;
+    if (!turn.ending) turn.ending = hostConversation.endTurn(turn.token).then(() => {
+      if (hostTurnRef.current === turn) {
+        hostTurnRef.current = null;
+        setTurnHoldError('');
+      }
+      turn.resolveEnd();
+    }).catch((error) => { turn.ending = null; setTurnHoldError(error.message || String(error)); });
+    return turn.ending;
+  }, [hostConversation]);
+  const stopActiveHostTurn = React.useCallback(async () => {
+    const turn = hostTurnRef.current;
+    if (!turn) return;
+    turn.cancelled = true;
+    setTurnHoldError(langRef.current === 'zh' ? '正在等待任务确认结束，工程仍由当前回合占用。' : 'Waiting for the task to stop; this turn still holds the project.');
+    try {
+      if (turn.confirmed) await finishHostTurn(turn);
+      else await turn.backend.stop();
+      await turn.ended;
+    } catch (error) { setTurnHoldError(error.message || String(error)); throw error; }
+  }, [finishHostTurn]);
+  const handleChatEvent = React.useCallback((evt, backendId) => {
     const pending = pendingTurnRef.current;
+    const held = hostTurnRef.current;
+    if (held && backendId && backendId !== held.backendId) return;
+    if (evt.turnId && evt.turnId !== pending?.turnId && evt.turnId !== held?.turnId) return;
+    if (evt.type === 'turn-end' || evt.type === 'turn-terminated') {
+      if (!held || evt.turnId !== held.turnId || backendId !== held.backendId) return;
+      void finishHostTurn(held);
+      if (evt.type === 'turn-terminated') return;
+    } else if (evt.type === 'error' && held && evt.turnId === held.turnId) {
+      if (evt.dispatchState === 'not-started') void finishHostTurn(held);
+      else setTurnHoldError(langRef.current === 'zh' ? '任务结束尚未确认，工程仍由当前回合占用。' : 'Task completion is unconfirmed; this turn still holds the project.');
+    }
     setTurnStage((current) => reduceTurnStage(current, evt, {
       pendingTurnId: pending?.turnId,
     }));
@@ -731,7 +767,7 @@ function Shell({ cs }) {
       setTurnProgress(null);
     }
     commitChatEntries((entries) => reduceEvent(entries, evt), evt);
-  }, [commitChatEntries, releaseTurnAttachments]);
+  }, [commitChatEntries, releaseTurnAttachments, finishHostTurn]);
 
   const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
     platform,
@@ -744,7 +780,7 @@ function Shell({ cs }) {
     getThinking: () => runtimeRef.current.thinking,
     getChannel: () => 'subscription',
     getLang: () => langRef.current,
-    onEvent: handleChatEvent,
+    onEvent: (event) => handleChatEvent(event, 'subscription'),
   }), [
     getMcpSpec,
     getWorkContext,
@@ -765,7 +801,7 @@ function Shell({ cs }) {
     getServerInstructions: () => mcp.getServerInstructions(),
     getLang: () => langRef.current,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
-    onEvent: handleChatEvent,
+    onEvent: (event) => handleChatEvent(event, 'codex'),
   }), [extRoot, getMcpSpec, getWorkContext, mcp, handleChatEvent, platform]);
 
   const openCodeBackend = React.useMemo(() => createOpenCodeBackend({
@@ -779,7 +815,7 @@ function Shell({ cs }) {
     getSensitiveValues: () => providerSensitiveValuesRef.current,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     getLang: () => langRef.current,
-    onEvent: handleChatEvent,
+    onEvent: (event) => handleChatEvent(event, 'opencode'),
   }), [extRoot, getMcpSpec, getWorkContext, mcp, handleChatEvent, platform]);
 
   runtimeRef.current = {
@@ -816,7 +852,7 @@ function Shell({ cs }) {
     now: () => Date.now(),
     uuid: randomProviderCredentialId,
     deps: {
-      stopActiveTurn: () => activeBackendInstanceRef.current?.stop?.(),
+      stopActiveTurn: stopActiveHostTurn,
       resetActiveBackend: () => activeBackendInstanceRef.current?.reset?.(),
       cancelPendingUi: () => elicitationCoordinator.cancelAll(),
       rotateHostConversation: (sessionId, context = {}) => {
@@ -867,6 +903,7 @@ function Shell({ cs }) {
   }), [
     elicitationCoordinator,
     hostConversation,
+    stopActiveHostTurn,
     resetAttachmentDraftSession,
     sessionStore,
   ]);
@@ -1144,20 +1181,25 @@ function Shell({ cs }) {
       pendingSessionLoadRef.current = null;
     }
     if (!decision.reset) return;
-    preserveAttachmentDraftRef.current = !pendingTurnRef.current && !pendingSessionLoad;
-    claudeBackend.reset();
-    codexBackend.reset();
-    openCodeBackend.reset();
-    resetAttachmentDraftSession();
-    setChatStreaming(false);
-    setThinkingActive(false);
-    setTurnStage(null);
-    setTurnProgress(null);
-    if (pendingSessionLoad) return;
-    setSessionModel(null);
-    setSessionEffort(null);
-    setSessionFast(null);
-    backendResetPromiseRef.current = sessionController.createSession();
+    let current = true;
+    backendResetPromiseRef.current = (async () => {
+      await stopActiveHostTurn();
+      if (!current) return;
+      preserveAttachmentDraftRef.current = !pendingTurnRef.current && !pendingSessionLoad;
+      await Promise.all([claudeBackend.reset(), codexBackend.reset(), openCodeBackend.reset()]);
+      if (!current) return;
+      resetAttachmentDraftSession();
+      setChatStreaming(false);
+      setThinkingActive(false);
+      setTurnStage(null);
+      setTurnProgress(null);
+      if (pendingSessionLoad) return;
+      setSessionModel(null);
+      setSessionEffort(null);
+      setSessionFast(null);
+      await sessionController.createSession();
+    })().catch((error) => setTurnHoldError(error.message || String(error)));
+    return () => { current = false; };
   }, [
     effective.backend,
     backendPref,
@@ -1166,6 +1208,7 @@ function Shell({ cs }) {
     openCodeBackend,
     resetAttachmentDraftSession,
     sessionController,
+    stopActiveHostTurn,
   ]);
 
   React.useEffect(() => {
@@ -1187,8 +1230,8 @@ function Shell({ cs }) {
     };
   }, [backendPref, status.state, providerInit.state, workDir, sessionSnapshot.activeId, hostConversation, runOpenCodeProbe]);
 
-  const sendChat = (input) => {
-    if (pendingTurnRef.current || catalogEmpty) return;
+  const sendChat = async (input) => {
+    if (pendingTurnRef.current || hostTurnRef.current || catalogEmpty) return;
     let turn;
     try {
       turn = normalizeTurnInput(input);
@@ -1223,8 +1266,19 @@ function Shell({ cs }) {
       });
       return;
     }
+    const held = { turnId: turn.turnId, backendId: effective.backend, backend: activeBackend, token: null };
+    held.ended = new Promise((resolve) => { held.resolveEnd = resolve; });
+    hostTurnRef.current = held;
+    let acquired = false;
     try {
       setTurnStage('connect');
+      setTurnHoldError('');
+      held.token = await hostConversation.startTurn(turn.turnId);
+      acquired = true;
+      if (held.cancelled) {
+        handleChatEvent({ type: 'error', code: 'TURN_ABORTED', message: 'Turn aborted.', turnId: turn.turnId, dispatchState: 'not-started' });
+        return;
+      }
       const result = activeBackend.sendUser(turn);
       Promise.resolve(result).catch((error) => {
         if (pendingTurnRef.current?.turnId !== turn.turnId) return;
@@ -1238,6 +1292,10 @@ function Shell({ cs }) {
         });
       });
     } catch (error) {
+      if (!acquired && hostTurnRef.current === held) {
+        hostTurnRef.current = null;
+        held.resolveEnd();
+      }
       handleChatEvent({
         type: 'error',
         kind: error?.kind || 'backend',
@@ -1250,7 +1308,7 @@ function Shell({ cs }) {
   };
 
   const newChatSession = async (skipConfirmation = false) => {
-    if (!skipConfirmation && (pendingTurnRef.current || chatStreaming)) {
+    if (!skipConfirmation && (pendingTurnRef.current || hostTurnRef.current || chatStreaming)) {
       setConfirmChatNavigation({ kind: 'new' });
       return;
     }
@@ -1293,7 +1351,7 @@ function Shell({ cs }) {
 
   const switchChatSession = React.useCallback(async (id) => {
     if (id === sessionController.snapshot().activeId) return;
-    if (pendingTurnRef.current || chatStreaming) {
+    if (pendingTurnRef.current || hostTurnRef.current || chatStreaming) {
       setConfirmChatNavigation({ kind: 'switch', id });
       return;
     }
@@ -1327,7 +1385,6 @@ function Shell({ cs }) {
     const request = confirmChatNavigation;
     setConfirmChatNavigation(null);
     if (!request) return;
-    if (pendingTurnRef.current || chatStreaming) activeBackend?.stop();
     if (request.kind === 'new') await newChatSession(true);
     else await switchChatSessionNow(request.id);
   }, [activeBackend, chatStreaming, confirmChatNavigation, newChatSession, switchChatSessionNow]);
@@ -1609,7 +1666,7 @@ function Shell({ cs }) {
     );
   }
 
-  const statusForBar = hostConversationError
+  const statusForBar = hostConversationError || turnHoldError
     ? 'error'
     : paused ? 'paused' : status.state === 'ok' ? 'connected' : status.state === 'starting' ? 'waiting' : 'error';
   const tabs = [
@@ -1623,7 +1680,7 @@ function Shell({ cs }) {
       ? (lang === 'zh' ? '正在检测凭据通道…' : 'Checking credential channels…')
       : '');
   const chatWorkDir = hostConversation.currentConversation()?.workDir || workDir;
-  const composerDisabled = !chatWorkDir || status.state !== 'ok' || paused || effective.backend === 'none' || Boolean(hostConversationError) || catalogEmpty;
+  const composerDisabled = !chatWorkDir || status.state !== 'ok' || paused || effective.backend === 'none' || Boolean(hostConversationError || turnHoldError) || catalogEmpty;
   const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
   const activeSessionMeta = sessionSnapshot.sessions.find(
     (meta) => meta.id === sessionSnapshot.activeId,
@@ -1634,9 +1691,9 @@ function Shell({ cs }) {
     <React.Fragment>
       <StatusBar
         status={statusForBar}
-        label={hostConversationError
+        label={turnHoldError || (hostConversationError
           ? `${t.error} · ${t.approvalSyncError}`
-          : paused ? t.paused : status.state === 'ok' ? `${t.connected} · 127.0.0.1:${status.port}` : status.state === 'error' ? `${t.error} · ${status.error || ''}` : t.starting}
+          : paused ? t.paused : status.state === 'ok' ? `${t.connected} · 127.0.0.1:${status.port}` : status.state === 'error' ? `${t.error} · ${status.error || ''}` : t.starting)}
         onStatusClick={() => { setDrawerOpen(true); }}
         onSessions={() => setSessionsOpen(true)}
         onTogglePause={togglePause}
@@ -1664,15 +1721,15 @@ function Shell({ cs }) {
             sessionTitle={sessionTitle}
             onOpenSessions={() => setSessionsOpen(true)}
             composerDisabled={composerDisabled}
-            disabledHint={!chatWorkDir
+            disabledHint={turnHoldError || (!chatWorkDir
               ? (lang === 'zh' ? '请先在设置中指定工作目录。' : 'Choose a work directory in Settings first.')
               : hostConversationError
               ? t.approvalSyncError
-              : paused ? t.pausedHint : catalogEmpty ? modelNotice : composerDisabled ? backendDisabledHint : fallbackNotice}
-            noticeActionLabel={paused ? t.resume : t.goSettings}
-            onNoticeAction={() => (paused ? togglePause() : setTab('settings'))}
+              : paused ? t.pausedHint : catalogEmpty ? modelNotice : composerDisabled ? backendDisabledHint : fallbackNotice)}
+            noticeActionLabel={turnHoldError ? (lang === 'zh' ? '停止任务' : 'Stop task') : paused ? t.resume : t.goSettings}
+            onNoticeAction={() => (turnHoldError ? void stopActiveHostTurn().catch(() => {}) : paused ? togglePause() : setTab('settings'))}
             onSend={sendChat}
-            onStop={() => activeBackend?.stop()}
+            onStop={() => { void stopActiveHostTurn().catch(() => {}); }}
             onApprove={(id, decision) => activeBackend?.approve(id, decision)}
             onAnswerQuestion={(id, result) => activeBackend?.answerQuestion
               && activeBackend.answerQuestion(id, result)}

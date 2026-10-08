@@ -1039,6 +1039,7 @@ function buildApp() {
         toolLibrary,
         instances: instanceService ? instanceService.instances : undefined,
         workspace: instanceService ? instanceService.workspace : undefined,
+        conversationTurns: instanceService ? instanceService.conversationTurns : undefined,
         routeTool: instanceService ? instanceService.routeTool : undefined,
         getReadJobs,
     });
@@ -1452,6 +1453,7 @@ function start(port, callback) {
     }
     if (instanceOptions) instanceService = createInstanceService(Object.assign({}, instanceOptions, {
         statePaths: statePathsForHost(), executeJsx,
+        isDraining: () => jsxBridge.getState().state !== 'ok',
     }));
     app = buildApp();
     let completed = false;
