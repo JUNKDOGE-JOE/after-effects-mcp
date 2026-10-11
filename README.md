@@ -337,8 +337,8 @@ with the project's development and maintenance.
 | --- | --- | --- | --- |
 | [**biheye-g**](https://github.com/biheye-g) | Bilibili content creator **匕禾页** | CNY 18 | First sponsor |
 | \*青 | Alipay sponsor | CNY 30 | — |
-| **O.oInkMore** | — | CNY 30 | WeChat Pay |
-| **A\*u** | — | CNY 18 | WeChat Pay |
+| **O.oInkMore** | WeChat Pay sponsor | CNY 30 | — |
+| **A\*u** | WeChat Pay sponsor | CNY 18 | — |
 
 ## License
 
