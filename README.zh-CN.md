@@ -35,7 +35,7 @@ ae-mcp 是安装在 After Effects 内的开源 CEP 扩展，将正在打开的�
 Model Context Protocol（MCP）。你可以在面板里与 Claude、Codex、OpenCode
 对话，也可以连接外部 MCP 客户端，让 AI 操作合成、图层、关键帧与表达式。
 
-[下载 v0.11.0](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0)
+[下载 v0.11.1](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.1)
 · [安装指南](docs/INSTALL.md) · [工具参考](docs/REFERENCE.md) · [更新日志](CHANGELOG.md)
 
 ## 能做什么
@@ -71,6 +71,12 @@ AI 通过 AE 宿主获取当前状态，包括尚未保存的修改；工程结�
   </tr>
 </table>
 
+## v0.11.1 更新
+
+- 修复 Codex 生图在聊天面板中的预览、放大与历史显示。
+- 改善外部 MCP 指引、工具库扫描性能和 Windows AE 进程识别及连接重试。
+- Windows 与 macOS 原生插件沿用 0.11.0；已有用户只需手动更新 ZXP。
+
 ## v0.11.0 更新
 
 - **多实例与并行预览**：外部客户端可发现、启动和路由到多个 AE 实例。不同工程可并行操作；同一工程保留一个活动写入者，只读 worker 基于固定检查点快照执行读取与预览。
@@ -92,8 +98,8 @@ Mac worker 场景仍待验证。完整验证范围与已知限制见
 
 ## 安装和首次启动
 
-1. 从 [v0.11.0 发布页](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0)
-   下载并安装 `ae-mcp-panel-v0.11.0.zxp`。
+1. 从 [v0.11.1 发布页](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.1)
+   下载并安装 `ae-mcp-panel-v0.11.1.zxp`。
 2. 如需 `ae_nativeExec`，按平台下载同一发布中的原生插件：Windows x64 使用
    `AeMcpNative-v0.11.0-windows-x64.aex`；macOS arm64 使用
    `AeMcpNative-v0.11.0-macos-arm64.plugin.zip`，解压后安装 `AeMcpNative.plugin`。

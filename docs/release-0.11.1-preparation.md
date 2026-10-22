@@ -1,8 +1,9 @@
 # 0.11.1 release preparation
 
 Status: preparation only; **not release-accepted or published**.
-The owner authorized final integration testing, merging the four fixes, and
-preparing 0.11.1. Publication is a separate final decision.
+The owner authorized publication on 2026-10-22, including reuse of unchanged
+Windows and macOS native assets from v0.11.0. Publication remains conditional
+on completing the packaged validation below.
 
 ## Merged scope
 
@@ -46,13 +47,14 @@ timeout remains an unpassed observation, not a retroactively passed test.
 ## Version preparation
 
 Product host, panel, CEP manifest, native-client fallback and package default
-advance to 0.11.1; the panel bundle is rebuilt. Native build scripts derive their
-product version from the host manifest when release binaries are built.
+advance to 0.11.1; the panel bundle is rebuilt. The native source tree is unchanged since v0.11.0. Per owner direction, reuse
+the published Windows AEX and macOS arm64 plugin ZIP byte-for-byte, keeping
+their 0.11.0 filenames, component versions and original signing properties.
 
 The unchanged npm connector and MCP Registry remain 0.11.0. The documented
 compatibility contract pairs product and connector by major.minor; no connector
-publication is needed for these installed-extension fixes. Published download
-links continue pointing to the existing release until new assets exist.
+publication is needed for these installed-extension fixes. Download links target the 0.11.1 release; unchanged native assets retain their
+0.11.0 filenames.
 
 ## Preparation checks
 
@@ -82,7 +84,8 @@ links continue pointing to the existing release until new assets exist.
 - Verify signatures, artifact identities and complete packaged payloads.
 - Run aggregate packaged T5 for the matrix above, then T6 clean install,
   upgrade and rollback. Development evidence must not be relabeled as T5/T6.
-- Obtain the owner's final publication decision before tag, GitHub Release or uploads.
+- Publish the verified bytes without rebuilding or re-signing. Owner approval
+  for tag, GitHub Release and asset upload was received on 2026-10-22.
 
 Updates remain manual: replacing the AEX requires AE to restart, and the
 plug-in process cannot guarantee continuation after its parent AE process exits.
