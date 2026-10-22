@@ -532,35 +532,110 @@ test('Windows PID probe rejects malformed ancestry and invalid input without gue
   }
 });
 
-test('a PID registration failure is visible and reopening reruns discovery before listening', async () => {
+function pidRetryHarness({ resolvePid, waitForPidRetry, hostOverrides = {} }) {
   const runtime = fakeHostDependencyRuntime({ platformId: 'macos-arm64', extensionRoot: '/extension', express: () => {} });
-  const statuses = [], probes = [], registered = [];
-  let foundPid = null, instance;
-  const host = { setRuntimeDependencies() {}, setCSInterface() {}, stop() {},
-    configureInstance: value => { instance = value; },
-    start: (port, callback) => {
-      registered.push(instance.aePid);
-      callback(instance.aePid ? null : Object.assign(new Error('Close and reopen the panel to retry PID detection'),
-        { code: 'AE_HOST_PID_UNVERIFIED' }), { port });
-    },
+  const statuses = [], probes = [], waits = [], calls = [];
+  let unload;
+  const host = { setRuntimeDependencies() {}, setCSInterface() {}, configureInstance() {},
+    stop: () => calls.push('stop'),
+    start: (port, callback) => { calls.push('start'); callback(null, { port }); },
+    restart: (port, callback) => { calls.push('restart'); callback(null, { port }); },
+    ...hostOverrides,
   };
   const controller = createHostController({ cs: {}, extensionRoot: '/extension', environment: {},
-    platform: { ...hostAdapter(runtime.fs), pid: 90, resolveAeHostPid: async () => { probes.push(90); return foundPid; } },
-    createInstanceId: () => 'main-a', addBeforeUnload() {}, onLog() {},
+    platform: { ...hostAdapter(runtime.fs), pid: 90, resolveAeHostPid: args => { probes.push(args); return resolvePid(); } },
+    waitForPidRetry: async ms => { waits.push(ms); await waitForPidRetry?.(ms); },
+    createInstanceId: () => 'retry-main', addBeforeUnload: callback => { unload = callback; }, onLog() {},
     requireImpl: request => request === 'module' ? runtime.moduleApi : request === 'path' ? path : host,
     onStatus: (...value) => statuses.push(value),
   });
-  await controller.start(11488);
-  assert.equal(statuses.at(-1)[0], 'error');
-  assert.match(statuses.at(-1)[2], /Close and reopen/);
-  assert.equal(statuses.some(value => value[0] === 'ok'), false);
-  assert.equal(controller.getInstance().nativeUnavailable.code, 'AE_HOST_PID_UNVERIFIED');
-  foundPid = 80;
-  await controller.start(11488);
-  assert.deepEqual(probes, [90, 90]);
-  assert.deepEqual(registered, [null, 80]);
-  assert.equal(statuses.at(-1)[0], 'ok');
-  assert.equal(controller.getInstance().nativeUnavailable, null);
+  return { controller, statuses, probes, waits, calls, unload: () => unload() };
+}
+
+test('PID discovery retries in place and starts once when the second or third attempt succeeds', async () => {
+  for (const successfulAttempt of [2, 3]) {
+    let attempt = 0;
+    const h = pidRetryHarness({ resolvePid: async () => ++attempt === successfulAttempt ? 80 : null });
+    await h.controller.start(11488);
+    assert.deepEqual(h.probes, Array(successfulAttempt).fill({ cepPid: 90, timeoutMs: 4000 }));
+    assert.deepEqual(h.waits, [250, 750].slice(0, successfulAttempt - 1));
+    assert.deepEqual(h.calls, ['start']);
+    assert.equal(h.statuses.at(-1)[0], 'ok');
+    assert.equal(h.controller.getInstance().nativeUnavailable, null);
+    await h.controller.restart(11489);
+    assert.deepEqual(h.calls, ['start', 'restart']);
+    assert.equal(h.probes.length, successfulAttempt);
+  }
+});
+
+test('PID retry exhaustion never starts a host and Retry connection reruns discovery without reopening', async () => {
+  const values = [null, 1, '80', 80];
+  const h = pidRetryHarness({ resolvePid: async () => values.shift() });
+  await h.controller.start(11488);
+  assert.equal(h.statuses.at(-1)[0], 'error');
+  assert.match(h.statuses.at(-1)[2], /AE_HOST_PID_UNVERIFIED.*3 attempts.*Retry connection/);
+  assert.equal(h.statuses.some(value => value[0] === 'ok'), false);
+  assert.equal(h.calls.includes('start'), false);
+  assert.equal(h.controller.getHost(), null);
+  assert.equal(h.controller.getInstance().aePid, null);
+  assert.equal(h.controller.getInstance().nativeUnavailable.code, 'AE_HOST_PID_UNVERIFIED');
+  assert.deepEqual(h.waits, [250, 750]);
+  await h.controller.restart(11488);
+  assert.equal(h.probes.length, 4);
+  assert.equal(h.calls.filter(value => value === 'start').length, 1);
+  assert.equal(h.statuses.at(-1)[0], 'ok');
+  assert.equal(h.controller.getInstance().aePid, 80);
+});
+
+test('closing during PID retry backoff cancels retries and concurrent restart cannot duplicate startup', async () => {
+  let resume, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  const h = pidRetryHarness({ resolvePid: async () => null,
+    waitForPidRetry: () => { entered(); return new Promise(resolve => { resume = resolve; }); } });
+  const starting = h.controller.start(11488);
+  await waiting;
+  await h.controller.restart(11488);
+  assert.equal(h.probes.length, 1);
+  h.unload();
+  resume();
+  await starting;
+  assert.equal(h.probes.length, 1);
+  assert.equal(h.calls.includes('start'), false);
+  assert.equal(h.controller.getHost(), null);
+  assert.equal(h.controller.getInstance().aePid, null);
+});
+
+test('PID retry leaves no registry owner or close marker before successful service publication', async t => {
+  const require = createRequire(import.meta.url);
+  const { InstanceRegistry } = require('../../host/instance-registry.js');
+  const { createInstanceService } = require('../../host/instance-service.js');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-pid-retry-'));
+  assert.equal(path.dirname(root), path.resolve(os.tmpdir()));
+  const registry = new InstanceRegistry({ root, isProcessAlive: () => true });
+  let service, configured = {}, published, pid = null;
+  t.after(async () => { await service?.markClosed('test-completed'); fs.rmSync(root, { recursive: true, force: true }); });
+  const h = pidRetryHarness({ resolvePid: async () => pid, hostOverrides: {
+    configureInstance: value => { configured = { ...configured, ...value }; service?.configure(value); },
+    getInstanceInfo: () => service?.getInfo() || configured,
+    stop: () => service?.markClosed('panel-stopped'),
+    start: (port, callback) => {
+      service = createInstanceService({ ...configured, registry, cepPid: 90, launcher: {},
+        executeJsx: async () => ({ payload: { ok: true, result: JSON.stringify({ projectPath: '/fixture/pid.aep', dirty: false, revision: 1 }) } }) });
+      published = service.publish('http://127.0.0.1:' + port + '/mcp').then(() => callback(null, { port }), callback);
+    },
+  } });
+  await h.controller.start(11488);
+  assert.equal(service, undefined);
+  assert.deepEqual(await registry.list({ includeClosed: true }), []);
+  assert.equal(fs.existsSync(path.join(root, 'retry-main.closed')), false);
+  pid = 80;
+  await h.controller.restart(11488);
+  await published;
+  const owner = await registry.get('retry-main');
+  assert.equal(owner.state, 'running');
+  assert.equal(owner.pid, 80);
+  assert.equal(fs.existsSync(path.join(root, 'retry-main.closed')), false);
+  assert.equal(h.statuses.at(-1)[0], 'ok');
 });
 
 test('manual macOS panels follow ps parent relationships without selecting an unrelated AE', async () => {
@@ -601,4 +676,5 @@ test('closing a panel during its parent process probe cannot start the listener 
   await starting;
   assert.equal(starts, 0);
   assert.equal(controller.getHost(), null);
+  assert.equal(controller.getInstance().aePid, null);
 });

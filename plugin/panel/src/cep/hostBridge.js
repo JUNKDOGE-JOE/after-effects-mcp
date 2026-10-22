@@ -235,12 +235,15 @@ export function createHostController({
   extensionRoot,
   environment,
   createInstanceId,
+  waitForPidRetry = (ms) => new Promise(resolve => setTimeout(resolve, ms)),
 }) {
   const adapter = platform || createPlatformAdapter();
   let host = null;
   let beforeUnloadInstalled = false;
   let lifecycleGeneration = 0;
   let instance = null;
+  let starting = false;
+  let closed = false;
   const workDirectories = new Map();
   let workDirectoryInitialized = false;
 
@@ -284,6 +287,8 @@ export function createHostController({
   }
 
   async function start(port) {
+    if (starting || closed) return;
+    starting = true;
     const generation = lifecycleGeneration += 1;
     onStatus('starting', port);
     const priorHost = host;
@@ -303,6 +308,7 @@ export function createHostController({
         });
       }
       if (instance.role === 'worker') {
+        starting = false;
         onStatus('disabled', null, 'Read workers do not start the panel host');
         return;
       }
@@ -333,6 +339,8 @@ export function createHostController({
         const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener('beforeunload', handler));
         installBeforeUnload(() => {
           lifecycleGeneration += 1;
+          starting = false;
+          closed = true;
           const closingHost = host;
           host = null;
           writeBootstrapStatus('intentional-disconnect');
@@ -342,14 +350,26 @@ export function createHostController({
         beforeUnloadInstalled = true;
       }
       if (!instance.aePid && typeof adapter.resolveAeHostPid === 'function') {
-        instance.aePid = await adapter.resolveAeHostPid({ cepPid: adapter.pid, timeoutMs: 4000 });
-        if (generation !== lifecycleGeneration || host !== nextHost) return;
+        const delays = [250, 750];
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const aePid = await adapter.resolveAeHostPid({ cepPid: adapter.pid, timeoutMs: 4000 });
+          if (generation !== lifecycleGeneration || host !== nextHost) return;
+          if (Number.isSafeInteger(aePid) && aePid > 1) { instance.aePid = aePid; break; }
+          if (attempt < delays.length) {
+            onLog('Identifying the After Effects process again (' + (attempt + 2) + '/3)');
+            await waitForPidRetry(delays[attempt]);
+            if (generation !== lifecycleGeneration || host !== nextHost) return;
+          }
+        }
         instance.nativeUnavailable = instance.aePid ? null : { code: 'AE_HOST_PID_UNVERIFIED',
-          message: 'The CEP process ancestry did not identify a formal After Effects host' };
+          message: 'AE_HOST_PID_UNVERIFIED: Could not identify After Effects after 3 attempts. '
+            + 'Keep AE and this panel open; use Retry connection to try again. Do not start a replacement AE.' };
         nextHost.configureInstance?.(instance);
+        if (!instance.aePid) throw Object.assign(new Error(instance.nativeUnavailable.message), { code: instance.nativeUnavailable.code });
       }
       nextHost.start(port, (err, info) => {
         if (generation !== lifecycleGeneration || host !== nextHost) return;
+        starting = false;
         if (err) onStatus('error', port, err.message);
         else {
           try { updateWorkDirectory(nextHost.getInstanceInfo?.().projectPath || instance.projectPath); }
@@ -359,6 +379,8 @@ export function createHostController({
         }
       });
     } catch (e) {
+      if (generation !== lifecycleGeneration) return;
+      starting = false;
       const failedHost = host;
       host = null;
       disposeLifecycle(failedHost);
@@ -366,6 +388,8 @@ export function createHostController({
     }
   }
   function restart(port) {
+    if (starting || closed) return;
+    if (!host) return start(port);
     if (host && host.restart) {
       const generation = lifecycleGeneration;
       const restartingHost = host;

@@ -15,7 +15,7 @@ function validPid(pid) { return Number.isSafeInteger(pid) && pid > 1; }
 function requirePrimaryPid(record) {
     if (record.role === 'primary' && !validPid(record.pid)) {
         throw registryError('AE_HOST_PID_UNVERIFIED', 'A running primary requires a valid After Effects host PID. '
-            + 'Close and reopen the panel to retry PID detection; existing project ownership is unchanged.');
+            + 'Keep AE open and let the panel retry identification. Use Retry connection if needed; do not start a replacement AE.');
     }
 }
 

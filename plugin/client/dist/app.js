@@ -24616,6 +24616,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
       recent: "\u6700\u8FD1\u6D3B\u52A8",
       copyConfig: "\u590D\u5236\u914D\u7F6E",
       restart: "\u91CD\u542F\u670D\u52A1",
+      retry: "\u91CD\u8BD5\u8FDE\u63A5",
       diagnose: "\u8FD0\u884C\u8BCA\u65AD",
       regen: "\u91CD\u65B0\u751F\u6210 Token",
       rerun: "\u91CD\u65B0\u8FD0\u884C",
@@ -24643,6 +24644,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
       recent: "Recent activity",
       copyConfig: "Copy config",
       restart: "Restart service",
+      retry: "Retry connection",
       diagnose: "Run diagnostics",
       regen: "Regenerate token",
       rerun: "Run again",
@@ -24682,7 +24684,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
     }).catch(() => {
     });
   }
-  function ConnectionDrawerBody({ lang = "zh", info = {}, panelVersion = package_default.version, statusLabel: statusLabel2, copyReady = true, onCopyConfig, onRestart, onDiagnose }) {
+  function ConnectionDrawerBody({ lang = "zh", info = {}, panelVersion = package_default.version, statusLabel: statusLabel2, copyReady = true, connecting = false, onCopyConfig, onRestart, onDiagnose }) {
     const t = D[lang] || D.zh;
     const connected = !!info.lastClientSeenAt;
     const hostVersion = info.hostVersion || "-";
@@ -24713,7 +24715,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
       ] }, i)) }),
       /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: !copyReady, onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
-        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
+        /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", disabled: connecting, onClick: onRestart, children: copyReady ? t.restart : t.retry }),
         /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
       ] })
     ] });
@@ -24737,7 +24739,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
       ] })
     ] });
   }
-  function ConnectionDrawer({ open = false, onClose, info = {}, copyReady = true, onCopyConfig, onRestart, onDiagnose, diagnostics = [], lang = "zh" }) {
+  function ConnectionDrawer({ open = false, onClose, info = {}, copyReady = true, connecting = false, onCopyConfig, onRestart, onDiagnose, diagnostics = [], lang = "zh" }) {
     const diagList = Array.isArray(diagnostics) ? diagnostics : [];
     const t = D[lang] || D.zh;
     const panelVersion = info.panelVersion || package_default.version;
@@ -24749,6 +24751,7 @@ Refresh, reconnect, or start a new session as this client requires, then call ae
           info,
           panelVersion,
           copyReady,
+          connecting,
           onCopyConfig,
           onRestart,
           onDiagnose
@@ -37364,13 +37367,16 @@ ${command}`
     addBeforeUnload,
     extensionRoot,
     environment,
-    createInstanceId
+    createInstanceId,
+    waitForPidRetry = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
   }) {
     const adapter = platform || createPlatformAdapter();
     let host = null;
     let beforeUnloadInstalled = false;
     let lifecycleGeneration = 0;
     let instance = null;
+    let starting = false;
+    let closed = false;
     const workDirectories = /* @__PURE__ */ new Map();
     let workDirectoryInitialized = false;
     function updateWorkDirectory(projectPath, directory) {
@@ -37418,6 +37424,8 @@ ${command}`
     }
     async function start(port) {
       var _a;
+      if (starting || closed) return;
+      starting = true;
       const generation = lifecycleGeneration += 1;
       onStatus("starting", port);
       const priorHost = host;
@@ -37437,6 +37445,7 @@ ${command}`
           });
         }
         if (instance.role === "worker") {
+          starting = false;
           onStatus("disabled", null, "Read workers do not start the panel host");
           return;
         }
@@ -37464,6 +37473,8 @@ ${command}`
           installBeforeUnload(() => {
             var _a2;
             lifecycleGeneration += 1;
+            starting = false;
+            closed = true;
             const closingHost = host;
             host = null;
             writeBootstrapStatus("intentional-disconnect");
@@ -37473,17 +37484,31 @@ ${command}`
           beforeUnloadInstalled = true;
         }
         if (!instance.aePid && typeof adapter.resolveAeHostPid === "function") {
-          instance.aePid = await adapter.resolveAeHostPid({ cepPid: adapter.pid, timeoutMs: 4e3 });
-          if (generation !== lifecycleGeneration || host !== nextHost) return;
+          const delays = [250, 750];
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            const aePid = await adapter.resolveAeHostPid({ cepPid: adapter.pid, timeoutMs: 4e3 });
+            if (generation !== lifecycleGeneration || host !== nextHost) return;
+            if (Number.isSafeInteger(aePid) && aePid > 1) {
+              instance.aePid = aePid;
+              break;
+            }
+            if (attempt < delays.length) {
+              onLog("Identifying the After Effects process again (" + (attempt + 2) + "/3)");
+              await waitForPidRetry(delays[attempt]);
+              if (generation !== lifecycleGeneration || host !== nextHost) return;
+            }
+          }
           instance.nativeUnavailable = instance.aePid ? null : {
             code: "AE_HOST_PID_UNVERIFIED",
-            message: "The CEP process ancestry did not identify a formal After Effects host"
+            message: "AE_HOST_PID_UNVERIFIED: Could not identify After Effects after 3 attempts. Keep AE and this panel open; use Retry connection to try again. Do not start a replacement AE."
           };
           (_a = nextHost.configureInstance) == null ? void 0 : _a.call(nextHost, instance);
+          if (!instance.aePid) throw Object.assign(new Error(instance.nativeUnavailable.message), { code: instance.nativeUnavailable.code });
         }
         nextHost.start(port, (err, info) => {
           var _a2, _b, _c;
           if (generation !== lifecycleGeneration || host !== nextHost) return;
+          starting = false;
           if (err) onStatus("error", port, err.message);
           else {
             try {
@@ -37497,6 +37522,8 @@ ${command}`
           }
         });
       } catch (e) {
+        if (generation !== lifecycleGeneration) return;
+        starting = false;
         const failedHost = host;
         host = null;
         disposeLifecycle(failedHost);
@@ -37504,6 +37531,8 @@ ${command}`
       }
     }
     function restart(port) {
+      if (starting || closed) return;
+      if (!host) return start(port);
       if (host && host.restart) {
         const generation = lifecycleGeneration;
         const restartingHost = host;
@@ -40876,6 +40905,7 @@ ${draft.baseUrl}`)) return;
           info: connInfo || {},
           diagnostics: Array.isArray(diagnostics) ? diagnostics : [],
           copyReady: externalMcpReady,
+          connecting: status.state === "starting",
           onDiagnose: runDiag,
           onCopyConfig: () => copyText(mcpConfigStr),
           onRestart: () => applyPort(status.port)

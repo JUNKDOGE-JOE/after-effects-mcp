@@ -123,10 +123,16 @@ distribution, and developer details.
 ### Host PID and project ownership errors
 
 `AE_HOST_PID_UNVERIFIED` means the panel could not identify its After Effects
-process. A running primary must have a valid AE PID before it can register.
-Close and reopen the panel to retry detection; restarting only the panel's
-service does not repeat the process lookup. If detection still fails, retain
-the diagnostic error and report the AE version and installation path.
+process. Before starting its service, the open panel retries detection up to
+three times with bounded waits. A running primary must still have a valid AE
+PID before it can register. If all attempts fail, keep AE and the panel open;
+use **Retry connection** in the Connection drawer to repeat detection in place.
+Do not start another AE merely because this panel has not registered yet.
+Closing the panel cancels further retries and does not reopen it automatically.
+An external stdio client can keep its connector running and use `ae_instances`
+to wait for registration, then bind and read back the project. An unavailable
+panel endpoint cannot itself accept a retry command. If detection still fails,
+retain the diagnostic error and report the AE version and installation path.
 
 Closing a panel does not release a project while its AE process is still alive.
 Older registry records may lack an AE PID and continue blocking the project with

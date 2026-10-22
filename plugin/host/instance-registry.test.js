@@ -160,7 +160,7 @@ test('running primary admission rejects invalid host PIDs without reserving proj
     const registry = new InstanceRegistry({ root: temporary(t), maxInstances: 1, isProcessAlive: () => true });
     for (const pid of [undefined, null, 0, 1, -1, 2.5, '1001', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
         await assert.rejects(registry.register({ instanceId: 'invalid', pid, cepPid: 2001, projectPath: 'C:/one.aep' }),
-            error => error.code === 'AE_HOST_PID_UNVERIFIED' && /Close and reopen the panel/.test(error.message));
+            error => error.code === 'AE_HOST_PID_UNVERIFIED' && /Retry connection/.test(error.message));
         assert.deepEqual(await registry.list({ includeClosed: true }), []);
         assert.equal(fs.existsSync(registry.lock), false);
     }
