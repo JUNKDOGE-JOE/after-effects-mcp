@@ -18,6 +18,9 @@ test(
     assert.match(BASE, /Computer Use as a fallback/);
     assert.match(BASE, /read-only refusal requires an[\s\S]*authorized write binding/);
     assert.match(BASE, /no tool for sending it a chat message/);
+    assert.match(BASE, /agent-managed reopening with ae_instances action=start/);
+    assert.match(BASE, /diagnosis-only requests, offer it without launching/);
+    assert.match(BASE, /alive AE with a closed panel[\s\S]*do not start a competing/);
     assert.doesNotMatch(BASE, /use builtin:skill:/);
     assert.ok(EXPERT.length > 0);
     const enabled = buildInstructions({ expertGuidance: true, tools: ['ae_status', 'ae_checkpoint'] });

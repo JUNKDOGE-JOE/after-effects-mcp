@@ -17,8 +17,13 @@ Different projects need separate bindings. A read-only refusal requires an
 authorized write binding, not a switch to the panel chat. Missing tools require
 checking this client's tool discovery; an unavailable instance requires
 connection/instance diagnosis. Never start a replacement solely because of timeout or
-intentional panel closure. Only confirm checkpoint continuation after explicit
-user authorization. A request to message the panel agent is a different task:
+intentional panel closure. For a saved project whose AE process has exited,
+offer agent-managed reopening with ae_instances action=start, project_path and
+work_dir, followed by a new binding. Execute it when the user has requested
+reopening; for diagnosis-only requests, offer it without launching. Do not send
+the user to reopen a saved project manually when this connector can start it.
+An alive AE with a closed panel is a different state: do not start a competing
+owner. Only confirm checkpoint continuation after explicit user authorization. A request to message the panel agent is a different task:
 the public MCP surface has no tool for sending it a chat message.
 
 Drive Adobe After Effects through two execution routes:
