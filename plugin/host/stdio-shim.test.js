@@ -56,6 +56,9 @@ test('generic stdio entry initializes without AE and keeps same-connection proje
     source.end();
     await completed;
     assert.equal(replies.find(reply => reply.id === 1).result.protocolVersion, '2025-03-26');
+    const advertised = replies.find(reply => reply.id === 2).result.tools;
+    assert.equal(replies.find(reply => reply.id === 1).result.instructions,
+        require('./mcp/instructions').buildInstructions({ tools: advertised.map(tool => tool.name) }));
     assert.ok(replies.find(reply => reply.id === 2).result.tools.some(tool => tool.name === 'ae_workspace'));
     assert.equal(replies.find(reply => reply.id === 5).result.structuredContent.code, 'WORKSPACE_REQUIRED');
     assert.deepEqual(calls, [{ instance: 'A', context: 'A:context' }, { instance: 'B', context: 'B:context' }]);

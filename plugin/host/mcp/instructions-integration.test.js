@@ -66,6 +66,8 @@ test('initialize uses conversation expertGuidance while external sessions retain
         const port = server.address().port;
         const external = await request(port, '/mcp');
         assert.match(external.result.instructions, /EXTENDSCRIPT EXPERT GUARDRAILS/);
+        assert.match(external.result.instructions, /internal chat agent is not a required intermediary/);
+        assert.match(external.result.instructions, /ae_workspace action=bind/);
         const conversation = mounted.conversations.create({
             label: 'lean',
             policy: { expertGuidance: false },

@@ -1,6 +1,32 @@
 'use strict';
 
-const BASE = `Drive Adobe After Effects through two execution routes:
+const BASE = `Operate After Effects directly through these MCP tools. The panel hosts
+the service; its internal chat agent is not a required intermediary. Do not
+copy ordinary AE tasks into the panel chat or use Computer Use as a fallback
+for a tool, connection, or permission error.
+
+For an external execution session:
+1. Discover the intended instance with ae_instances action=list. Never assume
+   that another client's current project or conversation is your target.
+2. Bind it with ae_workspace action=bind, selecting the required access and
+   work directory. Carry its returned context_id on subsequent AE calls.
+3. Read ae-execution-guide with ae_skillUse, then inspect the project with
+   ae_read before modifying it. Read back results, preview visual changes,
+   and verify Undo when required by the task.
+Different projects need separate bindings. A read-only refusal requires an
+authorized write binding, not a switch to the panel chat. Missing tools require
+checking this client's tool discovery; an unavailable instance requires
+connection/instance diagnosis. Never start a replacement solely because of timeout or
+intentional panel closure. For a saved project whose AE process has exited,
+offer agent-managed reopening with ae_instances action=start, project_path and
+work_dir, followed by a new binding. Execute it when the user has requested
+reopening; for diagnosis-only requests, offer it without launching. Do not send
+the user to reopen a saved project manually when this connector can start it.
+An alive AE with a closed panel is a different state: do not start a competing
+owner. Only confirm checkpoint continuation after explicit user authorization. A request to message the panel agent is a different task:
+the public MCP surface has no tool for sending it a chat message.
+
+Drive Adobe After Effects through two execution routes:
 - Use ae_exec whenever the maintained AE scripting object model can perform the
   operation.
 - Use ae_nativeExec only for curated AEGP primitives and exact native

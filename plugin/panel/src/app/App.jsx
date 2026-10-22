@@ -1896,6 +1896,7 @@ function Shell({ cs }) {
         info={connInfo || {}}
         diagnostics={Array.isArray(diagnostics) ? diagnostics : []}
         copyReady={externalMcpReady}
+        connecting={status.state === 'starting'}
         onDiagnose={runDiag}
         onCopyConfig={() => copyText(mcpConfigStr)}
         onRestart={() => applyPort(status.port)}

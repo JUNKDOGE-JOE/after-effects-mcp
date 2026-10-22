@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import Module, { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import {
   createHostController,
   isValidPort,
@@ -458,6 +459,8 @@ test('manual Windows panels bind only a formal AE process on their validated par
     spawnImpl: processProbeSpawn((file, args, options) => {
       assert.equal(file, 'D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
       assert.ok(args.includes('-NonInteractive'));
+      assert.ok(args.includes('-NoProfile'));
+      assert.equal(args.at(-1).match(/Get-CimInstance/g)?.length, 1);
       assert.equal(options.windowsHide, true);
       return JSON.stringify(rows);
     }),
@@ -468,6 +471,171 @@ test('manual Windows panels bind only a formal AE process on their validated par
   rows[1].pid = 80;
   rows[1].executablePath = 'C:\\Adobe\\Adobe After Effects (Beta)\\Support Files\\AfterFX.exe';
   assert.equal(await platform.resolveAeHostPid({ cepPid: 90 }), null);
+});
+
+test('Windows PID probe executes one snapshot and emits only the bounded CEP ancestry', { skip: process.platform !== 'win32' }, async () => {
+  let executable, probe;
+  const platform = createWindowsAdapter({ platform: 'win32', arch: 'x64', pid: 90,
+    home: os.homedir(), temp: os.tmpdir(), env: process.env, fs, now: Date.now,
+    spawnImpl: processProbeSpawn((file, args) => { executable = file; probe = args.at(-1); return '[]'; }),
+  });
+  await platform.resolveAeHostPid({ cepPid: 90 });
+  const row = (pid, ppid) => ({ ProcessId: pid, ParentProcessId: ppid, ExecutablePath: `C:\\process-${pid}.exe` });
+  const snapshots = [
+    [row(70, 1), row(90, 80), row(80, 1)],
+    [row(90, 80), row(80, 90)],
+    [row(90, 80)],
+    Array.from({ length: 15 }, (_, i) => row(90 - i, 89 - i)),
+  ];
+  const setup = JSON.stringify(snapshots).replace(/'/g, "''");
+  const script = [
+    `$aeTestSnapshots=ConvertFrom-Json '${setup}'`,
+    'function Get-CimInstance { [CmdletBinding()] param($ClassName,$Property)',
+    '$script:aeTestCalls++; if($ClassName -ne "Win32_Process"){throw "wrong class"}',
+    'for($aeTestPid=1000;$aeTestPid -lt 2000;$aeTestPid++){[pscustomobject]@{ProcessId=$aeTestPid;ParentProcessId=1;ExecutablePath="C:\\other.exe"}}',
+    '$script:aeTestSnapshot }',
+    '$aeTestResults=@(foreach($script:aeTestSnapshot in $aeTestSnapshots){',
+    '$script:aeTestCalls=0',
+    `$aeTestOutput=& {\n${probe}\n}`,
+    'if($script:aeTestCalls -ne 1){throw "expected one snapshot"}',
+    '[pscustomobject]@{json=$aeTestOutput}',
+    '})',
+    'ConvertTo-Json -InputObject $aeTestResults -Depth 5 -Compress',
+  ].join('\n');
+  const result = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-Command', script],
+    { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  const results = JSON.parse(result.stdout);
+  assert.deepEqual(results.map(item => JSON.parse(item.json).map(entry => entry.pid)),
+    [[90, 80], [90, 80], [90], Array.from({ length: 12 }, (_, i) => 90 - i)]);
+  assert.ok(result.stdout.length < 16384);
+});
+
+test('Windows PID probe rejects malformed ancestry and invalid input without guessing an owner', async () => {
+  let output = '[]', calls = 0;
+  const platform = createWindowsAdapter({ platform: 'win32', arch: 'x64', pid: 90,
+    home: 'C:\\Users\\a', temp: 'C:\\Temp', env: {}, fs: { existsSync: () => false }, now: Date.now,
+    spawnImpl: processProbeSpawn(() => { calls += 1; return output; }),
+  });
+  for (const input of [{ cepPid: null }, { cepPid: 1 }, { cepPid: 1.5 }, { timeoutMs: 0 }]) {
+    assert.equal(await platform.resolveAeHostPid(input), null);
+  }
+  assert.equal(calls, 0);
+  for (const value of ['', '{', '{}', '[]',
+    JSON.stringify([{ pid: 91, ppid: 1, executablePath: 'C:\\AfterFX.exe' }]),
+    JSON.stringify([{ pid: 90, ppid: '80', executablePath: 'C:\\AfterFX.exe' }]),
+    JSON.stringify([{ pid: 90, ppid: 80 }, { pid: 80, ppid: 90 }, { pid: 90, ppid: 1, executablePath: 'C:\\AfterFX.exe' }]),
+    JSON.stringify(Array.from({ length: 13 }, (_, i) => ({ pid: 90 - i, ppid: 89 - i })))]) {
+    output = value;
+    assert.equal(await platform.resolveAeHostPid({ cepPid: 90 }), null, value);
+  }
+});
+
+function pidRetryHarness({ resolvePid, waitForPidRetry, hostOverrides = {} }) {
+  const runtime = fakeHostDependencyRuntime({ platformId: 'macos-arm64', extensionRoot: '/extension', express: () => {} });
+  const statuses = [], probes = [], waits = [], calls = [];
+  let unload;
+  const host = { setRuntimeDependencies() {}, setCSInterface() {}, configureInstance() {},
+    stop: () => calls.push('stop'),
+    start: (port, callback) => { calls.push('start'); callback(null, { port }); },
+    restart: (port, callback) => { calls.push('restart'); callback(null, { port }); },
+    ...hostOverrides,
+  };
+  const controller = createHostController({ cs: {}, extensionRoot: '/extension', environment: {},
+    platform: { ...hostAdapter(runtime.fs), pid: 90, resolveAeHostPid: args => { probes.push(args); return resolvePid(); } },
+    waitForPidRetry: async ms => { waits.push(ms); await waitForPidRetry?.(ms); },
+    createInstanceId: () => 'retry-main', addBeforeUnload: callback => { unload = callback; }, onLog() {},
+    requireImpl: request => request === 'module' ? runtime.moduleApi : request === 'path' ? path : host,
+    onStatus: (...value) => statuses.push(value),
+  });
+  return { controller, statuses, probes, waits, calls, unload: () => unload() };
+}
+
+test('PID discovery retries in place and starts once when the second or third attempt succeeds', async () => {
+  for (const successfulAttempt of [2, 3]) {
+    let attempt = 0;
+    const h = pidRetryHarness({ resolvePid: async () => ++attempt === successfulAttempt ? 80 : null });
+    await h.controller.start(11488);
+    assert.deepEqual(h.probes, Array(successfulAttempt).fill({ cepPid: 90, timeoutMs: 4000 }));
+    assert.deepEqual(h.waits, [250, 750].slice(0, successfulAttempt - 1));
+    assert.deepEqual(h.calls, ['start']);
+    assert.equal(h.statuses.at(-1)[0], 'ok');
+    assert.equal(h.controller.getInstance().nativeUnavailable, null);
+    await h.controller.restart(11489);
+    assert.deepEqual(h.calls, ['start', 'restart']);
+    assert.equal(h.probes.length, successfulAttempt);
+  }
+});
+
+test('PID retry exhaustion never starts a host and Retry connection reruns discovery without reopening', async () => {
+  const values = [null, 1, '80', 80];
+  const h = pidRetryHarness({ resolvePid: async () => values.shift() });
+  await h.controller.start(11488);
+  assert.equal(h.statuses.at(-1)[0], 'error');
+  assert.match(h.statuses.at(-1)[2], /AE_HOST_PID_UNVERIFIED.*3 attempts.*Retry connection/);
+  assert.equal(h.statuses.some(value => value[0] === 'ok'), false);
+  assert.equal(h.calls.includes('start'), false);
+  assert.equal(h.controller.getHost(), null);
+  assert.equal(h.controller.getInstance().aePid, null);
+  assert.equal(h.controller.getInstance().nativeUnavailable.code, 'AE_HOST_PID_UNVERIFIED');
+  assert.deepEqual(h.waits, [250, 750]);
+  await h.controller.restart(11488);
+  assert.equal(h.probes.length, 4);
+  assert.equal(h.calls.filter(value => value === 'start').length, 1);
+  assert.equal(h.statuses.at(-1)[0], 'ok');
+  assert.equal(h.controller.getInstance().aePid, 80);
+});
+
+test('closing during PID retry backoff cancels retries and concurrent restart cannot duplicate startup', async () => {
+  let resume, entered;
+  const waiting = new Promise(resolve => { entered = resolve; });
+  const h = pidRetryHarness({ resolvePid: async () => null,
+    waitForPidRetry: () => { entered(); return new Promise(resolve => { resume = resolve; }); } });
+  const starting = h.controller.start(11488);
+  await waiting;
+  await h.controller.restart(11488);
+  assert.equal(h.probes.length, 1);
+  h.unload();
+  resume();
+  await starting;
+  assert.equal(h.probes.length, 1);
+  assert.equal(h.calls.includes('start'), false);
+  assert.equal(h.controller.getHost(), null);
+  assert.equal(h.controller.getInstance().aePid, null);
+});
+
+test('PID retry leaves no registry owner or close marker before successful service publication', async t => {
+  const require = createRequire(import.meta.url);
+  const { InstanceRegistry } = require('../../host/instance-registry.js');
+  const { createInstanceService } = require('../../host/instance-service.js');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-pid-retry-'));
+  assert.equal(path.dirname(root), path.resolve(os.tmpdir()));
+  const registry = new InstanceRegistry({ root, isProcessAlive: () => true });
+  let service, configured = {}, published, pid = null;
+  t.after(async () => { await service?.markClosed('test-completed'); fs.rmSync(root, { recursive: true, force: true }); });
+  const h = pidRetryHarness({ resolvePid: async () => pid, hostOverrides: {
+    configureInstance: value => { configured = { ...configured, ...value }; service?.configure(value); },
+    getInstanceInfo: () => service?.getInfo() || configured,
+    stop: () => service?.markClosed('panel-stopped'),
+    start: (port, callback) => {
+      service = createInstanceService({ ...configured, registry, cepPid: 90, launcher: {},
+        executeJsx: async () => ({ payload: { ok: true, result: JSON.stringify({ projectPath: '/fixture/pid.aep', dirty: false, revision: 1 }) } }) });
+      published = service.publish('http://127.0.0.1:' + port + '/mcp').then(() => callback(null, { port }), callback);
+    },
+  } });
+  await h.controller.start(11488);
+  assert.equal(service, undefined);
+  assert.deepEqual(await registry.list({ includeClosed: true }), []);
+  assert.equal(fs.existsSync(path.join(root, 'retry-main.closed')), false);
+  pid = 80;
+  await h.controller.restart(11488);
+  await published;
+  const owner = await registry.get('retry-main');
+  assert.equal(owner.state, 'running');
+  assert.equal(owner.pid, 80);
+  assert.equal(fs.existsSync(path.join(root, 'retry-main.closed')), false);
+  assert.equal(h.statuses.at(-1)[0], 'ok');
 });
 
 test('manual macOS panels follow ps parent relationships without selecting an unrelated AE', async () => {
@@ -508,4 +676,5 @@ test('closing a panel during its parent process probe cannot start the listener 
   await starting;
   assert.equal(starts, 0);
   assert.equal(controller.getHost(), null);
+  assert.equal(controller.getInstance().aePid, null);
 });
