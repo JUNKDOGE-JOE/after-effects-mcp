@@ -32236,7 +32236,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return true;
     }
     function handleNotification(message) {
-      var _a;
+      var _a, _b;
       const params = message.params || {};
       if (message.method === "turn/started") {
         if (!activeRun) return;
@@ -32264,6 +32264,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           emit({ type: "thinking", active: true });
           return;
         }
+        if (item.type === "imageGeneration") {
+          emitAfterText({ type: "tool-start", toolUseId: String(item.id || ""), name: "image_generation", input: {} });
+          return;
+        }
         if (item.type !== "mcpToolCall") return;
         emitAfterText({
           type: "tool-start",
@@ -32279,6 +32283,31 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           emit({ type: "thinking", active: false });
           return;
         }
+        if (item.type === "imageGeneration") {
+          const ok = item.status === "completed" && !item.failure;
+          const zh = currentLang() === "zh";
+          const limited = ((_a = item.failure) == null ? void 0 : _a.type) === "usageLimitExceeded";
+          let content = [];
+          if (ok) {
+            const savedPath = typeof item.savedPath === "string" ? item.savedPath : "";
+            const result = typeof item.result === "string" ? item.result : "";
+            const mimeType = attachmentMediaType(savedPath) || (/^iVBORw0KGgo/.test(result) ? "image/png" : /^\/9j\//.test(result) ? "image/jpeg" : /^UklGR/.test(result) ? "image/webp" : /^R0lGOD/.test(result) ? "image/gif" : "");
+            content = [{
+              type: "image",
+              mimeType,
+              ...savedPath ? { url: attachmentFileUrl(savedPath, adapter.id) } : /^data:image\//.test(result) ? { url: result } : { data: result }
+            }];
+          }
+          emitAfterText({
+            type: "tool-result",
+            toolUseId: String(item.id || ""),
+            name: "image_generation",
+            ok,
+            text: ok ? zh ? "\u56FE\u7247\u5DF2\u751F\u6210\u3002" : "Image generated." : limited ? zh ? "\u56FE\u7247\u751F\u6210\u989D\u5EA6\u5DF2\u7528\u5B8C\u3002" : "Image generation usage limit reached." : zh ? "\u56FE\u7247\u751F\u6210\u5931\u8D25\u3002" : "Image generation failed.",
+            ...captureToolImages(content, adapter)
+          });
+          return;
+        }
         if (item.type !== "mcpToolCall") return;
         emitAfterText({
           type: "tool-result",
@@ -32286,7 +32315,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           name: mcpToolName(item),
           ok: !item.error && item.status === "completed",
           text: toolDisplayText(toolResultText2(item.result)),
-          ...captureToolImages((_a = item.result) == null ? void 0 : _a.content, adapter),
+          ...captureToolImages((_b = item.result) == null ? void 0 : _b.content, adapter),
           durationMs: item.durationMs
         });
         return;

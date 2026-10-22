@@ -24,6 +24,8 @@ import {
   planSessionKey,
 } from '../../../shared/tool-approval.mjs';
 import {
+  attachmentFileUrl,
+  attachmentMediaType,
   normalizeTurnInput,
   withAttachmentManifest,
 } from '../../../shared/chat-attachments.mjs';
@@ -521,6 +523,10 @@ export function createCodexBackend({
         emit({ type: 'thinking', active: true });
         return;
       }
+      if (item.type === 'imageGeneration') {
+        emitAfterText({ type: 'tool-start', toolUseId: String(item.id || ''), name: 'image_generation', input: {} });
+        return;
+      }
       if (item.type !== 'mcpToolCall') return;
       emitAfterText({
         type: 'tool-start',
@@ -534,6 +540,33 @@ export function createCodexBackend({
       const item = itemFromParams(params);
       if (item.type === 'reasoning') {
         emit({ type: 'thinking', active: false });
+        return;
+      }
+      if (item.type === 'imageGeneration') {
+        const ok = item.status === 'completed' && !item.failure;
+        const zh = currentLang() === 'zh';
+        const limited = item.failure?.type === 'usageLimitExceeded';
+        let content = [];
+        if (ok) {
+          const savedPath = typeof item.savedPath === 'string' ? item.savedPath : '';
+          const result = typeof item.result === 'string' ? item.result : '';
+          const mimeType = attachmentMediaType(savedPath)
+            || (/^iVBORw0KGgo/.test(result) ? 'image/png'
+              : /^\/9j\//.test(result) ? 'image/jpeg'
+                : /^UklGR/.test(result) ? 'image/webp'
+                  : /^R0lGOD/.test(result) ? 'image/gif' : '');
+          content = [{ type: 'image', mimeType,
+            ...(savedPath ? { url: attachmentFileUrl(savedPath, adapter.id) }
+              : /^data:image\//.test(result) ? { url: result } : { data: result }),
+          }];
+        }
+        emitAfterText({
+          type: 'tool-result', toolUseId: String(item.id || ''), name: 'image_generation', ok,
+          text: ok ? (zh ? '图片已生成。' : 'Image generated.')
+            : limited ? (zh ? '图片生成额度已用完。' : 'Image generation usage limit reached.')
+              : (zh ? '图片生成失败。' : 'Image generation failed.'),
+          ...captureToolImages(content, adapter),
+        });
         return;
       }
       if (item.type !== 'mcpToolCall') return;

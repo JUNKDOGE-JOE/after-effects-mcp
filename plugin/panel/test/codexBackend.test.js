@@ -229,6 +229,62 @@ test('Codex completed MCP image results retain their call id and omit data from 
   } finally { h.backend.reset(); }
 });
 
+test('Codex native image generation uses its saved image and preserves the call identity', async () => {
+  const h = makeBackend();
+  try {
+    const { proc } = await startTurn(h.backend, h.spawned);
+    const item = { type: 'imageGeneration', id: 'image-1', status: 'inProgress', result: '' };
+    proc.emit({ method: 'item/started', params: { item } });
+    proc.emit({ method: 'item/completed', params: { item: { ...item, status: 'completed',
+      result: 'iVBORw0KGgo=', savedPath: 'C:\\图片\\red circle.png', failure: null } } });
+    const start = h.events.find((event) => event.type === 'tool-start');
+    const result = h.events.find((event) => event.type === 'tool-result');
+    assert.equal(start.name, 'image_generation');
+    assert.equal(start.toolUseId, result.toolUseId);
+    assert.equal(result.toolUseId, 'image-1');
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.images, [{ src: 'file:///C:/%E5%9B%BE%E7%89%87/red%20circle.png' }]);
+    assert.doesNotMatch(JSON.stringify(h.events), /iVBORw0KGgo/);
+  } finally { h.backend.reset(); }
+});
+
+test('Codex native image data enters the bounded preview cache when no saved path is provided', async () => {
+  for (const dataUrl of [false, true]) {
+    const h = makeBackend({ getLang: () => 'en' });
+    const writes = [];
+    h.platform.fs.readdirSync = () => [];
+    h.platform.fs.writeFileSync = (...args) => writes.push(args);
+    try {
+      const { proc } = await startTurn(h.backend, h.spawned);
+      proc.emit({ method: 'item/completed', params: { item: { type: 'imageGeneration', id: 'base64-1',
+        status: 'completed', result: `${dataUrl ? 'data:image/png;base64,' : ''}iVBORw0KGgo=`, savedPath: null } } });
+      const result = h.events.find((event) => event.type === 'tool-result');
+      assert.equal(writes.length, 1);
+      assert.equal(writes[0][1], 'iVBORw0KGgo=');
+      assert.deepEqual(writes[0][2], { encoding: 'base64', flag: 'wx' });
+      assert.match(result.images[0].src, /tool-images\/preview-.*\.png$/);
+      assert.equal(result.text, 'Image generated.');
+      assert.doesNotMatch(JSON.stringify(h.events), /iVBORw0KGgo/);
+    } finally { h.backend.reset(); }
+  }
+});
+
+test('Codex native image failures remain failures and never display a stale image', async () => {
+  for (const failure of [null, { type: 'usageLimitExceeded', limitId: 'image' }]) {
+    const h = makeBackend({ getLang: () => 'en' });
+    try {
+      const { proc } = await startTurn(h.backend, h.spawned);
+      proc.emit({ method: 'item/completed', params: { item: { type: 'imageGeneration', id: 'failed-1',
+        status: failure ? 'completed' : 'failed', failure, result: 'iVBORw0KGgo=', savedPath: 'C:\\old.png' } } });
+      const result = h.events.find((event) => event.type === 'tool-result');
+      assert.equal(result.ok, false);
+      assert.equal(result.images, undefined);
+      assert.equal(result.text, failure ? 'Image generation usage limit reached.' : 'Image generation failed.');
+      assert.doesNotMatch(JSON.stringify(h.events), /iVBORw0KGgo|old.png/);
+    } finally { h.backend.reset(); }
+  }
+});
+
 test('resolveCodexCli exposes the CLI shim for diagnostics', async () => {
   const result = await resolveCodexCli({
     env: { AE_MCP_CODEX_CLI: 'C:\\Custom\\codex.cmd' },
