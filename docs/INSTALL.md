@@ -120,6 +120,22 @@ page. Persistent state defaults to `~/.ae-mcp` and can be relocated with
 `AE_MCP_STATE_DIR`. See [Tool Library](TOOL_LIBRARY.md) for lifecycle, cleanup,
 distribution, and developer details.
 
+### Host PID and project ownership errors
+
+`AE_HOST_PID_UNVERIFIED` means the panel could not identify its After Effects
+process. A running primary must have a valid AE PID before it can register.
+Close and reopen the panel to retry detection; restarting only the panel's
+service does not repeat the process lookup. If detection still fails, retain
+the diagnostic error and report the AE version and installation path.
+
+Closing a panel does not release a project while its AE process is still alive.
+Older registry records may lack an AE PID and continue blocking the project with
+`PROJECT_OCCUPIED`. Before recovering one, confirm that its AE instance has
+exited and back up `instances/registry.json` under the configured state root.
+Maintenance should close only the confirmed stale instance ID through the
+existing `InstanceRegistry.unregister` operation. Do not clear the registry or
+release a record merely because its CEP process exited.
+
 ## 5. Local development
 
 Install the Node dependencies and build the panel:

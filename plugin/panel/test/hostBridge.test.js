@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import Module, { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import {
   createHostController,
   isValidPort,
@@ -458,6 +459,8 @@ test('manual Windows panels bind only a formal AE process on their validated par
     spawnImpl: processProbeSpawn((file, args, options) => {
       assert.equal(file, 'D:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
       assert.ok(args.includes('-NonInteractive'));
+      assert.ok(args.includes('-NoProfile'));
+      assert.equal(args.at(-1).match(/Get-CimInstance/g)?.length, 1);
       assert.equal(options.windowsHide, true);
       return JSON.stringify(rows);
     }),
@@ -468,6 +471,96 @@ test('manual Windows panels bind only a formal AE process on their validated par
   rows[1].pid = 80;
   rows[1].executablePath = 'C:\\Adobe\\Adobe After Effects (Beta)\\Support Files\\AfterFX.exe';
   assert.equal(await platform.resolveAeHostPid({ cepPid: 90 }), null);
+});
+
+test('Windows PID probe executes one snapshot and emits only the bounded CEP ancestry', { skip: process.platform !== 'win32' }, async () => {
+  let executable, probe;
+  const platform = createWindowsAdapter({ platform: 'win32', arch: 'x64', pid: 90,
+    home: os.homedir(), temp: os.tmpdir(), env: process.env, fs, now: Date.now,
+    spawnImpl: processProbeSpawn((file, args) => { executable = file; probe = args.at(-1); return '[]'; }),
+  });
+  await platform.resolveAeHostPid({ cepPid: 90 });
+  const row = (pid, ppid) => ({ ProcessId: pid, ParentProcessId: ppid, ExecutablePath: `C:\\process-${pid}.exe` });
+  const snapshots = [
+    [row(70, 1), row(90, 80), row(80, 1)],
+    [row(90, 80), row(80, 90)],
+    [row(90, 80)],
+    Array.from({ length: 15 }, (_, i) => row(90 - i, 89 - i)),
+  ];
+  const setup = JSON.stringify(snapshots).replace(/'/g, "''");
+  const script = [
+    `$aeTestSnapshots=ConvertFrom-Json '${setup}'`,
+    'function Get-CimInstance { [CmdletBinding()] param($ClassName,$Property)',
+    '$script:aeTestCalls++; if($ClassName -ne "Win32_Process"){throw "wrong class"}',
+    'for($aeTestPid=1000;$aeTestPid -lt 2000;$aeTestPid++){[pscustomobject]@{ProcessId=$aeTestPid;ParentProcessId=1;ExecutablePath="C:\\other.exe"}}',
+    '$script:aeTestSnapshot }',
+    '$aeTestResults=@(foreach($script:aeTestSnapshot in $aeTestSnapshots){',
+    '$script:aeTestCalls=0',
+    `$aeTestOutput=& {\n${probe}\n}`,
+    'if($script:aeTestCalls -ne 1){throw "expected one snapshot"}',
+    '[pscustomobject]@{json=$aeTestOutput}',
+    '})',
+    'ConvertTo-Json -InputObject $aeTestResults -Depth 5 -Compress',
+  ].join('\n');
+  const result = spawnSync(executable, ['-NoProfile', '-NonInteractive', '-Command', script],
+    { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+  const results = JSON.parse(result.stdout);
+  assert.deepEqual(results.map(item => JSON.parse(item.json).map(entry => entry.pid)),
+    [[90, 80], [90, 80], [90], Array.from({ length: 12 }, (_, i) => 90 - i)]);
+  assert.ok(result.stdout.length < 16384);
+});
+
+test('Windows PID probe rejects malformed ancestry and invalid input without guessing an owner', async () => {
+  let output = '[]', calls = 0;
+  const platform = createWindowsAdapter({ platform: 'win32', arch: 'x64', pid: 90,
+    home: 'C:\\Users\\a', temp: 'C:\\Temp', env: {}, fs: { existsSync: () => false }, now: Date.now,
+    spawnImpl: processProbeSpawn(() => { calls += 1; return output; }),
+  });
+  for (const input of [{ cepPid: null }, { cepPid: 1 }, { cepPid: 1.5 }, { timeoutMs: 0 }]) {
+    assert.equal(await platform.resolveAeHostPid(input), null);
+  }
+  assert.equal(calls, 0);
+  for (const value of ['', '{', '{}', '[]',
+    JSON.stringify([{ pid: 91, ppid: 1, executablePath: 'C:\\AfterFX.exe' }]),
+    JSON.stringify([{ pid: 90, ppid: '80', executablePath: 'C:\\AfterFX.exe' }]),
+    JSON.stringify([{ pid: 90, ppid: 80 }, { pid: 80, ppid: 90 }, { pid: 90, ppid: 1, executablePath: 'C:\\AfterFX.exe' }]),
+    JSON.stringify(Array.from({ length: 13 }, (_, i) => ({ pid: 90 - i, ppid: 89 - i })))]) {
+    output = value;
+    assert.equal(await platform.resolveAeHostPid({ cepPid: 90 }), null, value);
+  }
+});
+
+test('a PID registration failure is visible and reopening reruns discovery before listening', async () => {
+  const runtime = fakeHostDependencyRuntime({ platformId: 'macos-arm64', extensionRoot: '/extension', express: () => {} });
+  const statuses = [], probes = [], registered = [];
+  let foundPid = null, instance;
+  const host = { setRuntimeDependencies() {}, setCSInterface() {}, stop() {},
+    configureInstance: value => { instance = value; },
+    start: (port, callback) => {
+      registered.push(instance.aePid);
+      callback(instance.aePid ? null : Object.assign(new Error('Close and reopen the panel to retry PID detection'),
+        { code: 'AE_HOST_PID_UNVERIFIED' }), { port });
+    },
+  };
+  const controller = createHostController({ cs: {}, extensionRoot: '/extension', environment: {},
+    platform: { ...hostAdapter(runtime.fs), pid: 90, resolveAeHostPid: async () => { probes.push(90); return foundPid; } },
+    createInstanceId: () => 'main-a', addBeforeUnload() {}, onLog() {},
+    requireImpl: request => request === 'module' ? runtime.moduleApi : request === 'path' ? path : host,
+    onStatus: (...value) => statuses.push(value),
+  });
+  await controller.start(11488);
+  assert.equal(statuses.at(-1)[0], 'error');
+  assert.match(statuses.at(-1)[2], /Close and reopen/);
+  assert.equal(statuses.some(value => value[0] === 'ok'), false);
+  assert.equal(controller.getInstance().nativeUnavailable.code, 'AE_HOST_PID_UNVERIFIED');
+  foundPid = 80;
+  await controller.start(11488);
+  assert.deepEqual(probes, [90, 90]);
+  assert.deepEqual(registered, [null, 80]);
+  assert.equal(statuses.at(-1)[0], 'ok');
+  assert.equal(controller.getInstance().nativeUnavailable, null);
 });
 
 test('manual macOS panels follow ps parent relationships without selecting an unrelated AE', async () => {

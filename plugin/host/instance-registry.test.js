@@ -150,12 +150,71 @@ test('unknown PID probes and starting reservations never imply a released owner'
     const registry = new InstanceRegistry({ root: temporary(t), isProcessAlive: () => null });
     await registry.reserve({ instanceId: 'starting', projectPath: 'C:/one.aep' });
     assert.equal((await registry.get('starting')).state, 'starting');
-    await registry.register({ instanceId: 'unidentified', pid: null, cepPid: null, projectPath: 'C:/two.aep' });
     await registry.register({ instanceId: 'inaccessible', pid: 901, cepPid: 902, projectPath: 'C:/three.aep' });
-    assert.equal((await registry.get('unidentified')).state, 'running');
     assert.equal((await registry.get('inaccessible')).state, 'running');
-    await assert.rejects(registry.reserve({ projectPath: 'C:/two.aep' }), { code: 'PROJECT_OCCUPIED' });
+    await assert.rejects(registry.reserve({ projectPath: 'C:/three.aep' }), { code: 'PROJECT_OCCUPIED' });
     assert.equal((await registry.register({ instanceId: 'starting', pid: 903, cepPid: 904 })).state, 'running');
+});
+
+test('running primary admission rejects invalid host PIDs without reserving projects or resource slots', async t => {
+    const registry = new InstanceRegistry({ root: temporary(t), maxInstances: 1, isProcessAlive: () => true });
+    for (const pid of [undefined, null, 0, 1, -1, 2.5, '1001', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+        await assert.rejects(registry.register({ instanceId: 'invalid', pid, cepPid: 2001, projectPath: 'C:/one.aep' }),
+            error => error.code === 'AE_HOST_PID_UNVERIFIED' && /Close and reopen the panel/.test(error.message));
+        assert.deepEqual(await registry.list({ includeClosed: true }), []);
+        assert.equal(fs.existsSync(registry.lock), false);
+    }
+    assert.equal((await registry.register({ instanceId: 'valid', pid: 1001, projectPath: 'C:/one.aep' })).state, 'running');
+});
+
+test('starting reservations accept missing PIDs but updates cannot bypass admission or discard a known host', async t => {
+    const registry = new InstanceRegistry({ root: temporary(t), isProcessAlive: () => true });
+    await registry.reserve({ instanceId: 'main', projectPath: 'C:/one.aep' });
+    await registry.update('main', { ticketPath: 'C:/ticket.json' });
+    for (const state of ['starting', 'unknown']) {
+        await registry.update('main', { state });
+        await assert.rejects(registry.register({ instanceId: 'main' }), { code: 'AE_HOST_PID_UNVERIFIED' });
+        await assert.rejects(registry.update('main', { state: 'running' }), { code: 'AE_HOST_PID_UNVERIFIED' });
+        assert.equal((await registry.get('main')).state, state);
+    }
+    await registry.update('main', { pid: 1001 });
+    await registry.register({ instanceId: 'main', cepPid: 2001 });
+    for (const state of ['running', 'unknown', 'closing', 'starting', 'closed']) {
+        await assert.rejects(registry.update('main', { state, pid: null }), { code: 'AE_HOST_PID_UNVERIFIED' });
+        assert.equal((await registry.get('main')).pid, 1001);
+        assert.equal((await registry.get('main')).state, 'running');
+    }
+    await registry.update('main', { workspaceId: 'workspace-one' });
+    await registry.update('main', { state: 'unknown', reason: 'panel-disconnected' });
+    assert.equal((await registry.get('main')).pid, 1001);
+    await registry.unregister('main', 'verified-exit');
+    assert.equal((await registry.get('main')).state, 'closed');
+});
+
+test('legacy missing-PID owners retain metadata updates, disconnected ownership and explicit recovery', async t => {
+    const root = temporary(t);
+    const live = new Set([2001, 1002]);
+    const registry = new InstanceRegistry({ root, maxInstances: 1, isProcessAlive: pid => live.has(pid) });
+    const legacy = { instanceId: 'legacy', role: 'primary', state: 'running', pid: null, cepPid: 2001,
+        projectPath: 'C:/one.aep', projectKey: normalizeProjectPath('C:/one.aep'), updatedAt: 1 };
+    fs.writeFileSync(registry.file, JSON.stringify({ version: 1, instances: [legacy] }));
+    assert.equal((await registry.get('legacy')).state, 'running');
+    await registry.update('legacy', { workspaceId: 'workspace-legacy' });
+    await assert.rejects(registry.update('legacy', { state: 'running' }), { code: 'AE_HOST_PID_UNVERIFIED' });
+    assert.equal((await registry.get('legacy')).workspaceId, 'workspace-legacy');
+    live.delete(2001);
+    const disconnected = await registry.get('legacy');
+    assert.equal(disconnected.state, 'unknown');
+    assert.equal(disconnected.reason, 'panel-host-exited');
+    assert.equal(registry.canReattach(disconnected, { pid: 1002, cepPid: 2002 }), false);
+    await registry.update('legacy', { reason: 'owner-exit-unverified' });
+    await assert.rejects(registry.register({ instanceId: 'new', pid: 1002, projectPath: 'C:/one.aep' }),
+        error => error.code === 'PROJECT_OCCUPIED' && /back up registry\.json/.test(error.message)
+            && /no verified AE host PID/.test(error.message));
+    await assert.rejects(registry.reserve({ projectPath: 'C:/two.aep' }), { code: 'INSTANCE_BUDGET' });
+    await registry.unregister('legacy', 'owner-exit-confirmed');
+    assert.equal((await registry.get('legacy')).reason, 'owner-exit-confirmed');
+    assert.equal((await registry.register({ instanceId: 'new', pid: 1002, projectPath: 'C:/one.aep' })).state, 'running');
 });
 
 test('only one new panel can atomically replace the dead host of the same AE', async (t) => {
