@@ -25,9 +25,7 @@ function inferredName(code, args) {
 }
 
 function capturedCandidates(library) {
-    return library.list({ statuses: ['candidate'] }).map(function (summary) {
-        try { return library.getArtifact(summary.id); } catch (error) { return null; }
-    }).filter(function (artifact) {
+    return library.readArtifacts({ statuses: ['candidate'], skipInvalid: true }).filter(function (artifact) {
         return artifact && artifact.status === 'candidate'
             && artifact.source.type === 'chat-tool-call';
     });
