@@ -5,6 +5,7 @@ const { createStatePaths } = require('./state-paths');
 const { TOOL_MODULES, publicDefinition } = require('./mcp/tools');
 const { textResult } = require('./mcp/tool-result');
 const { contextInstanceId } = require('./mcp/workspace-router');
+const { buildInstructions } = require('./mcp/instructions');
 const version = require('./package.json').version;
 
 function run(input, output, errorOutput, options) {
@@ -43,7 +44,7 @@ function run(input, output, errorOutput, options) {
                 const requested = message.params && message.params.protocolVersion;
                 result = { protocolVersion: ['2025-06-18', '2025-03-26'].includes(requested) ? requested : '2025-06-18', capabilities: { tools: {} },
                     serverInfo: { name: 'ae-mcp-connector', version },
-                    instructions: 'Use ae_instances to discover or explicitly start a primary. Bind with ae_workspace and carry context_id on AE calls. Never start a replacement after timeout or intentional panel closure. Only pass continuation confirmation after explicit user authorization.' };
+                    instructions: buildInstructions({ tools: TOOL_MODULES.map(mod => mod.definition.name) }) };
             } else if (!initialized) throw new Error('Initialize the MCP connection first.');
             else if (message.method === 'ping') result = {};
             else if (message.method === 'tools/list') result = { tools: TOOL_MODULES.map(publicDefinition) };
