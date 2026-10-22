@@ -12,6 +12,14 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ### [未发布]
 
+### [0.11.1] — 2026-10-22 (UTC+8)
+
+- 修复 Codex 原生生图成功后面板不显示图片；支持现有放大预览与历史会话重开（#402 / #411）。
+- 补齐外部 stdio 客户端的直接 MCP 指引，与 HTTP 指引一致，明确实例发现、工程绑定、技能与结果验证（#404 / #412）。
+- 工具库管理列表与候选收集每次只读取一次索引，保留逐项校验，减少候选较多时的重复扫描（#406 / #410）。
+- 修复 Windows AE PID 缺失时无法可靠释放工程占用的问题；自动尝试三次 PID 查询，失败后可在原面板重试连接。AE 仍运行时保持占用，确认退出后释放（#408 / #409）。
+- 更新仍由用户手动执行。Windows 与 macOS 原生插件沿用 0.11.0，已有用户只需更新 ZXP。AE 的原生启动提示可能需要用户或 Computer Use 处理。
+
 ### [0.11.0] — 2026-10-09 (UTC+8)
 
 - **多实例与并行预览（#393）**：连接器支持发现、启动及路由多个 AE 实例；不同工程可并行操作，同一工程保持单个活动写入者。只读 worker 从固定检查点快照执行读取和预览，结果不代表实时工程。
@@ -419,6 +427,14 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ## English
 
 ### [Unreleased]
+
+### [0.11.1] — 2026-10-22 (UTC+8)
+
+- Display successful native Codex image generation in the panel, including zoom and reopened conversation history (#402 / #411).
+- Align external stdio guidance with HTTP guidance for direct MCP instance discovery, workspace binding, skills and result verification (#404 / #412).
+- Read the Tool Library index once per management listing or candidate collection while retaining per-artifact validation (#406 / #410).
+- Fix missing Windows AE PID ownership records that could prevent reliable project release. Retry PID discovery up to three times and offer an in-panel connection retry; retain occupancy while AE is alive and release it after confirmed exit (#408 / #409).
+- Updates remain manual. Windows and macOS native plug-ins remain byte-identical to 0.11.0; existing users only need the new ZXP. Native AE startup prompts may require the user or Computer Use.
 
 ### [0.11.0] — 2026-10-09 (UTC+8)
 

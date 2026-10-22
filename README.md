@@ -39,7 +39,7 @@ project to the Model Context Protocol (MCP). Chat with Claude, Codex, or OpenCod
 inside the panel, or connect an external MCP client to work with compositions,
 layers, keyframes, and expressions.
 
-[Download v0.11.0](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0)
+[Download v0.11.1](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.1)
 · [Install](docs/INSTALL.md) · [Tool reference](docs/REFERENCE.md) · [Changelog](CHANGELOG.md)
 
 ## What it does
@@ -78,6 +78,12 @@ the workflow; v0.11.0 additions are described below.
   </tr>
 </table>
 
+## What's new in v0.11.1
+
+- Fix native Codex image preview, zoom and conversation history.
+- Improve external MCP guidance, Tool Library scanning and Windows AE process discovery/retry.
+- Windows and macOS native plug-ins remain at 0.11.0; existing users only need to update the ZXP manually.
+
 ## What's new in v0.11.0
 
 - **Multiple instances and parallel previews:** external clients can discover, launch, and route to multiple AE instances. Different projects can run concurrently; each project has one active writer, while read-only workers inspect and preview fixed checkpoint snapshots.
@@ -101,8 +107,8 @@ for verification scope and known limitations.
 
 ## Install and first run
 
-1. Download and install `ae-mcp-panel-v0.11.0.zxp` from the
-   [v0.11.0 release](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.0).
+1. Download and install `ae-mcp-panel-v0.11.1.zxp` from the
+   [v0.11.1 release](https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.11.1).
 2. For `ae_nativeExec`, download the native plug-in from the same release:
    `AeMcpNative-v0.11.0-windows-x64.aex` for Windows x64, or
    `AeMcpNative-v0.11.0-macos-arm64.plugin.zip` for macOS arm64. Extract the Mac
