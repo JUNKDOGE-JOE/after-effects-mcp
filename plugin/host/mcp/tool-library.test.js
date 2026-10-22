@@ -941,3 +941,43 @@ test('library management transitions and deletion respect artifact lifecycle', (
     assert.equal(library.managementList().candidates[0].contentCharacters > 0, true);
     assert.deepEqual(library.clearCandidates(), { removedIds: [secondCandidate.id], count: 1 });
 });
+
+test('management scans read the index once and retain metadata, ordering and fresh contents', t => {
+    const library = makeLibrary(t);
+    const entries = ['candidate', 'saved', 'archived', 'deprecated'].map((status, index) => library.saveArtifact(artifact({
+        id: 'user:00000000-0000-4000-8000-' + String(index + 1).padStart(12, '0'),
+        status, content: '// 😀中', argsSchema: {}, createdAt: 1000, updatedAt: 2000 + index,
+    })));
+    const readIndex = library.readIndex.bind(library);
+    let reads = 0;
+    library.readIndex = () => { reads += 1; return readIndex(); };
+    const listed = library.managementList();
+    assert.equal(reads, 1);
+    assert.deepEqual(listed.candidates.map(row => row.id), [entries[0].id]);
+    assert.deepEqual(listed.artifacts.map(row => row.id), [entries[2].id, entries[1].id]);
+    for (const row of listed.candidates.concat(listed.artifacts)) {
+        assert.equal(row.createdAt, 1000);
+        assert.equal(row.contentCharacters, 5);
+    }
+    library.saveArtifact(artifact({ ...entries[0], name: 'Updated', content: '// shorter', revision: 2, updatedAt: 3000 }));
+    reads = 0;
+    const next = library.managementList();
+    assert.equal(reads, 1);
+    assert.equal(next.candidates[0].name, 'Updated');
+    assert.equal(next.candidates[0].contentCharacters, 10);
+});
+
+test('bulk management reads keep artifact and index corruption checks', t => {
+    for (const damage of ['missing', 'json', 'summary', 'hash']) {
+        const library = makeLibrary(t);
+        const saved = library.saveArtifact(artifact());
+        const file = library.artifactPath(saved.id);
+        if (damage === 'missing') fs.unlinkSync(file);
+        else if (damage === 'json') fs.writeFileSync(file, '{');
+        else {
+            const changed = damage === 'summary' ? { ...saved, name: 'Different summary' } : { ...saved, content: 'Changed body' };
+            fs.writeFileSync(file, JSON.stringify(changed));
+        }
+        assert.throws(() => library.managementList(), /corrupt|contentHash/i, damage);
+    }
+});

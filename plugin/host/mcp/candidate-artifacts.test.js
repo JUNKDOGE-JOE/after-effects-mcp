@@ -185,6 +185,33 @@ test('candidate pruning retains the newest 200 entries globally', (t) => {
     assert.equal(ids.includes(candidate(1, 1, null).id), false);
 });
 
+test('candidate scans read one index even at the default global retention limit', t => {
+    const f = fixture(t);
+    for (let i = 1; i <= 200; i += 1) f.library.saveArtifact(candidate(i, 1000, null));
+    const readIndex = f.library.readIndex.bind(f.library);
+    let reads = 0;
+    f.library.readIndex = () => { reads += 1; return readIndex(); };
+    pruneCandidates(f.library, 1001);
+    assert.equal(reads, 1);
+    const guidance = candidateGuidance('Try again', context(null), { getToolLibrary: () => f.library });
+    assert.equal(reads, 2);
+    assert.match(guidance, /Recent successful scripts/);
+    assert.equal(f.library.list({ statuses: ['candidate'] }).length, 200);
+});
+
+test('candidate cleanup skips damaged artifacts while retaining its existing deletion rules', t => {
+    const f = fixture(t);
+    const damaged = f.library.saveArtifact(candidate(1, 0, null));
+    const expired = f.library.saveArtifact(candidate(2, 0, null));
+    const saved = f.library.saveArtifact(candidate(3, 0, null, { status: 'saved' }));
+    fs.writeFileSync(f.library.artifactPath(damaged.id), '{');
+    pruneCandidates(f.library, CANDIDATE_TTL_MS + 1);
+    assert.equal(fs.existsSync(f.library.artifactPath(damaged.id)), true);
+    assert.equal(fs.existsSync(f.library.artifactPath(expired.id)), false);
+    assert.equal(f.library.getArtifact(saved.id).status, 'saved');
+    assert.throws(() => f.library.managementList(), /corrupt/);
+});
+
 test('placeholder guidance prefers the current conversation, falls back globally, and preserves empty text', (t) => {
     const f = fixture(t);
     for (let i = 1; i <= 6; i += 1) f.library.saveArtifact(candidate(i, i, 'current'));

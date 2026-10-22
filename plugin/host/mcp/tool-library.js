@@ -660,13 +660,25 @@ class ToolLibrary {
             if (!legacy) throw new Error('tool not found');
             return legacy;
         }
+        return this.readIndexedArtifact(entry);
+    }
+
+    readIndexedArtifact(entry) {
         const artifact = validateArtifact(normalizeArtifact(
-            this.readJson(this.artifactPath(id), 'artifact.json'),
+            this.readJson(this.artifactPath(entry.id), 'artifact.json'),
         ));
         if (canonicalJson(this.summaryFromArtifact(artifact)) !== canonicalJson(entry)) {
             throw new Error('tool store is corrupt');
         }
         return artifact;
+    }
+
+    readArtifacts(options) {
+        const input = options || {};
+        return this.list(input).map(function (entry) {
+            try { return this.readIndexedArtifact(entry); }
+            catch (error) { if (input.skipInvalid) return null; throw error; }
+        }, this).filter(Boolean);
     }
 
     resolveArtifact(name) {
@@ -962,8 +974,8 @@ class ToolLibrary {
     }
 
     managementList() {
-        const rows = this.list().map(function (summary) {
-            return this.managementSummary(this.getArtifact(summary.id));
+        const rows = this.readArtifacts().map(function (artifact) {
+            return this.managementSummary(artifact);
         }, this);
         return {
             candidates: rows.filter(function (item) { return item.status === 'candidate'; }),
