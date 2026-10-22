@@ -390,7 +390,8 @@ test('cold startup cannot publish an unrelated project and only becomes ready af
     const expected = state.projectPath;
     let actual = path.join(root, 'wrong.aep');
     await registry.reserve({ instanceId: 'cold-ticket', projectPath: expected });
-    const cold = createInstanceService({ instanceId: 'cold-ticket', projectPath: expected, registry, launcher: {},
+    alivePids.add(322);
+    const cold = createInstanceService({ instanceId: 'cold-ticket', aePid: 322, projectPath: expected, registry, launcher: {},
         executeJsx: async () => reply({ projectPath: actual }) });
     try {
         await assert.rejects(cold.publish('http://127.0.0.1:11490/mcp'), { code: 'STARTUP_PROJECT_MISMATCH' });
@@ -402,6 +403,23 @@ test('cold startup cannot publish an unrelated project and only becomes ready af
         await cold.publish('http://127.0.0.1:11490/mcp');
         assert.equal((await registry.get('cold-ticket')).state, 'running');
     } finally { await cold.markClosed('test-completed'); }
+});
+
+test('publish without a host PID leaves no reservation and succeeds after verified PID configuration', async t => {
+    const { registry, root, alivePids } = await fixture(t);
+    const projectPath = path.join(root, 'second.aep');
+    const service = createInstanceService({ instanceId: 'missing-pid', registry, launcher: {},
+        executeJsx: async () => reply({ projectPath, dirty: false, revision: 1 }) });
+    const before = await registry.list({ includeClosed: true });
+    await assert.rejects(service.publish('http://127.0.0.1:11490/mcp'), { code: 'AE_HOST_PID_UNVERIFIED' });
+    assert.deepEqual(await registry.list({ includeClosed: true }), before);
+    alivePids.add(322);
+    service.configure({ aePid: 322 });
+    try {
+        await service.publish('http://127.0.0.1:11490/mcp');
+        assert.equal((await registry.get(service.instanceId)).pid, 322);
+        assert.equal((await registry.get(service.instanceId)).projectPath, projectPath);
+    } finally { await service.markClosed('test-completed'); }
 });
 
 test('panel shutdown is idempotent and writes only its marker before a live caller reconciles the registry', async (t) => {

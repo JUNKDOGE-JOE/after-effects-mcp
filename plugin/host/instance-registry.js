@@ -10,6 +10,15 @@ function registryError(code, message) {
     return Object.assign(new Error(message), { code });
 }
 
+function validPid(pid) { return Number.isSafeInteger(pid) && pid > 1; }
+
+function requirePrimaryPid(record) {
+    if (record.role === 'primary' && !validPid(record.pid)) {
+        throw registryError('AE_HOST_PID_UNVERIFIED', 'A running primary requires a valid After Effects host PID. '
+            + 'Keep AE open and let the panel retry identification. Use Retry connection if needed; do not start a replacement AE.');
+    }
+}
+
 function normalizeProjectPath(value) {
     if (value === null || value === undefined) return null;
     if (typeof value !== 'string' || !value.trim()) throw registryError('INVALID_PATH', 'An absolute project path is required');
@@ -216,9 +225,13 @@ class InstanceRegistry {
                     + JSON.stringify(Object.assign({}, detail, { requiredBytes: required, startingWorkers: starting })));
             }
         }
-        if (candidate.role === 'primary' && candidate.projectKey && others.some((record) =>
-            record.role === 'primary' && record.projectKey === candidate.projectKey)) {
-            throw registryError('PROJECT_OCCUPIED', 'The project already has a primary instance or a starting reservation');
+        const owner = candidate.role === 'primary' && candidate.projectKey && others.find((record) =>
+            record.role === 'primary' && record.projectKey === candidate.projectKey);
+        if (owner) {
+            const detail = owner.state !== 'starting' && !validPid(owner.pid)
+                ? ' The existing owner has no verified AE host PID. Confirm that its AE has exited, back up registry.json, '
+                    + 'and explicitly recover only that record; panel exit alone does not release ownership.' : '';
+            throw registryError('PROJECT_OCCUPIED', 'The project already has a primary instance or a starting reservation.' + detail);
         }
         if (others.length >= this.maxInstances || (candidate.role === 'worker'
             && others.filter((record) => record.role === 'worker').length >= this.maxWorkers)) {
@@ -269,6 +282,7 @@ class InstanceRegistry {
             FIELDS.forEach((key) => { if (options[key] !== undefined) candidate[key] = options[key]; });
             candidate.state = 'running';
             candidate.updatedAt = Date.now();
+            requirePrimaryPid(candidate);
             this._check(replaced ? records.filter(item => item !== replaced) : records, candidate);
             if (replaced) Object.assign(replaced, { state: 'closed', reason: 'panel-reattached',
                 replacedByInstanceId: candidate.instanceId, updatedAt: Date.now() });
@@ -286,6 +300,7 @@ class InstanceRegistry {
             const candidate = Object.assign({}, record);
             FIELDS.forEach((key) => { if (patch && patch[key] !== undefined) candidate[key] = patch[key]; });
             candidate.updatedAt = Date.now();
+            if ((patch && patch.state === 'running') || validPid(record.pid)) requirePrimaryPid(candidate);
             this._check(records, candidate);
             return Object.assign(record, candidate);
         });

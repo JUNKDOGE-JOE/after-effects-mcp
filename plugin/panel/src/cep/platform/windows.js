@@ -134,8 +134,13 @@ export function createWindowsAdapter(deps) {
       if (!Number.isSafeInteger(cepPid) || cepPid <= 1 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return null;
       const script = [
         '$aeProbePid=' + cepPid,
+        '$aeProbeProcesses=@{}',
+        'Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,ExecutablePath -ErrorAction Stop | ForEach-Object {$aeProbeProcesses[[int]$_.ProcessId]=$_}',
+        '$aeProbeSeen=@{}',
         '$aeProbeRows=@(for($aeProbeDepth=0;$aeProbeDepth -lt 12 -and $aeProbePid -gt 1;$aeProbeDepth++){',
-        '$aeProbeItem=Get-CimInstance Win32_Process -Filter ("ProcessId = " + $aeProbePid)',
+        'if($aeProbeSeen.ContainsKey($aeProbePid)){break}',
+        '$aeProbeSeen[$aeProbePid]=$true',
+        '$aeProbeItem=$aeProbeProcesses[$aeProbePid]',
         'if(-not $aeProbeItem){break}',
         '[pscustomobject]@{pid=[int]$aeProbeItem.ProcessId;ppid=[int]$aeProbeItem.ParentProcessId;executablePath=$aeProbeItem.ExecutablePath}',
         '$aeProbePid=[int]$aeProbeItem.ParentProcessId',
