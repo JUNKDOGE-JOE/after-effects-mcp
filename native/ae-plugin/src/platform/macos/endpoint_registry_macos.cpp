@@ -427,7 +427,10 @@ EndpointResult MacEndpointRegistry::create_listener() {
   }
   sockaddr_un address{};
   address.sun_family = AF_UNIX;
-  std::memcpy(address.sun_path, socket_path_.c_str(), socket_path_.size() + 1);
+  if (::strlcpy(address.sun_path, socket_path_.c_str(), sizeof(address.sun_path)) >=
+      sizeof(address.sun_path)) {
+    return {EndpointCode::kSocketCreateFailed, "endpoint-path-too-long"};
+  }
   address.sun_len = SUN_LEN(&address);
   if (::bind(
           listener_fd_, reinterpret_cast<const sockaddr*>(&address),
